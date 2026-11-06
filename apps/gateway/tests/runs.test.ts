@@ -1,4 +1,7 @@
+import { randomUUID } from 'node:crypto';
+import type { Run } from '@jian/contracts';
 import { afterEach, expect, it, vi } from 'vitest';
+import { updateRun } from '../src/runs/repository.js';
 import { testServices } from './helpers/services.js';
 
 const profileInput = {
@@ -299,6 +302,77 @@ it('two identical steered sends at once store one message', async () => {
   expect(b.id).toBe(run.id);
   expect(await userTexts(fixture, body.text)).toHaveLength(1);
   expect(await services.lifecycle.steer(run.id, 'worker')).toBe(body.text);
+});
+
+async function parkedOn(fixture: Awaited<ReturnType<typeof setup>>, parking: Partial<Run>) {
+  const { services, profile, session } = fixture;
+  const run = await services.runs.submit(profile.id, session.id, {
+    text: 'Start',
+    requestKey: 'start',
+  });
+  const now = new Date().toISOString();
+
+  await services.store.transaction(profile.id, (tx) =>
+    updateRun(tx, { ...run, status: 'waiting', updatedAt: now, ...parking }),
+  );
+
+  return run;
+}
+
+it('a retried answer to a parked question is stored and continued once', async () => {
+  const fixture = await setup();
+  const { services, profile, session } = fixture;
+  const parked = await parkedOn(fixture, {
+    question: { id: randomUUID(), prompt: 'Which provider?', askedAt: new Date().toISOString() },
+  });
+  const body = { text: 'Gemini Live', requestKey: 'answer-1' };
+
+  const first = await services.runs.submit(profile.id, session.id, body, { ownerMessage: true });
+  const retry = await services.runs.submit(profile.id, session.id, body, { ownerMessage: true });
+
+  expect(first.id).not.toBe(parked.id);
+  expect(retry.id).toBe(parked.id);
+  expect(await userTexts(fixture, body.text)).toHaveLength(1);
+  expect(await services.lifecycle.steer(first.id, 'worker')).toBeNull();
+});
+
+it('a retried reject note on a parked approval is stored and continued once', async () => {
+  const fixture = await setup();
+  const { services, profile, session } = fixture;
+  const parked = await parkedOn(fixture, {
+    approval: {
+      id: randomUUID(),
+      toolCallId: 'call',
+      toolName: 'shell',
+      kind: 'machine',
+      title: 'Delete the folder',
+      detail: '',
+      confirmLabel: 'Delete',
+      request: '{}',
+      askedAt: new Date().toISOString(),
+    },
+  });
+  const body = { text: 'No, keep the folder', requestKey: 'reject-1' };
+
+  const first = await services.runs.submit(profile.id, session.id, body, { ownerMessage: true });
+  const retry = await services.runs.submit(profile.id, session.id, body, { ownerMessage: true });
+
+  expect(first.id).not.toBe(parked.id);
+  expect(retry.id).toBe(parked.id);
+  expect(await userTexts(fixture, body.text)).toHaveLength(1);
+  expect(await services.runs.activities(profile.id)).toHaveLength(1);
+});
+
+it('refuses a request key already used for different text', async () => {
+  const fixture = await setup();
+  const { services, profile, session } = fixture;
+
+  await running(fixture);
+  await services.runs.submit(profile.id, session.id, { text: 'First', requestKey: 'k5' });
+
+  await expect(
+    services.runs.submit(profile.id, session.id, { text: 'Other', requestKey: 'k5' }),
+  ).rejects.toMatchObject({ statusCode: 409 });
 });
 
 it('keeps every correction when two arrive before the run reads them', async () => {

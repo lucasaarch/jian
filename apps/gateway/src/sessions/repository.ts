@@ -318,61 +318,62 @@ export async function findOwnSession(
   return row ? toSession(row) : null;
 }
 
+/** What a message row holds; one mapping for every insert so they cannot drift apart. */
+function messageValues(message: Message, requestKey?: string) {
+  const { author, ...rest } = message;
+
+  return {
+    ...rest,
+    ...(requestKey ? { requestKey } : {}),
+    authorId: author?.id ?? null,
+    authorName: author?.name ?? null,
+    createdAt: new Date(message.createdAt),
+  };
+}
+
 export async function insertMessage(
   db: Queryable,
   message: Message,
   repeatable = false,
+  requestKey?: string,
 ): Promise<void> {
-  const { author, ...rest } = message;
-  const insert = db.insert(messages).values({
-    ...rest,
-    authorId: author?.id ?? null,
-    authorName: author?.name ?? null,
-    createdAt: new Date(message.createdAt),
-  });
+  const insert = db.insert(messages).values(messageValues(message, requestKey));
   if (repeatable) await insert.onConflictDoNothing({ target: messages.id });
   else await insert;
 }
 
 /**
- * Stores a message a person sent under a request key, once. The unique index on the key is the
- * guard when two sends race past the lookup; the loser inserts nothing instead of failing, since
- * a failed statement would abort the whole profile transaction.
+ * Stores a message a person sent into a turn already running, once. The unique index on the key
+ * is the guard when two sends race past the lookup; the loser inserts nothing instead of
+ * failing, since a failed statement would abort the whole profile transaction.
  */
 export async function insertKeyedMessage(
   db: Queryable,
   message: Message,
   requestKey: string,
 ): Promise<boolean> {
-  const { author, ...rest } = message;
   const inserted = await db
     .insert(messages)
-    .values({
-      ...rest,
-      requestKey,
-      authorId: author?.id ?? null,
-      authorName: author?.name ?? null,
-      createdAt: new Date(message.createdAt),
-    })
+    .values(messageValues(message, requestKey))
     .onConflictDoNothing()
     .returning({ id: messages.id });
 
   return inserted.length > 0;
 }
 
-/** The run a message sent under this request key belongs to, if one was already stored. */
-export async function findRunIdByMessageKey(
+/** The run and text of a message already stored under this request key. */
+export async function findMessageByKey(
   db: Queryable,
   sessionId: string,
   requestKey: string,
-): Promise<string | null> {
+): Promise<{ runId: string | null; content: string } | null> {
   const [row] = await db
-    .select({ runId: messages.runId })
+    .select({ runId: messages.runId, content: messages.content })
     .from(messages)
     .where(and(eq(messages.sessionId, sessionId), eq(messages.requestKey, requestKey)))
     .limit(1);
 
-  return row?.runId ?? null;
+  return row ?? null;
 }
 
 /** A message ID never grants access to another profile or conversation. */

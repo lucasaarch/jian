@@ -33,7 +33,7 @@ import {
 import type { SessionReader } from '../sessions/port.js';
 import {
   findMessage,
-  findRunIdByMessageKey,
+  findMessageByKey,
   insertKeyedMessage,
   insertMessage,
   parseCavemanMode,
@@ -155,6 +155,20 @@ export class Runs {
     return run;
   }
 
+  /** The message form of {@link sameRequest}: the key's first send decides what it stands for. */
+  private async sameMessage(
+    stored: { runId: string | null; content: string },
+    text: string,
+    tx: Queryable,
+    profileId: string,
+  ): Promise<Run> {
+    if (stored.content !== text || !stored.runId) {
+      throw new GatewayError(409, 'Request key was already used for different content');
+    }
+
+    return this.run(profileId, stored.runId, tx);
+  }
+
   /** Where a late answer goes when the agent that asked has already stopped waiting. */
   async relayTo(profileId: string, runId: string, sessionId: string | null) {
     await this.store.transaction(profileId, (tx) => setRelayTo(tx, runId, sessionId));
@@ -231,8 +245,8 @@ export class Runs {
       // A steered message has no run of its own to carry the key, so the retry is found through
       // the message. Without this it would be stored and steered again, or, if the run has
       // ended since, start a new turn.
-      const sentBefore = await findRunIdByMessageKey(tx, sessionId, data.requestKey);
-      if (sentBefore) return this.run(profileId, sentBefore, tx);
+      const sentBefore = await findMessageByKey(tx, sessionId, data.requestKey);
+      if (sentBefore?.runId) return this.sameMessage(sentBefore, data.text, tx, profileId);
 
       const waiting = await findWaitingSessionRun(tx, profileId, sessionId);
 
@@ -264,6 +278,7 @@ export class Runs {
           activity,
           data.text,
           options.channelMessage,
+          data.requestKey,
         );
       }
 
@@ -283,6 +298,7 @@ export class Runs {
             decidedBy: chat ? 'contact' : 'owner',
             note: chat ? chat.note : data.text,
             requestKey: resumeKey,
+            messageKey: data.requestKey,
             reply: {
               text: data.text,
               ...(author ? { author } : {}),
@@ -319,8 +335,8 @@ export class Runs {
 
         // Another send with this key got in between the lookup and the insert.
         if (!stored) {
-          const existing = await findRunIdByMessageKey(tx, sessionId, data.requestKey);
-          return existing ? this.run(profileId, existing, tx) : inFlight;
+          const existing = await findMessageByKey(tx, sessionId, data.requestKey);
+          return existing?.runId ? this.sameMessage(existing, data.text, tx, profileId) : inFlight;
         }
 
         if (modeChange) await setPonytailMode(tx, profileId, sessionId, modeChange);
@@ -653,6 +669,8 @@ export class Runs {
     // What the person wrote, when the answer it stands for differs: "2" for the second choice.
     said: string = answer,
     channelMessage?: Message['channelMessage'],
+    // The key the sender gave, which the continuation's own key does not carry.
+    messageKey?: string,
   ): Promise<Run> {
     const question = waiting.question;
     if (!question) throw new GatewayError(409, 'That run is not waiting for an answer');
@@ -675,18 +693,23 @@ export class Runs {
     await updateRun(tx, closed);
     await recordEvent(tx, this.clock, profileId, 'run.answered', { answer }, waiting.id);
 
-    await insertMessage(tx, {
-      id: randomUUID(),
-      profileId,
-      sessionId: waiting.sessionId,
-      runId: waiting.id,
-      role: 'user',
-      content: said,
-      ...(channelMessage ? { channelMessage } : {}),
-      ...(author ? { author } : {}),
-      purpose: 'answer',
-      createdAt: nowIso(this.clock),
-    });
+    await insertMessage(
+      tx,
+      {
+        id: randomUUID(),
+        profileId,
+        sessionId: waiting.sessionId,
+        runId: waiting.id,
+        role: 'user',
+        content: said,
+        ...(channelMessage ? { channelMessage } : {}),
+        ...(author ? { author } : {}),
+        purpose: 'answer',
+        createdAt: nowIso(this.clock),
+      },
+      false,
+      messageKey,
+    );
 
     const { chosen, selection } = await this.continuationModel(tx, session, waiting, activity);
 
@@ -721,6 +744,8 @@ export class Runs {
       decidedBy: 'owner' | 'contact';
       note?: string;
       requestKey: string;
+      /** The key the sender gave the message, which `requestKey` does not carry. */
+      messageKey?: string;
       /** The message that decided it, when one did. */
       reply?: {
         text: string;
@@ -766,18 +791,25 @@ export class Runs {
     );
 
     if (decision.reply) {
-      await insertMessage(tx, {
-        id: randomUUID(),
-        profileId,
-        sessionId: waiting.sessionId,
-        runId: waiting.id,
-        role: 'user',
-        content: decision.reply.text,
-        ...(decision.reply.channelMessage ? { channelMessage: decision.reply.channelMessage } : {}),
-        ...(decision.reply.author ? { author: decision.reply.author } : {}),
-        purpose: 'answer',
-        createdAt: nowIso(this.clock),
-      });
+      await insertMessage(
+        tx,
+        {
+          id: randomUUID(),
+          profileId,
+          sessionId: waiting.sessionId,
+          runId: waiting.id,
+          role: 'user',
+          content: decision.reply.text,
+          ...(decision.reply.channelMessage
+            ? { channelMessage: decision.reply.channelMessage }
+            : {}),
+          ...(decision.reply.author ? { author: decision.reply.author } : {}),
+          purpose: 'answer',
+          createdAt: nowIso(this.clock),
+        },
+        false,
+        decision.messageKey,
+      );
     }
 
     const { chosen, selection } = await this.continuationModel(
