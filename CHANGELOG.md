@@ -4,6 +4,32 @@ Every release of Jian, newest first.
 
 <!-- Generated from docs/releases by scripts/changelog.mjs. Edit the release note, then run `make changelog`. -->
 
+## 1.6.0 — 2026-11-06
+
+Pair a phone with your gateway by scanning a QR code, and get a push when an agent replies or needs you. The gateway side is ready for the Jian phone app.
+
+### Phones
+
+* **Pair a phone:** Settings → Mobile shows a QR code with your gateway's address and a one-time pairing code that works for 5 minutes. Scanning it gives the phone a token of its own, so you never copy your owner credentials onto it. The Jian app for iOS and Android isn't released yet. The gateway side is ready for it.
+* **See and revoke your phones:** The page lists each paired phone with its platform and when it was last seen. Revoke asks first, and a revoked phone loses access at once.
+* **Needs `JIAN_PUBLIC_URL`:** The QR code carries your gateway's address, so pairing needs `JIAN_PUBLIC_URL` set. Without it, the page tells you to set it.
+* **Not on the desktop app's own gateway:** Mobile isn't offered there. It appears when the desktop app is connected to a server gateway.
+* **No rate limit for paired phones:** They are treated like you. Pairing attempts are limited to 10 a minute.
+
+### Push notifications
+
+* **When it sends:** Each paired phone with notifications on gets a push when an agent replies in a panel chat, asks for approval or asks a question, or when a run stops on an error. The title is the agent's name, pushes are grouped per conversation, and the app icon's badge counts the conversations waiting on you.
+* **Show previews:** Turn it off for a phone and the text is replaced with "replied", "needs your approval", "asked you something" or "stopped on an error".
+* **Previews pass through Expo:** Pushes go through Expo's push service. Unlike the browser notifications, they are not end-to-end encrypted, so a preview passes through Expo, Apple and Google. That is what Show previews is for.
+* **No push where you are looking:** A phone that has that conversation open gets nothing. A phone that uninstalled the app stops being sent to.
+
+### Upgrading
+
+* The desktop app updates itself to this release.
+* **Servers:** Recreate the gateway and web containers with the 1.6.0 images, or follow the `latest` tags. The gateway applies the new migration, `0095_devices.sql`, when it starts.
+* **Pairing:** Set `JIAN_PUBLIC_URL` in the gateway's environment to the address your phone reaches it at.
+* **API:** New routes `POST /v1/devices/pairings`, `POST /v1/devices/pair` (public), `GET /v1/devices`, `PATCH /v1/devices/{deviceId}`, `DELETE /v1/devices/{deviceId}`, `GET /v1/devices/self`, `PUT /v1/devices/self/push`, `PUT /v1/devices/self/focus` and `DELETE /v1/devices/self`. A device token (`Authorization: Bearer jdev_…`) opens the API with the owner's access.
+
 ## 1.5.2 — 2026-11-06
 
 Compaction stops burning your quota when it fails, Apps gets 18 more services and several accounts per app, Atlassian moves to v2 with Bitbucket, and Jian starts sending an anonymous daily report you can turn off.
