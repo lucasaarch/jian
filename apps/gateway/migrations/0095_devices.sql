@@ -6,6 +6,7 @@ CREATE TABLE "devices" (
   "push_token" text,
   "previews" boolean DEFAULT true NOT NULL,
   "focused_session" uuid,
+  "focused_at" timestamp with time zone,
   "created_at" timestamp with time zone DEFAULT now() NOT NULL,
   "last_seen_at" timestamp with time zone,
   "revoked_at" timestamp with time zone

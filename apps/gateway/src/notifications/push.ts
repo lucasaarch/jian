@@ -10,6 +10,7 @@ import type { GatewayVault } from '../security/gateway-vault.js';
 import type { SessionReader } from '../sessions/port.js';
 import type { Store } from '../storage/database.js';
 import { pushSubscriptions } from '../storage/schema.js';
+import { beingRead } from './reading.js';
 
 /** The installation's own key pair, which push services check every notification against. */
 const KEYS = 'web-push-vapid';
@@ -17,12 +18,6 @@ const KEYS = 'web-push-vapid';
 const TTL_SECONDS = 60 * 60;
 /** What a notification's text holds at most; a phone shows two lines of it anyway. */
 const BODY_CHARS = 180;
-/**
- * A chat read this recently is on the owner's screen: the panel marks an open chat read every
- * half minute. Nothing is sent about it, and the browser is never handed a push it should not
- * show — iOS takes the permission back from an app that receives pushes and shows none.
- */
-const READING_MS = 60_000;
 
 type Send = typeof webpush.sendNotification;
 type Notice = { title: string; body: string; url: string; tag: string };
@@ -82,7 +77,9 @@ export class PushNotifications {
     if (!devices.length) return;
     const session = await this.sessions.session(run.profileId, run.sessionId);
     if (session.channel !== GATEWAY_SESSION_CHANNEL) return;
-    if (session.readAt && this.clock() - Date.parse(session.readAt) < READING_MS) return;
+    // Nothing is sent about a chat on screen, and the browser is never handed a push it should
+    // not show: iOS takes the permission back from an app that receives pushes and shows none.
+    if (beingRead(session, this.clock())) return;
 
     const said =
       run.status === 'waiting'

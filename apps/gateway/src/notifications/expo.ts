@@ -2,6 +2,7 @@ import { GATEWAY_SESSION_CHANNEL, type Run } from '@jian/contracts';
 import type { Devices } from '../devices/service.js';
 import type { ProfileReader } from '../profiles/port.js';
 import type { SessionReader } from '../sessions/port.js';
+import { beingRead } from './reading.js';
 
 const SEND_URL = 'https://exp.host/--/api/v2/push/send';
 const RECEIPTS_URL = 'https://exp.host/--/api/v2/push/getReceipts';
@@ -62,7 +63,10 @@ export class MobilePush {
   private pending: Pending[] = [];
 
   constructor(
-    private readonly devices: Pick<Devices, 'pushTargets' | 'forgetPushToken' | 'waitingRuns'>,
+    private readonly devices: Pick<
+      Devices,
+      'pushTargets' | 'forgetPushToken' | 'waitingConversations'
+    >,
     private readonly profiles: ProfileReader,
     private readonly sessions: Pick<SessionReader, 'session'>,
     private readonly fetcher: typeof fetch,
@@ -78,9 +82,11 @@ export class MobilePush {
     if (!targets.length) return;
     const session = await this.sessions.session(run.profileId, run.sessionId);
     if (session.channel !== GATEWAY_SESSION_CHANNEL) return;
+    // The owner is reading it in the panel; a phone buzzing about it would be noise.
+    if (beingRead(session, this.clock())) return;
     const profile = await this.profiles.profile(run.profileId);
     const kind = pushKind(run);
-    const badge = await this.devices.waitingRuns();
+    const badge = await this.devices.waitingConversations();
 
     const messages = targets
       // The conversation is open on that phone; a banner about what it is reading is noise.
@@ -92,6 +98,8 @@ export class MobilePush {
         data: { profileId: run.profileId, sessionId: run.sessionId, runId: run.id, kind },
         categoryId: kind,
         threadId: run.sessionId,
+        // On Android a newer push of a chat replaces the older one; iOS groups them by threadId.
+        tag: run.sessionId,
         channelId: 'conversations',
         badge,
       }));

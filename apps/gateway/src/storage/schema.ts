@@ -1238,8 +1238,10 @@ export const devices = pgTable(
     // The Expo push token; one token belongs to one device at a time.
     pushToken: text('push_token'),
     previews: boolean('previews').notNull().default(true),
-    // The conversation open on the phone while the app is in the foreground.
+    // The conversation open on the phone while the app is in the foreground, and when the phone
+    // last said so; a focus not renewed for two minutes is ignored.
     focusedSession: uuid('focused_session'),
+    focusedAt: timestamp('focused_at', { withTimezone: true }),
     createdAt,
     lastSeenAt: timestamp('last_seen_at', { withTimezone: true }),
     revokedAt: timestamp('revoked_at', { withTimezone: true }),

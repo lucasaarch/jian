@@ -58,6 +58,10 @@ export const devicePushInputSchema = z.strictObject({
   pushToken: z.string().min(1).max(200).nullable(),
 });
 
+/**
+ * The conversation open on the phone, or null. A focus lapses two minutes after it was set, so a
+ * phone that died with a chat open does not mute it: the app sends it again every minute.
+ */
 export const deviceFocusInputSchema = z.strictObject({
   sessionId: z.uuid().nullable(),
 });

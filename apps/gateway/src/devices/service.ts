@@ -9,7 +9,7 @@ import {
   devicePushInputSchema,
   GATEWAY_SESSION_CHANNEL,
 } from '@jian/contracts';
-import { and, count, desc, eq, gt, isNotNull, isNull, lte, ne } from 'drizzle-orm';
+import { and, countDistinct, desc, eq, gt, isNotNull, isNull, lte, ne } from 'drizzle-orm';
 import type { Clock } from '../core/clock.js';
 import { assertFound, GatewayError } from '../core/errors.js';
 import { GATEWAY_SCOPE } from '../security/gateway-vault.js';
@@ -19,6 +19,13 @@ import { DEVICE_TOKEN_PREFIX, hashSecret, newDeviceToken } from './tokens.js';
 
 /** A pairing code is for one scan right after the QR code appears. */
 export const PAIRING_TTL_MS = 5 * 60 * 1000;
+
+/**
+ * How long a phone's focus mutes its conversation, in ms. The app sends its focus again every
+ * minute while a conversation is open, so a phone that died or lost its network with a chat on
+ * screen stops muting it soon after.
+ */
+export const FOCUS_MS = 2 * 60 * 1000;
 
 /** `last_seen_at` is for the owner to read, so a request per second need not write a row each time. */
 const SEEN_EVERY_MS = 60 * 1000;
@@ -124,7 +131,12 @@ export class Devices {
     // The push token goes too: a revoked phone must not keep receiving what the agent says.
     const revoked = await this.store.db
       .update(devices)
-      .set({ revokedAt: new Date(this.clock()), pushToken: null, focusedSession: null })
+      .set({
+        revokedAt: new Date(this.clock()),
+        pushToken: null,
+        focusedSession: null,
+        focusedAt: null,
+      })
       .where(and(eq(devices.id, id), isNull(devices.revokedAt)))
       .returning({ id: devices.id });
     if (revoked.length === 0) throw new GatewayError(404, 'Device not found');
@@ -175,7 +187,7 @@ export class Devices {
     const { sessionId } = deviceFocusInputSchema.parse(input);
     const set = await this.store.db
       .update(devices)
-      .set({ focusedSession: sessionId })
+      .set({ focusedSession: sessionId, focusedAt: sessionId ? new Date(this.clock()) : null })
       .where(and(eq(devices.id, id), isNull(devices.revokedAt)))
       .returning({ id: devices.id });
     if (set.length === 0) throw new GatewayError(404, 'Device not found');
@@ -188,6 +200,7 @@ export class Devices {
       .select()
       .from(devices)
       .where(and(isNull(devices.revokedAt), isNotNull(devices.pushToken)));
+    const now = this.clock();
     return rows.flatMap((row) =>
       row.pushToken
         ? [
@@ -195,7 +208,11 @@ export class Devices {
               id: row.id,
               pushToken: row.pushToken,
               previews: row.previews,
-              focusedSession: row.focusedSession,
+              // A focus the phone stopped renewing is no focus at all.
+              focusedSession:
+                row.focusedAt && now - row.focusedAt.getTime() < FOCUS_MS
+                  ? row.focusedSession
+                  : null,
             },
           ]
         : [],
@@ -210,10 +227,13 @@ export class Devices {
       .where(eq(devices.pushToken, pushToken));
   }
 
-  /** What an app icon's badge counts: runs of the panel's chats stopped for the owner to answer. */
-  async waitingRuns(): Promise<number> {
+  /**
+   * What an app icon's badge counts: the panel's chats with a run stopped for the owner to
+   * answer. A chat waiting on two answers is still one chat to open.
+   */
+  async waitingConversations(): Promise<number> {
     const [row] = await this.store.db
-      .select({ total: count() })
+      .select({ total: countDistinct(runs.sessionId) })
       .from(runs)
       .innerJoin(sessions, eq(sessions.id, runs.sessionId))
       .where(and(eq(runs.status, 'waiting'), eq(sessions.channel, GATEWAY_SESSION_CHANNEL)));

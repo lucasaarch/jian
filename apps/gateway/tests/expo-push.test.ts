@@ -1,6 +1,8 @@
 import type { Run } from '@jian/contracts';
+import { eq } from 'drizzle-orm';
 import { expect, it } from 'vitest';
 import { MobilePush, pushBody } from '../src/notifications/expo.js';
+import { runs } from '../src/storage/schema.js';
 import { testServices } from './helpers/services.js';
 
 const input = {
@@ -30,8 +32,20 @@ function expo(reply?: Reply) {
   return { fetcher, requests, messages };
 }
 
-async function setup(fetcher: typeof fetch, now = () => 0) {
-  const services = await testServices();
+/** A run stopped for the owner to answer, in that conversation. */
+async function park(
+  services: Awaited<ReturnType<typeof testServices>>,
+  profileId: string,
+  sessionId: string,
+  key: string,
+) {
+  const queued = await services.runs.submit(profileId, sessionId, { text: 'Go', requestKey: key });
+  await services.store.db.update(runs).set({ status: 'waiting' }).where(eq(runs.id, queued.id));
+}
+
+/** `now` is the push sender's clock; `clock` is the rest of the gateway's, real time by default. */
+async function setup(fetcher: typeof fetch, now = () => 0, clock?: () => number) {
+  const services = await testServices(clock);
   const profile = await services.profiles.createProfile(input);
   const chat = await services.sessions.createGatewaySession(profile.id, {});
   const pair = async (name: string, token: string, previews = true) => {
@@ -82,6 +96,7 @@ it('sends a reply to every paired phone, titled by the agent', async () => {
       title: profile.name,
       body: 'Opened the pull request.',
       threadId: chat.id,
+      tag: chat.id,
       categoryId: 'reply',
       channelId: 'conversations',
       data: { profileId: profile.id, sessionId: chat.id, kind: 'reply' },
@@ -123,6 +138,58 @@ it('stays quiet on the phone where the conversation is open', async () => {
   await push.runSettled(run({ output: 'Done.' }));
 
   expect(api.messages().map((m) => m.to)).toEqual(['ExponentPushToken[away]']);
+});
+
+it('stays quiet on every phone while the chat is read in the panel', async () => {
+  const api = expo();
+  let now = Date.now();
+  const { services, profile, chat, pair, push, run } = await setup(api.fetcher, () => now);
+  await pair('One', 'ExponentPushToken[one]');
+  const read = await services.sessions.markRead(profile.id, chat.id);
+  const readAt = Date.parse(read.readAt ?? 'missing');
+
+  now = readAt + 10_000;
+  await push.runSettled(run({ output: 'Done.' }));
+  expect(api.requests).toHaveLength(0);
+
+  now = readAt + 2 * 60_000;
+  await push.runSettled(run({ output: 'Done.' }));
+  expect(api.messages().map((m) => m.to)).toEqual(['ExponentPushToken[one]']);
+});
+
+it('stops muting a conversation once the phone stops renewing its focus', async () => {
+  const api = expo();
+  let now = Date.parse('2026-11-06T12:00:00Z');
+  const clock = () => now;
+  const { services, chat, pair, push, run } = await setup(api.fetcher, clock, clock);
+  const phone = await pair('Open', 'ExponentPushToken[open]');
+
+  await services.devices.setFocus(phone.id, { sessionId: chat.id });
+  now += 30_000;
+  await push.runSettled(run({ output: 'Done.' }));
+  expect(api.requests).toHaveLength(0);
+
+  now += 150_000;
+  await push.runSettled(run({ output: 'Done.' }));
+  expect(api.messages().map((m) => m.to)).toEqual(['ExponentPushToken[open]']);
+});
+
+it('badges the number of panel chats waiting, not the number of runs', async () => {
+  const api = expo();
+  const { services, profile, chat, pair, push, run } = await setup(api.fetcher);
+  await pair('One', 'ExponentPushToken[one]');
+  const second = await services.sessions.createGatewaySession(profile.id, {});
+  const channel = await services.sessions.createSession(profile.id, { channel: 'api' });
+  await park(services, profile.id, chat.id, 'a');
+  await park(services, profile.id, chat.id, 'b');
+  await park(services, profile.id, second.id, 'c');
+  await park(services, profile.id, channel.id, 'd');
+
+  expect(await services.devices.waitingConversations()).toBe(2);
+  await push.runSettled(
+    run({ status: 'waiting', question: { prompt: 'Which?' } as Run['question'] }),
+  );
+  expect(api.messages()[0]).toMatchObject({ badge: 2 });
 });
 
 it('forgets a phone that uninstalled the app, from a ticket or a receipt', async () => {
