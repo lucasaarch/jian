@@ -66,11 +66,12 @@ export type Kept = {
 };
 
 /**
- * A line of the record or of a file that reads like one of these headings, or like the
- * checkpoint's own opening, would pass for something Jian kept. Escaped, it reads as written.
+ * A line of the record or of a file that reads like one of these headings, like a kept-words
+ * line (`{"from":`), or like the checkpoint's own opening, would pass for something Jian kept.
+ * Escaped, it reads as written.
  */
 const FORGED = new RegExp(
-  `^(\\s*)(#{1,6}\\s*(?:what people wrote|what the owner wrote|files in progress)|${CHECKPOINT.replace(/[()]/g, '\\$&')})`,
+  `^(\\s*)(#{1,6}\\s*(?:what people wrote|what the owner wrote|files in progress)|\\{\\s*"from"\\s*:|${CHECKPOINT.replace(/[()]/g, '\\$&')})`,
   'gimu',
 );
 
@@ -98,7 +99,8 @@ const CREDENTIAL_FILE = new RegExp(
     'kubeconfig',
     'auth\\.json',
     'token.*\\.json',
-    '.*\\.(?:pem|key|p12|pfx|jks|keystore|tfvars|tfstate)',
+    '\\.pypirc',
+    '.*\\.(?:pem|key|p12|pfx|jks|keystore|tfvars|tfvars\\.json|tfstate|tfstate\\.backup)',
     '.*credentials.*',
     '.*secret.*',
   ].join('|')})$`,
@@ -263,7 +265,11 @@ function fileCalls(messages: readonly ModelMessage[]): { tool: string; path: str
 }
 
 /** Whether the file's name says it holds credentials (`CREDENTIAL_FILE`), on any machine. */
-const credentialFile = (path: string) => CREDENTIAL_FILE.test(path.split(/[\\/]/).at(-1) ?? path);
+/** Credentials kept in a file whose name says nothing alone, known by the folder it is in. */
+const CREDENTIAL_PATH = /(?:^|[\\/])(?:\.kube[\\/]config|\.docker[\\/]config\.json)$/i;
+
+const credentialFile = (path: string) =>
+  CREDENTIAL_FILE.test(path.split(/[\\/]/).at(-1) ?? path) || CREDENTIAL_PATH.test(path);
 
 /**
  * The files these turns changed, most recently changed first, at most `MAX_FILES`; the files
@@ -340,6 +346,12 @@ function renderWords(words: readonly Said[]): string {
   ].join('\n');
 }
 
+/**
+ * A kept file's path as its heading shows it: JSON-quoted, so a path holding a newline or a
+ * control character stays on its own line and cannot write a heading or a words line of its own.
+ */
+const shownPath = (path: string) => JSON.stringify(path);
+
 /** The files as the model reads them, each fenced, with any line that could pass for a heading escaped. */
 function renderFiles({ changed, files }: NonNullable<Kept['files']>): string {
   return [
@@ -349,11 +361,11 @@ function renderFiles({ changed, files }: NonNullable<Kept['files']>): string {
       if ('content' in file) {
         const text = neutralised(file.content);
         const fence = fenceFor(text);
-        return `### ${file.path}\n${fence}\n${text.endsWith('\n') ? text : `${text}\n`}${fence}`;
+        return `### ${shownPath(file.path)}\n${fence}\n${text.endsWith('\n') ? text : `${text}\n`}${fence}`;
       }
       return file.reason === 'large'
-        ? `### ${file.path}\nNot kept here, at more than ${file.tokens.toLocaleString('en')} tokens: read it again when you need it.`
-        : `### ${file.path}\nCould not be read at this summary: read it again when you need it.`;
+        ? `### ${shownPath(file.path)}\nNot kept here, at more than ${file.tokens.toLocaleString('en')} tokens: read it again when you need it.`
+        : `### ${shownPath(file.path)}\nCould not be read at this summary: read it again when you need it.`;
     }),
   ].join('\n\n');
 }
