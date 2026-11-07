@@ -4,22 +4,43 @@ Every release of Jian, newest first.
 
 <!-- Generated from docs/releases by scripts/changelog.mjs. Edit the release note, then run `make changelog`. -->
 
-## 1.6.4 — 2026-11-07
+## 1.7.0 — 2026-11-07
 
-Long conversations on Claude cost less, with compaction read from the cache and tool results given the room they were meant to have.
+Agents keep long conversations near their model's full window and pay less for them, hand work to subagents and wait for the report, and see the end of long tool output.
 
-### Conversations
+### Long conversations
 
-* **Tool results, memories and skills get their full room:** On Claude these limits were counted a byte a token, about 2.4 times tighter than meant. The 12,000-token limit on a tool result held about 5,000 of Claude's tokens, so the agent read the rest a page at a time, and every page was another step that sent the whole conversation again. The limits on tool results, recalled memories and loaded skills are now counted in Claude's own tokens. Other providers count as before.
-* **The Context line shows how close compaction is:** Each turn tells the agent how far it is from the point where Jian summarises older turns, which is never more than 200,000 tokens, and the count now includes the tool definitions. It used to give a share of the whole window, and on a 1M-token model compaction comes at a fifth of the window, so the line read about 20% when a summary was due. The agent's advice on when to compact by itself now uses the same point.
-* **Compaction reads the conversation from the cache:** A summary used to be a separate request that read up to 200,000 tokens of the conversation again at full price. Now Jian sends the request the conversation just sent, with one more message asking for the summary, so a provider that caches prompts reads everything before that message from its cache. On Claude a cached read costs a tenth of a fresh one. The cache only lasts so long, an hour for your own conversations on Claude, so a conversation you come back to later, or one already past the model's window, is summarised in parts as before. The run's compaction checkpoint records how many input tokens came from the cache.
-* **Summaries think less where they can:** On the Claude models that take an effort for a single reply, among them Opus 5 and 5.5 and Sonnet 5.5, the summary is written at low effort. On other models a summary sent this way keeps the conversation's effort, since changing it would throw the cache away. A summary written in parts uses the least effort, as before.
-* **The summary keeps your requests:** It now lists every request you made in the summarised turns, quoted briefly in your own words, and the summary is asked to stay within about 2,500 words.
+* **You choose when each agent compacts:** Agent settings has a new Compact conversations setting, under Identity. By default an agent summarises a conversation near the end of its model's window, about 83% of what the model can take in after the room it keeps for its answer, or roughly 773,000 tokens on a model with a million. Jian used to stop at 200,000. To pay less per step, pick At a set size and type a number of tokens, 50,000 or more, or choose 200K, 400K or 600K. A size the model can't reach is held to the default.
+* **Compaction reads the conversation from the cache:** A summary used to be a separate request that read the conversation again at full price. Now Jian sends the request the conversation just sent, with one more message asking for the summary, so a provider that caches prompts reads everything before it from the cache. On Claude a cached read costs a tenth of a fresh one. The cache lasts an hour for your own conversations on Claude. A conversation you come back to later is summarised in one request without the cache, and one already past the model's window is summarised in parts. The compaction checkpoint records how many input tokens came from the cache.
+* **Summaries think less where they can:** On the Claude models that take an effort for a single reply, among them Opus 5 and 5.5 and Sonnet 5.5, a summary is written at low effort. On other models a summary sent from the cache keeps the conversation's effort, since changing it would throw the cache away, and a summary written in parts uses the least effort.
+* **A summary keeps people's words and the files being edited:** What people wrote in the summarised turns stays word for word next to the summary, newest first, up to 20,000 tokens, with who wrote it: you in Jian, or a contact or group member by name and channel. Other agents' messages are not kept. A very long message keeps its beginning and its end. The summary itself lists every request you made, quoted briefly, and stays within about 2,500 words. The agent also gets the current contents of the last five files it changed in those turns, up to 5,000 tokens each and 20,000 in all. A bigger file, or one that can't be read, is listed by its path so the agent knows to open it again. Files that look like credentials, such as `.env` files and keys, are never kept. A cut to fit the window never drops the summary.
+* **The Context line shows how close compaction is:** Each turn tells the agent how far it is from the point where Jian compacts that conversation, counting the tool definitions too. It used to give a share of the whole window, so on a 1M-token model it read about 20% when a summary was due. The agent's advice on when to compact by itself uses the same point, and so does the context ring.
+* **Tool results, memories and skills get their full room:** On Claude these limits were counted a byte a token, about 2.4 times tighter than meant. The 12,000-token limit on a tool result held about 5,000 of Claude's tokens, so the agent read the rest a page at a time, and every page was another step that sent the whole conversation again. They are now counted in Claude's own tokens. Other providers count as before.
+
+### Subagents
+
+* **Your agent hands work off when it pays:** It can start a subagent without loading anything first, and it is told when that is worth doing: a wide search, a long log or a test run whose detail would only fill the conversation, pieces that can run side by side, or a second look at its own work. It keeps a single lookup or a few files for itself. A brief is all it has to write.
+* **It waits for the report:** By default the agent gets the subagent's report back in the same turn. Several subagents started together run at the same time. If one takes longer than 15 minutes, or can't start within a minute, the agent stops waiting and the report arrives later, in the turn still going or as a new one. A long report is kept whole for the agent to read.
+* **A report is the subagent's account:** It reaches the agent marked as something to check before relying on it, and it is screened for instructions aimed at the agent, like a web page.
+* **Only you answer the agent's questions:** A question your agent asks you is answered only by you, or by the person a channel conversation is with. A subagent's report, a nudge to continue the conversation's objective, a schedule or another agent's message used to count as your answer. They now reach the agent as information and the question stays open.
+
+### Tool output
+
+* **The end of long output survives:** When a command's output, a file, a search or a connected service's text is too long to show in full, the agent sees its beginning and its end instead of only the beginning, with a line saying how long it really was and where the full copy is. The error at the bottom of a failed build is no longer cut off. Commands keep the first and last 30,000 characters of their output on the gateway, and the first and last 200,000 on a connected machine.
+* **One step's results share a limit:** When several large results come back in one step, they are shortened together, the biggest first, so a burst of parallel reads can't fill the conversation at once. The full output stays available, and a page the agent is reading through is never shortened.
+
+### Fixes
+
+* **Tool answers come through on Claude:** Since 1.6.2, on Claude 4.5 and newer, a call that made other tools available sent the agent only those tools' names in place of its result. A result too long to keep whole lost its preview and the way to read the rest, and the first call into a tool group or the browser could come back empty. Every tool's result now reaches the agent as it was.
+* **Long turns on a server:** A run that went past 11 minutes was marked failed in the job queue while it kept going, so a worker could end up running more turns at once than it should. Runs now hold their place for up to 6 hours and keep showing they are alive, so a worker that dies is still noticed within a couple of minutes.
 
 ### Upgrading
 
 * The desktop app updates itself to this release.
-* **Servers:** Recreate the gateway and web containers with the 1.6.4 images, or follow the `latest` tags. There is no migration.
+* **Servers:** Recreate the gateway and web containers with the 1.7.0 images, or follow the `latest` tags. There is no migration. The job queues pick up their new settings when the gateway starts.
+* **Machines with Jian Remote:** Update them from Machines to keep the end of long remote output. An older Jian Remote still works and keeps only the start.
+* **Compaction point:** Every agent starts on the new default, near the end of its model's window. If you'd rather keep 200,000, set At a set size to 200K in each agent's settings.
+* **API:** An agent's `contextPolicy` takes `compactAt`, `"auto"` or a number of tokens from 50,000, and is replaced whole on `PATCH /v1/profiles/{profileId}`, so send it back with every field. `spawn_subagent` needs only `brief` and takes `wait` (default `true`).
 
 ## 1.6.2 — 2026-11-07
 
