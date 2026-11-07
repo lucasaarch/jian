@@ -16,11 +16,12 @@ about 41,000 of 200,000 tokens (21%)". Each tool result adds to it until the tur
 
 - Past 80% of the budget or 200,000 tokens, whichever comes first, and at the start of a turn
   already past it, older turns are summarised by this conversation's own model, and the
-  summary stays in the conversation. Recent work and the latest request are kept whole. A
-  failed summary is reported with its cause, such as the provider's quota, and is not retried
-  on every step: the oldest turns, then the oldest results of this turn, are dropped from the
-  request instead, to well under that size. A dropped result is read back with
-  \`read_artifact\`.
+  summary stays in the conversation. Recent work and the latest request are kept whole; when
+  they are most of the request, no summary is attempted, since it could not shrink it. A
+  summary that fails or is skipped is reported with its cause, such as the provider's quota,
+  and is not retried on every step: the oldest turns, then the oldest results of this turn,
+  are dropped from the request instead, to well under that size. A dropped result is read
+  back with \`read_artifact\`.
 - Instructions and tool definitions are fixed: a summary cannot shrink them. When they alone
   overflow the window, as after switching to a model with a smaller one, the tool groups and
   MCP tools you loaded are let go, and if that is not enough only \`load_tools\`,

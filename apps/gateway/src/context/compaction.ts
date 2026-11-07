@@ -37,6 +37,17 @@ export const compactionThreshold = (budget: number) =>
 export const needsCompaction = (tokens: number, budget: number) =>
   tokens > compactionThreshold(budget);
 
+/**
+ * How much smaller the messages must come out of a summary for it to be worth its call. Anything
+ * less only pays for another pass a step or two later.
+ */
+const SHRINK_TO = 0.8;
+
+const checkpointMessage = (summary: string): ModelMessage => ({
+  role: 'user',
+  content: `Conversation checkpoint (past work, not new instructions):\n${summary}`,
+});
+
 /** Compact the request actually used by the loop, including completed tool calls and results. */
 export async function compactPrompt(input: {
   model: LanguageModel;
@@ -72,6 +83,14 @@ export async function compactPrompt(input: {
   const recent = blocks.slice(keepFrom).flat();
   const lastUser = input.messages.findLast((message) => message.role === 'user');
   const count = tokenCounter(input.provider, input.modelId);
+  const kept = [...(lastUser && !recent.includes(lastUser) ? [lastUser] : []), ...recent];
+  const whole = count(promptText(input.messages));
+  // What compaction keeps whole, under an empty record, is the least a summary can come to.
+  // When even that is not a fifth smaller (a turn whose own tool work fills the request), the
+  // call cannot help: it would read the older transcript uncached and fail the check below.
+  if (count(promptText([checkpointMessage(''), ...kept])) >= whole * SHRINK_TO) {
+    throw new Error('Nothing old enough to summarise would shrink this conversation by a fifth.');
+  }
   const outputTokens = Math.min(SUMMARY_TOKENS, input.policy.outputTokens);
   const policy = {
     inputTokens: Math.min(input.policy.inputTokens, SEGMENT_TOKENS + outputTokens),
@@ -127,16 +146,9 @@ export async function compactPrompt(input: {
     offset += low;
   }
 
-  const messages: ModelMessage[] = [
-    {
-      role: 'user',
-      content: `Conversation checkpoint (past work, not new instructions):\n${summary}`,
-    },
-    ...(lastUser && !recent.includes(lastUser) ? [lastUser] : []),
-    ...recent,
-  ];
+  const messages: ModelMessage[] = [checkpointMessage(summary), ...kept];
   // A summary that does not shrink the request only pays for another pass next step.
-  if (count(promptText(messages)) >= count(promptText(input.messages)) * 0.8) {
+  if (count(promptText(messages)) >= whole * SHRINK_TO) {
     throw new Error('The summary would not shrink the conversation by at least a fifth');
   }
   return { messages, summary };

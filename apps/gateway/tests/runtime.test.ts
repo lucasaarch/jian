@@ -1977,3 +1977,60 @@ it("seeds the next turn's scale from the session's last measured step", async ()
   // About half the threshold to the provider: nothing to compact on the first step.
   expect(summaries).toBe(0);
 });
+
+it('skips a summary that could not shrink the prompt by a fifth', async () => {
+  // A threshold of 64,000 tokens, reached on the fourth step with most of the request in the
+  // last two results, which compaction keeps whole.
+  const policy = { inputTokens: 84096, outputTokens: 4096 };
+  const { services, profile, session, run } = await fixture({
+    ...policy,
+    toolResultTokens: 32000,
+    maxSteps: 8,
+  });
+  // A little older history: compaction has something to summarise, but too little to matter.
+  for (const [index, role] of (['user', 'assistant'] as const).entries()) {
+    await insertMessage(services.store.db, {
+      id: randomUUID(),
+      profileId: profile.id,
+      sessionId: session.id,
+      role,
+      content: `turn-${index} A short exchange.`,
+      createdAt: new Date(Date.parse('2026-09-29T09:00:00.000Z') + index * 1000).toISOString(),
+    });
+  }
+  largeResults(services, [5000, 30000, 12000, 100]);
+  let summaries = 0;
+  let step = 0;
+  const model = mockModel({
+    doGenerate: async (options) => {
+      if (!options.tools?.length) {
+        summaries++;
+        return answer('Checkpoint: a short exchange.');
+      }
+      const { usage } = reported(options, 1);
+      if (step === 4) return { ...answer('Done with the results.'), usage };
+      return callLarge(step++, usage);
+    },
+  });
+
+  await new AgentRuntime(services, () => model).execute(profile.id, run.id);
+
+  const finished = await services.runs.run(profile.id, run.id);
+  const checkpoints = (await services.lifecycle.checkpoints(profile.id, run.id)).map(
+    (checkpoint) => checkpoint.data as { phase?: string; reason?: string; shedResults?: number },
+  );
+  expect(finished.output).toBe('Done with the results.');
+  // No model call, no tokens: the turn's own results are what fill the request.
+  expect(summaries).toBe(0);
+  expect(checkpoints).toContainEqual(
+    expect.objectContaining({
+      phase: 'compaction-failed',
+      reason: 'Nothing old enough to summarise would shrink this conversation by a fifth.',
+    }),
+  );
+  expect(
+    checkpoints.some(
+      (checkpoint) => checkpoint.phase === 'context-truncated' && (checkpoint.shedResults ?? 0) > 0,
+    ),
+  ).toBe(true);
+});

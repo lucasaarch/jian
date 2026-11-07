@@ -23,9 +23,11 @@ const answer = (text: string, inputTokens = 10) => ({
   warnings: [],
 });
 
-async function conversation() {
+async function conversation(contextPolicy?: { inputTokens: number }) {
   const services = await testServices();
-  const profile = await services.profiles.createProfile(input);
+  const profile = await services.profiles.createProfile(
+    contextPolicy ? { ...input, contextPolicy } : input,
+  );
   const session = await services.sessions.createSession(profile.id, { title: 'Release' });
   return { services, profile, session };
 }
@@ -154,7 +156,9 @@ it('tells the owner why /compact failed instead of saying there was nothing to c
 });
 
 it('compacts once on /compact sent while a turn runs, without telling the agent the words', async () => {
-  const { services, profile, session } = await conversation();
+  // Room for the history without an automatic compaction first: one would leave nothing older
+  // than the turn for /compact to summarise, and that summary is not attempted.
+  const { services, profile, session } = await conversation({ inputTokens: 64000 });
   for (let index = 0; index < 6; index++) {
     await insertMessage(services.store.db, {
       id: randomUUID(),
