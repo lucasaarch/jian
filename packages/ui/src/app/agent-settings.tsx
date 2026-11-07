@@ -14,11 +14,12 @@ import { useOnboarding } from '../lib/stores/onboarding';
 import { useRefresh } from '../lib/workspace';
 import { useRouter } from '../platform/navigation';
 import { AgentAvatar } from './agent-avatar';
+import { AgentCompaction } from './agent-compaction';
 import { AgentIdentity } from './agent-identity';
 
 /**
- * Who the agent is, saved as it is typed, and what cannot be taken back: forgetting everything
- * it was told, or deleting it.
+ * Who the agent is and when its conversations are compacted, saved as they change, and what
+ * cannot be taken back: forgetting everything it was told, or deleting it.
  */
 export function AgentSettingsContent({ profileId }: { profileId: string }) {
   const profile = useProfiles().data?.find((item) => item.id === profileId);
@@ -35,6 +36,7 @@ export function AgentSettingsContent({ profileId }: { profileId: string }) {
         </div>
       </header>
       <AgentIdentity key={profile.id} profile={profile} />
+      <AgentCompaction key={`${profile.id}-compaction`} profile={profile} />
       <DangerZone profile={profile} />
     </>
   );

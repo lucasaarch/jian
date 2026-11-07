@@ -20,6 +20,7 @@ const profileBase = {
     toolResultTokens: 1500,
     maxSteps: 200,
     maxRunTokens: 500000,
+    compactAt: 'auto' as const,
   },
   disabledSkills: [],
   allowShell: false,
