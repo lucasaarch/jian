@@ -85,6 +85,7 @@ import {
   defersTools,
   MAX_DEFERRED,
   markDeferred,
+  plainOutput,
   referencedTools,
   referencing,
   toolAdditions,
@@ -118,7 +119,7 @@ import { availableNote, connectMcpTools, type McpEntry, unavailableNote } from '
 import { MCP_ERROR_UNSAID, mcpErrorText, mcpOutcomeUncertain } from './mcp-errors.js';
 import { Narrator, ToolCalls } from './narrator.js';
 import { ProgressReporter } from './progress.js';
-import { boundToolResult, redactOutput, redactText } from './results.js';
+import { boundToolResult, fitStep, redactOutput, redactText, type StepResult } from './results.js';
 import { type StepRequest, summaryCall } from './summary-call.js';
 import { plainTitle, type TitleModel, writeTitle } from './title.js';
 import { reason, toolFailure } from './tool-failure.js';
@@ -1029,6 +1030,31 @@ export class AgentRuntime {
 
       const guarded: ToolSet = {};
       const toolCalls = new ToolCalls();
+      // One step's results as they came back, each bounded on its own, until the step's
+      // messages are built from them: only then are they all known, and fitted together.
+      const stepResults = new Map<string, StepResult & { steered: boolean }>();
+      // What a step's fitting cut, by call: what the model is given and what the step records.
+      const fittedResults = new Map<string, unknown>();
+      let fitting: Promise<void> = Promise.resolve();
+      const fittedOutput = async (toolCallId: string, output: unknown) => {
+        if (stepResults.has(toolCallId)) {
+          const step = [...stepResults.values()];
+          stepResults.clear();
+          fitting = fitStep(step, run, secrets, this.options, scale).then((fitted) => {
+            for (const [id, cut] of fitted) {
+              const entry = step.find((item) => item.toolCallId === id);
+              // A warning about outside content stays on what is left of that content.
+              fittedResults.set(
+                id,
+                entry?.steered ? { ...(entry.result as object), result: cut } : cut,
+              );
+            }
+            if (fitted.size && 'read_artifact' in tools) loadedTools.add('read_artifact');
+          });
+        }
+        await fitting;
+        return fittedResults.has(toolCallId) ? fittedResults.get(toolCallId) : output;
+      };
       // Serializing tool execution prevents another effect from starting after one remote outcome is uncertain.
       let toolQueue: Promise<void> = Promise.resolve();
 
@@ -1052,8 +1078,20 @@ export class AgentRuntime {
           // brought in is sent whole from the next step, unreferenced.
           ...(deferring && LOADERS.has(name)
             ? { toModelOutput: referencing(definition, (id) => broughtIn.get(id)) }
-            : {}),
+            : definition.toModelOutput
+              ? {}
+              : {
+                  toModelOutput: async ({
+                    toolCallId,
+                    output,
+                  }: {
+                    toolCallId: string;
+                    output: unknown;
+                  }) => plainOutput(await fittedOutput(toolCallId, output)),
+                }),
           execute: async (input, options) => {
+            // An approved action runs before any step: its result is no step's to fit.
+            const inStep = approvedCallId !== options.toolCallId;
             const previous = toolQueue;
             let release: () => void = () => {};
 
@@ -1227,7 +1265,6 @@ export class AgentRuntime {
                       run,
                       secrets,
                       this.options,
-                      false,
                       scale,
                     ),
                   });
@@ -1239,7 +1276,6 @@ export class AgentRuntime {
                   run,
                   secrets,
                   this.options,
-                  currentCavemanMode !== 'off',
                   scale,
                 );
                 for (const mate of groupMates(name, tools)) loadedTools.add(mate);
@@ -1263,9 +1299,21 @@ export class AgentRuntime {
                 }
 
                 // Read after secrets are masked: the judge sees no more than the agent will.
-                return judge && outsideContent(name, mcpToolNames)
-                  ? await markSteering(judge, result, signal)
-                  : result;
+                const marked =
+                  judge && outsideContent(name, mcpToolNames)
+                    ? await markSteering(judge, result, signal)
+                    : result;
+                // A tool with an output of its own (a screenshot) is not text to fit.
+                if (inStep && !definition.toModelOutput) {
+                  stepResults.set(options.toolCallId, {
+                    toolCallId: options.toolCallId,
+                    toolName: name,
+                    output: answered,
+                    result: marked,
+                    steered: marked !== result,
+                  });
+                }
+                return marked;
               } catch (error) {
                 if (error instanceof AskUserPause) {
                   askUser = error.question;
@@ -1992,13 +2040,20 @@ export class AgentRuntime {
             finishReason,
             usage: measured,
             prompt: preparedPrompt,
-            tools: toolResults.map((result) => ({
-              toolName: result.toolName,
-              toolCallId: result.toolCallId,
-              bytes: Buffer.byteLength(JSON.stringify(result.output) ?? 'null'),
-              artifactId: (result.output as { artifactId?: string } | null)?.artifactId,
-              result: redactOutput(result.output, secrets),
-            })),
+            // As the model was given them: a result the step's fitting cut is recorded cut, so
+            // the turns after this one read what this one did.
+            tools: toolResults.map((result) => {
+              const output = fittedResults.has(result.toolCallId)
+                ? fittedResults.get(result.toolCallId)
+                : result.output;
+              return {
+                toolName: result.toolName,
+                toolCallId: result.toolCallId,
+                bytes: Buffer.byteLength(JSON.stringify(output) ?? 'null'),
+                artifactId: (output as { artifactId?: string } | null)?.artifactId,
+                result: redactOutput(output, secrets),
+              };
+            }),
           });
 
           // An instruction file or a skill the agent wrote is read again next turn.

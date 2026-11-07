@@ -29,8 +29,13 @@ import { onOwnerComputer, workspaceHome, workspaceTemp } from './workspace-home.
 
 /** Long enough for a build, short enough that a run does not die waiting on a hung command. */
 const TIMEOUT_MS = 120_000;
-/** Output past this is cut; a command that prints a megabyte would cost the run its context. */
+/**
+ * Characters kept of each stream, its first and last halves; a command that prints a megabyte
+ * would cost the run its context. The result's own budget then cuts what is kept further.
+ */
 const MAX_OUTPUT = 60_000;
+/** What a command may print before it is stopped, in bytes: well past MAX_OUTPUT. */
+const READ_OUTPUT = 8 * 1024 * 1024;
 
 const absolute = z
   .string()
@@ -122,10 +127,14 @@ export function commandEnvironment(
   };
 }
 
+/**
+ * Its first and last halves within `limit`: a build or a test run says what failed at the end,
+ * and the start says what ran. What is cut here is gone, not stored, and the marker says so.
+ */
 function clip(text: string, limit: number): string {
-  return text.length > limit
-    ? `${text.slice(0, limit)}\n… ${text.length - limit} characters omitted`
-    : text;
+  if (text.length <= limit) return text;
+  const half = Math.floor(limit / 2);
+  return `${text.slice(0, half)}\n[… ${(text.length - 2 * half).toLocaleString('en')} characters of this output were not kept]\n${text.slice(-half)}`;
 }
 
 /**
@@ -181,7 +190,9 @@ export function shellTools(
               cwd: directory,
               env: commandEnvironment({ home, temp }, process.env, gitAccess.sshCommand),
               timeout: timeoutMs,
-              maxBuffer: MAX_OUTPUT * 4,
+              // Read past what is kept, so the end that is kept is the command's real end: a
+              // command stopped at this size ends with whatever it printed by then.
+              maxBuffer: READ_OUTPUT,
               encoding: 'utf8',
             },
             (error, stdout, stderr) => {

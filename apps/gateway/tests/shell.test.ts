@@ -128,6 +128,20 @@ describe('running commands on the machine the gateway runs on', () => {
     expect(await sh(tools.run_command, 'exit 3')).toMatchObject({ exitCode: 3 });
   });
 
+  it('keeps the start and the end of an output too long to keep whole', async () => {
+    const { tools } = await toolsFor(true);
+    const result = await sh(
+      tools.run_command,
+      'echo FIRST; i=0; while [ $i -lt 9000 ]; do echo "line of build output $i"; i=$((i+1)); done; echo "error: the build failed" >&1; exit 2',
+    );
+
+    expect(result.exitCode).toBe(2);
+    expect(result.stdout.length).toBeLessThanOrEqual(61_000);
+    expect(result.stdout.startsWith('FIRST\n')).toBe(true);
+    expect(result.stdout.endsWith('error: the build failed\n')).toBe(true);
+    expect(result.stdout).toMatch(/\[… [\d,]+ characters of this output were not kept\]/);
+  });
+
   it('starts in the shared directory, which is its home and holds its temporary files', async () => {
     const { tools, home } = await toolsFor(true);
 

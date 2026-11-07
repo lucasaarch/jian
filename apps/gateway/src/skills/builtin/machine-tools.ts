@@ -155,7 +155,9 @@ anywhere the owner did not ask.
 const LIMITS = `## Limits of a command
 
 - A command stops after at most two minutes (\`timeoutMs\`, 30 seconds unless you raise it).
-- Output past about 60,000 characters is cut.
+- Output past about 60,000 characters keeps its first and last 30,000; the middle is not kept,
+  and a command that prints more than 8 MB is stopped. Send a long output to a file and read the
+  part you need.
 - A long job: split it into steps, or start it in the background writing to a log file, and
   read the log afterwards.
 
