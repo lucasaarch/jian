@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { AgentRuntime } from '../src/agent/runtime.js';
 import { compactionThreshold } from '../src/context/compaction.js';
 import { insertMessage } from '../src/sessions/repository.js';
-import { mockModel } from './helpers/model.js';
+import { isSummary, mockModel } from './helpers/model.js';
 import { events } from './helpers/rows.js';
 import { testServices } from './helpers/services.js';
 import { turnOf } from './helpers/turn.js';
@@ -915,7 +915,7 @@ it.each([false, true])(
     const model = mockModel({
       doGenerate: async (options) => {
         const prompt = JSON.stringify(options.prompt);
-        if (!options.tools?.length) {
+        if (isSummary(options)) {
           if (
             subscription &&
             !prompt.includes("You are Claude Code, Anthropic's official CLI for Claude.")
@@ -995,7 +995,7 @@ it.each([false])(
     const model = mockModel({
       doGenerate: async (options) => {
         const prompt = JSON.stringify(options.prompt);
-        if (!options.tools?.length) {
+        if (isSummary(options)) {
           if (
             subscription &&
             !prompt.includes("You are Claude Code, Anthropic's official CLI for Claude.")
@@ -1139,7 +1139,7 @@ it('truncates older turns when compaction cannot free the context budget', async
   let answered = false;
   const model = mockModel({
     doGenerate: async (options) => {
-      if (!options.tools?.length) throw new Error('compaction model unavailable');
+      if (isSummary(options)) throw new Error('compaction model unavailable');
       answered = true;
       expect(JSON.stringify(options.prompt)).toContain(run.input);
       expect(JSON.stringify(options.prompt)).not.toContain('turn-0');
@@ -1183,7 +1183,7 @@ it.each([
   const heads: string[] = [];
   const model = mockModel({
     doGenerate: async (options) => {
-      if (!options.tools?.length) {
+      if (isSummary(options)) {
         summaries++;
         throw new Error('The summary was cut off at its limit');
       }
@@ -1730,7 +1730,7 @@ it('lets the agent request compaction before reaching the automatic threshold', 
   let summaries = 0;
   const model = mockModel({
     doGenerate: async (options) => {
-      if (!options.tools?.length) {
+      if (isSummary(options)) {
         summaries++;
         return answer('Checkpoint: deployment time requested. Finish the answer.');
       }
@@ -1774,7 +1774,7 @@ it('compacts again when a tool result exceeds the window soon after a checkpoint
   let summaries = 0;
   const model = mockModel({
     doGenerate: async (options) => {
-      if (!options.tools?.length) {
+      if (isSummary(options)) {
         summaries++;
         return answer(
           JSON.stringify(options.prompt).includes('x'.repeat(1000))
@@ -1827,7 +1827,7 @@ it('persists a cursor only through earlier messages covered by compaction', asyn
   let step = 0;
   const model = mockModel({
     doGenerate: async (options) => {
-      if (!options.tools?.length) return answer('Checkpoint: earlier deployment discussion.');
+      if (isSummary(options)) return answer('Checkpoint: earlier deployment discussion.');
       if (step++ >= 2) return answer('Continuing after checkpoint.');
       const toolName = step === 1 ? 'load_tools' : 'compact_context';
       return {
@@ -1924,8 +1924,8 @@ it('compacts by the size the provider reported, not the byte estimate', async ()
   const model = mockModel({
     doGenerate: async (options) => {
       const size = reported(options, 0.5);
-      calls.push({ summary: !options.tools?.length, bytes: size.total * 2, reported: size.total });
-      if (!options.tools?.length) return answer('Checkpoint: the older turns were read.');
+      calls.push({ summary: isSummary(options), bytes: size.total * 2, reported: size.total });
+      if (isSummary(options)) return answer('Checkpoint: the older turns were read.');
       if (JSON.stringify(options.prompt).includes('Checkpoint: the older turns')) {
         return { ...answer('Done after the checkpoint.'), usage: size.usage };
       }
@@ -1953,7 +1953,7 @@ it("seeds the next turn's scale from the session's last measured step", async ()
   let long = true;
   const model = mockModel({
     doGenerate: async (options) => {
-      if (!options.tools?.length) {
+      if (isSummary(options)) {
         summaries++;
         return answer('Checkpoint: a long answer was given.');
       }
@@ -2003,7 +2003,7 @@ it('skips a summary that could not shrink the prompt by a fifth', async () => {
   let step = 0;
   const model = mockModel({
     doGenerate: async (options) => {
-      if (!options.tools?.length) {
+      if (isSummary(options)) {
         summaries++;
         return answer('Checkpoint: a short exchange.');
       }
@@ -2068,7 +2068,7 @@ it('cuts a prompt that fits the window only by the exact scale', async () => {
   let last = '';
   const model = mockModel({
     doGenerate: async (options) => {
-      if (!options.tools?.length) return answer('Checkpoint: the older turns were read.');
+      if (isSummary(options)) return answer('Checkpoint: the older turns were read.');
       const sent = reported(options, 1);
       const call = (toolName: string, input = '{}') => ({
         content: [{ type: 'tool-call' as const, toolCallId: `call-${step}`, toolName, input }],

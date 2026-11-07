@@ -118,6 +118,7 @@ import { MCP_ERROR_UNSAID, mcpErrorText, mcpOutcomeUncertain } from './mcp-error
 import { Narrator, ToolCalls } from './narrator.js';
 import { ProgressReporter } from './progress.js';
 import { boundToolResult, redactOutput, redactText } from './results.js';
+import { type StepRequest, summaryCall } from './summary-call.js';
 import { plainTitle, type TitleModel, writeTitle } from './title.js';
 import { reason, toolFailure } from './tool-failure.js';
 import {
@@ -1360,6 +1361,41 @@ export class AgentRuntime {
 
       describer = { model, subscription, account, config };
 
+      /**
+       * What a step hands the SDK. Only Anthropic needs the cache marks: OpenAI and xAI match a
+       * long prefix on their own. Built in one place, as a summary is sent as this same request
+       * (agent/summary-call.ts) and a byte of difference would read nothing back from the cache.
+       */
+      const stepRequest = (
+        system: string,
+        messages: ModelMessage[],
+        names: string[],
+        order?: string[],
+      ): StepRequest => ({
+        instructions:
+          config.provider === 'anthropic' ? cacheableInstructions(system, cacheTtl) : system,
+        messages:
+          config.provider === 'anthropic'
+            ? cacheable(messages, cacheTtl, 3, currentStartIndex)
+            : messages,
+        activeTools: names,
+        ...(order ? { toolOrder: order } : {}),
+        maxOutputTokens: policy.outputTokens,
+        providerOptions: withOpenAiPromptCache(
+          reasoning,
+          profileId,
+          config.provider,
+          config.modelId,
+        ),
+      });
+      /**
+       * The request the last step sent, its size against the window, and whether it was in the
+       * deferred form and carried tool additions: a refusal since changes what may be sent.
+       */
+      let sent:
+        | { request: StepRequest; tokens: number; defers: boolean; carries: boolean }
+        | undefined;
+
       if (!session.title && !learning) {
         const options = leastReasoningOptions(config);
         naming = this.nameConversation(run, secrets, {
@@ -1591,8 +1627,41 @@ export class AgentRuntime {
           ) {
             compactionRequested = false;
             lastCompactionAttempt = stepNumber;
+            // What the summary calls cost, in the checkpoint: a cached read shows as
+            // `cachedInputTokens`, which is how the owner sees the prefix was reused.
+            const spent = { inputTokens: 0, outputTokens: 0, cachedInputTokens: 0 };
             try {
               const session = await this.services.sessions.session(profileId, run.sessionId);
+              /**
+               * The summary as the request the conversation last sent, plus its instructions,
+               * read back from the provider's cache. At a turn's first step, or once Anthropic
+               * refused a form since, it is the request this step would send, tools and all
+               * (even for /compact, whose own answer offers none): the last turn wrote that
+               * prefix to the cache. None when it would not fit the window.
+               */
+              const inPlace = (instructions: string) => {
+                if (before > limit) return undefined;
+                const reused =
+                  sent && sent.defers === defers && sent.carries === carries ? sent : undefined;
+                let request = reused?.request;
+                let tokens = reused?.tokens ?? 0;
+                if (!request) {
+                  const order = defers ? deferral(inContext) : undefined;
+                  request = stepRequest(codingInstructions, messages, order ?? activeNames, order);
+                  // `before` is at the exact scale; the window is held at the edge's.
+                  tokens = before * margin;
+                }
+                const total = Math.ceil(tokens + estimate(instructions) * edge);
+                if (total > limit) return undefined;
+                return summaryCall({
+                  model,
+                  tools: guarded,
+                  request,
+                  instructions,
+                  allowSystemInMessages: deferring,
+                  signal,
+                }).then((answer) => ({ answer, tokens: total }));
+              };
               // The conversation's own model. A separately chosen one can be the provider whose
               // quota just ran out, which is how a full window used to report nothing to compact.
               const compacted = await compactPrompt({
@@ -1602,16 +1671,21 @@ export class AgentRuntime {
                 currentStartIndex,
                 includeCurrent: before > limit,
                 previous: session.summary,
-                // Only its segments use it, each fitted to the model's window.
-                scale: edge,
-                // Writing a record needs no deliberation, and thinking draws on the same
+                inPlace,
+                // Only its segments use these, each fitted to the model's window and sent on its
+                // own. Writing a record needs no deliberation, and thinking draws on the same
                 // allowance as the summary: at the owner's effort it ran out before the record.
+                // The request reused in place keeps the owner's effort, which its cache needs.
+                scale: edge,
                 providerOptions: leastReasoningOptions(config),
                 policy,
                 signal,
                 dress: subscription ? withClaudeCodeIdentity : undefined,
                 onUsage: async (usage, tokens, text) => {
-                  await account(usage, tokens, text, 0);
+                  const measured = await account(usage, tokens, text, 0);
+                  spent.inputTokens += measured.inputTokens;
+                  spent.outputTokens += measured.outputTokens;
+                  spent.cachedInputTokens += measured.cachedInputTokens;
                 },
               });
               if (compacted) {
@@ -1630,6 +1704,8 @@ export class AgentRuntime {
                   summary,
                   beforeTokens: before,
                   afterTokens,
+                  via: compacted.via,
+                  usage: spent,
                 });
                 await this.services.sessions.summarize(
                   profileId,
@@ -1656,6 +1732,7 @@ export class AgentRuntime {
               await this.services.lifecycle.checkpoint(profileId, runId, owner, {
                 phase: 'compaction-failed',
                 reason: compactionFailure,
+                ...(spent.inputTokens ? { usage: spent } : {}),
               });
             }
           }
@@ -1793,26 +1870,14 @@ export class AgentRuntime {
 
           // The full prompt includes cached input. Charging its estimate again rejects
           // useful work before the provider has reported what was actually new.
-          return {
-            instructions:
-              config.provider === 'anthropic'
-                ? cacheableInstructions(fitted.instructions, cacheTtl)
-                : fitted.instructions,
-            // Only Anthropic needs telling: OpenAI matches a long prefix on its own.
-            messages:
-              config.provider === 'anthropic'
-                ? cacheable(fitted.messages, cacheTtl, 3, currentStartIndex)
-                : fitted.messages,
-            activeTools: compactCommand ? [] : (sendAll ?? activeNames),
-            ...(sendAll ? { toolOrder: sendAll } : {}),
-            maxOutputTokens: policy.outputTokens,
-            providerOptions: withOpenAiPromptCache(
-              reasoning,
-              profileId,
-              config.provider,
-              config.modelId,
-            ),
-          };
+          const request = stepRequest(
+            fitted.instructions,
+            fitted.messages,
+            compactCommand ? [] : (sendAll ?? activeNames),
+            sendAll,
+          );
+          sent = { request, tokens: fitted.tokens, defers, carries };
+          return request;
         },
         onStepEnd: async ({ text, toolCalls, toolResults, finishReason, usage }) => {
           const measured = await account(

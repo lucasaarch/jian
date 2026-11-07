@@ -15,11 +15,12 @@ import {
   type ClaudeReply,
   type ClaudeRequest,
   fakeClaude,
+  isSummary as isClaudeSummary,
   referencedIn,
   resultOf,
   sentTools,
 } from './helpers/claude.js';
-import { mockModel } from './helpers/model.js';
+import { isSummary, mockModel } from './helpers/model.js';
 import { testServices } from './helpers/services.js';
 
 const CONVERSATIONS = TOOL_GROUPS.conversations.tools;
@@ -41,8 +42,14 @@ async function conversation(
   return { services, profile, session, ask };
 }
 
-/** The turn's own steps: summaries and other side calls are sent without streaming. */
-const steps = (requests: ClaudeRequest[]) => requests.filter((request) => request.stream);
+/**
+ * Whether a request is a step of the turn: side calls are sent without streaming, and a summary
+ * sent as the conversation's own request streams like a step but asks for the record.
+ */
+const isStep = (request: ClaudeRequest) => request.stream === true && !isClaudeSummary(request);
+
+/** The turn's own steps. */
+const steps = (requests: ClaudeRequest[]) => requests.filter(isStep);
 
 const usage = {
   inputTokens: { total: 10, noCache: 10, cacheRead: 0, cacheWrite: 0 },
@@ -75,7 +82,7 @@ describe('tool loading on Claude', () => {
         { text: 'Only this one.' },
       ];
       const claude = fakeClaude(modelId, (request, index) =>
-        request.stream ? (plan[index] ?? { text: 'Done.' }) : { text: 'Done.' },
+        isStep(request) ? (plan[index] ?? { text: 'Done.' }) : { text: 'Done.' },
       );
 
       await new AgentRuntime(services, () => claude.model).execute(profile.id, run.id);
@@ -118,7 +125,7 @@ describe('tool loading on Claude', () => {
     const { services, profile, ask } = await conversation({ provider: 'anthropic', modelId });
     const run = await ask('What else are we talking about?');
     const claude = fakeClaude(modelId, (request, index) =>
-      request.stream && index === 0 ? { tool: 'list_sessions' } : { text: 'I could not look.' },
+      isStep(request) && index === 0 ? { tool: 'list_sessions' } : { text: 'I could not look.' },
     );
 
     await new AgentRuntime(services, () => claude.model).execute(profile.id, run.id);
@@ -182,7 +189,7 @@ describe('tool loading on Claude', () => {
     ];
     let step = 0;
     const claude = fakeClaude(modelId, (request) =>
-      request.stream
+      isStep(request)
         ? (plan[step++] ?? { text: 'Done.' })
         : { text: 'Checkpoint: the conversations group was loaded and a large result read.' },
     );
@@ -212,7 +219,7 @@ describe('tool loading on Claude', () => {
     ];
     let step = 0;
     const claude = fakeClaude(modelId, (request) =>
-      request.stream ? (plan[step++] ?? { text: 'Done.' }) : { text: 'Done.' },
+      isStep(request) ? (plan[step++] ?? { text: 'Done.' }) : { text: 'Done.' },
     );
     const first = await ask('Load what you need to see my conversations.');
     await new AgentRuntime(services, () => claude.model).execute(profile.id, first.id);
@@ -370,7 +377,7 @@ describe('tool loading on Claude', () => {
       ];
       let step = 0;
       const claude = fakeClaude(modelId, (request) =>
-        request.stream ? (plan[step++] ?? { text: 'Done.' }) : { text: 'Done.' },
+        isStep(request) ? (plan[step++] ?? { text: 'Done.' }) : { text: 'Done.' },
       );
 
       await new AgentRuntime(services, () => claude.model).execute(profile.id, run.id);
@@ -405,7 +412,7 @@ describe('tool loading on Claude', () => {
       ];
       let step = 0;
       const claude = fakeClaude(modelId, (request) =>
-        request.stream ? (plan[step++] ?? { text: 'Done.' }) : { text: 'Done.' },
+        isStep(request) ? (plan[step++] ?? { text: 'Done.' }) : { text: 'Done.' },
       );
 
       await new AgentRuntime(services, () => claude.model).execute(profile.id, run.id);
@@ -453,7 +460,7 @@ describe('tool loading on Claude', () => {
     const run = await ask('What else are we talking about?');
     const claude = fakeClaude(modelId, (request, index) =>
       // Refused again the old way too, as a mistake of the request's own is.
-      request.stream && index < 2
+      isStep(request) && index < 2
         ? { refuse: 'max_tokens: 900000 > 128000, which is the maximum allowed' }
         : { text: 'Answered.' },
     );
@@ -547,7 +554,7 @@ describe('tool loading elsewhere', () => {
     let step = 0;
     const mock = mockModel({
       doGenerate: async (options) => {
-        if (!options.tools?.length) return answer('Summary.');
+        if (isSummary(options) || !options.tools?.length) return answer('Summary.');
         offered.push(options.tools.map((item) => item.name));
         prompts.push(JSON.stringify(options.prompt));
         expect(
@@ -633,7 +640,7 @@ describe('the context estimate on Claude', () => {
     let step = 0;
     const mock = mockModel({
       doGenerate: async (options) => {
-        if (!options.tools?.length) return answer('Summary.');
+        if (isSummary(options) || !options.tools?.length) return answer('Summary.');
         sentCount = Math.max(sentCount, options.tools.length);
         if (step++ > 0) return answer('Found it.');
         const record = options.tools.find((item) => item.name.includes('record_7_'))?.name;
@@ -674,7 +681,7 @@ describe('the context estimate on Claude', () => {
     let step = 0;
     const mock = mockModel({
       doGenerate: async (options) => {
-        if (!options.tools?.length) return answer('Summary.');
+        if (isSummary(options) || !options.tools?.length) return answer('Summary.');
         seen.push({
           prompt: JSON.stringify(options.prompt),
           deferred: options.tools.flatMap((item) =>

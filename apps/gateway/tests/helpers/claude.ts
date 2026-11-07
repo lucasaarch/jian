@@ -1,13 +1,23 @@
 import { createAnthropic } from '@ai-sdk/anthropic';
+import { CHECKPOINT_TASK } from '../../src/context/compaction.js';
 
 /** What the fake answers one request with: a tool call, text that ends the turn, or a refusal. */
-export type ClaudeReply = { tool: string; input?: unknown } | { text: string } | { refuse: string };
+export type ClaudeReply =
+  | { tool: string; input?: unknown }
+  /** `cacheRead`: the input tokens the fake reports as read from the cache. */
+  | { text: string; cacheRead?: number }
+  | { refuse: string };
 
 /** The parts of a Messages API request these tests read. */
 export type ClaudeRequest = {
   /** The `anthropic-beta` header it was sent with, recorded by the fake. */
   beta?: string;
   stream?: boolean;
+  system?: unknown;
+  thinking?: unknown;
+  output_config?: unknown;
+  tool_choice?: unknown;
+  max_tokens?: number;
   tools?: Array<{ name: string; defer_loading?: boolean; cache_control?: unknown }>;
   messages: Array<{
     role: string;
@@ -50,7 +60,11 @@ export function fakeClaude(
         { status: 400 },
       );
     }
-    const usage = { input_tokens: 10, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 };
+    const usage = {
+      input_tokens: 10,
+      cache_creation_input_tokens: 0,
+      cache_read_input_tokens: 'cacheRead' in answer ? (answer.cacheRead ?? 0) : 0,
+    };
     const block =
       'tool' in answer
         ? {
@@ -151,3 +165,12 @@ export const addedIn = (request: ClaudeRequest | undefined) =>
         )
       : [],
   );
+
+/**
+ * Whether a request asks for a summary. One sent in place is the conversation's own request,
+ * streamed like a step, with the summary instructions at its end; one read in segments carries
+ * them in its system prompt.
+ */
+export const isSummary = (request: ClaudeRequest | undefined) =>
+  JSON.stringify(request?.messages.at(-1) ?? '').includes(CHECKPOINT_TASK) ||
+  JSON.stringify(request?.system ?? '').includes(CHECKPOINT_TASK);

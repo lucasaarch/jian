@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { expect, it } from 'vitest';
 import { AgentRuntime } from '../src/agent/runtime.js';
 import { insertMessage } from '../src/sessions/repository.js';
-import { mockModel } from './helpers/model.js';
+import { isSummary, mockModel } from './helpers/model.js';
 import { testServices } from './helpers/services.js';
 
 const input = {
@@ -180,7 +180,7 @@ it('compacts once on /compact sent while a turn runs, without telling the agent 
   const prompts: string[] = [];
   const model = mockModel({
     doGenerate: async (options) => {
-      if (!options.tools?.length) {
+      if (isSummary(options)) {
         if (clicked) summariesAfter++;
         return answer('The earlier turns, in short.');
       }

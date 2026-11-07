@@ -1,4 +1,5 @@
 import { MockLanguageModelV4, simulateReadableStream } from 'ai/test';
+import { CHECKPOINT_TASK } from '../../src/context/compaction.js';
 
 // Derived from the mock itself so the helper follows the SDK without importing its provider
 // package, which this workspace does not depend on directly.
@@ -45,3 +46,17 @@ export function mockModel({ doGenerate }: { doGenerate: (options: Options) => Pr
     },
   });
 }
+
+/**
+ * Whether the mock is asked for a summary: in place, the conversation's own request with the
+ * summary instructions last, tools and all; in segments, a request of its own without tools.
+ */
+export const isSummary = (options: Options) => {
+  const last = options.prompt.findLast((message) => message.role !== 'system');
+  return (
+    JSON.stringify(last ?? '').includes(CHECKPOINT_TASK) ||
+    options.prompt.some(
+      (message) => message.role === 'system' && message.content.includes(CHECKPOINT_TASK),
+    )
+  );
+};

@@ -1,7 +1,7 @@
 import { expect, it } from 'vitest';
 import { AgentRuntime } from '../src/agent/runtime.js';
 import { listLoads, useLoads } from '../src/sessions/loads.js';
-import { mockModel } from './helpers/model.js';
+import { isSummary, mockModel } from './helpers/model.js';
 import { testServices } from './helpers/services.js';
 
 const usage = {
@@ -55,8 +55,9 @@ async function conversation(
     let step = 0;
     const model = mockModel({
       doGenerate: async (options) => {
-        // The call that names a new conversation has no tools: it is not a step of the turn.
-        if (!options.tools) return answer('Loads');
+        // The call that names a new conversation has no tools, and a summary asks for the
+        // record: neither is a step of the turn.
+        if (!options.tools || isSummary(options)) return answer('Loads');
         sent.push(options);
         return steps[Math.min(step++, steps.length - 1)] as ReturnType<typeof answer>;
       },
