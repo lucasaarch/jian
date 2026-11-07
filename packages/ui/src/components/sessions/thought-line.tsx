@@ -86,6 +86,58 @@ const spoken = (seconds: number) =>
 const at = (moment?: string | number) =>
   moment === undefined ? undefined : typeof moment === 'number' ? moment : Date.parse(moment);
 
+/** Its body is built only while the tool is open: a long trace holds only the lines in view. */
+function ToolStepItem({
+  step,
+  onFailure,
+}: {
+  step: ThoughtStep;
+  onFailure: (step: ThoughtStep) => void;
+}) {
+  const [shown, setShown] = useState(false);
+
+  return (
+    <li data-status={step.status}>
+      {hasDetails(step) ? (
+        <details className="thought-tool" onToggle={(event) => setShown(event.currentTarget.open)}>
+          <summary>
+            <StepLine step={step}>
+              <ChevronDown size={13} className="thought-tool-chevron" aria-hidden="true" />
+            </StepLine>
+          </summary>
+          {shown && (
+            <div className="thought-tool-body">
+              <ToolDetails
+                {...(step.input ? { input: step.input } : {})}
+                {...(step.output ? { output: step.output } : {})}
+                json={step.json === true}
+              />
+              {step.diff && <FileDiff diff={step.diff} open={false} />}
+              {step.note && step.detail && (
+                <button
+                  type="button"
+                  className="thought-note"
+                  data-detail
+                  aria-haspopup="dialog"
+                  aria-label={`${step.note}: ${step.text}`}
+                  onClick={() => onFailure(step)}
+                >
+                  {step.note}: show error details
+                </button>
+              )}
+            </div>
+          )}
+        </details>
+      ) : (
+        // Nothing was recorded to open: a line of the trace, with nothing that offers.
+        <div className="thought-tool-row">
+          <StepLine step={step} />
+        </div>
+      )}
+    </li>
+  );
+}
+
 /**
  * Activity and outcome share one fixed gutter, so settling never moves the label.
  */
@@ -200,50 +252,11 @@ export function ThoughtLine({
           {working || settled === undefined ? current : `${summary} · ${spoken(settled)}`}
         </span>
       </button>
-      {foldable && (
-        <div className="thought-trace" id={trace} inert={!open}>
+      {foldable && open && (
+        <div className="thought-trace" id={trace}>
           <ol>
             {steps.map((step) => (
-              <li key={step.key} data-status={step.status}>
-                {hasDetails(step) ? (
-                  <details className="thought-tool">
-                    <summary>
-                      <StepLine step={step}>
-                        <ChevronDown
-                          size={13}
-                          className="thought-tool-chevron"
-                          aria-hidden="true"
-                        />
-                      </StepLine>
-                    </summary>
-                    <div className="thought-tool-body">
-                      <ToolDetails
-                        {...(step.input ? { input: step.input } : {})}
-                        {...(step.output ? { output: step.output } : {})}
-                        json={step.json === true}
-                      />
-                      {step.diff && <FileDiff diff={step.diff} open={false} />}
-                      {step.note && step.detail && (
-                        <button
-                          type="button"
-                          className="thought-note"
-                          data-detail
-                          aria-haspopup="dialog"
-                          aria-label={`${step.note}: ${step.text}`}
-                          onClick={() => setFailure(step)}
-                        >
-                          {step.note}: show error details
-                        </button>
-                      )}
-                    </div>
-                  </details>
-                ) : (
-                  // Nothing was recorded to open: a line of the trace, with nothing that offers.
-                  <div className="thought-tool-row">
-                    <StepLine step={step} />
-                  </div>
-                )}
-              </li>
+              <ToolStepItem key={step.key} step={step} onFailure={setFailure} />
             ))}
           </ol>
         </div>

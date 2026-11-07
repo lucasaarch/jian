@@ -79,9 +79,60 @@ it('keeps every tool call, its input, and its output folded inside the activity'
 
   expect(element.querySelector('.thought-head')?.getAttribute('aria-expanded')).toBe('false');
   const call = element.querySelector<HTMLDetailsElement>('.thought-tool');
-  expect(call?.open).toBe(false);
-  expect(call?.textContent).toContain('pwd');
-  expect(call?.textContent).toContain('/workspace');
+  expect(call).toBeNull();
+  act(() => element.querySelector<HTMLButtonElement>('.thought-head')?.click());
+  const open = element.querySelector<HTMLDetailsElement>('.thought-tool');
+  expect(open?.open).toBe(false);
+  toggle(open, true);
+  expect(open?.textContent).toContain('pwd');
+  expect(open?.textContent).toContain('/workspace');
+});
+
+/** A browser fires `toggle` when the summary is used; the test DOM does not. */
+function toggle(details: HTMLDetailsElement | null | undefined, open: boolean) {
+  if (!details) throw new Error('No details to toggle');
+  act(() => {
+    details.open = open;
+    details.dispatchEvent(new Event('toggle'));
+  });
+}
+
+it('builds the trace only while it is open', () => {
+  act(() => root.render(<ThoughtLine working={false} steps={steps} />));
+  const head = () => element.querySelector<HTMLButtonElement>('.thought-head');
+  expect(element.querySelector('.thought-trace')).toBeNull();
+  act(() => head()?.click());
+  const trace = element.querySelector('.thought-trace');
+  expect(trace).not.toBeNull();
+  expect(head()?.getAttribute('aria-controls')).toBe(trace?.id);
+  act(() => head()?.click());
+  expect(element.querySelector('.thought-trace')).toBeNull();
+});
+
+it('builds a tool’s details only while it is open', () => {
+  act(() =>
+    root.render(
+      <ThoughtLine
+        working={false}
+        steps={[
+          {
+            key: 'cmd',
+            text: 'Running a command',
+            status: 'done',
+            input: { text: '{"command":"pwd"}' },
+            output: { text: '/workspace' },
+          },
+        ]}
+      />,
+    ),
+  );
+  act(() => element.querySelector<HTMLButtonElement>('.thought-head')?.click());
+  const call = element.querySelector<HTMLDetailsElement>('.thought-tool');
+  expect(element.querySelector('.tool-details')).toBeNull();
+  toggle(call, true);
+  expect(element.querySelector('.tool-details')).not.toBeNull();
+  toggle(call, false);
+  expect(element.querySelector('.tool-details')).toBeNull();
 });
 
 it('keeps a failed step in the trace with what went wrong', () => {
@@ -93,6 +144,7 @@ it('keeps a failed step in the trace with what went wrong', () => {
       />,
     ),
   );
+  act(() => element.querySelector<HTMLButtonElement>('.thought-head')?.click());
   const step = element.querySelector('.thought-trace li');
   expect(step?.getAttribute('data-status')).toBe('failed');
   expect(step?.textContent).toContain('Failed: 404');
@@ -119,7 +171,7 @@ it('opens full highlighted error details on click instead of exposing a hover to
   expect(document.querySelector('[role="dialog"]')).toBeNull();
   expect(document.querySelector('[role="tooltip"]')).toBeNull();
   act(() => element.querySelector<HTMLButtonElement>('.thought-head')?.click());
-  act(() => element.querySelector<HTMLElement>('.thought-tool > summary')?.click());
+  toggle(element.querySelector<HTMLDetailsElement>('.thought-tool'), true);
   await act(async () => element.querySelector<HTMLButtonElement>('button.thought-note')?.click());
   const dialog = document.querySelector('[role="dialog"]');
   expect(dialog?.textContent).toContain(message);

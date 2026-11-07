@@ -11,6 +11,24 @@ import { useReconnect } from '../../lib/stores/reconnect';
 import { CrewDrawer } from './crew-drawer';
 import { History } from './history';
 
+/** The trace is built only while open, so a test that reads its lines opens them first. */
+const openTraces = (root: ParentNode) =>
+  act(() => {
+    for (const head of root.querySelectorAll<HTMLButtonElement>(
+      '.thought-head[aria-expanded="false"]',
+    ))
+      head.click();
+  });
+
+/** A tool's body is built when its details open; the test DOM does not fire `toggle` itself. */
+const openTools = (root: ParentNode) =>
+  act(() => {
+    for (const details of root.querySelectorAll<HTMLDetailsElement>('details.thought-tool')) {
+      details.open = true;
+      details.dispatchEvent(new Event('toggle'));
+    }
+  });
+
 let hear: ((event: { type: string }) => void) | undefined;
 vi.mock('../../lib/events', () => ({
   subscribe: (listener: () => void) => {
@@ -367,6 +385,7 @@ it('keeps tool history visible when a failed run never wrote an answer', async (
     await act(async () =>
       root.render(<History api={api} profileId="profile" sessionId="session" />),
     );
+    openTraces(element);
     expect(element.textContent).toContain('Review the change');
     expect(element.querySelector('.thought-trace')?.textContent).toContain(
       'Reading a large result',
@@ -538,6 +557,8 @@ it('lays a turn out in the order it happened, its working line at the end', asyn
         <History api={api} profileId="profile" sessionId="session" initialRun={working} />,
       ),
     );
+    openTraces(element);
+    openTools(element);
     const lines = [...element.querySelectorAll('.thought-line')];
     const diff = element.querySelector('.code-diff');
     expect(lines).toHaveLength(2);
@@ -698,6 +719,7 @@ it('keeps the work done before a message sent mid-turn above it, live and once t
         <History api={api} profileId="profile" sessionId="session" initialRun={working} />,
       ),
     );
+    openTraces(element);
     expect(follows(text('Drafting the issue.'), line('Reading a file'))).toBe(true);
     expect(follows(line('Reading a file'), text('Leave the parent out'))).toBe(true);
     const live = element.querySelector('.thought-line[data-working]');
@@ -718,6 +740,7 @@ it('keeps the work done before a message sent mid-turn above it, live and once t
       ),
     );
     expect(element.querySelector('.thought-line[data-working]')).toBeNull();
+    openTraces(element);
     expect(follows(line('Reading a file'), text('Leave the parent out'))).toBe(true);
     expect(follows(text('Leave the parent out'), line('Reading a page'))).toBe(true);
   } finally {

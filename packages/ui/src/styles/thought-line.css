@@ -7,8 +7,6 @@
    tokens; the Tailwind `--color-*` names do not exist at runtime. */
 @layer components {
   .thought-line {
-    --thought-settle: 350ms;
-    --thought-ease: cubic-bezier(0.23, 1, 0.32, 1);
     @apply inline-flex max-w-full flex-col items-start text-xs font-normal leading-5;
     color: var(--muted);
   }
@@ -54,22 +52,13 @@
   }
   .thought-chevron {
     @apply shrink-0 opacity-55;
-    transition: transform 200ms var(--thought-ease);
   }
   .thought-line[data-open] .thought-chevron {
     @apply rotate-180;
   }
 
-  .thought-trace {
-    display: grid;
-    grid-template-rows: 0fr;
-    transition: grid-template-rows var(--thought-settle) var(--thought-ease);
-  }
-  .thought-line[data-open] .thought-trace {
-    grid-template-rows: 1fr;
-  }
   .thought-trace > ol {
-    @apply m-0 grid min-h-0 list-none gap-1.5 overflow-hidden p-0 text-[13px] font-normal;
+    @apply m-0 grid list-none gap-1.5 p-0 text-[13px] font-normal;
   }
   .thought-trace > ol > li:first-child {
     @apply mt-2.5;
@@ -77,7 +66,6 @@
   .thought-trace li {
     @apply min-w-0;
     color: var(--ink);
-    animation: thought-rise 220ms var(--thought-ease);
   }
   .thought-trace li:not([data-status="running"]) {
     color: var(--muted);
@@ -95,7 +83,7 @@
   /* Beside the name it belongs to, not at the far end of the widest line. It appears where it can
      be used: on the line under the pointer or the keyboard, and always where there is no pointer. */
   .thought-tool-chevron {
-    @apply shrink-0 opacity-0 transition-[transform,opacity];
+    @apply shrink-0 opacity-0;
   }
   .thought-tool > summary:is(:hover, :focus-visible) .thought-tool-chevron,
   .thought-tool[open] .thought-tool-chevron {
@@ -108,18 +96,6 @@
   }
   .thought-tool[open] .thought-tool-chevron {
     @apply rotate-180;
-  }
-  /* A tool's details ease open. Where a browser cannot animate this, they simply open. */
-  .thought-tool::details-content {
-    block-size: 0;
-    overflow: clip;
-    interpolate-size: allow-keywords;
-    transition:
-      block-size var(--thought-settle) var(--thought-ease),
-      content-visibility var(--thought-settle) allow-discrete;
-  }
-  .thought-tool[open]::details-content {
-    block-size: auto;
   }
   .thought-tool-body {
     @apply ml-7 mt-2 grid min-w-0 gap-3;
@@ -218,11 +194,5 @@
   }
   50% {
     opacity: 1;
-  }
-}
-@keyframes thought-rise {
-  from {
-    opacity: 0;
-    transform: translateY(-4px);
   }
 }

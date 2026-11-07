@@ -169,6 +169,7 @@ it('reads an agent’s paragraphs as one answer, as the conversation does', asyn
     expect(answers[0]).toContain('Checked the config.');
     expect(answers[0]).toContain('Nothing else changed.');
     expect(answers[1]).toContain('The suite passes.');
+    act(() => element.querySelector<HTMLButtonElement>('.thought-head')?.click());
     expect(element.querySelector('.thought-line')?.textContent).toContain('Running a command');
   } finally {
     await act(async () => root.unmount());
