@@ -28,6 +28,8 @@ export type ThoughtStep = {
   diff?: CodeDiff;
   /** The list cut this tool: what it shows is a preview, and opening it reads the whole step. */
   brief?: boolean;
+  /** The turn that called it, by which its whole step is read: a call id is only its model's. */
+  run?: string;
 };
 
 /** The mark, the name and how it ended: the same line whether it opens or not. */
@@ -93,7 +95,11 @@ const at = (moment?: string | number) =>
 /** How the whole of a tool cut for the list is coming along, under its preview. */
 function Reading({ state }: { state: FullStep['state'] }) {
   if (state === 'failed') {
-    return <p className="thought-truncated">The full details could not be read.</p>;
+    return (
+      <p role="status" className="thought-truncated">
+        The full details could not be read.
+      </p>
+    );
   }
   if (state !== 'reading') return null;
   return (
@@ -132,7 +138,15 @@ function ToolStepItem({
                 json={step.json === true}
               />
               <Reading state={state} />
-              {step.diff && <FileDiff diff={step.diff} open={false} />}
+              {step.diff &&
+                // A brief diff has its hunks but none of their lines: never drawn empty.
+                (!step.brief ? (
+                  <FileDiff diff={step.diff} open={false} />
+                ) : (
+                  state !== 'reading' && (
+                    <p className="thought-truncated">{step.diff.path}: lines not loaded.</p>
+                  )
+                ))}
               {step.note && step.detail && (
                 <button
                   type="button"

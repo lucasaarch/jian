@@ -10,7 +10,7 @@ const failures: Partial<Record<ToolStep['status'], string>> = {
 };
 
 /** One tool as a line of the Thought Line's trace, in the words the panel uses for it. */
-export function thoughtOf(step: ToolStep): ThoughtStep {
+export function thoughtOf(step: ToolStep, run?: string): ThoughtStep {
   const failed = failures[step.status];
 
   return {
@@ -27,8 +27,10 @@ export function thoughtOf(step: ToolStep): ThoughtStep {
     ...(step.mcp || isMcpName(step.toolName) ? { json: true } : {}),
     ...(step.diff ? { diff: step.diff } : {}),
     ...(step.brief ? { brief: true } : {}),
+    ...(run ? { run } : {}),
   };
 }
 
-/** The tools of a turn as the Thought Line's trace. */
-export const traceOf = (steps: ToolStep[]): ThoughtStep[] => steps.map(thoughtOf);
+/** The tools of a turn as the Thought Line's trace; `run`, the turn, for reading one whole. */
+export const traceOf = (steps: ToolStep[], run?: string): ThoughtStep[] =>
+  steps.map((step) => thoughtOf(step, run));

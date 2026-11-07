@@ -91,11 +91,13 @@ it('reads one tool step of a conversation in full', async () => {
   );
   vi.stubGlobal('fetch', fetch);
 
-  await expect(gatewayApi().toolStep('profile', 'session', 'call_1/a')).resolves.toMatchObject({
+  await expect(
+    gatewayApi().toolStep('profile', 'session', 'run', 'call_1/a'),
+  ).resolves.toMatchObject({
     toolName: 'read_file',
   });
   const [request] = fetch.mock.calls[0] as unknown as [Request];
   expect(new URL(request.url).pathname).toBe(
-    '/v1/profiles/profile/sessions/session/steps/call_1%2Fa',
+    '/v1/profiles/profile/sessions/session/runs/run/steps/call_1%2Fa',
   );
 });

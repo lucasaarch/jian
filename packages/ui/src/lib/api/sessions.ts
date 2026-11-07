@@ -250,11 +250,14 @@ export const sessionCalls = (client: Client, origin = '') => ({
       return answer;
     }
   },
-  /** One tool of the conversation whole, for a step a brief timeline cut. */
-  toolStep: (profileId: string, sessionId: string, toolCallId: string) =>
+  /**
+   * One tool of the conversation whole, for a step a brief timeline cut: by its turn and the id
+   * its model gave the call, which another turn may have used too.
+   */
+  toolStep: (profileId: string, sessionId: string, runId: string, toolCallId: string) =>
     result(
-      client.GET('/v1/profiles/{profileId}/sessions/{sessionId}/steps/{toolCallId}', {
-        params: { path: { profileId, sessionId, toolCallId } },
+      client.GET('/v1/profiles/{profileId}/sessions/{sessionId}/runs/{runId}/steps/{toolCallId}', {
+        params: { path: { profileId, sessionId, runId, toolCallId } },
       }),
     ),
   /**

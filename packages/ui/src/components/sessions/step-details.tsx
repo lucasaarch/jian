@@ -6,41 +6,47 @@ import type { ThoughtStep } from './thought-line';
 import { thoughtOf } from './trace';
 
 /**
- * Where an opened tool reads its whole step, when a brief timeline cut it. Given by the
+ * Where an opened tool reads its whole step, when a brief timeline cut it: by the turn that
+ * called it and its call id, since a model may use the same id in another turn. Given by the
  * conversation that read the timeline; without one (the crew drawer, a draft, a test), a tool
  * shows what its step has.
  */
 export type StepDetails = {
   /** The step whole, read once: a later call for the same tool gets the same answer. */
-  read(toolCallId: string): Promise<ToolStep>;
+  read(runId: string, toolCallId: string): Promise<ToolStep>;
   /** The step whole if it has been read, so a tool opened again draws it at once. */
-  known(toolCallId: string): ToolStep | undefined;
+  known(runId: string, toolCallId: string): ToolStep | undefined;
 };
 
 export const StepDetailsContext = createContext<StepDetails | undefined>(undefined);
 
 /**
- * Whole steps by tool call, for one conversation. A step still running is read again next time:
- * what it answers is not final. A read that failed is forgotten, so the next opening tries again.
+ * Whole steps by turn and tool call, for one conversation. A step still running is read again
+ * next time: what it answers is not final. A read that failed is forgotten, so the next opening
+ * tries again.
  */
-export function readOnce(read: (toolCallId: string) => Promise<ToolStep>): StepDetails {
+export function readOnce(
+  read: (runId: string, toolCallId: string) => Promise<ToolStep>,
+): StepDetails {
   const steps = new Map<string, ToolStep>();
   const reading = new Map<string, Promise<ToolStep>>();
+  const keyOf = (runId: string, toolCallId: string) => `${runId}:${toolCallId}`;
 
   return {
-    known: (toolCallId) => steps.get(toolCallId),
-    read: (toolCallId) => {
-      const known = steps.get(toolCallId);
+    known: (runId, toolCallId) => steps.get(keyOf(runId, toolCallId)),
+    read: (runId, toolCallId) => {
+      const key = keyOf(runId, toolCallId);
+      const known = steps.get(key);
       if (known) return Promise.resolve(known);
-      const under = reading.get(toolCallId);
+      const under = reading.get(key);
       if (under) return under;
-      const asked = read(toolCallId)
+      const asked = read(runId, toolCallId)
         .then((step) => {
-          if (step.status !== 'running') steps.set(toolCallId, step);
+          if (step.status !== 'running') steps.set(key, step);
           return step;
         })
-        .finally(() => reading.delete(toolCallId));
-      reading.set(toolCallId, asked);
+        .finally(() => reading.delete(key));
+      reading.set(key, asked);
       return asked;
     },
   };
@@ -67,26 +73,34 @@ export type FullStep = { step: ThoughtStep; state?: 'reading' | 'failed' };
  */
 export function useFullStep(line: ThoughtStep, open: boolean): FullStep {
   const details = useContext(StepDetailsContext);
-  const wanted = Boolean(open && line.brief && details);
-  const known = wanted ? details?.known(line.key) : undefined;
-  const [read, setRead] = useState<{ key: string; status: string; step?: ToolStep }>();
-  const failed = read?.key === line.key && read.status === line.status && !read.step;
+  const { run, key, status } = line;
+  const wanted = Boolean(open && line.brief && details && run);
+  const known = wanted && run ? details?.known(run, key) : undefined;
+  // What a read answered holds for the line it was asked for, as it was then.
+  const attempt = `${run}:${key}:${status}`;
+  const [read, setRead] = useState<{ attempt: string; step?: ToolStep }>();
+  // Closing forgets a failure: opening again is a new try, drawn as reading until it answers.
+  const [wasOpen, setWasOpen] = useState(open);
+  if (open !== wasOpen) {
+    setWasOpen(open);
+    if (!open) setRead(undefined);
+  }
 
   useEffect(() => {
-    if (!wanted || !details || known) return;
+    if (!wanted || !details || !run || known) return;
     let gone = false;
     const told = (step?: ToolStep) => {
-      if (!gone) setRead({ key: line.key, status: line.status, step });
+      if (!gone) setRead({ attempt, step });
     };
-    details.read(line.key).then(told, () => told());
+    details.read(run, key).then(told, () => told());
     return () => {
       gone = true;
     };
-  }, [wanted, details, known, line.key, line.status]);
+  }, [wanted, details, known, run, key, attempt]);
 
   if (!wanted) return { step: line };
-  const whole =
-    known ?? (read?.key === line.key && read.status === line.status ? read.step : undefined);
+  const answered = read?.attempt === attempt ? read : undefined;
+  const whole = known ?? answered?.step;
   if (whole) return { step: over(line, whole) };
-  return { step: line, state: failed ? 'failed' : 'reading' };
+  return { step: line, state: answered ? 'failed' : 'reading' };
 }

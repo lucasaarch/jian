@@ -15,17 +15,20 @@ const endOf = (steps: ToolStep[]) =>
 /** Tools a turn used between two things it said, settled. */
 export function Worked({
   steps,
+  runId,
   startedAt,
   finishedAt = endOf(steps),
 }: {
   steps: ToolStep[];
+  /** The turn that used them, by which an opened tool reads its whole step. */
+  runId?: string;
   startedAt?: string;
   finishedAt?: string;
 }) {
   return (
     <ThoughtLine
       working={false}
-      steps={traceOf(steps)}
+      steps={traceOf(steps, runId)}
       startedAt={startedAt}
       finishedAt={finishedAt}
     />

@@ -56,10 +56,13 @@ export function statusOf(run: Pick<Run, 'status' | 'progress'>): {
 /** The working Thought Line of a run and the pictures it is drawing so far. */
 export function LiveThought({
   run,
+  runId,
   steps,
   startedAt,
 }: {
   run: Pick<Run, 'status' | 'progress' | 'createdAt'>;
+  /** The turn at work, by which an opened tool reads its whole step. */
+  runId?: string;
   steps: ToolStep[];
   startedAt: string;
 }) {
@@ -73,7 +76,7 @@ export function LiveThought({
           working={!writing}
           label={label}
           orb={state}
-          steps={traceOf(steps)}
+          steps={traceOf(steps, runId)}
           startedAt={startedAt}
           finishedAt={writing ? (steps.at(-1)?.finishedAt ?? run.progress?.updatedAt) : undefined}
         />

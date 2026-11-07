@@ -1,7 +1,7 @@
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import type { ToolStep } from '../../lib/api';
+import { gatewayApi, type ToolStep } from '../../lib/api';
 import { readOnce, StepDetailsContext } from './step-details';
 import { ThoughtLine, type ThoughtStep } from './thought-line';
 
@@ -18,11 +18,13 @@ beforeEach(() => {
 afterEach(() => {
   act(() => root.unmount());
   element.remove();
+  vi.unstubAllGlobals();
 });
 
 /** A tool the list cut: a preview of what it read. */
 const brief: ThoughtStep = {
   key: 'call-1',
+  run: 'run-1',
   text: 'Reading a file',
   status: 'done',
   brief: true,
@@ -81,7 +83,7 @@ it('reads a brief tool in full when it is opened, and draws what it read', async
   expect(element.textContent).toContain('Reading the full details');
 
   await act(async () => answer(whole));
-  expect(read).toHaveBeenCalledWith('call-1');
+  expect(read).toHaveBeenCalledWith('run-1', 'call-1');
   expect(tool()?.textContent).toContain('every line after them');
   expect(tool()?.textContent).not.toContain('Output truncated.');
   expect(element.textContent).not.toContain('Reading the full details');
@@ -133,4 +135,95 @@ it('never reads a tool that is whole already, nor without a conversation to read
   expect(read).not.toHaveBeenCalled();
   expect(tool()?.textContent).toContain('The first lines of the no');
   expect(element.textContent).not.toContain('could not be read');
+});
+
+it('reads a step by its turn, so a call id another turn used reads as its own', async () => {
+  const read = vi.fn(async (run: string) => ({ ...whole, output: `Read in ${run}.` }));
+  const details = readOnce(read);
+  draw(details, [{ ...brief, run: 'run-2' }]);
+  openTrace();
+  await toggle(true);
+
+  expect(read).toHaveBeenCalledWith('run-2', 'call-1');
+  expect(tool()?.textContent).toContain('Read in run-2.');
+  expect(details.known('run-1', 'call-1')).toBeUndefined();
+});
+
+it('keeps the preview when the gateway has no such step, as one that predates the route', async () => {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => Response.json({ error: 'Not Found' }, { status: 404 })),
+  );
+  const api = gatewayApi();
+  draw(readOnce((run, call) => api.toolStep('profile', 'session', run, call)));
+  openTrace();
+  await toggle(true);
+  await vi.waitFor(() =>
+    expect(tool()?.querySelector('[role="status"]')?.textContent).toBe(
+      'The full details could not be read.',
+    ),
+  );
+
+  expect(tool()?.textContent).toContain('The first lines of the no');
+});
+
+it('reads again when a tool that failed is opened again, and says it is reading meanwhile', async () => {
+  let fail = true;
+  let answer!: (step: ToolStep) => void;
+  const read = vi.fn(async (): Promise<ToolStep> => {
+    if (fail) throw new Error('Offline');
+    return new Promise<ToolStep>((resolve) => {
+      answer = resolve;
+    });
+  });
+  draw(readOnce(read));
+  openTrace();
+  await toggle(true);
+  expect(element.textContent).toContain('could not be read');
+
+  fail = false;
+  await toggle(false);
+  await toggle(true);
+  expect(element.textContent).not.toContain('could not be read');
+  expect(element.textContent).toContain('Reading the full details');
+
+  await act(async () => answer(whole));
+  expect(read).toHaveBeenCalledTimes(2);
+  expect(tool()?.textContent).toContain('every line after them');
+});
+
+it('never draws a brief diff empty: it waits for the lines, or says they are not loaded', async () => {
+  const diff = {
+    path: 'src/deploy.ts',
+    additions: 1,
+    deletions: 0,
+    hunks: [{ oldStart: 1, oldLines: 0, newStart: 1, newLines: 1, lines: [] }],
+  };
+  let answer!: (step: ToolStep) => void;
+  let fail!: () => void;
+  const read = vi.fn(
+    () =>
+      new Promise<ToolStep>((resolve, reject) => {
+        answer = resolve;
+        fail = () => reject(new Error('Offline'));
+      }),
+  );
+  draw(readOnce(read), [{ ...brief, diff }]);
+  openTrace();
+  await toggle(true);
+  expect(tool()?.querySelector('.code-diff')).toBeNull();
+  expect(element.textContent).toContain('Reading the full details');
+
+  await act(async () => fail());
+  expect(tool()?.querySelector('.code-diff')).toBeNull();
+  expect(tool()?.textContent).toContain('src/deploy.ts: lines not loaded.');
+
+  await toggle(false);
+  await toggle(true);
+  const lines = [{ kind: 'add' as const, new: 1, text: 'export const host = "example.test";' }];
+  await act(async () =>
+    answer({ ...whole, diff: { ...diff, hunks: [{ ...diff.hunks[0], lines }] } as never }),
+  );
+  expect(tool()?.querySelector('.code-diff')).not.toBeNull();
+  expect(tool()?.textContent).not.toContain('lines not loaded');
 });
