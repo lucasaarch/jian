@@ -1538,6 +1538,8 @@ export class Channels {
         },
         {
           activity: 'channel',
+          // What they wrote themselves: it may answer a question the agent asked them.
+          personReply: true,
           ...(channelMessage ? { channelMessage } : {}),
           ...(group ? { group } : {}),
           ...(author ? { author } : {}),

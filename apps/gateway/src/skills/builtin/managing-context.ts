@@ -56,11 +56,17 @@ Every size here is in the model's own tokens.
   MCP tools you loaded are let go, and if that is not enough only \`load_tools\`,
   \`load_mcp_tools\`, \`load_skill\` and \`read_artifact\` stay: load back only what you
   need.
-- A tool result over 2% of the window, at most 12,000 tokens (and at least 1,500), is stored,
-  and you get a preview and an artifact id to read it a page at a time with
-  \`read_artifact\`. Every result rides
+- A tool result over 2% of the window, at most 12,000 tokens (and at least 1,500), is stored
+  whole and cut, with its artifact id. Text (a command's output, a file, a search, a page)
+  keeps its first and last parts, under a line giving its full size in lines and tokens, with a
+  marker saying how much of the middle was left out; anything else keeps the start of its JSON.
+  One step's results together get three times that room (pages of \`read_artifact\` and images
+  aside): past it, the largest are cut first.
+  \`read_artifact\` with the artifact id returns the whole, a page at a time. Every result rides
   in each later step of the turn, so ask for the part you need: a line range, a search, a
   filtered command.
+- Work whose output you need only the outcome of (a wide search, long logs, a test run) can go
+  to a subagent with \`spawn_subagent\`: only its report comes back here.
 - A skill you load is dropped, least recently used first, once loaded skills pass a tenth of
   the window, at most 16,000 tokens.
 - The tool results of your two latest turns stay whole in the conversation. Older ones are cut
@@ -105,3 +111,13 @@ If the conversation refers to something you no longer see, it was summarised. Ch
 summary at the top of the conversation, then \`search_history\` (the \`conversations\`
 group) for the exact words, before asking the person to repeat themselves.`,
 };
+
+/** The line about subagents, which a subagent, unable to start one, is not told. */
+const DELEGATING = /^- Work whose output you need only the outcome of[\s\S]*?comes back here\.\n/m;
+
+/** As the run may read it: a subagent's copy says nothing of spawning one. */
+export function managingContextFor({ subagent }: { subagent: boolean }): Skill {
+  return subagent
+    ? { ...managingContext, instructions: managingContext.instructions.replace(DELEGATING, '') }
+    : managingContext;
+}

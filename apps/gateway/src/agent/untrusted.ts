@@ -13,10 +13,12 @@ const TIMEOUT_MS = 2000;
 /**
  * Whether a result was written by someone other than the owner and the agent: a page, a search,
  * anything an outside service returns. What it says reaches the model, and a stranger can write
- * it to read like an order.
+ * it to read like an order. A subagent's report is among them: it read pages and files of its
+ * own, and what they told it can come back in its words.
  */
 export function outsideContent(name: string, mcpToolNames: readonly string[]): boolean {
   return (
+    name === 'spawn_subagent' ||
     name === 'fetch_url' ||
     name === 'web_search' ||
     name === 'inspect_page' ||

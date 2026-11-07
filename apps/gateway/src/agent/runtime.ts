@@ -99,6 +99,7 @@ import {
   defersTools,
   MAX_DEFERRED,
   markDeferred,
+  plainOutput,
   referencedTools,
   referencing,
   toolAdditions,
@@ -133,7 +134,14 @@ import { availableNote, connectMcpTools, type McpEntry, unavailableNote } from '
 import { MCP_ERROR_UNSAID, mcpErrorText, mcpOutcomeUncertain } from './mcp-errors.js';
 import { Narrator, ToolCalls } from './narrator.js';
 import { ProgressReporter } from './progress.js';
-import { boundToolResult, redactOutput, redactText } from './results.js';
+import {
+  boundToolResult,
+  carriesMedia,
+  fitStep,
+  redactOutput,
+  redactText,
+  type StepResult,
+} from './results.js';
 import { type StepRequest, summaryCall } from './summary-call.js';
 import { plainTitle, type TitleModel, writeTitle } from './title.js';
 import { reason, toolFailure } from './tool-failure.js';
@@ -158,6 +166,14 @@ import { RunWorktrees, type WorktreeService, worktreeTools } from './worktree-to
  * fires on something that hung, not on work that takes its time.
  */
 const STALLED_AFTER_MS = 5 * 60_000;
+
+/**
+ * Tools whose call waits on work outside this run and changes nothing of its own: they run
+ * beside the step's other calls instead of in turn (see `toolQueue`).
+ */
+const WAITS_OUTSIDE = new Set(['spawn_subagent']);
+
+type ModelOutputOptions = Parameters<NonNullable<Tool['toModelOutput']>>[0];
 
 /** Failed summaries in a row after which a turn stops asking for one on its own. */
 const MAX_COMPACTION_FAILURES = 2;
@@ -1032,6 +1048,8 @@ export class AgentRuntime {
       const context = await this.services.contexts.context(run, skillServers, {
         ...project,
         toolTokens,
+        // What the run offers from its first step, not only what it has.
+        ...('spawn_subagent' in tools && offeredNow('spawn_subagent') ? { delegates: true } : {}),
         ...(worktreeCan ? { worktrees: worktreeCan } : {}),
         ...(conversation.remoteMachineId ? { machine: { files: Boolean(machineFiles) } } : {}),
       });
@@ -1078,6 +1096,31 @@ export class AgentRuntime {
 
       const guarded: ToolSet = {};
       const toolCalls = new ToolCalls();
+      // One step's results as they came back, each bounded on its own, until the step's
+      // messages are built from them: only then are they all known, and fitted together.
+      const stepResults = new Map<string, StepResult & { steered: boolean }>();
+      // What a step's fitting cut, by call: what the model is given and what the step records.
+      const fittedResults = new Map<string, unknown>();
+      let fitting: Promise<void> = Promise.resolve();
+      const fittedOutput = async (toolCallId: string, output: unknown) => {
+        if (stepResults.has(toolCallId)) {
+          const step = [...stepResults.values()];
+          stepResults.clear();
+          fitting = fitStep(step, run, secrets, this.options, scale).then((fitted) => {
+            for (const [id, cut] of fitted) {
+              const entry = step.find((item) => item.toolCallId === id);
+              // A warning about outside content stays on what is left of that content.
+              fittedResults.set(
+                id,
+                entry?.steered ? { ...(entry.result as object), result: cut } : cut,
+              );
+            }
+            if (fitted.size && 'read_artifact' in tools) loadedTools.add('read_artifact');
+          });
+        }
+        await fitting;
+        return fittedResults.has(toolCallId) ? fittedResults.get(toolCallId) : output;
+      };
       // Serializing tool execution prevents another effect from starting after one remote outcome is uncertain.
       let toolQueue: Promise<void> = Promise.resolve();
 
@@ -1093,6 +1136,13 @@ export class AgentRuntime {
           continue;
         }
 
+        // Text to fit with the step's other results: a connected service's result, or one the
+        // SDK shows as it is. A tool that shows its own (a screenshot) is not text, and a load
+        // on Claude answers with references alone.
+        const fitsStep =
+          !(deferring && LOADERS.has(name)) &&
+          (mcpToolNames.includes(name) || !definition.toModelOutput);
+
         guarded[name] = {
           ...definition,
           // Only a load answers with references, and with nothing else: Anthropic refuses them
@@ -1101,8 +1151,22 @@ export class AgentRuntime {
           // brought in is sent whole from the next step, unreferenced.
           ...(deferring && LOADERS.has(name)
             ? { toModelOutput: referencing(definition, (id) => broughtIn.get(id)) }
-            : {}),
+            : fitsStep
+              ? {
+                  // What the step's fitting left of the result, shown as the tool shows its
+                  // own: an MCP result as its text blocks, the rest as the SDK would.
+                  toModelOutput: async (options: ModelOutputOptions) => {
+                    const output = await fittedOutput(options.toolCallId, options.output);
+                    return definition.toModelOutput
+                      ? definition.toModelOutput({ ...options, output })
+                      : plainOutput(output);
+                  },
+                }
+              : {}),
           execute: async (input, options) => {
+            // An approved action runs before any step: its result is no step's to fit.
+            const inStep = approvedCallId !== options.toolCallId;
+            let feeding: ReturnType<typeof setInterval> | undefined;
             const previous = toolQueue;
             let release: () => void = () => {};
 
@@ -1210,6 +1274,15 @@ export class AgentRuntime {
                 input: redactOutput(input, secrets),
               });
 
+              // A call that waits on work outside this run lets the step's next call start: the
+              // checks above ran in turn, and what it waits for touches nothing of this run's.
+              // The watchdog is fed meanwhile, so it cannot tell this call stalled; that is
+              // accepted, as the wait has a limit of its own (`awaitReport`) and the owner's
+              // Cancel still ends it.
+              const waits = WAITS_OUTSIDE.has(name);
+              if (waits) release();
+              feeding = waits ? setInterval(alive, Math.min(30_000, stalledAfter / 4)) : undefined;
+
               try {
                 // Read per call: this run or another of its conversation may have changed them.
                 await worktrees?.scope.reload();
@@ -1218,6 +1291,7 @@ export class AgentRuntime {
                   () => execute(input, options),
                   worktrees?.scope.guarded,
                 );
+                clearInterval(feeding);
                 // A file write's diff is for the owner, not the agent: it goes to its own
                 // checkpoint, read by the timeline alone, and leaves the result before the
                 // result is bounded, so it can neither cost context nor push the result into an
@@ -1269,7 +1343,6 @@ export class AgentRuntime {
                       run,
                       secrets,
                       this.options,
-                      false,
                       scale,
                     ),
                   });
@@ -1281,7 +1354,6 @@ export class AgentRuntime {
                   run,
                   secrets,
                   this.options,
-                  currentCavemanMode !== 'off',
                   scale,
                 );
                 for (const mate of groupMates(name, tools)) loadedTools.add(mate);
@@ -1301,9 +1373,20 @@ export class AgentRuntime {
                 }
 
                 // Read after secrets are masked: the judge sees no more than the agent will.
-                return judge && outsideContent(name, mcpToolNames)
-                  ? await markSteering(judge, result, signal)
-                  : result;
+                const marked =
+                  judge && outsideContent(name, mcpToolNames)
+                    ? await markSteering(judge, result, signal)
+                    : result;
+                if (inStep && fitsStep && !carriesMedia(answered)) {
+                  stepResults.set(options.toolCallId, {
+                    toolCallId: options.toolCallId,
+                    toolName: name,
+                    output: answered,
+                    result: marked,
+                    steered: marked !== result,
+                  });
+                }
+                return marked;
               } catch (error) {
                 if (error instanceof AskUserPause) {
                   askUser = error.question;
@@ -1357,6 +1440,7 @@ export class AgentRuntime {
                 throw new Error(`Tool ${name} failed: ${failure}`);
               }
             } finally {
+              clearInterval(feeding);
               release();
             }
           },
@@ -2158,13 +2242,20 @@ export class AgentRuntime {
             finishReason,
             usage: measured,
             prompt: preparedPrompt,
-            tools: toolResults.map((result) => ({
-              toolName: result.toolName,
-              toolCallId: result.toolCallId,
-              bytes: Buffer.byteLength(JSON.stringify(result.output) ?? 'null'),
-              artifactId: (result.output as { artifactId?: string } | null)?.artifactId,
-              result: redactOutput(result.output, secrets),
-            })),
+            // As the model was given them: a result the step's fitting cut is recorded cut, so
+            // the turns after this one read what this one did.
+            tools: toolResults.map((result) => {
+              const output = fittedResults.has(result.toolCallId)
+                ? fittedResults.get(result.toolCallId)
+                : result.output;
+              return {
+                toolName: result.toolName,
+                toolCallId: result.toolCallId,
+                bytes: Buffer.byteLength(JSON.stringify(output) ?? 'null'),
+                artifactId: (output as { artifactId?: string } | null)?.artifactId,
+                result: redactOutput(output, secrets),
+              };
+            }),
           });
 
           // An instruction file or a skill the agent wrote is read again next turn.

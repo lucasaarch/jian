@@ -73,6 +73,8 @@ async function setup(channel = 'api') {
     name: 'Atlas',
     instructions: 'Help.',
     model: { provider: 'openai', modelId: 'test', apiKeyEnv: 'JIAN_PROVIDER_TEST' },
+    // Room for the instructions and the tools offered from the start: no summary between steps.
+    contextPolicy: { inputTokens: 64000 },
   });
   const session = await services.sessions.createSession(profile.id, { title: 'Work', channel });
   const file = join(root, profile.id, 'notes.txt');

@@ -44,6 +44,8 @@ it('runs a scoped subagent in its parent conversation and delivers one durable h
     identity: 'Inspect the release evidence.',
     brief: 'Find the release status and report the exact source.',
     mediaIds: [image.id],
+    // Returns once queued: what is under test is the handoff that comes after.
+    wait: false,
   };
   const call = { toolCallId: 'spawn-one', messages: [], context: {} };
   const child = await tools.spawn_subagent?.execute?.(assignment, call);

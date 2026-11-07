@@ -265,6 +265,42 @@ export class Runs {
 
       const waiting = await findWaitingSessionRun(tx, profileId, sessionId);
 
+      // Continuing another run would answer the question with the reconciliation, on the
+      // owner's behalf and without their saying so: they answer it first.
+      if (waiting?.question && continuationOf) {
+        throw new GatewayError(
+          409,
+          'The agent is waiting for an answer to its question in this conversation. Answer it before continuing another run.',
+        );
+      }
+
+      // Only the owner, or the person the conversation is with, answers what the agent asked.
+      // Anything the gateway writes (a subagent's report, an objective's nudge, a schedule, a
+      // relayed reply, another agent's call) joins the waiting turn as data, read when it
+      // resumes, and the question stays theirs. Joining, not waiting: the message is kept, and a
+      // flow that delivers the run it was given still has one.
+      if (waiting?.question && !options.ownerMessage && !options.personReply) {
+        const stored = await insertKeyedMessage(
+          tx,
+          {
+            id: randomUUID(),
+            profileId,
+            sessionId,
+            runId: waiting.id,
+            role: 'user',
+            content: data.text,
+            ...purposeOf(options, data.text),
+            createdAt: nowIso(this.clock),
+          },
+          data.requestKey,
+        );
+        if (!stored) {
+          const existing = await findMessageByKey(tx, sessionId, data.requestKey);
+          if (existing?.runId) return this.sameMessage(existing, data.text, tx, profileId);
+        }
+        return waiting;
+      }
+
       // Answering a mid-run question resumes work; it is not a steer and not a bare "continue".
       if (waiting?.question) {
         const resumeKey = `ask-answer:${waiting.id}`;
@@ -702,6 +738,7 @@ export class Runs {
         ...question,
         answer,
         answeredAt: nowIso(this.clock),
+        // Reached only by the owner's reply or that of the channel's person (see submit).
         answeredBy: activity === 'channel' ? 'contact' : 'owner',
       },
       // Keep the question text as the parked run's output; delivery already sent it.

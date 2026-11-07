@@ -221,3 +221,188 @@ it('keeps a recommendation only when it is one of the choices', () => {
   expect(asked('C').recommended).toBeUndefined();
   expect(formatQuestionText(asked('B'))).toContain('2. B (recommended)');
 });
+
+it('keeps the question for the owner when a subagent report arrives while it waits', async () => {
+  const services = await testServices();
+  const profile = await services.profiles.createProfile(input);
+  const session = await services.sessions.createSession(profile.id, {
+    channel: 'api',
+    title: 'Questions',
+  });
+  const run = await services.runs.submit(profile.id, session.id, {
+    text: 'Which provider first?',
+    requestKey: 'ask',
+  });
+  let step = 0;
+  let resumed = '';
+  const model = mockModel({
+    doGenerate: async (options) => {
+      step++;
+      if (step === 2) resumed = JSON.stringify(options.prompt);
+      return step === 1
+        ? {
+            content: [
+              {
+                type: 'tool-call',
+                toolCallId: 'ask',
+                toolName: 'ask_user',
+                input: JSON.stringify({ prompt: 'Which provider should I wire first?' }),
+              },
+            ],
+            finishReason: { unified: 'tool-calls', raw: 'tool-calls' },
+            usage,
+            warnings: [],
+          }
+        : answer('Wiring Gemini Live.');
+    },
+  });
+  await new AgentRuntime(services, () => model).execute(profile.id, run.id);
+  expect((await services.runs.run(profile.id, run.id)).status).toBe('waiting');
+
+  // As a subagent's handoff arrives: the gateway's words, not the owner's.
+  const report = 'Subagent "Pricing" finished.\nReport: Gemini Live costs less per minute.';
+  const joined = await services.runs.submit(
+    profile.id,
+    session.id,
+    { text: report, requestKey: 'task-worker-finished:pricing' },
+    { purpose: 'resume' },
+  );
+  expect(joined.id).toBe(run.id);
+  const still = await services.runs.run(profile.id, run.id);
+  expect(still.status).toBe('waiting');
+  expect(still.question?.answer).toBeUndefined();
+  expect(still.question?.answeredBy).toBeUndefined();
+
+  const resume = await services.runs.submit(
+    profile.id,
+    session.id,
+    { text: 'Gemini Live', requestKey: 'reply' },
+    { ownerMessage: true },
+  );
+  expect((await services.runs.run(profile.id, run.id)).question).toMatchObject({
+    answer: 'Gemini Live',
+    answeredBy: 'owner',
+  });
+  // The report is in what the resumed turn reads, as data beside the answer.
+  await new AgentRuntime(services, () => model).execute(profile.id, resume.id);
+  expect(resumed).toContain('Gemini Live costs less per minute.');
+});
+
+it('refuses to continue another run while the agent waits on the owner, and keeps the question', async () => {
+  const services = await testServices();
+  const profile = await services.profiles.createProfile(input);
+  const session = await services.sessions.createSession(profile.id, {
+    channel: 'api',
+    title: 'Questions',
+  });
+  // A run that stopped, which the owner may continue with a reconciliation.
+  const stopped = await services.runs.submit(profile.id, session.id, {
+    text: 'Deploy the release.',
+    requestKey: 'deploy',
+  });
+  await services.lifecycle.claim(stopped.id, profile.id, 'stopped');
+  await services.lifecycle.finish(profile.id, stopped.id, 'stopped', 'interrupted', 'Lost.');
+  const asking = await services.runs.submit(profile.id, session.id, {
+    text: 'Which provider first?',
+    requestKey: 'ask',
+  });
+  const model = mockModel({
+    doGenerate: async () => ({
+      content: [
+        {
+          type: 'tool-call',
+          toolCallId: 'ask',
+          toolName: 'ask_user',
+          input: JSON.stringify({ prompt: 'Which provider should I wire first?' }),
+        },
+      ],
+      finishReason: { unified: 'tool-calls', raw: 'tool-calls' },
+      usage,
+      warnings: [],
+    }),
+  });
+  await new AgentRuntime(services, () => model).execute(profile.id, asking.id);
+  expect((await services.runs.run(profile.id, asking.id)).status).toBe('waiting');
+
+  await expect(
+    services.runs.continueRun(profile.id, stopped.id, {
+      text: 'Carry on.',
+      requestKey: 'continue',
+      reconciliation: 'Nothing was deployed.',
+    }),
+  ).rejects.toMatchObject({ statusCode: 409 });
+  const still = await services.runs.run(profile.id, asking.id);
+  expect(still.status).toBe('waiting');
+  expect(still.question?.answer).toBeUndefined();
+});
+
+it('keeps the question for the owner when an objective nudge or a schedule arrives while it waits', async () => {
+  const services = await testServices();
+  const profile = await services.profiles.createProfile(input);
+  const session = await services.sessions.createSession(profile.id, {
+    channel: 'api',
+    title: 'Questions',
+  });
+  await services.sessions.setObjective(profile.id, session.id, {
+    text: 'Ship mid-run questions',
+    status: 'open',
+  });
+  // A turn that finished, which an open objective follows with a nudge.
+  const done = await services.runs.submit(profile.id, session.id, {
+    text: 'Start the work.',
+    requestKey: 'start',
+  });
+  await services.lifecycle.claim(done.id, profile.id, 'done');
+  await services.lifecycle.finish(profile.id, done.id, 'done', 'completed', 'Started.');
+  const asking = await services.runs.submit(
+    profile.id,
+    session.id,
+    { text: 'Which provider first?', requestKey: 'ask' },
+    { ownerMessage: true },
+  );
+  const model = mockModel({
+    doGenerate: async () => ({
+      content: [
+        {
+          type: 'tool-call',
+          toolCallId: 'ask',
+          toolName: 'ask_user',
+          input: JSON.stringify({ prompt: 'Which provider should I wire first?' }),
+        },
+      ],
+      finishReason: { unified: 'tool-calls', raw: 'tool-calls' },
+      usage,
+      warnings: [],
+    }),
+  });
+  await new AgentRuntime(services, () => model).execute(profile.id, asking.id);
+  expect((await services.runs.run(profile.id, asking.id)).status).toBe('waiting');
+
+  const nudged = await services.objectives.continueAfter(done);
+  expect(nudged?.id).toBe(asking.id);
+  // A schedule's message is the gateway's words too.
+  const scheduled = await services.runs.submit(profile.id, session.id, {
+    text: '[Scheduled: Morning check] Check the build.',
+    requestKey: 'schedule',
+  });
+  expect(scheduled.id).toBe(asking.id);
+
+  const still = await services.runs.run(profile.id, asking.id);
+  expect(still.status).toBe('waiting');
+  expect(still.question?.answer).toBeUndefined();
+  expect(still.question?.answeredBy).toBeUndefined();
+  const kept = await services.sessions.messages(profile.id, session.id);
+  expect(kept.some((message) => message.content.includes('Check the build.'))).toBe(true);
+
+  // The owner's own reply still answers it, as theirs.
+  await services.runs.submit(
+    profile.id,
+    session.id,
+    { text: 'Gemini Live', requestKey: 'reply' },
+    { ownerMessage: true },
+  );
+  expect((await services.runs.run(profile.id, asking.id)).question).toMatchObject({
+    answer: 'Gemini Live',
+    answeredBy: 'owner',
+  });
+});

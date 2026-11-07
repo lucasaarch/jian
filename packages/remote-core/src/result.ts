@@ -1,7 +1,7 @@
 import type { RemoteResult } from '@jian/contracts';
+import { keepEnds } from './ends.ts';
 import { hostWording } from './host.ts';
 import type { Logger } from './log.ts';
-import { STDERR_CAP, STDOUT_CAP } from './shell.ts';
 
 /**
  * Max JSON body for a result POST. The gateway route allows 512 KiB; leave headroom for
@@ -56,25 +56,20 @@ export function fitResult(
     };
   }
 
-  const note = '\n… truncated to fit the gateway size limit';
+  // Cut from the middle, as the command's own capture was: the end is where a failure says
+  // what went wrong.
   while (Buffer.byteLength(body) > budget && stdout.length > 0) {
-    const overflow = Buffer.byteLength(body) - budget + Buffer.byteLength(note);
-    const cut = Math.min(stdout.length, Math.max(2048, overflow));
-    stdout = stdout.slice(0, Math.max(0, stdout.length - cut));
+    const overflow = Buffer.byteLength(body) - budget;
+    stdout = keepEnds(stdout, Math.max(0, stdout.length - Math.max(2048, overflow)));
     body = pack();
+    if (stdout.length <= 200) break;
   }
-  if (stdout.length < (result.stdout?.length ?? 0))
-    stdout = `${stdout}${note}`.slice(0, STDOUT_CAP);
-
-  body = pack();
   while (Buffer.byteLength(body) > budget && stderr.length > 0) {
-    const overflow = Buffer.byteLength(body) - budget + Buffer.byteLength(note);
-    const cut = Math.min(stderr.length, Math.max(1024, overflow));
-    stderr = stderr.slice(0, Math.max(0, stderr.length - cut));
+    const overflow = Buffer.byteLength(body) - budget;
+    stderr = keepEnds(stderr, Math.max(0, stderr.length - Math.max(1024, overflow)));
     body = pack();
+    if (stderr.length <= 200) break;
   }
-  if (stderr.length < (result.stderr?.length ?? 0))
-    stderr = `${stderr}${note}`.slice(0, STDERR_CAP);
 
   body = pack();
   if (Buffer.byteLength(body) > budget) {

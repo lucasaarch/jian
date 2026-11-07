@@ -14,6 +14,8 @@ const input = {
   name: 'Atlas',
   instructions: 'Help.',
   model: { provider: 'openai', modelId: 'test', apiKeyEnv: 'JIAN_PROVIDER_TEST' },
+  // Room for the instructions and the tools offered from the start: no summary before a step.
+  contextPolicy: { inputTokens: 64000 },
 };
 
 const usage = {
@@ -249,7 +251,9 @@ async function fixture(contextPolicy?: Record<string, number | 'auto'>, subscrip
       }
     : input;
   const profile = await services.profiles.createProfile(
-    contextPolicy ? { ...configured, contextPolicy } : configured,
+    contextPolicy
+      ? { ...configured, contextPolicy: { ...configured.contextPolicy, ...contextPolicy } }
+      : configured,
   );
   const session = await services.sessions.createSession(profile.id, { title: 'Mac' });
 

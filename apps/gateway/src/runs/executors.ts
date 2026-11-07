@@ -15,6 +15,22 @@ export interface RunExecutor {
 
 const queueName = 'jian-agent-runs';
 
+/**
+ * How a run's job is held in pg-boss. A turn has no clock of its own (a waiting
+ * `spawn_subagent` call alone may hold one for 15 minutes), and pg-boss fails a job whose
+ * handler outlives `expireInSeconds`: the run would go on under its own lease, but the job
+ * would leave `localConcurrency` and another would take its slot. Six hours is above any turn;
+ * what ends a turn is its lease, its budgets and the stall watchdog. The heartbeat, which
+ * pg-boss refreshes on its own while the handler runs, is what notices a worker that died.
+ */
+export const RUN_QUEUE_OPTIONS = {
+  policy: 'exclusive',
+  // Run leases handle recovery; queue retries must not replay an agent's external effects.
+  retryLimit: 0,
+  expireInSeconds: 6 * 60 * 60,
+  heartbeatSeconds: 60,
+} as const;
+
 /** Across every worker of a server installation, through pg-boss in its PostgreSQL. */
 export class BossExecutor implements RunExecutor {
   constructor(
@@ -26,12 +42,11 @@ export class BossExecutor implements RunExecutor {
     this.boss.on('error', () => this.report('jian: queue connection failed'));
     await this.boss.start();
 
-    // Run leases handle recovery; queue retries must not replay an agent's external effects.
-    await this.boss.createQueue(queueName, {
-      policy: 'exclusive',
-      retryLimit: 0,
-      expireInSeconds: 660,
-    });
+    // `createQueue` leaves a queue that exists as it was: an installation that made it with the
+    // earlier options is brought to these by `updateQueue`, which cannot change the policy.
+    await this.boss.createQueue(queueName, RUN_QUEUE_OPTIONS);
+    const { policy: _policy, ...settings } = RUN_QUEUE_OPTIONS;
+    await this.boss.updateQueue(queueName, settings);
 
     await this.boss.work<{ profileId: string; runId: string }>(
       queueName,

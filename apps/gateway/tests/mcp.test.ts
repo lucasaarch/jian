@@ -966,3 +966,173 @@ it('cleans optional empty fields in the SDK JSON Schema before the MCP server va
     await new Promise<void>((resolve) => server.close(() => resolve()));
   }
 });
+
+it('fits one step’s plain-text MCP results together, each keeping its end and its artifact', async () => {
+  const lines = { a: 4000, b: 3500, c: 3000, d: 2500 } as Record<string, number>;
+  const server = createServer(async (req, res) => {
+    if (req.method !== 'POST') {
+      res.writeHead(405).end();
+      return;
+    }
+    let body = '';
+    for await (const chunk of req) body += chunk;
+    const message = JSON.parse(body);
+    if (message.id === undefined) {
+      res.writeHead(202).end();
+      return;
+    }
+    const tag = String(message.params?.arguments?.tag ?? 'a');
+    const result =
+      message.method === 'initialize'
+        ? {
+            protocolVersion: '2025-03-26',
+            capabilities: { tools: {} },
+            serverInfo: { name: 'logs', version: '1' },
+          }
+        : message.method === 'tools/list'
+          ? {
+              tools: [
+                {
+                  name: 'build_log',
+                  description: 'Read a build log',
+                  annotations: { readOnlyHint: true },
+                  inputSchema: { type: 'object', properties: { tag: { type: 'string' } } },
+                },
+              ],
+            }
+          : tag === 'chart'
+            ? // An image under one budget, large beside the step's share: it stays an image.
+              {
+                content: [
+                  { type: 'image', data: 'A'.repeat(2000), mimeType: 'image/png' },
+                  { type: 'text', text: 'The build time chart.' },
+                ],
+              }
+            : {
+                content: [
+                  {
+                    type: 'text',
+                    text: `${tag} FIRST\n${`${tag} line of the build log\n`.repeat(lines[tag] ?? 1)}${tag} LAST ERROR`,
+                  },
+                ],
+              };
+    res
+      .writeHead(200, { 'Content-Type': 'application/json' })
+      .end(JSON.stringify({ jsonrpc: '2.0', id: message.id, result }));
+  });
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  const origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  const outbound = createSafeFetch({ allowPrivateOrigins: [origin] });
+  try {
+    const services = await testServices();
+    const profile = await services.profiles.createProfile({
+      name: 'Logs',
+      instructions: 'Help.',
+      model: { provider: 'openai', modelId: 'test', apiKeyEnv: 'JIAN_PROVIDER_TEST' },
+      contextPolicy: { inputTokens: 64000, toolResultTokens: 2560 },
+    });
+    await services.mcp.replace({ servers: [{ name: 'logs', url: `${origin}/mcp` }] });
+    const session = await services.sessions.createSession(profile.id, { title: 'Logs' });
+    const run = await services.runs.submit(profile.id, session.id, {
+      text: 'Read the logs',
+      requestKey: 'logs',
+    });
+    const usage = {
+      inputTokens: { total: 1, noCache: 1, cacheRead: 0, cacheWrite: 0 },
+      outputTokens: { total: 1, text: 1, reasoning: 0 },
+    };
+    const prompts: Array<Parameters<Parameters<typeof mockModel>[0]['doGenerate']>[0]> = [];
+    let remoteName = '';
+    const model = mockModel({
+      doGenerate: async (options) => {
+        prompts.push(options);
+        if (prompts.length === 1) {
+          remoteName =
+            options.tools
+              ?.filter((item) => item.type === 'function')
+              .find((item) => item.name === 'load_mcp_tools')
+              ?.description?.match(/mcp__logs_build_log_[a-f0-9]{8}/)?.[0] ?? '';
+          return {
+            content: [
+              {
+                type: 'tool-call' as const,
+                toolCallId: 'select',
+                toolName: 'load_mcp_tools',
+                input: JSON.stringify({ names: [remoteName] }),
+              },
+            ],
+            finishReason: { unified: 'tool-calls' as const, raw: 'tool-calls' },
+            usage,
+            warnings: [],
+          };
+        }
+        if (prompts.length === 2) {
+          return {
+            content: [...Object.keys(lines), 'chart'].map((tag) => ({
+              type: 'tool-call' as const,
+              toolCallId: `log-${tag}`,
+              toolName: remoteName,
+              input: JSON.stringify({ tag }),
+            })),
+            finishReason: { unified: 'tool-calls' as const, raw: 'tool-calls' },
+            usage,
+            warnings: [],
+          };
+        }
+        return {
+          content: [{ type: 'text' as const, text: 'Read them.' }],
+          finishReason: { unified: 'stop' as const, raw: 'stop' },
+          usage,
+          warnings: [],
+        };
+      },
+    });
+    await new AgentRuntime(services, () => model, {
+      outbound,
+      storeArtifact: async () => ({ artifactId: crypto.randomUUID(), bytes: 1 }),
+    }).execute(profile.id, run.id);
+
+    const all = (prompts[2]?.prompt ?? []).flatMap((message) =>
+      message.role === 'tool'
+        ? message.content.flatMap((part) =>
+            part.type === 'tool-result' &&
+            part.toolCallId.startsWith('log-') &&
+            part.output.type === 'content'
+              ? [
+                  {
+                    id: part.toolCallId,
+                    text: part.output.value
+                      .map((item) => (item.type === 'text' ? item.text : ''))
+                      .join(''),
+                  },
+                ]
+              : [],
+          )
+        : [],
+    );
+    const chart = (prompts[2]?.prompt ?? []).flatMap((message) =>
+      message.role === 'tool'
+        ? message.content.filter(
+            (part) => part.type === 'tool-result' && part.toolCallId === 'log-chart',
+          )
+        : [],
+    )[0] as { output: { type: string; value: Array<{ type: string }> } } | undefined;
+    expect(chart?.output.type).toBe('content');
+    expect(chart?.output.value.map((item) => item.type)).toContain('file');
+    const texts = all.filter((item) => item.id !== 'log-chart');
+    expect(texts).toHaveLength(4);
+    // Each result's own budget would let the four through at nearly 4 × 2,560 bytes.
+    expect(texts.reduce((sum, item) => sum + Buffer.byteLength(item.text), 0)).toBeLessThan(
+      3 * 2560,
+    );
+    for (const item of texts) {
+      expect(item.text).toContain(`${item.id.slice(-1)} LAST ERROR`);
+      expect(item.text).toMatch(/read_artifact with artifactId "[0-9a-f-]{36}"/);
+    }
+  } finally {
+    await new Promise<void>((resolve, reject) =>
+      server.close((err) => (err ? reject(err) : resolve())),
+    );
+  }
+});

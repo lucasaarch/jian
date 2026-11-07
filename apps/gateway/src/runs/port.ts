@@ -41,6 +41,12 @@ export type SubmitOptions = {
    * not show it. The auto-continue of an open objective is a `resume`.
    */
   purpose?: Message['purpose'];
+  /**
+   * The message is the reply of the person this channel conversation is with, as they wrote it.
+   * With `ownerMessage`, the only thing that answers a question the agent asked: the gateway's
+   * own messages (a schedule, a nudge, a report, a relay) never do.
+   */
+  personReply?: boolean;
 };
 
 export interface RunReader {

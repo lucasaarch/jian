@@ -17,6 +17,8 @@ const input = {
   name: 'Atlas',
   instructions: 'Help.',
   model: { provider: 'openai' as const, modelId: 'test', apiKeyEnv: 'JIAN_PROVIDER_TEST' },
+  // Room for the instructions and the tools offered from the start: no summary between steps.
+  contextPolicy: { inputTokens: 64000 },
 };
 
 const usage = {

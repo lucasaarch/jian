@@ -21,6 +21,8 @@ export interface ContextSources {
   servers: readonly McpServer[];
   /** The run has the worktree tools, so the skill about them is offered. */
   worktrees?: boolean;
+  /** The run has spawn_subagent: it is told when handing work to one is worth it. */
+  delegates?: boolean;
   /** The run targets a machine; `files` when its file tools work there, not on the gateway. */
   machine?: { files: boolean };
   /** The installation's zone, which the agent reads the time in; the host's when absent. */
@@ -72,6 +74,10 @@ export interface ContextSources {
 import { TURN_CONTEXT } from './markers.js';
 
 export { TURN_CONTEXT };
+
+/** When handing work to a subagent pays, for a run that can. */
+const DELEGATION =
+  'You can hand work to a subagent with spawn_subagent, which returns its report: worth it for output not worth keeping here (a wide search, long logs, a test run, many files), for independent pieces run in parallel and for a fresh-eyes review. Do a single lookup or a few files yourself, never delegate understanding what the owner asked, and check a report before relying on it.';
 
 /** A memory judged this unlikely to help is left out, and its room goes to one that may. */
 const IRRELEVANT = 0.1;
@@ -246,6 +252,9 @@ export function buildContext(
         : 'You can run commands and read, edit, find and search files on the machine this gateway runs on: load the shell and files tool groups when a task needs them. $HOME is one directory shared by every agent of this installation: keep each task in a folder of its own, do not assume you are alone in ~, and leave what you did not create. Your memories and conversations stay yours; these files do not.',
     'Every machine connected to this installation supports shell and computer use through the remote tool group.',
     'You can search the web and read public pages: load the web tool group when a question needs current or outside information, and say where an answer came from.',
+    // Said only to a run that has the tool. Without it, an agent with a broad task fills its
+    // own context with searches and logs, or does in turn what could have run side by side.
+    ...(sources.delegates && !worker ? [DELEGATION] : []),
     ...(!worker
       ? [
           'A message that starts with [Scheduled: …] comes from one of this profile’s schedules, at its time: nobody typed it just now. Carry it out and answer in this conversation.',

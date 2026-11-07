@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { LocalExecutor } from '../src/runs/executors.js';
+import { BossExecutor, LocalExecutor } from '../src/runs/executors.js';
 
 /** A run that ends when the test says so. */
 function controlled() {
@@ -57,5 +57,31 @@ describe('runs executed in this process', () => {
     runs.finish.get('a')?.();
     await stopping;
     expect(runs.started).toEqual(['a']);
+  });
+});
+
+describe('runs executed through pg-boss', () => {
+  it('holds a run’s job past a long turn, on a queue made earlier too', async () => {
+    const calls: Array<[string, string, Record<string, unknown>]> = [];
+    const boss = {
+      on: () => {},
+      start: async () => {},
+      createQueue: async (name: string, options: Record<string, unknown>) => {
+        calls.push(['create', name, options]);
+      },
+      updateQueue: async (name: string, options: Record<string, unknown>) => {
+        calls.push(['update', name, options]);
+      },
+      work: async () => 'worker',
+    };
+    await new BossExecutor(boss as never).start(async () => {});
+
+    const [create, update] = calls;
+    expect(create?.[2]).toMatchObject({ policy: 'exclusive', retryLimit: 0 });
+    // Above any turn: a waiting subagent call alone may hold one for 15 minutes.
+    expect(Number(update?.[2].expireInSeconds)).toBeGreaterThanOrEqual(6 * 60 * 60);
+    expect(update?.[2].heartbeatSeconds).toBeGreaterThanOrEqual(10);
+    expect(update?.[2]).not.toHaveProperty('policy');
+    expect(update?.[1]).toBe(create?.[1]);
   });
 });

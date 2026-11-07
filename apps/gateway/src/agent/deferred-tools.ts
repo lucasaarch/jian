@@ -195,7 +195,7 @@ export function withoutDeferral<M extends Loose>(messages: M[]): M[] {
 }
 
 /** What the SDK makes of a result when the tool has no `toModelOutput` of its own. */
-const plainOutput = (output: unknown): Output => {
+export const plainOutput = (output: unknown): Output => {
   if (typeof output === 'string') return { type: 'text', value: output };
   // As the SDK's own `toJSONValue`: what JSON cannot say (undefined, a function) becomes null.
   const json = output === undefined ? undefined : JSON.stringify(output);
