@@ -2034,3 +2034,80 @@ it('skips a summary that could not shrink the prompt by a fifth', async () => {
     ),
   ).toBe(true);
 });
+
+it('cuts a prompt that fits the window only by the exact scale', async () => {
+  const policy = { inputTokens: 64000, outputTokens: 4096 };
+  const { services, profile, session, run } = await fixture({
+    ...policy,
+    toolResultTokens: 32000,
+    maxSteps: 8,
+  });
+  const limit = policy.inputTokens - policy.outputTokens;
+  for (let index = 0; index < 6; index++) {
+    await insertMessage(services.store.db, {
+      id: randomUUID(),
+      profileId: profile.id,
+      sessionId: session.id,
+      role: index % 2 === 0 ? 'user' : 'assistant',
+      content: `turn-${index} ${'history '.repeat(300)}`,
+      createdAt: new Date(Date.parse('2026-09-29T09:00:00.000Z') + index * 1000).toISOString(),
+    });
+  }
+  // Sized from the request it follows: two results that bring the request to about 94% of the
+  // window, which fits by the measured scale but not with the margin a scale can drift by.
+  let size = 0;
+  if (!services.web) throw new Error('Web tools unavailable');
+  services.web.tools = () => ({
+    large_result: tool({
+      description: 'Return a large synthetic result.',
+      inputSchema: z.object({}),
+      execute: async () => 'x'.repeat(size),
+    }),
+  });
+  let step = 0;
+  let last = '';
+  const model = mockModel({
+    doGenerate: async (options) => {
+      if (!options.tools?.length) return answer('Checkpoint: the older turns were read.');
+      const sent = reported(options, 1);
+      const call = (toolName: string, input = '{}') => ({
+        content: [{ type: 'tool-call' as const, toolCallId: `call-${step}`, toolName, input }],
+        finishReason: { unified: 'tool-calls' as const, raw: 'tool-calls' },
+        usage: sent.usage,
+        warnings: [],
+      });
+      switch (step++) {
+        case 0:
+          return call('load_tools', JSON.stringify({ groups: ['tasks'] }));
+        case 1:
+          return call('compact_context');
+        case 2:
+          // Compacted just now: the next steps do not try again, and the request only grows.
+          size = Math.round((limit * 0.94 - sent.total - 1500) / 2);
+          return call('large_result');
+        case 3:
+          return call('large_result');
+        case 4:
+          return call('read_memories');
+        default:
+          last = JSON.stringify(options.prompt);
+          return { ...answer('Done.'), usage: sent.usage };
+      }
+    },
+  });
+
+  await new AgentRuntime(services, () => model).execute(profile.id, run.id);
+
+  const checkpoints = (await services.lifecycle.checkpoints(profile.id, run.id)).map(
+    (checkpoint) => checkpoint.data as { phase?: string; shedResults?: number },
+  );
+  expect((await services.runs.run(profile.id, run.id)).output).toBe('Done.');
+  expect(size).toBeGreaterThan(10000);
+  expect(
+    checkpoints.some(
+      (checkpoint) => checkpoint.phase === 'context-truncated' && (checkpoint.shedResults ?? 0) > 0,
+    ),
+  ).toBe(true);
+  // The older result was put aside; the latest step's, which the model is answering, never is.
+  expect(last.split('x'.repeat(size)).length - 1).toBe(1);
+});

@@ -135,6 +135,16 @@ const COMPACTION_RETRY_GROWTH = 1.25;
 const SHED_TO = 0.6;
 
 /**
+ * Headroom over a measured scale at the window's hard edge. The scale is the last step's mix of
+ * text, code and pictures, and one step can change it (a pasted log, a screenshot); a provider
+ * that refuses a request for its size fails the run, with no cut and second try. The compaction
+ * threshold and the agent's Context line keep the exact scale: starting a summary a little late
+ * costs nothing, while a refused request costs the turn. A default scale gets none: it is set
+ * above anything measured (a byte a token; a half for Claude, which measured 0.41).
+ */
+const LIMIT_MARGIN = 1.15;
+
+/**
  * The share of the model's input window the conversation's loaded skills may take, kept in its
  * instructions, and the most they may take in tokens: a tenth of a 1M window let 100k of skills
  * ride in every step. Past it the least recently used goes, and is loaded again if needed.
@@ -1190,9 +1200,14 @@ export class AgentRuntime {
       // decision of the run goes by the estimate times this, so compaction starts when the
       // provider's own count nears the threshold, not when a byte count does. Each step the
       // provider reports measures it again; a turn starts from the conversation's last one.
-      let scale =
-        (await lastPromptScale(this.services.store.db, profileId, run.sessionId, config)) ??
-        defaultScale(config.provider);
+      const seeded = await lastPromptScale(
+        this.services.store.db,
+        profileId,
+        run.sessionId,
+        config,
+      );
+      let scale = seeded ?? defaultScale(config.provider);
+      let margin = seeded === undefined ? 1 : LIMIT_MARGIN;
       // The gateway's unscaled count of the prompt the step sent, which its report is held to.
       let preparedEstimate = 0;
       const account = async (
@@ -1348,10 +1363,12 @@ export class AgentRuntime {
             };
           };
           let { names: activeNames, tools: activeTools } = pick();
+          // The scale for checks against the window itself (see LIMIT_MARGIN).
+          const edge = scale * margin;
           const fixedCost = (withCurrent = false) =>
             promptTokens({
               ...config,
-              scale,
+              scale: edge,
               instructions: codingInstructions,
               // What a summary never shrinks: the request being answered now. Its tool work
               // can be summarised, so it does not count here.
@@ -1396,7 +1413,7 @@ export class AgentRuntime {
           if (fixedCost() > policy.inputTokens - policy.outputTokens) {
             fitPrompt({
               ...config,
-              scale,
+              scale: edge,
               policy,
               instructions: codingInstructions,
               messages,
@@ -1430,7 +1447,8 @@ export class AgentRuntime {
                 currentStartIndex,
                 includeCurrent: before > limit,
                 previous: session.summary,
-                scale,
+                // Only its segments use it, each fitted to the model's window.
+                scale: edge,
                 // Writing a record needs no deliberation, and thinking draws on the same
                 // allowance as the summary: at the owner's effort it ran out before the record.
                 providerOptions: leastReasoningOptions(config),
@@ -1501,13 +1519,16 @@ export class AgentRuntime {
           // Drops the oldest turns, then the oldest results of this one, until the prompt fits
           // `within`. Originals stay stored in the database and the panel. read_artifact is
           // budgeted in: a shed result is read back with it.
-          const shed = async (within: { inputTokens: number; outputTokens: number }) => {
+          const shed = async (
+            within: { inputTokens: number; outputTokens: number },
+            by: number,
+          ) => {
             const reader = guarded.read_artifact;
             const truncated = truncatePrompt({
               provider: config.provider,
               modelId: config.modelId,
               policy: within,
-              scale,
+              scale: by,
               instructions: codingInstructions,
               messages,
               tools: compactCommand
@@ -1551,10 +1572,13 @@ export class AgentRuntime {
               limit,
             )
           ) {
-            fitted = await shed({
-              inputTokens: Math.round(compactionThreshold(limit) * SHED_TO) + policy.outputTokens,
-              outputTokens: policy.outputTokens,
-            });
+            fitted = await shed(
+              {
+                inputTokens: Math.round(compactionThreshold(limit) * SHED_TO) + policy.outputTokens,
+                outputTokens: policy.outputTokens,
+              },
+              scale,
+            );
           }
           if (!fitted) {
             try {
@@ -1562,7 +1586,7 @@ export class AgentRuntime {
                 provider: config.provider,
                 modelId: config.modelId,
                 policy,
-                scale,
+                scale: edge,
                 instructions: codingInstructions,
                 messages,
                 // What is sent: a /compact turn offers no tools, and its estimate must not count
@@ -1573,12 +1597,12 @@ export class AgentRuntime {
               signal.throwIfAborted();
               // When compaction cannot shrink the window, drop what it takes for the current
               // request to run.
-              fitted = await shed(policy);
+              fitted = await shed(policy, edge);
               if (!fitted) throw error;
             }
           }
 
-          preparedInputTokens = fitted.tokens;
+          preparedInputTokens = Math.ceil(fitted.estimatedTokens * scale);
           preparedEstimate = fitted.estimatedTokens;
           // The unscaled estimate and the model it was made for: the next turn's first step
           // takes its scale from this and the input the provider reports for it.
@@ -1620,8 +1644,12 @@ export class AgentRuntime {
             JSON.stringify({ text, toolCalls }),
             1,
           );
-          if (!measured.estimated) {
-            scale = measuredScale(measured.inputTokens, preparedEstimate) ?? scale;
+          const measuredNow = measured.estimated
+            ? undefined
+            : measuredScale(measured.inputTokens, preparedEstimate);
+          if (measuredNow !== undefined) {
+            scale = measuredNow;
+            margin = LIMIT_MARGIN;
           }
 
           await this.services.lifecycle.checkpoint(profileId, runId, owner, {
@@ -1831,7 +1859,7 @@ export class AgentRuntime {
             model,
             instructions,
             [...lastMessages, ...((await result.steps).at(-1)?.response.messages ?? [])],
-            { ...config, scale },
+            { ...config, scale: scale * margin },
             account,
             policy,
             signal,
