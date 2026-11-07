@@ -5,6 +5,7 @@ import { type ReactNode, useState } from 'react';
 import { Action } from '../../kit';
 import type { RunApproval, RunQuestion } from '../../lib/api';
 import { highlightLines } from '../ui/highlight';
+import { Markdown } from '../ui/markdown';
 
 function Card({
   chip,
@@ -26,7 +27,7 @@ function Card({
           {chip === 'Question' ? <MessageCircleQuestion size={14} /> : <ShieldCheck size={14} />}
           {chip}
         </span>
-        <p className="decision-title">{title}</p>
+        <div className="decision-title">{title}</div>
       </header>
       {children && <div className="decision-body">{children}</div>}
       {footer && <div className="decision-footer">{footer}</div>}
@@ -161,7 +162,17 @@ export function QuestionCard({
   const answering = !answered && !chat && Boolean(onAnswer);
 
   return (
-    <Card chip="Question" tone="neutral" title={question.prompt}>
+    <Card
+      chip="Question"
+      tone="neutral"
+      title={
+        // The agent writes its question in Markdown, as it writes its replies: lists, emphasis
+        // and line breaks, which plain text ran together into one paragraph.
+        <div className="markdown min-w-0 break-words">
+          <Markdown text={question.prompt} breaks />
+        </div>
+      }
+    >
       {choices.length > 0 && (
         <ul className="decision-options" aria-label="Choices">
           {choices.map((choice) => {

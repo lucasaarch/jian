@@ -749,7 +749,7 @@ export function History({
             replies.length === 1 && asked?.approval
               ? `Asked for approval: ${asked.approval.title}`
               : replies.length === 1 && asked?.question
-                ? `Asked: ${asked.question.prompt}`
+                ? `Asked: ${plainText(asked.question.prompt).replace(/\s+/g, ' ')}`
                 : replies[0]
                   ? plainText(replies[0].content)
                       .split('\n')

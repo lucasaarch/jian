@@ -77,7 +77,7 @@ export function ChatNotices({ profileId }: { profileId: string }) {
         session,
         run.approval
           ? `Waiting for your approval: ${run.approval.title}`
-          : `Asks: ${run.question?.prompt ?? ''}`.slice(0, 140),
+          : `Asks: ${plainText(run.question?.prompt ?? '').replace(/\s+/g, ' ')}`.slice(0, 140),
       );
     }
     asking.current = waiting;

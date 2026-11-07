@@ -138,6 +138,27 @@ it('answers a question from its choices in the panel’s own chat', async () => 
   expect(answerRun).toHaveBeenCalledWith('profile', 'run', 'dev');
 });
 
+it('shows a question the way the agent wrote it, lists and emphasis included', async () => {
+  const prompt = [
+    'First part is ready on `feat/anonymous-orders`.',
+    '- Customer is optional.',
+    '- The R$ 5 floor is gone.',
+    '',
+    'Before the machine part:',
+    '',
+    '1. **Free mode.** Keep it?',
+    '2. **Branch.** Which one?',
+  ].join('\n');
+  await show({ question: { id: 'q', prompt, askedAt: approval.askedAt } }, prompt);
+
+  const card = element.querySelector('[aria-label="Question"]');
+  expect(card?.querySelectorAll('ul li')).toHaveLength(2);
+  expect(card?.querySelectorAll('ol li')).toHaveLength(2);
+  expect(card?.querySelector('strong')?.textContent).toBe('Free mode.');
+  expect(card?.querySelector('code')?.textContent).toBe('feat/anonymous-orders');
+  expect(card?.textContent).not.toContain('**');
+});
+
 it('finds the card by the run that asked, whatever the gateway wrote for it', async () => {
   await show({ approval }, 'Pending: the agent wants to clean up storage.');
 
