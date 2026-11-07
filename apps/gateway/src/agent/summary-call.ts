@@ -6,6 +6,7 @@ import {
   streamText,
   type ToolSet,
 } from 'ai';
+import { streamedAnswer } from '../context/compaction.js';
 import { additionsOf } from './deferred-tools.js';
 
 /** What a step hands the SDK, kept so a summary can be sent as the same request. */
@@ -102,18 +103,5 @@ export async function summaryCall(input: {
     abortSignal: input.signal,
     maxRetries: 0,
   });
-  // A failed request is reported on the stream; read there, its reason reaches the owner
-  // instead of "no output generated".
-  let failure: unknown;
-  for await (const part of result.fullStream) {
-    input.alive?.();
-    if (part.type === 'error') failure ??= part.error;
-  }
-  if (failure) throw failure;
-  return {
-    text: await result.text,
-    finishReason: await result.finishReason,
-    toolCalls: await result.toolCalls,
-    usage: await result.usage,
-  };
+  return streamedAnswer(result, input.alive);
 }

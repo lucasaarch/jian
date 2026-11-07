@@ -1,12 +1,19 @@
 import { randomUUID } from 'node:crypto';
 import { simulateReadableStream } from 'ai';
 import { MockLanguageModelV4 } from 'ai/test';
-import { eq } from 'drizzle-orm';
-import { expect, it } from 'vitest';
+import { and, eq, sql } from 'drizzle-orm';
+import { expect, it, vi } from 'vitest';
 import { AgentRuntime } from '../src/agent/runtime.js';
 import { insertMessage } from '../src/sessions/repository.js';
 import { checkpoints } from '../src/storage/schema.js';
-import { type ClaudeReply, type ClaudeRequest, fakeClaude, isSummary } from './helpers/claude.js';
+import {
+  addedIn,
+  type ClaudeReply,
+  type ClaudeRequest,
+  fakeClaude,
+  isSummary,
+} from './helpers/claude.js';
+import { isSummary as asksForSummary } from './helpers/model.js';
 import { testServices } from './helpers/services.js';
 
 const MODEL = 'claude-opus-5-5';
@@ -204,7 +211,6 @@ it('falls back to segments when the prompt is past the window', async () => {
   const sent = summaries(claude.requests);
   expect(sent.length).toBeGreaterThan(0);
   for (const summary of sent) {
-    expect(summary.stream).not.toBe(true);
     expect(summary.tools ?? []).toEqual([]);
     expect(JSON.stringify(summary.system)).toContain('Read the next conversation segment');
   }
@@ -251,10 +257,14 @@ it('summarises a turn whose cache has expired in segments', async () => {
   await new AgentRuntime(services, () => claude.model).execute(profile.id, first.id);
   // The last step is two hours old: past the hour an owner's conversation is cached for, so
   // the request it wrote is gone, and sending it again would write all of it to the cache.
+  const sentAt = new Date(Date.now() - 2 * HOUR);
   await services.store.db
     .update(checkpoints)
-    .set({ createdAt: new Date(Date.now() - 2 * HOUR) })
-    .where(eq(checkpoints.runId, first.id));
+    .set({
+      createdAt: sentAt,
+      data: sql`jsonb_set(${checkpoints.data}, '{prompt,sentAt}', to_jsonb(${sentAt.toISOString()}::text))`,
+    })
+    .where(and(eq(checkpoints.runId, first.id), sql`${checkpoints.data} ? 'prompt'`));
   const before = claude.requests.length;
 
   const command = await services.runs.submit(
@@ -268,8 +278,8 @@ it('summarises a turn whose cache has expired in segments', async () => {
   const sent = summaries(claude.requests.slice(before));
   expect(sent.length).toBeGreaterThan(0);
   for (const summary of sent) {
-    expect(summary.stream).not.toBe(true);
     expect(summary.tools ?? []).toEqual([]);
+    expect(JSON.stringify(summary.system)).toContain('Read the next conversation segment');
   }
   expect((await services.runs.run(profile.id, command.id)).status).toBe('completed');
 });
@@ -277,94 +287,162 @@ it('summarises a turn whose cache has expired in segments', async () => {
 it('falls back to segments when the provider refuses the summary sent in place', async () => {
   const { services, profile, session, ask } = await conversation();
   const run = await ask('Carry on with the release.');
+  // Sent in place, the summary carries the run's tools; read in segments, none.
   const claude = compactingClaude((request) =>
-    request.stream
+    request.tools?.length
       ? { refuse: 'Synthetic refusal of the summary request.' }
       : { text: '## Open request\nCarry on with the release.' },
   );
-
-  await new AgentRuntime(services, () => claude.model).execute(profile.id, run.id);
+  const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
+  let said: string[];
+  try {
+    await new AgentRuntime(services, () => claude.model).execute(profile.id, run.id);
+  } finally {
+    said = logged.mock.calls.map((call) => String(call[0]));
+    logged.mockRestore();
+  }
 
   expect((await services.runs.run(profile.id, run.id)).output).toBe('Carried on.');
   const data = await phases(services, profile.id, run.id);
-  expect(data.find((item) => item.phase === 'context-compacted')?.via).toBe('segments');
+  const compacted = data.find((item) => item.phase === 'context-compacted');
+  expect(compacted?.via).toBe('segments');
+  expect(compacted?.inPlaceRefused).toContain('Synthetic refusal of the summary request.');
+  // One line for the operator: the model and what the provider said, not the conversation.
+  const lines = said.filter((line) => line.includes('summary in place refused'));
+  expect(lines).toHaveLength(1);
+  expect(lines[0]).toContain(MODEL);
+  expect(lines[0]).toContain('Synthetic refusal of the summary request.');
+  expect(lines[0]).not.toContain('history');
   expect(data.some((item) => item.phase === 'compaction-failed')).toBe(false);
   expect((await services.sessions.session(profile.id, session.id)).summary).toContain(
     'Carry on with the release.',
   );
 });
 
-it('keeps a run alive while its summary is still streaming', async () => {
-  const { services, profile, ask } = await conversation();
-  const run = await ask('Carry on with the release.');
-  const plan = ['load_tools', 'compact_context'];
-  let step = 0;
-  const usage = {
-    inputTokens: { total: 10, noCache: 10, cacheRead: 0, cacheWrite: 0 },
-    outputTokens: { total: 10, text: 10, reasoning: 0 },
-  };
-  const finish = (finishReason: 'stop' | 'tool-calls') => ({
-    type: 'finish' as const,
-    finishReason: { unified: finishReason, raw: finishReason },
-    usage,
-  });
-  const model = new MockLanguageModelV4({
-    doStream: async (options) => {
-      const asked = JSON.stringify(
-        options.prompt.filter((message) => message.role !== 'system').at(-1),
-      ).includes('Respond with text only');
-      const name = plan[step];
-      if (asked) {
-        // A long record at the owner's effort: something comes back every 100 ms for twice the
-        // stall window, which would otherwise read as a call that is not coming back.
-        const deltas = Array.from({ length: 12 }, (_, index) => ({
-          type: 'text-delta' as const,
-          id: 'record',
-          delta: index ? ' and more' : '## Open request\nCarry on with the release.',
-        }));
-        return {
-          stream: simulateReadableStream({
-            chunkDelayInMs: 100,
-            chunks: [
+it.each([
+  ['sent in place', ['load_tools', 'compact_context'], undefined],
+  // Past the window: the older turns are read in segments, each its own long call.
+  ['read in segments', [], { inputTokens: 32_000, outputTokens: 1_024 }],
+] as const)(
+  'keeps a run alive while its summary is still streaming, %s',
+  async (_, plan, policy) => {
+    const { services, profile, ask } = await conversation(
+      policy,
+      policy ? 12 : 6,
+      policy ? 1_000 : 300,
+    );
+    const run = await ask('Carry on with the release.');
+    let step = 0;
+    const usage = {
+      inputTokens: { total: 10, noCache: 10, cacheRead: 0, cacheWrite: 0 },
+      outputTokens: { total: 10, text: 10, reasoning: 0 },
+    };
+    const finish = (finishReason: 'stop' | 'tool-calls') => ({
+      type: 'finish' as const,
+      finishReason: { unified: finishReason, raw: finishReason },
+      usage,
+    });
+    const model = new MockLanguageModelV4({
+      doStream: async (options) => {
+        if (asksForSummary(options)) {
+          // A long record: something comes back every 250 ms for nearly twice the stall window,
+          // which would otherwise read as a call that is not coming back.
+          const deltas = Array.from({ length: 16 }, (_, index) => ({
+            type: 'text-delta' as const,
+            id: 'record',
+            delta: index ? ' and more' : '## Open request\nCarry on with the release.',
+          }));
+          return {
+            stream: simulateReadableStream({
+              chunkDelayInMs: 250,
+              chunks: [
+                { type: 'stream-start' as const, warnings: [] },
+                { type: 'text-start' as const, id: 'record' },
+                ...deltas,
+                { type: 'text-end' as const, id: 'record' },
+                finish('stop'),
+              ],
+            }),
+          };
+        }
+        const name = plan[step];
+        step++;
+        const chunks: unknown[] = name
+          ? [
               { type: 'stream-start' as const, warnings: [] },
-              { type: 'text-start' as const, id: 'record' },
-              ...deltas,
-              { type: 'text-end' as const, id: 'record' },
+              {
+                type: 'tool-call' as const,
+                toolCallId: `call-${step}`,
+                toolName: name,
+                input: JSON.stringify(name === 'load_tools' ? { groups: ['tasks'] } : {}),
+              },
+              finish('tool-calls'),
+            ]
+          : [
+              { type: 'stream-start' as const, warnings: [] },
+              { type: 'text-start' as const, id: 'answer' },
+              { type: 'text-delta' as const, id: 'answer', delta: 'Carried on.' },
+              { type: 'text-end' as const, id: 'answer' },
               finish('stop'),
-            ],
-          }),
-        };
-      }
-      step++;
-      const chunks: unknown[] = name
-        ? [
-            { type: 'stream-start' as const, warnings: [] },
-            {
-              type: 'tool-call' as const,
-              toolCallId: `call-${step}`,
-              toolName: name,
-              input: JSON.stringify(name === 'load_tools' ? { groups: ['tasks'] } : {}),
-            },
-            finish('tool-calls'),
-          ]
-        : [
-            { type: 'stream-start' as const, warnings: [] },
-            { type: 'text-start' as const, id: 'answer' },
-            { type: 'text-delta' as const, id: 'answer', delta: 'Carried on.' },
-            { type: 'text-end' as const, id: 'answer' },
-            finish('stop'),
-          ];
-      // The parts' types are the provider spec's, which this workspace does not import.
-      return { stream: simulateReadableStream({ chunks }) } as never;
-    },
-  });
+            ];
+        // The parts' types are the provider spec's, which this workspace does not import.
+        return { stream: simulateReadableStream({ chunks }) } as never;
+      },
+    });
 
-  await new AgentRuntime(services, () => model, { stalledAfterMs: 600 }).execute(
-    profile.id,
-    run.id,
+    await new AgentRuntime(services, () => model, { stalledAfterMs: 2_500 }).execute(
+      profile.id,
+      run.id,
+    );
+
+    const finished = await services.runs.run(profile.id, run.id);
+    expect(finished.error).toBeUndefined();
+    expect(finished.output).toBe('Carried on.');
+    const compacted = (await phases(services, profile.id, run.id)).find(
+      (data) => data.phase === 'context-compacted',
+    );
+    expect(compacted?.via).toBe(policy ? 'segments' : 'request');
+  },
+  20_000,
+);
+
+it('summarises /compact with the tools an earlier turn loaded, as that turn cached them', async () => {
+  const { services, profile, session, ask } = await conversation();
+  let plan: ClaudeReply[] = [
+    { tool: 'load_tools', input: { groups: ['conversations'] } },
+    { text: 'Loaded.' },
+  ];
+  let step = 0;
+  const claude = fakeClaude(MODEL, (request) =>
+    isSummary(request) ? { text: '## Open request\nNone' } : (plan[step++] ?? { text: 'Done.' }),
   );
+  const first = await ask('Load what you need to see my conversations.');
+  await new AgentRuntime(services, () => claude.model).execute(profile.id, first.id);
+  const previous = claude.requests.at(-1);
+  plan = [{ text: 'Compacted.' }];
+  step = 0;
 
-  const finished = await services.runs.run(profile.id, run.id);
-  expect(finished.error).toBeUndefined();
-  expect(finished.output).toBe('Carried on.');
+  const command = await services.runs.submit(
+    profile.id,
+    session.id,
+    { text: '/compact', requestKey: 'compact-carried' },
+    { ownerMessage: true },
+  );
+  await new AgentRuntime(services, () => claude.model).execute(profile.id, command.id);
+
+  const [summary] = summaries(claude.requests);
+  if (!summary) throw new Error('No summary was asked for');
+  // The front of the prompt is the one the last turn wrote: the loaded tools still deferred.
+  for (const field of ['tools', 'system', 'thinking', 'output_config'] as const) {
+    expect(JSON.stringify(summary[field]), field).toBe(JSON.stringify(previous?.[field]));
+  }
+  // Last, one system message brings the loaded tools back and sets this reply's effort.
+  const last = summary.messages.at(-1);
+  expect(last?.role).toBe('system');
+  expect(last?.output_config).toEqual({ effort: 'low' });
+  const added = addedIn({ ...summary, messages: [last as ClaudeRequest['messages'][number]] });
+  expect(added.length).toBeGreaterThan(0);
+  expect(added).toEqual(addedIn(summary));
+  expect(JSON.stringify(summary.messages.at(-2))).toContain('Respond with text only.');
+  expect((await services.runs.run(profile.id, command.id)).status).toBe('completed');
 });

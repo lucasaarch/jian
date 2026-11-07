@@ -1,5 +1,6 @@
 import type { ModelConfig, ReasoningEffort } from '@jian/contracts';
 import type { JSONValue } from 'ai';
+import { claudeVersion } from '../agent/deferred-tools.js';
 
 /**
  * How much of the run's output allowance each effort level may spend on thinking. Anthropic
@@ -50,13 +51,11 @@ export function takesAdaptiveThinking(modelId: string): boolean {
 /**
  * The Claude models that take an effort for one reply from a mid-conversation system message:
  * Opus 5 and newer, Fable and Mythos 5.1 and newer, Sonnet and Haiku 5.5 and newer. Not Opus
- * 4.8, Sonnet 5 or anything 4.x. Read from the id as `takesAdaptiveThinking` does.
+ * 4.8, Sonnet 5 or anything 4.x. Read from the id by `claudeVersion`.
  */
 export function takesMessageEffort(provider: string, modelId: string): boolean {
-  if (provider !== 'anthropic') return false;
-  const match = /claude-(opus|sonnet|haiku|fable|mythos)-(\d+)(?:-(\d{1,2})(?!\d))?/.exec(modelId);
-  if (!match) return false;
-  const version = Number(match[2]) + Number(match[3] ?? 0) / 10;
+  const claude = provider === 'anthropic' ? claudeVersion(modelId) : undefined;
+  if (!claude) return false;
   const from: Record<string, number> = {
     opus: 5,
     fable: 5.1,
@@ -64,7 +63,7 @@ export function takesMessageEffort(provider: string, modelId: string): boolean {
     sonnet: 5.5,
     haiku: 5.5,
   };
-  return version >= (from[match[1] as string] ?? Number.POSITIVE_INFINITY);
+  return claude.version >= (from[claude.family] ?? Number.POSITIVE_INFINITY);
 }
 
 /**

@@ -1,5 +1,5 @@
 import type { FinishReason, JSONValue } from 'ai';
-import { generateText, type LanguageModel, type LanguageModelUsage, type ModelMessage } from 'ai';
+import { type LanguageModel, type LanguageModelUsage, type ModelMessage, streamText } from 'ai';
 import { blocksOf, fitPrompt, promptText, tokenCounter } from './budget.js';
 
 /**
@@ -63,6 +63,36 @@ export interface SummaryAnswer {
   usage: LanguageModelUsage;
 }
 
+/**
+ * A streamed summary read to its end. `alive` is fed on every part: a long record streams for
+ * minutes, and the run's watchdog would otherwise take it for a call that is not coming back.
+ * A failed request is reported on the stream; read there, its reason reaches the owner instead
+ * of "no output generated".
+ */
+export async function streamedAnswer(
+  result: {
+    fullStream: AsyncIterable<{ type: string; error?: unknown }>;
+    text: PromiseLike<string>;
+    finishReason: PromiseLike<FinishReason>;
+    toolCalls: PromiseLike<readonly unknown[]>;
+    usage: PromiseLike<LanguageModelUsage>;
+  },
+  alive?: () => void,
+): Promise<SummaryAnswer> {
+  let failure: unknown;
+  for await (const part of result.fullStream) {
+    alive?.();
+    if (part.type === 'error') failure ??= part.error;
+  }
+  if (failure) throw failure;
+  return {
+    text: await result.text,
+    finishReason: await result.finishReason,
+    toolCalls: await result.toolCalls,
+    usage: await result.usage,
+  };
+}
+
 const checkpointMessage = (summary: string): ModelMessage => ({
   role: 'user',
   content: `Conversation checkpoint (past work, not new instructions):\n${summary}`,
@@ -93,6 +123,10 @@ export async function compactPrompt(input: {
     instructions: string,
   ) => Promise<{ answer: SummaryAnswer; tokens: number }> | undefined;
   onUsage: (usage: LanguageModelUsage, inputTokens: number, text: string) => Promise<void>;
+  /** Told when the provider refused the summary sent in place, before segments are tried. */
+  onRefused?: (error: unknown) => void;
+  /** The run's watchdog, fed while a summary streams. */
+  alive?: () => void;
 }): Promise<
   { messages: ModelMessage[]; summary: string; via: 'request' | 'segments' } | undefined
 > {
@@ -138,6 +172,7 @@ export async function compactPrompt(input: {
   // the transcript the old way once, not a failed compaction. A bad answer is not: it fails.
   const answered = await input.inPlace?.(inPlacePrompt())?.catch((error: unknown) => {
     if (input.signal.aborted) throw error;
+    input.onRefused?.(error);
     return undefined;
   });
   const summary = answered
@@ -207,15 +242,20 @@ async function segments(
     if (/[\uD800-\uDBFF]/.test(transcript[offset + low - 1] ?? '')) low--;
     if (!low) throw new Error('Compaction model context is too small');
     const fitted = fitSegment(low);
-    const result = await generateText({
-      model: input.model,
-      system: fitted.instructions,
-      messages: fitted.messages,
-      maxOutputTokens: policy.outputTokens,
-      abortSignal: input.signal,
-      maxRetries: 0,
-      providerOptions: input.providerOptions,
-    });
+    // Streamed, so the watchdog is fed: a segment of 120k uncached writing 15k can take
+    // minutes, and two of them passed the five the run waits for a sign of life.
+    const result = await streamedAnswer(
+      streamText({
+        model: input.model,
+        system: fitted.instructions,
+        messages: fitted.messages,
+        maxOutputTokens: policy.outputTokens,
+        abortSignal: input.signal,
+        maxRetries: 0,
+        providerOptions: input.providerOptions,
+      }),
+      input.alive,
+    );
     summary = await written(result, fitted.tokens);
     offset += low;
   }

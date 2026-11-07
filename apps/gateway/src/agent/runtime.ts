@@ -1659,6 +1659,8 @@ export class AgentRuntime {
             // What the summary calls cost, in the checkpoint: a cached read shows as
             // `cachedInputTokens`, which is how the owner sees the prefix was reused.
             const spent = { inputTokens: 0, outputTokens: 0, cachedInputTokens: 0 };
+            // Why a summary went to segments after being sent in place, for the checkpoint.
+            let inPlaceRefused: string | undefined;
             try {
               const session = await this.services.sessions.session(profileId, run.sessionId);
               /**
@@ -1671,13 +1673,18 @@ export class AgentRuntime {
               // The cache holds a prefix for its TTL from the last request that wrote it. Past
               // that, a summary in place writes the whole prompt to the cache again, at a
               // quarter or double the price of reading it fresh: the segments cost less.
+              // Counted from when the request was sent, and short of the lifetime by a margin:
+              // the provider holds it from when it read it, and a summary sent at the last
+              // second would find it gone.
               const wroteAt =
                 sent?.at ??
                 (
                   await lastStepAt(this.services.store.db, profileId, run.sessionId, config)
                 )?.getTime();
+              const lifetime = CACHE_LIFETIME_MS[cacheTtl];
               const cached =
-                wroteAt !== undefined && Date.now() - wroteAt < CACHE_LIFETIME_MS[cacheTtl];
+                wroteAt !== undefined &&
+                Date.now() - wroteAt < lifetime - Math.max(30_000, lifetime * 0.1);
               const inPlace = (instructions: string) => {
                 if (before > limit || !cached) return undefined;
                 const reused =
@@ -1685,8 +1692,23 @@ export class AgentRuntime {
                 let request = reused?.request;
                 let tokens = reused?.tokens ?? 0;
                 if (!request) {
-                  const order = defers ? deferral(inContext) : undefined;
-                  request = stepRequest(codingInstructions, messages, order ?? activeNames, order);
+                  // /compact sends its own answer without the tools earlier turns loaded, but the
+                  // last turn's cached prefix has them deferred, brought in by its references.
+                  // Without the additions a turn adds them back with, they would go whole, and
+                  // the tools at the very front of the prompt would differ from what is cached.
+                  const carried = [...loadable].filter(offeredNow).sort();
+                  const own =
+                    compactCommand &&
+                    carries &&
+                    carried.length &&
+                    !learning &&
+                    (currentStartIndex ?? 0) > 0
+                      ? [...messages, toolAdditions(carried)]
+                      : messages;
+                  const order = defers
+                    ? deferral(new Set([...inContext, ...referencedTools(own)]))
+                    : undefined;
+                  request = stepRequest(codingInstructions, own, order ?? activeNames, order);
                   // `before` is at the exact scale; the window is held at the edge's.
                   tokens = before * margin;
                 }
@@ -1722,6 +1744,14 @@ export class AgentRuntime {
                 policy,
                 signal,
                 dress: subscription ? withClaudeCodeIdentity : undefined,
+                alive,
+                onRefused: (error) => {
+                  inPlaceRefused = reason(error, secrets);
+                  // The model and the provider's own words: never what the request carried.
+                  console.error(
+                    `jian: run ${runId} summary in place refused for ${config.modelId}; summarising in parts — ${inPlaceRefused}`,
+                  );
+                },
                 onUsage: async (usage, tokens, text) => {
                   const measured = await account(usage, tokens, text, 0);
                   spent.inputTokens += measured.inputTokens;
@@ -1746,6 +1776,7 @@ export class AgentRuntime {
                   beforeTokens: before,
                   afterTokens,
                   via: compacted.via,
+                  ...(inPlaceRefused ? { inPlaceRefused } : {}),
                   usage: spent,
                 });
                 await this.services.sessions.summarize(
@@ -1773,6 +1804,7 @@ export class AgentRuntime {
               await this.services.lifecycle.checkpoint(profileId, runId, owner, {
                 phase: 'compaction-failed',
                 reason: compactionFailure,
+                ...(inPlaceRefused ? { inPlaceRefused } : {}),
                 ...(spent.inputTokens ? { usage: spent } : {}),
               });
             }
@@ -1901,6 +1933,8 @@ export class AgentRuntime {
           // The unscaled estimate and the model it was made for: the next turn's first step
           // takes its scale from this and the input the provider reports for it.
           preparedPrompt = {
+            // When it went out, which is when the provider's cache of it starts (lastStepAt).
+            sentAt: new Date().toISOString(),
             estimatedTokens: fitted.estimatedTokens,
             scale,
             model: { provider: config.provider, modelId: config.modelId },

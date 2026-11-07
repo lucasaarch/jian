@@ -28,8 +28,9 @@ Every size here is in the model's own tokens.
 - You write that summary yourself. A message at the end of the conversation asks for a record
   of at most about 2,500 words under the headings it names, among them every request the
   person made, quoted briefly; the latest exchanges stay word for word after it. Past the
-  window, the older turns come to you on their own, in parts. Answer with text alone: a tool
-  called then runs nothing, and the summary fails.
+  window, once the provider's cache of the conversation has expired, or when the provider
+  refused that request, the older turns come to you on their own instead, in parts. Answer
+  with text alone: a tool called then runs nothing, and the summary fails.
 - Instructions and tool definitions are fixed: a summary cannot shrink them. When they alone
   overflow the window, as after switching to a model with a smaller one, the tool groups and
   MCP tools you loaded are let go, and if that is not enough only \`load_tools\`,

@@ -130,8 +130,9 @@ export async function lastPromptScale(
 }
 
 /**
- * When the conversation last sent a step on this model, which is when the provider last wrote
- * its prompt to the cache; undefined when it never did. Another model's steps wrote another
+ * When the conversation last sent a step on this model, which is when the provider's cache of
+ * its prompt starts; undefined when it never did. A step records when it was sent; one from
+ * before that did is read at its end, which is later. Another model's steps wrote another
  * cache, so they do not count.
  */
 export async function lastStepAt(
@@ -141,7 +142,7 @@ export async function lastStepAt(
   model: Pick<ModelConfig, 'provider' | 'modelId'>,
 ): Promise<Date | undefined> {
   const [step] = await db
-    .select({ at: checkpoints.createdAt })
+    .select({ at: checkpoints.createdAt, data: checkpoints.data })
     .from(checkpoints)
     .innerJoin(runs, eq(runs.id, checkpoints.runId))
     .where(
@@ -156,5 +157,7 @@ export async function lastStepAt(
     )
     .orderBy(desc(checkpoints.createdAt))
     .limit(1);
-  return step?.at;
+  const sentAt = (step?.data as { prompt?: { sentAt?: unknown } } | undefined)?.prompt?.sentAt;
+  const sent = typeof sentAt === 'string' ? new Date(sentAt) : undefined;
+  return sent && !Number.isNaN(sent.getTime()) ? sent : step?.at;
 }

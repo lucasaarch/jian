@@ -12,7 +12,8 @@ import type { ModelMessage, Tool, ToolSet } from 'ai';
  * Anthropic expands a reference in place, so the tool joins the conversation, not the tool list.
  */
 
-const claudeVersion = (modelId: string) => {
+/** A Claude model's family and version, read from its id; undefined for any other id. */
+export const claudeVersion = (modelId: string) => {
   const match = /claude-(opus|sonnet|haiku|fable|mythos)-(\d+)(?:-(\d{1,2})(?!\d))?/.exec(modelId);
   return match
     ? { family: match[1] as string, version: Number(match[2]) + Number(match[3] ?? 0) / 10 }
