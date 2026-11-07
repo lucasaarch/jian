@@ -6,15 +6,16 @@ Every release of Jian, newest first.
 
 ## 1.6.1 — 2026-11-06
 
-Loading tools on Claude no longer makes it read the whole conversation again, and release notes catch up after a gateway update.
+Loading tools on Claude no longer makes it read the whole conversation again, and the panel catches up after a gateway update and shows an agent's questions as written.
 
 ### Claude
 
-* **Loading tools keeps the cache:** Each time an agent loaded tools or an app's tools, Claude read the whole conversation again without its cache, about 630,000 tokens in one long turn. Loaded tools are now added to the conversation, and the tool list Claude caches stays the same. This applies to Claude 4.5 and newer.
+* **Loading tools keeps the cache:** Each time an agent loaded tools or an app's tools, Claude read the whole conversation again without its cache, about 630,000 tokens in one long turn. Loaded tools are now added to the conversation, and the tool list Claude caches stays the same, within a turn and from one turn to the next. This applies to Claude 4.5 and newer. If Anthropic refuses this new form for a model, Jian goes back to the old one for that model.
 
-### Release notes
+### The panel
 
-* **They catch up after a gateway update:** A desktop app left open while its server gateway was updated kept saying "1 release behind" and showed the old version's notes until you reloaded it. They now refresh when the panel reconnects.
+* **Release notes catch up after a gateway update:** A panel left open while its server gateway was updated, in the desktop app or on the web, kept saying "1 release behind" and showed the old version's notes until you reloaded it. They now refresh when the panel reconnects.
+* **Questions read as written:** A question from an agent showed as one run-together paragraph, asterisks included. It now shows its lists, bold text and line breaks, like the agent's replies.
 
 ### Upgrading
 
