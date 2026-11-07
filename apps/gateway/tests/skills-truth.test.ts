@@ -2,9 +2,13 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { PINNED_CEILING, PINNED_SHARE } from '../src/agent/runtime.js';
+import { COMPACT_AT, COMPACT_CEILING } from '../src/context/compaction.js';
 import { X_TOOL_GROUPS } from '../src/integrations/x/catalog/index.js';
+import { TOOL_RESULT_CEILING, TOOL_RESULT_SHARE } from '../src/providers/service.js';
 import { builtinSkillNames, builtinSkills } from '../src/skills/builtin/index.js';
 import { machineToolsFor } from '../src/skills/builtin/machine-tools.js';
+import { managingContext } from '../src/skills/builtin/managing-context.js';
 import { sshKeysFor } from '../src/skills/builtin/ssh-keys.js';
 import { xFor } from '../src/skills/builtin/x.js';
 
@@ -111,6 +115,30 @@ describe('what the built-in skills say', () => {
     for (const skill of everything) {
       for (const gone of GONE) expect(skill.instructions, skill.name).not.toMatch(gone);
     }
+  });
+
+  it('states the context limits the gateway enforces', () => {
+    const said = `${managingContext.description}\n${managingContext.instructions}`.replaceAll(
+      /\s+/g,
+      ' ',
+    );
+    const tokens = (value: number) => value.toLocaleString('en');
+
+    expect(said).toContain(
+      `Past ${COMPACT_AT * 100}% of the budget or ${tokens(COMPACT_CEILING)} tokens, whichever comes first`,
+    );
+    expect(said).toContain(
+      `over ${TOOL_RESULT_SHARE * 100}% of the window, at most ${tokens(TOOL_RESULT_CEILING)} tokens`,
+    );
+    expect(said).toContain(
+      `${PINNED_SHARE === 0.1 ? 'a tenth' : `${PINNED_SHARE * 100}%`} of the window, at most ${tokens(PINNED_CEILING)} tokens`,
+    );
+    // The example is the line the turn context really carries.
+    expect(said).toMatch(
+      /"Context: this turn starts at about [\d,]+ tokens, \d+% of the way to [\d,]+, where Jian summarises the older turns\./,
+    );
+    // Never a share of the window: on a 1M model the turn is summarised at a fifth of it.
+    expect(said).not.toMatch(/half full|above about 50%/);
   });
 
   it('never teaches X to a run that does not have it', () => {

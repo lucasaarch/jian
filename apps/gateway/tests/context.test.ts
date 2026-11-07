@@ -297,6 +297,39 @@ describe('context', () => {
     expect(await recalled()).toBeLessThan(10);
   });
 
+  it('says how far the turn starts from where Jian compacts, not from the whole window', async () => {
+    const services = await testServices();
+    const profile = await services.profiles.createProfile({
+      name: 'Atlas',
+      instructions: 'Help the owner.',
+      model: { provider: 'anthropic', modelId: 'claude-opus-5-5', apiKeyEnv: 'JIAN_PROVIDER_TEST' },
+      contextPolicy: { inputTokens: 1_000_000, outputTokens: 64_000 },
+    });
+    const session = await services.sessions.createSession(profile.id, { title: 'Line' });
+    const run = await services.runs.submit(profile.id, session.id, {
+      text: 'Hello',
+      requestKey: 'line',
+    });
+
+    const turn = buildContext(run, {
+      servers: [],
+      memories: [],
+      activities: [],
+      history: [],
+      scale: 0.5,
+    }).messages.at(-2)?.content;
+
+    // On a 1M window Jian compacts at 200,000, a fifth of it: a share of the window would read
+    // 2% at a turn already a tenth of the way there.
+    const line =
+      /Context: this turn starts at about ([\d,]+) tokens, (\d+)% of the way to 200,000, where Jian summarises the older turns\./.exec(
+        turn ?? '',
+      );
+    expect(line).not.toBeNull();
+    const used = Number(line?.[1]?.replaceAll(',', ''));
+    expect(Number(line?.[2])).toBe(Math.round((used / 200_000) * 100));
+  });
+
   it('refuses an oversized prompt instead of silently dropping tool-call/result blocks', () => {
     const messages = [
       { role: 'user' as const, content: 'old'.repeat(5000) },

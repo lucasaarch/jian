@@ -28,7 +28,13 @@ import { isChatChannel } from '../channels/kinds.js';
 import { findContactBySession } from '../channels/repository.js';
 import { fitPrompt, promptTokens, tokenCounter, truncatePrompt } from '../context/budget.js';
 import { withTurnNote } from '../context/build.js';
-import { compactionThreshold, compactPrompt, needsCompaction } from '../context/compaction.js';
+import {
+  COMPACT_AT,
+  COMPACT_CEILING,
+  compactionThreshold,
+  compactPrompt,
+  needsCompaction,
+} from '../context/compaction.js';
 import type { ContextSource } from '../context/port.js';
 import { defaultScale, measuredScale } from '../context/scale.js';
 import { nowIso } from '../core/clock.js';
@@ -859,8 +865,7 @@ export class AgentRuntime {
           browser,
         ),
         compact_context: tool({
-          description:
-            "Request a context checkpoint before continuing a long task. The gateway summarizes older turns with this conversation's own model after this tool returns, preserving recent work and the latest request. Automatic compaction remains active past 80% of the budget.",
+          description: `Request a context checkpoint before continuing a long task. The gateway summarizes older turns with this conversation's own model after this tool returns, preserving recent work and the latest request. Without it, older turns are summarized automatically once the request passes ${COMPACT_AT * 100}% of the budget or ${COMPACT_CEILING.toLocaleString('en')} tokens, whichever comes first.`,
           inputSchema: z.object({}),
           execute: async () => {
             compactionRequested = true;

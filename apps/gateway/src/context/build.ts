@@ -12,6 +12,7 @@ import { gatewayTimeZone } from '../core/time-zone.js';
 import { sanitizeObjectiveText } from '../sessions/objective.js';
 import { availableSkills } from '../skills/builtin/index.js';
 import { tokenCounter } from './budget.js';
+import { compactionThreshold } from './compaction.js';
 import { defaultScale } from './scale.js';
 
 export interface ContextSources {
@@ -348,7 +349,10 @@ export function buildContext(
       messages.reduce((sum, message) => sum + count(message.content) + 8, 0)) *
       scale,
   );
-  const share = Math.min(100, Math.round((used / policy.inputTokens) * 100));
+  // Measured against where the runtime compacts, not the window: on a 1M model that is 200k,
+  // and a share of the window read 20% at the very point the older turns were summarised.
+  const compactsAt = compactionThreshold(policy.inputTokens - policy.outputTokens);
+  const share = Math.round((used / compactsAt) * 100);
 
   const tail = [
     ...turn,
@@ -357,7 +361,7 @@ export function buildContext(
           `A quick check suggests the skill ${JSON.stringify(sources.suggestedSkill)} fits this turn. Load it if it matches what was actually asked; otherwise ignore this.`,
         ]
       : []),
-    `Context: this turn starts at about ${used.toLocaleString('en')} of ${policy.inputTokens.toLocaleString('en')} tokens (${share}%). Tool results add to it as you work; near the limit the older part is summarised automatically. See managing-context.`,
+    `Context: this turn starts at about ${used.toLocaleString('en')} tokens, ${share}% of the way to ${compactsAt.toLocaleString('en')}, where Jian summarises the older turns. Tool results add to it as you work. See managing-context.`,
   ].join('\n\n');
 
   // The turn context goes just before the request, as the turn's own: it is compacted with the

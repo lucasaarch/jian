@@ -3,20 +3,23 @@ import type { Skill } from '@jian/contracts';
 export const managingContext: Skill = {
   name: 'managing-context',
   description:
-    'Use before a long stretch of work, when the Context line says the turn starts above about half full, when a conversation changes subject, or when you lose track of what was said earlier.',
+    'Use before a long stretch of work when the Context line says the turn starts more than halfway to where Jian summarises, when a conversation changes subject, or when you lose track of what was said earlier.',
   instructions: `# Your context
 
 Your context is everything sent to the model on each step: your instructions, the
 conversation so far, the turn context, and every tool result of this turn. It has a budget.
 The turn context, just before each request, holds the time, the memories that may help, what
-else is running, and a last line on how full the request is: "Context: this turn starts at
-about 41,000 of 200,000 tokens (21%)". Each tool result adds to it until the turn ends.
+else is running, and a last line on how far the request is from the point where Jian
+summarises it: "Context: this turn starts at about 41,000 tokens, 21% of the way to 200,000,
+where Jian summarises the older turns." Each tool result adds to it until the turn ends.
+Every size here is in the model's own tokens.
 
 ## What the gateway does on its own
 
 - Past 80% of the budget or 200,000 tokens, whichever comes first, and at the start of a turn
   already past it, older turns are summarised by this conversation's own model, and the
-  summary stays in the conversation. Recent work and the latest request are kept whole; when
+  summary stays in the conversation. On a model with a window of a million tokens that point
+  is a fifth of it, so the Context line measures against it, not the window. Recent work and the latest request are kept whole; when
   they are most of the request, no summary is attempted, since it could not shrink it. A
   summary that fails or is skipped is reported with its cause, such as the provider's quota,
   and is not retried on every step: the oldest turns, then the oldest results of this turn,
@@ -27,12 +30,13 @@ about 41,000 of 200,000 tokens (21%)". Each tool result adds to it until the tur
   MCP tools you loaded are let go, and if that is not enough only \`load_tools\`,
   \`load_mcp_tools\`, \`load_skill\` and \`read_artifact\` stay: load back only what you
   need.
-- A tool result over 2% of the window, at most 12,000 tokens, is stored, and you get a preview
-  and an artifact id to read it a page at a time with \`read_artifact\`. Every result rides
+- A tool result over 2% of the window, at most 12,000 tokens (and at least 1,500), is stored,
+  and you get a preview and an artifact id to read it a page at a time with
+  \`read_artifact\`. Every result rides
   in each later step of the turn, so ask for the part you need: a line range, a search, a
   filtered command.
-- A skill you load is dropped, least recently used first, once loaded skills pass about 16,000
-  tokens.
+- A skill you load is dropped, least recently used first, once loaded skills pass a tenth of
+  the window, at most 16,000 tokens.
 - The tool results of your two latest turns stay whole in the conversation. Older ones are cut
   to their input and the head of their result, marked \`cut\`: \`read_artifact\` with the
   call's id as \`toolCallId\` returns the whole result. Read it back rather than repeating a
@@ -51,7 +55,9 @@ summary is detail; the original messages remain searchable.
 \`compact_context\` (the \`tasks\` group; load it with \`load_tools\`) asks for the summary
 now, before the next step. Use it:
 
-- before a long stretch of tool work, when the turn starts above about 50%;
+- before starting a big new task or a long stretch of tool work, when the Context line says
+  the turn starts more than about halfway to where Jian summarises: the summary then comes
+  before the work, not in the middle of it;
 - when the conversation moved on to a new subject and the old one is only weight;
 - after a large result you have finished with, before reading the next.
 
