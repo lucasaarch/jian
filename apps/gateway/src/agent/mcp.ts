@@ -409,8 +409,9 @@ export async function connectMcpTools(
     context.clients.push(live.client);
 
     // Everything the server offers. A long catalog costs nothing per turn: only the tools the
-    // agent has loaded are sent with a request, so a server with a hundred of them is no
-    // heavier than one with three until they are used.
+    // agent has loaded reach the model's context (on Claude the rest go deferred, which keeps
+    // them out of it), so a server with a hundred of them is no heavier than one with three
+    // until they are used.
     const disabled = new Set(config.disabledTools ?? []);
 
     for (const [name, remote] of Object.entries(live.offered)) {

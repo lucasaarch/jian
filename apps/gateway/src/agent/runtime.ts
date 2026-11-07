@@ -18,6 +18,7 @@ import {
   type ModelMessage,
   Output,
   stepCountIs,
+  type Tool,
   ToolLoopAgent,
   type ToolSet,
   tool,
@@ -70,6 +71,14 @@ import {
   withOpenAiPromptCache,
 } from './cache.js';
 import { compactNote, isCompactCommand, withoutCompactCommands } from './compact-command.js';
+import {
+  defersTools,
+  MAX_DEFERRED,
+  markDeferred,
+  referencedTools,
+  referencing,
+  withoutReferences,
+} from './deferred-tools.js';
 import { splitDiff } from './diff.js';
 import { githubGitTools } from './github-git.js';
 import { localPlace, remotePlace } from './github-git-place.js';
@@ -944,6 +953,20 @@ export class AgentRuntime {
             })
           : undefined;
 
+      // Whether the run offers a tool now, by its own bookkeeping: always offered, or loaded.
+      const mcpNames = new Set(mcpToolNames);
+      const offeredNow = (name: string) =>
+        mcpNames.has(name)
+          ? selectedMcpTools.has(name)
+          : (!gated.has(name) && (!minimal || minimal.has(name))) || loadedTools.has(name);
+      // On Claude a loaded tool joins the conversation instead of the tool list (see
+      // deferred-tools.ts): what each call brought in, and what the step's messages reference.
+      const defers = defersTools(config.provider, config.modelId);
+      const loadable = new Set([...gated, ...mcpToolNames]);
+      const broughtIn = new Map<string, string[]>();
+      const builtOptions = new Map<string, Tool['providerOptions']>();
+      let referencedNow = new Set<string>();
+
       const guarded: ToolSet = {};
       const toolCalls = new ToolCalls();
       // Serializing tool execution prevents another effect from starting after one remote outcome is uncertain.
@@ -951,15 +974,19 @@ export class AgentRuntime {
 
       for (const [name, definition] of Object.entries(tools)) {
         const execute = definition.execute;
+        builtOptions.set(name, definition.providerOptions);
 
         if (!execute) {
-          guarded[name] = definition;
+          // A copy: a step marks the run's definitions deferred or not, and must not mark one
+          // another run holds.
+          guarded[name] = { ...definition };
 
           continue;
         }
 
         guarded[name] = {
           ...definition,
+          ...(defers ? { toModelOutput: referencing(definition, (id) => broughtIn.get(id)) } : {}),
           execute: async (input, options) => {
             const previous = toolQueue;
             let release: () => void = () => {};
@@ -983,6 +1010,27 @@ export class AgentRuntime {
               }
 
               signal.throwIfAborted();
+
+              // Sent deferred, a tool the run has not loaded can still be called: refused as the
+              // SDK refuses a tool it was not given. One whose reference is in the messages is
+              // in the model's context, and runs. An approved call was checked when it was made.
+              if (
+                defers &&
+                approvedCallId !== options.toolCallId &&
+                !offeredNow(name) &&
+                !referencedNow.has(name)
+              ) {
+                throw new Error(
+                  `Model tried to call unavailable tool '${name}'.${
+                    mcpToolNames.includes(name)
+                      ? ' Load it with load_mcp_tools first.'
+                      : gated.has(name)
+                        ? ' Load its group with load_tools first.'
+                        : ''
+                  }`,
+                );
+              }
+              const offeredBefore = defers ? new Set([...loadable].filter(offeredNow)) : undefined;
 
               // An action asks before anything else happens, the start of the call included:
               // what waits for approval has not started, and the timeline must not say it did.
@@ -1120,6 +1168,13 @@ export class AgentRuntime {
                 if (result && typeof result === 'object' && 'artifactId' in result) {
                   loadedTools.add('read_artifact');
                 }
+                if (offeredBefore) {
+                  const added = [...loadable].filter(
+                    (tool) =>
+                      !offeredBefore.has(tool) && offeredNow(tool) && !referencedNow.has(tool),
+                  );
+                  if (added.length) broughtIn.set(options.toolCallId, added);
+                }
 
                 // Read after secrets are masked: the judge sees no more than the agent will.
                 return judge && outsideContent(name, mcpToolNames)
@@ -1183,6 +1238,28 @@ export class AgentRuntime {
           },
         };
       }
+
+      /**
+       * On Claude, every tool the run has goes with every step, in one order, and only what the
+       * messages do not already bring in is sent whole. A deferred definition stays out of the
+       * cached prefix, so loading one leaves the prefix, and the thinking before it, as they
+       * were. A loaded tool whose reference is gone (cut, summarised, or carried from an earlier
+       * turn) is sent whole so it stays callable; whatever took its reference had rewritten the
+       * prompt already. Undefined when Anthropic would refuse the request (nothing sent whole,
+       * or more deferred than it takes): that step narrows the list as other providers do.
+       */
+      const deferral = (inContext: ReadonlySet<string>) => {
+        const names = Object.keys(guarded).sort();
+        const deferred = new Set(
+          names.filter((name) => !offeredNow(name) || (loadable.has(name) && inContext.has(name))),
+        );
+        if (deferred.size === names.length || deferred.size > MAX_DEFERRED) {
+          markDeferred(guarded, new Set(), builtOptions);
+          return undefined;
+        }
+        markDeferred(guarded, deferred, builtOptions);
+        return names;
+      };
 
       // The effort the owner picked next to the model, in the dialect this provider reads;
       // lowered, never raised, for a turn judged plainly light.
@@ -1351,11 +1428,15 @@ export class AgentRuntime {
             );
           });
 
+          // On Claude a tool the messages reference is in the context whether or not it is still
+          // loaded: counted once, like a definition sent, and callable. Deferred definitions
+          // nothing references are left out of every estimate, or a large MCP catalog would
+          // fill the window on paper and bring compaction early.
+          const referenced = () => (defers ? referencedTools(messages) : new Set<string>());
+          let inContext = referenced();
           const pick = () => {
-            const names = Object.keys(guarded).filter((name) =>
-              mcpToolNames.includes(name)
-                ? selectedMcpTools.has(name)
-                : (!gated.has(name) && (!minimal || minimal.has(name))) || loadedTools.has(name),
+            const names = Object.keys(guarded).filter(
+              (name) => offeredNow(name) || inContext.has(name),
             );
             return {
               names,
@@ -1388,6 +1469,12 @@ export class AgentRuntime {
             await dropLoads(this.services.store.db, scope, 'mcp', [...selectedMcpTools]);
             loadedTools.clear();
             selectedMcpTools.clear();
+            // Let go of, they leave the context too: a reference would keep them in it. Every
+            // reference is to a tool loaded at some point, so none is left.
+            if (defers) {
+              messages = withoutReferences(messages);
+              inContext = referenced();
+            }
             ({ names: activeNames, tools: activeTools } = pick());
             if (fixedCost(true) > policy.inputTokens - policy.outputTokens) {
               minimal = new Set(MINIMAL_TOOLS);
@@ -1602,6 +1689,27 @@ export class AgentRuntime {
             }
           }
 
+          // A summary or a cut may have taken references with it: the estimate the scale is
+          // measured against counts what this step really puts in the context.
+          if (defers && !compactCommand) {
+            const kept = referencedTools(fitted.messages);
+            if (kept.size !== inContext.size || [...inContext].some((name) => !kept.has(name))) {
+              inContext = kept;
+              ({ names: activeNames, tools: activeTools } = pick());
+              fitted = fitPrompt({
+                provider: config.provider,
+                modelId: config.modelId,
+                policy: { inputTokens: Number.MAX_SAFE_INTEGER, outputTokens: 0 },
+                scale: edge,
+                instructions: fitted.instructions,
+                messages: fitted.messages,
+                tools: activeTools,
+              });
+            }
+          }
+          referencedNow = inContext;
+          const sendAll = defers && !compactCommand ? deferral(inContext) : undefined;
+
           preparedInputTokens = Math.ceil(fitted.estimatedTokens * scale);
           preparedEstimate = fitted.estimatedTokens;
           // The unscaled estimate and the model it was made for: the next turn's first step
@@ -1627,7 +1735,8 @@ export class AgentRuntime {
               config.provider === 'anthropic'
                 ? cacheable(fitted.messages, cacheTtl, 3, currentStartIndex)
                 : fitted.messages,
-            activeTools: compactCommand ? [] : activeNames,
+            activeTools: compactCommand ? [] : (sendAll ?? activeNames),
+            ...(sendAll ? { toolOrder: sendAll } : {}),
             maxOutputTokens: policy.outputTokens,
             providerOptions: withOpenAiPromptCache(
               reasoning,
@@ -1855,10 +1964,15 @@ export class AgentRuntime {
         if (!exhausted && narrator.finishedAsCommentary && narrator.lastSaid) {
           answer = narrator.lastSaid;
         } else {
+          const closing = [
+            ...lastMessages,
+            ...((await result.steps).at(-1)?.response.messages ?? []),
+          ];
           answer = await this.closingWords(
             model,
             instructions,
-            [...lastMessages, ...((await result.steps).at(-1)?.response.messages ?? [])],
+            // Sent without tools: a reference to one would be refused.
+            defers ? withoutReferences(closing) : closing,
             { ...config, scale: scale * margin },
             account,
             policy,

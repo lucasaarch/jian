@@ -969,7 +969,8 @@ function offeredGroups(tools: ToolSet): ToolGroup[] {
 
 /**
  * Adds the loader and reports which tools it gates. The returned set is live: loading a group
- * adds its names to it, and the runtime sends only the tools it holds.
+ * adds its names to it, and the runtime offers only the tools it holds (on Claude it sends the
+ * others deferred, out of the model's context: see deferred-tools.ts).
  */
 export function deferTools(
   tools: ToolSet,
