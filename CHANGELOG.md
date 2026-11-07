@@ -26,7 +26,7 @@ Pair a phone with your gateway by scanning a QR code, and get a push when an age
 
 ### Conversations
 
-* **Compaction waits until a conversation is full:** Claude's prompts were counted at about twice their real size, so long turns were compacted early, the summary often failed, and every attempt read the whole prompt again without the cache. Jian now goes by the size the provider reports, and doesn't attempt a summary that couldn't shrink the conversation.
+* **Compaction waits until a conversation nears its limit:** Claude's prompts were counted at more than twice their real size, so long turns were compacted early, the summary often failed, and every attempt read the whole prompt again without the cache. Jian now goes by the size the provider reports, and doesn't attempt a summary that couldn't shrink the conversation.
 
 ### Upgrading
 
