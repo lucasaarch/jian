@@ -1122,3 +1122,120 @@ it('reads the open chat again when it is asked to, keeping what it showed until 
   await act(async () => root.unmount());
   host.remove();
 });
+
+it('asks for an ended turn’s tools once, and for the turn at work on every read', async () => {
+  Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+  vi.useFakeTimers();
+  const run = (id: string, status: Run['status'], createdAt: string): Run => ({
+    id,
+    profileId: 'profile',
+    sessionId: 'session',
+    requestKey: id,
+    input: id,
+    status,
+    createdAt,
+    updatedAt: createdAt,
+  });
+  const line = (id: string, runId: string, createdAt: string) => ({
+    id,
+    profileId: 'profile',
+    sessionId: 'session',
+    runId,
+    role: 'assistant' as const,
+    content: `Said in ${runId}.`,
+    createdAt,
+  });
+  let live = run('live', 'running', '2026-11-07T10:00:00Z');
+  const asked: string[][] = [];
+  const api = {
+    messages: async () => [
+      // Older than every run the gateway lists: ended long ago.
+      line('ancient-line', 'ancient', '2026-11-01T00:00:00Z'),
+      line('done-line', 'done', '2026-11-07T09:00:00Z'),
+      line('live-line', 'live', '2026-11-07T10:00:00Z'),
+    ],
+    activities: async () => [run('done', 'completed', '2026-11-07T09:00:00Z'), live],
+    timeline: async (_profileId: string, _sessionId: string, runs?: string[]) => {
+      asked.push([...(runs ?? [])].sort());
+      return (runs ?? []).map((runId) => ({ runId, steps: [] }));
+    },
+  } as unknown as GatewayApi;
+  const element = document.createElement('div');
+  document.body.append(element);
+  const root = createRoot(element);
+  const step = async () =>
+    act(async () => {
+      hear?.({ type: 'run.step' });
+      await vi.advanceTimersByTimeAsync(150);
+    });
+
+  try {
+    await act(async () =>
+      root.render(<History api={api} profileId="profile" sessionId="session" initialRun={live} />),
+    );
+    expect(asked).toEqual([['ancient', 'done', 'live']]);
+    await step();
+    expect(asked.at(-1)).toEqual(['live']);
+    // Its last tools are read once more as it ends, then never again.
+    live = { ...live, status: 'completed' };
+    await step();
+    expect(asked.at(-1)).toEqual(['live']);
+    const reads = asked.length;
+    await step();
+    expect(asked).toHaveLength(reads);
+    expect(element.textContent).toContain('Said in live.');
+  } finally {
+    await act(async () => root.unmount());
+    element.remove();
+    vi.useRealTimers();
+  }
+});
+
+it('reads one at a time, and once more for whatever was heard meanwhile', async () => {
+  Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+  vi.useFakeTimers();
+  let open = 0;
+  let most = 0;
+  let reads = 0;
+  let release: (() => void) | undefined;
+  const api = {
+    messages: async () => {
+      reads += 1;
+      open += 1;
+      most = Math.max(most, open);
+      await new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      open -= 1;
+      return [];
+    },
+    activities: async () => [],
+    timeline: async () => [],
+  };
+  const element = document.createElement('div');
+  document.body.append(element);
+  const root = createRoot(element);
+
+  try {
+    await act(async () =>
+      root.render(<History api={api} profileId="profile" sessionId="session" />),
+    );
+    expect(reads).toBe(1);
+    for (let heard = 0; heard < 3; heard++) {
+      await act(async () => {
+        hear?.({ type: 'run.step' });
+        await vi.advanceTimersByTimeAsync(200);
+      });
+    }
+    expect(reads).toBe(1);
+    await act(async () => release?.());
+    expect(reads).toBe(2);
+    await act(async () => release?.());
+    expect(reads).toBe(2);
+    expect(most).toBe(1);
+  } finally {
+    await act(async () => root.unmount());
+    element.remove();
+    vi.useRealTimers();
+  }
+});

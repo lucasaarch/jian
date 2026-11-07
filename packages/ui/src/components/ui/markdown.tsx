@@ -1,4 +1,4 @@
-import { createContext, Fragment, type ReactNode, useContext } from 'react';
+import { createContext, Fragment, memo, type ReactNode, useContext } from 'react';
 import { CodeBlock } from './code-block';
 
 /**
@@ -317,9 +317,11 @@ function Blocks({
 
 /**
  * `breaks` keeps a single line break as one, the way a chat reads; documents join the lines of
- * a paragraph, the way Markdown does.
+ * a paragraph, the way Markdown does. Drawn again only when its text or options change: a long
+ * conversation redraws on every step of a turn, and each of its messages would be parsed and
+ * highlighted again for nothing. Links and pictures still follow their providers.
  */
-export function Markdown({
+export const Markdown = memo(function Markdown({
   text,
   breaks = false,
   streaming = false,
@@ -350,7 +352,7 @@ export function Markdown({
       })}
     </>
   );
-}
+});
 
 /** The words of a Markdown text on one line, for a preview: marks, fences and pipes gone. */
 export function plainText(text: string) {

@@ -162,6 +162,27 @@ function overTurns<Value>(known: Map<string, Value>, asked: string[], read: [str
   return next;
 }
 
+/** How a run ends: its tools and its question can no longer change. */
+const ENDED = new Set<Run['status']>(['completed', 'failed', 'interrupted', 'cancelled']);
+
+/**
+ * The turns of a page whose tools are final, by the profile's recent runs as the gateway listed
+ * them before the tools were read. A turn missing from the list is ended when it began before the
+ * oldest run listed: the list holds the latest ones, so it is older than all of them. One missing
+ * and newer started after the list was read, and is not.
+ */
+function endedTurns(turns: string[], page: Message[], recent: Run[]): string[] {
+  const listed = new Map(recent.map((item) => [item.id, item.status]));
+  const oldest = recent.map((item) => item.createdAt).sort()[0];
+
+  return turns.filter((turn) => {
+    const status = listed.get(turn);
+    if (status) return ENDED.has(status);
+    const began = page.find((message) => message.runId === turn)?.createdAt;
+    return Boolean(oldest && began && began < oldest);
+  });
+}
+
 export function History({
   api,
   agent,
@@ -284,6 +305,26 @@ export function History({
   const [deciding, setDeciding] = useState(false);
   // The failed turn whose card the owner closed; a later one shows its own.
   const [dismissed, setDismissed] = useState<string>();
+  // Turns whose tools were read after they ended, here and the other agent's: never asked for
+  // again. A turn moves its tools on every step, and asking for all of a long conversation's on
+  // each one downloaded and drew megabytes for the one turn that changed.
+  const settled = useRef({ runs: new Set<string>(), calls: new Set<string>() });
+  // Bumped when the conversation changes or the view goes: a read begun for an earlier one lands
+  // nowhere.
+  const generation = useRef(0);
+  // The read under way, and whether something asked for another while it was.
+  const reader = useRef<{ for: number; again: boolean }>(undefined);
+  // What a read that runs after others were asked for needs from the latest render.
+  const latest = useRef({ reloads, tools, asks, callTools });
+  latest.current = { reloads, tools, asks, callTools };
+  // biome-ignore lint/correctness/useExhaustiveDependencies: what is read changing is what this marks.
+  useEffect(() => {
+    generation.current += 1;
+    settled.current = { runs: new Set(), calls: new Set() };
+    return () => {
+      generation.current += 1;
+    };
+  }, [api, profileId, sessionId, group]);
 
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout>;
@@ -405,26 +446,32 @@ export function History({
   /**
    * The tools of a page of messages, asked for by that page's own turns, so an old page never
    * lacks them. The other agent's tools are read where it worked: its own session, in its profile.
+   * Turns in `skip` are left as they are known.
    */
-  const readTurns = async (page: Message[], under?: string) => {
+  const readTurns = async (
+    page: Message[],
+    under?: string,
+    skip: { runs: Set<string>; calls: Set<string> } = { runs: new Set(), calls: new Set() },
+  ) => {
     const turns = [
       ...new Set([
         ...page.flatMap((message) => (message.runId ? [message.runId] : [])),
         ...(under ? [under] : []),
       ]),
-    ];
+    ].filter((turn) => !skip.runs.has(turn));
     const calls = new Map<string, { profileId: string; sessionId: string; runs: string[] }>();
     for (const { call } of page) {
-      if (!call) continue;
+      if (!call || skip.calls.has(call.runId)) continue;
       const place = `${call.profileId}/${call.sessionId}`;
       const known = calls.get(place) ?? { ...call, runs: [] };
-      known.runs.push(call.runId);
+      if (!known.runs.includes(call.runId)) known.runs.push(call.runId);
       calls.set(place, known);
     }
     const [timeline, worked] = await Promise.all([
-      api.timeline
+      // Nothing to ask: a timeline asked for no turn answers with the latest ones instead.
+      api.timeline && turns.length
         ? api.timeline(profileId, sessionId, turns).catch(() => undefined)
-        : Promise.resolve(undefined),
+        : Promise.resolve(api.timeline ? [] : undefined),
       api.timeline
         ? Promise.all(
             [...calls.values()].map((call) =>
@@ -461,11 +508,21 @@ export function History({
     };
   };
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: Retry and revision explicitly restart the read.
+  // One read at a time. What asks for a read while one is under way gets one more after it,
+  // however many asked: reads that overlapped each downloaded and drew the whole conversation.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Retry and revision explicitly ask for a read.
   useEffect(() => {
-    let stopped = false;
+    const mine = generation.current;
+    if (reader.current?.for === mine) {
+      reader.current.again = true;
+      return;
+    }
+    const state = { for: mine, again: false };
+    reader.current = state;
+    const stopped = () => generation.current !== mine;
     const read = async () => {
       const began = new Date().toISOString();
+      const { reloads } = latest.current;
       try {
         // The transcript is the part the owner came to see. Start its request with the supporting
         // reads, but do not make the conversation wait for a second trip to fetch its timeline.
@@ -479,9 +536,10 @@ export function History({
           (failure) => ({ failure }),
         );
         const history = await historyRequest;
-        if (stopped) return;
+        if (stopped()) return;
         // A reload the owner asked for starts from what the gateway says now, and nothing else.
         const fresh = answered.current !== reloads;
+        if (fresh) settled.current = { runs: new Set(), calls: new Set() };
         setMessages((known) => joinHistory(fresh ? [] : known, history));
         if (fresh) {
           setAtBeginning(false);
@@ -493,8 +551,8 @@ export function History({
         setLoading(false);
 
         const supporting = await supportingReads;
-        // Superseded while it waited: a newer read says what is at work now.
-        if (stopped) return;
+        // Gone while it waited: another conversation is on screen now.
+        if (stopped()) return;
         if ('failure' in supporting) throw supporting.failure;
         const [activities, members, children] = supporting.result;
         const lastRun = activities
@@ -509,8 +567,22 @@ export function History({
             ? new Map([...known].filter(([, at]) => at >= began))
             : known,
         );
-        const read = await readTurns(history, lastRun?.id);
-        if (stopped) return;
+        const ended = settled.current;
+        const read = await readTurns(history, lastRun?.id, ended);
+        if (stopped()) return;
+        // Read once they ended, and never again: an ended turn's tools are final.
+        if (read.toolsRead) {
+          for (const turn of endedTurns(read.turns, history, activities)) ended.runs.add(turn);
+        }
+        if (read.callsRead) {
+          for (const turn of read.callTurns) {
+            // The other agent's answer is back: its turn there is over.
+            const back = history.some(
+              (message) => message.role === 'user' && message.call?.runId === turn,
+            );
+            if (back) ended.calls.add(turn);
+          }
+        }
         // What a part that could not be read leaves as it was.
         if (read.toolsRead) {
           setTools((known) => overTurns(fresh ? new Map() : known, read.turns, read.steps));
@@ -526,17 +598,25 @@ export function History({
         setToolsUnread(read.unread);
         answered.current = reloads;
         if (fresh) toast.success('Chat reloaded.');
+        // Kept whole: this read asked only for the turns that could still change.
+        const base = fresh
+          ? { tools: new Map(), asks: new Map(), callTools: new Map() }
+          : latest.current;
         keep({
           messages: history,
-          tools: read.toolsRead ? read.steps : [...tools],
-          asks: read.toolsRead ? read.asked : [...asks],
-          callTools: read.callsRead ? read.called : [...callTools],
+          tools: [...(read.toolsRead ? overTurns(base.tools, read.turns, read.steps) : base.tools)],
+          asks: [...(read.toolsRead ? overTurns(base.asks, read.turns, read.asked) : base.asks)],
+          callTools: [
+            ...(read.callsRead
+              ? overTurns(base.callTools, read.callTurns, read.called)
+              : base.callTools),
+          ],
           subagents: children,
           people: members,
           ...(lastRun ? { run: lastRun } : {}),
         });
       } catch (failure) {
-        if (stopped) return;
+        if (stopped()) return;
         const said =
           failure instanceof Error ? failure.message : 'The history could not be loaded.';
         if (shown.current) setBehind(true);
@@ -547,13 +627,16 @@ export function History({
           toast.error(`This chat could not be reloaded: ${said}`);
         }
       } finally {
-        if (!stopped) setLoading(false);
+        if (!stopped()) setLoading(false);
       }
     };
-    void read();
-    return () => {
-      stopped = true;
-    };
+    void (async () => {
+      do {
+        state.again = false;
+        await read();
+      } while (state.again && !stopped());
+      if (reader.current === state) reader.current = undefined;
+    })();
   }, [api, profileId, sessionId, retry, revision, reloads, group, heard]);
 
   // Further back in the conversation: its page, with that page's tools, above what is shown.
