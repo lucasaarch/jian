@@ -4,6 +4,19 @@ Every release of Jian, newest first.
 
 <!-- Generated from docs/releases by scripts/changelog.mjs. Edit the release note, then run `make changelog`. -->
 
+## 1.7.1 — 2026-11-07
+
+A long conversation stays light in the panel while its agent works.
+
+### Conversations
+
+* **A long conversation at work no longer slows the panel down:** On every step of a turn, the panel downloaded the tools of every turn in the conversation again, over a megabyte on a long one, and redrew every message. It now reads only the turn at work, one read at a time, and redraws a message only when its text changes. This applies to the desktop app and the web panel.
+
+### Upgrading
+
+* The desktop app updates itself to this release.
+* **Servers:** Recreate the gateway and web containers with the 1.7.1 images, or follow the `latest` tags. There is no migration.
+
 ## 1.7.0 — 2026-11-07
 
 Agents keep long conversations near their model's full window and pay less for them, hand work to subagents and wait for the report, and see the end of long tool output.
