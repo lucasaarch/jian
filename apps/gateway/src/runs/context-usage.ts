@@ -142,7 +142,11 @@ export async function lastStepAt(
   model: Pick<ModelConfig, 'provider' | 'modelId'>,
 ): Promise<Date | undefined> {
   const [step] = await db
-    .select({ at: checkpoints.createdAt, data: checkpoints.data })
+    // One field, not the whole step: a checkpoint's data carries the step's tool results.
+    .select({
+      at: checkpoints.createdAt,
+      sentAt: sql<string | null>`${checkpoints.data}->'prompt'->>'sentAt'`,
+    })
     .from(checkpoints)
     .innerJoin(runs, eq(runs.id, checkpoints.runId))
     .where(
@@ -157,7 +161,7 @@ export async function lastStepAt(
     )
     .orderBy(desc(checkpoints.createdAt))
     .limit(1);
-  const sentAt = (step?.data as { prompt?: { sentAt?: unknown } } | undefined)?.prompt?.sentAt;
+  const sentAt = step?.sentAt;
   const sent = typeof sentAt === 'string' ? new Date(sentAt) : undefined;
   return sent && !Number.isNaN(sent.getTime()) ? sent : step?.at;
 }

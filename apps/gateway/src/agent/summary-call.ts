@@ -91,6 +91,9 @@ export async function summaryCall(input: {
 
   const result = streamText({
     model: input.model,
+    // The stream's error is read and reported where the answer is read; the SDK's own dump of
+    // it would print the provider's whole response a second time.
+    onError: () => {},
     tools,
     instructions: request.instructions,
     messages: withSummaryRequest(request.messages, input.instructions, input.effort),

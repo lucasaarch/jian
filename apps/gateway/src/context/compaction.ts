@@ -247,6 +247,8 @@ async function segments(
     const result = await streamedAnswer(
       streamText({
         model: input.model,
+        // Read and reported by `streamedAnswer`; the SDK's default would print it again.
+        onError: () => {},
         system: fitted.instructions,
         messages: fitted.messages,
         maxOutputTokens: policy.outputTokens,
