@@ -21,8 +21,14 @@ export function affected(event: GatewayEvent, profileId: string): QueryKey[] {
   const { type } = event;
 
   // Nothing before this was told, so what the screens read while it opened may have missed some.
+  // A stream opens again after the gateway restarts, as it does on an update: its release too.
   if (type === STREAM_OPENED_EVENT) {
-    return [keys.activities(profileId), keys.sessions(profileId), keys.contexts(profileId)];
+    return [
+      keys.activities(profileId),
+      keys.sessions(profileId),
+      keys.contexts(profileId),
+      keys.releases,
+    ];
   }
   if (type.startsWith('contact.') || type.startsWith('channel.')) return [keys.profile(profileId)];
   // A step taken, a turn ended, a context compacted: each moves how full the context is.

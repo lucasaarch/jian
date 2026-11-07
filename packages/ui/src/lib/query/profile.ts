@@ -57,8 +57,9 @@ export const queries = {
       staleTime: 5 * 60_000,
     }),
   /**
-   * What this installation runs and what changed. Read once a visit: it only moves with an
-   * update, and a panel that cannot say what changed still works, so a failure stays quiet.
+   * What this installation runs and what changed. It only moves with an update, so it is read
+   * once a visit and again each time the event stream opens, which a gateway restarted on an
+   * update makes it do. A panel that cannot say what changed still works: a failure stays quiet.
    */
   releases: () =>
     queryOptions({
