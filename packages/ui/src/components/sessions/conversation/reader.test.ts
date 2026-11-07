@@ -57,6 +57,22 @@ function fakeApi(over: Partial<HistoryApi> = {}) {
   return { api, asked };
 }
 
+/** A timeline whose first read is held until released, answering `stale`; later ones `later`. */
+function slowFirst(later: string) {
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let reads = 0;
+  const timeline: HistoryApi['timeline'] = async (_profile, _session, runs = []) => {
+    reads += 1;
+    const first = reads === 1;
+    if (first) await held;
+    return runs.map((runId) => ({ runId, steps: [step(first ? 'stale' : later)] }));
+  };
+  return { timeline, release };
+}
+
 const open = (api: HistoryApi, options: { reloads?: () => number; group?: boolean } = {}) => {
   const store = createConversationStore();
   const reader = createReader({
@@ -371,6 +387,81 @@ describe('the conversation reader', () => {
 
     expect(asked.messages).toHaveLength(2);
     expect(store.getState().run?.status).toBe('completed');
+  });
+
+  it('a slow step read never overwrites a turn that ended meanwhile', async () => {
+    const { timeline, release } = slowFirst('final');
+    const { api } = fakeApi({
+      messages: async () => [said('asked', { runId: 'run-1' })],
+      activities: async () => [turn('run-1', 'completed')],
+      timeline,
+    });
+    const { store, reader } = open(api);
+
+    const slow = reader.turns(['run-1']);
+    await reader.latest();
+    expect(store.getState().ended.runs.has('run-1')).toBe(true);
+    release();
+    await slow;
+
+    expect(
+      store
+        .getState()
+        .tools.get('run-1')
+        ?.map((item) => item.toolCallId),
+    ).toEqual(['final']);
+  });
+
+  it('a slow read of the other agent never overwrites its turn once the answer is back', async () => {
+    const call = { profileId: 'other', sessionId: 'there', runId: 'call-1' };
+    const carried = said('carried', { role: 'assistant', call } as Partial<Message>);
+    let page = [carried];
+    const { timeline, release } = slowFirst('final');
+    const { api } = fakeApi({
+      messages: async () => page,
+      run: async () => turn('call-1'),
+      timeline,
+    });
+    const { store, reader } = open(api);
+    store.getState().pageRead(page, false);
+
+    const slow = reader.call();
+    page = [carried, said('back', { call } as Partial<Message>)];
+    await reader.latest();
+    expect(store.getState().ended.calls.has('call-1')).toBe(true);
+    release();
+    await slow;
+
+    expect(
+      store
+        .getState()
+        .callTools.get('call-1')
+        ?.map((item) => item.toolCallId),
+    ).toEqual(['final']);
+    expect(store.getState().callRun).toBeUndefined();
+  });
+
+  it('an older read of a running turn never lands over a newer one', async () => {
+    const { timeline, release } = slowFirst('newer');
+    const { api } = fakeApi({
+      messages: async () => [said('asked', { runId: 'run-1' })],
+      activities: async () => [turn('run-1')],
+      timeline,
+    });
+    const { store, reader } = open(api);
+
+    const slow = reader.turns(['run-1']);
+    await reader.latest();
+    release();
+    await slow;
+
+    expect(
+      store
+        .getState()
+        .tools.get('run-1')
+        ?.map((item) => item.toolCallId),
+    ).toEqual(['newer']);
+    expect(store.getState().ended.runs.has('run-1')).toBe(false);
   });
 
   it('a stopped reader writes nothing', async () => {

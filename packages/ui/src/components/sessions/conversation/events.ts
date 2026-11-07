@@ -164,7 +164,7 @@ export function followConversation(options: {
     void tick();
   };
 
-  const sync = (state: ConversationState) => {
+  const sync = (state: ConversationState, previous?: ConversationState) => {
     if (working(state) && !quiet) {
       polls = 0;
       quiet = setTimeout(checkQuiet, QUIET_CHECK_MS);
@@ -177,6 +177,9 @@ export function followConversation(options: {
       clearInterval(crew);
       crew = undefined;
     }
+    // Only the messages say whether a call is pending, and text under way changes the store
+    // several times a second without touching them.
+    if (previous && state.messages === previous.messages) return;
     const key = callKey(state);
     if (key !== following) followCall(key);
   };

@@ -168,6 +168,18 @@ describe('following a conversation', () => {
     unfollow();
   });
 
+  it('a step reads the turn whose text is under way before the latest turn', async () => {
+    const { store, reads, before, unfollow } = await following({ run: turn(RUN) });
+    const writingRun = '00000000-0000-4000-8000-000000000002';
+    store.getState().progress(writingRun, writing('Hello'));
+
+    hear?.({ id: 0, type: 'run.step', data: { sessionId: SESSION } });
+    await vi.advanceTimersByTimeAsync(200);
+
+    expect(reads.timeline).toEqual([...before.timeline, [writingRun]]);
+    unfollow();
+  });
+
   it('a step with nothing under way reads the latest turn’s tools', async () => {
     const { reads, before, unfollow } = await following({ run: turn(RUN) });
 

@@ -94,6 +94,30 @@ export function createReader(options: {
   // with an error. Nothing yet is loading; a first read that failed left its error.
   const shown = () => !state().loading && !state().error;
 
+  // Reads of one turn's tools overlap: a step's, the latest read's, the other agent's poll, each
+  // its own single flight, answered in any order. Each read is numbered as it is sent, and what it
+  // says of a turn lands only if no read sent after it has landed first: a slow answer never
+  // steps a turn's tools back, nor brings an ended turn's earlier tools over its final ones.
+  let sent = 0;
+  const landed = { runs: new Map<string, number>(), calls: new Map<string, number>() };
+  /** The turns read number `read` may write, now taken as written by it. */
+  const newest = (kind: 'runs' | 'calls', turns: string[], read: number) =>
+    turns.filter((turn) => {
+      if ((landed[kind].get(turn) ?? 0) > read) return false;
+      landed[kind].set(turn, read);
+      return true;
+    });
+  const only = <Value>(turns: string[], told: [string, Value][]) => {
+    const kept = new Set(turns);
+    return told.filter(([turn]) => kept.has(turn));
+  };
+  const writeTurns = (turns: string[], steps: [string, ToolStep[]][], asks: [string, Asks][]) => {
+    if (turns.length) state().turnsRead(turns, only(turns, steps), only(turns, asks));
+  };
+  const writeCalls = (turns: string[], steps: [string, ToolStep[]][]) => {
+    if (turns.length) state().callsRead(turns, only(turns, steps));
+  };
+
   /**
    * The tools of a page of messages, asked for by that page's own turns, so an old page never
    * lacks them. The other agent's tools are read where it worked: its own session, in its profile.
@@ -114,6 +138,7 @@ export function createReader(options: {
       if (!known.runs.includes(call.runId)) known.runs.push(call.runId);
       calls.set(place, known);
     }
+    const number = ++sent;
     const [timeline, worked] = await Promise.all([
       // Nothing to ask: a timeline asked for no turn answers with the latest ones instead.
       api.timeline && turns.length
@@ -135,6 +160,7 @@ export function createReader(options: {
     );
 
     return {
+      number,
       turns,
       callTurns: [...calls.values()].flatMap((call) => call.runs),
       steps,
@@ -193,8 +219,9 @@ export function createReader(options: {
       const read = await readTurns(page, lastRun?.id, state().ended);
       if (stopped) return;
       // What a part that could not be read leaves as it was.
-      if (read.toolsRead) state().turnsRead(read.turns, read.steps, read.asked);
-      if (read.callsRead) state().callsRead(read.callTurns, read.called);
+      if (read.toolsRead)
+        writeTurns(newest('runs', read.turns, read.number), read.steps, read.asked);
+      if (read.callsRead) writeCalls(newest('calls', read.callTurns, read.number), read.called);
       // Read once they ended, and never again: an ended turn's tools are final. A turn moves its
       // tools on every step, and asking for all of a long conversation's on each one downloaded
       // and drew megabytes for the one turn that changed.
@@ -233,11 +260,14 @@ export function createReader(options: {
     const turns = [...new Set(asked)].filter((turn) => !ended.runs.has(turn));
     // Never ask the timeline for no turn: it answers with the latest ones instead.
     if (!turns.length || !api.timeline || stopped) return;
+    const number = ++sent;
     try {
       const timeline = await api.timeline(profileId, sessionId, turns);
       if (stopped) return;
-      state().turnsRead(
-        turns,
+      // A turn that ended while this was read has its final tools from the read that ended it.
+      const still = turns.filter((turn) => !state().ended.runs.has(turn));
+      writeTurns(
+        newest('runs', still, number),
         timeline.map((item): [string, ToolStep[]] => [item.runId, item.steps]),
         timeline.flatMap((item): [string, Asks][] =>
           item.approval || item.question
@@ -287,15 +317,17 @@ export function createReader(options: {
   const call = singleFlight<never>(async () => {
     const pending = pendingCall(state().messages);
     if (!pending || !api.run || stopped) return;
+    const number = ++sent;
     const [current, steps] = await Promise.all([
       api.run(pending.profileId, pending.runId).catch(() => undefined),
       api.timeline?.(pending.profileId, pending.sessionId, [pending.runId]).catch(() => undefined),
     ]);
-    if (stopped) return;
+    // Its answer came back while this was read: the read that saw it holds the final word.
+    if (stopped || state().ended.calls.has(pending.runId)) return;
     state().patch({ callRun: current });
     if (steps) {
-      state().callsRead(
-        [pending.runId],
+      writeCalls(
+        newest('calls', [pending.runId], number),
         steps.map((item): [string, ToolStep[]] => [item.runId, item.steps]),
       );
     }
@@ -322,8 +354,10 @@ export function createReader(options: {
           const before = page.filter((message) => !known.has(message.id));
           const read = await readTurns(before, undefined, state().ended);
           if (stopped) return;
-          if (read.toolsRead) state().turnsRead(read.turns, read.steps, read.asked);
-          if (read.callsRead) state().callsRead(read.callTurns, read.called);
+          if (read.toolsRead) {
+            writeTurns(newest('runs', read.turns, read.number), read.steps, read.asked);
+          }
+          if (read.callsRead) writeCalls(newest('calls', read.callTurns, read.number), read.called);
           if (read.unread) state().patch({ toolsUnread: true });
           state().earlierRead(page);
         } catch {
