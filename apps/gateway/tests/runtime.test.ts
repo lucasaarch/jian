@@ -3,6 +3,7 @@ import { tool } from 'ai';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { AgentRuntime } from '../src/agent/runtime.js';
+import { compactionThreshold } from '../src/context/compaction.js';
 import { insertMessage } from '../src/sessions/repository.js';
 import { mockModel } from './helpers/model.js';
 import { events } from './helpers/rows.js';
@@ -758,7 +759,9 @@ it.each([31700, 32000])(
 );
 
 it('does not show a false cumulative token warning while tools remain available', async () => {
-  const { services, profile, run } = await fixture({ maxRunTokens: 32000 });
+  // A window with room for the 23,000 tokens the first step reports: past the 32,000 default's
+  // threshold, that report would start a compaction, which is not what this is about.
+  const { services, profile, run } = await fixture({ maxRunTokens: 32000, inputTokens: 64000 });
   let calls = 0;
   const model = mockModel({
     doGenerate: async (options) => {
@@ -1849,4 +1852,128 @@ it('persists a cursor only through earlier messages covered by compaction', asyn
   const resumed = await services.contexts.context(run, []);
   expect(resumed.messages[0]?.content).not.toContain('Earlier deployment discussion:');
   expect(resumed.messages.at(-1)?.content).toContain(run.input);
+});
+
+/**
+ * What a provider reports for a request: a share of the bytes it was sent. The gateway counts a
+ * byte as a token for every provider but OpenAI; Claude reads about 2.4 bytes into each token.
+ */
+const reported = (options: { prompt: unknown; tools?: unknown }, share: number) => {
+  const total = Math.round(
+    Buffer.byteLength(JSON.stringify(options.prompt) + JSON.stringify(options.tools ?? [])) * share,
+  );
+  return {
+    total,
+    usage: {
+      inputTokens: { total, noCache: total, cacheRead: 0, cacheWrite: 0 },
+      outputTokens: { total: 10, text: 10, reasoning: 0 },
+    },
+  };
+};
+
+/** Results of these sizes in turn, the last repeated. */
+const largeResults = (services: Awaited<ReturnType<typeof testServices>>, sizes: number[]) => {
+  if (!services.web) throw new Error('Web tools unavailable');
+  let call = 0;
+  services.web.tools = () => ({
+    large_result: tool({
+      description: 'Return a large synthetic result.',
+      inputSchema: z.object({}),
+      execute: async () => 'x'.repeat(sizes[Math.min(call++, sizes.length - 1)] ?? 0),
+    }),
+  });
+};
+
+const callLarge = (step: number, usage: ReturnType<typeof reported>['usage']) => ({
+  content: [
+    {
+      type: 'tool-call' as const,
+      toolCallId: `large-${step}`,
+      toolName: 'large_result',
+      input: '{}',
+    },
+  ],
+  finishReason: { unified: 'tool-calls' as const, raw: 'tool-calls' },
+  usage,
+  warnings: [],
+});
+
+it('compacts by the size the provider reported, not the byte estimate', async () => {
+  const policy = { inputTokens: 100000, outputTokens: 4096, historyTokens: 100000 };
+  const { services, profile, session, run } = await fixture({
+    ...policy,
+    toolResultTokens: 16000,
+    maxSteps: 14,
+  });
+  const threshold = compactionThreshold(policy.inputTokens - policy.outputTokens);
+  // Older turns worth summarising: a summary of them shrinks the request by more than a fifth.
+  for (let index = 0; index < 8; index++) {
+    await insertMessage(services.store.db, {
+      id: randomUUID(),
+      profileId: profile.id,
+      sessionId: session.id,
+      role: index % 2 === 0 ? 'user' : 'assistant',
+      content: `turn-${index} ${'history '.repeat(600)}`,
+      createdAt: new Date(Date.parse('2026-09-29T09:00:00.000Z') + index * 1000).toISOString(),
+    });
+  }
+  largeResults(services, [15000]);
+  // Each call in order: the bytes it was sent, and what the provider said it read.
+  const calls: Array<{ summary: boolean; bytes: number; reported: number }> = [];
+  let step = 0;
+  const model = mockModel({
+    doGenerate: async (options) => {
+      const size = reported(options, 0.5);
+      calls.push({ summary: !options.tools?.length, bytes: size.total * 2, reported: size.total });
+      if (!options.tools?.length) return answer('Checkpoint: the older turns were read.');
+      if (JSON.stringify(options.prompt).includes('Checkpoint: the older turns')) {
+        return { ...answer('Done after the checkpoint.'), usage: size.usage };
+      }
+      return callLarge(step++, size.usage);
+    },
+  });
+
+  await new AgentRuntime(services, () => model).execute(profile.id, run.id);
+
+  const first = calls.findIndex((call) => call.summary);
+  const before = calls.slice(0, first);
+  expect(first).toBeGreaterThan(0);
+  // The request had passed the threshold counted in bytes for several steps without a summary.
+  expect(before.filter((call) => call.bytes > threshold).length).toBeGreaterThanOrEqual(2);
+  // And the summary came once what the provider read was itself near the threshold.
+  expect(before.at(-1)?.reported).toBeGreaterThan(threshold * 0.8);
+  expect((await services.runs.run(profile.id, run.id)).output).toBe('Done after the checkpoint.');
+});
+
+it("seeds the next turn's scale from the session's last measured step", async () => {
+  const policy = { inputTokens: 100000, outputTokens: 4096, historyTokens: 200000 };
+  const { services, profile, session, run } = await fixture({ ...policy, maxSteps: 4 });
+  const threshold = compactionThreshold(policy.inputTokens - policy.outputTokens);
+  let summaries = 0;
+  let long = true;
+  const model = mockModel({
+    doGenerate: async (options) => {
+      if (!options.tools?.length) {
+        summaries++;
+        return answer('Checkpoint: a long answer was given.');
+      }
+      const { usage } = reported(options, 0.5);
+      // The first turn's answer alone puts the next request past the threshold, in bytes.
+      return { ...answer(long ? `Long ${'y'.repeat(threshold)}` : 'Short.'), usage };
+    },
+  });
+  await new AgentRuntime(services, () => model).execute(profile.id, run.id);
+  expect((await services.runs.run(profile.id, run.id)).status).toBe('completed');
+
+  const next = await services.runs.submit(profile.id, session.id, {
+    text: 'And now?',
+    requestKey: 'two',
+  });
+  long = false;
+  await new AgentRuntime(services, () => model).execute(profile.id, next.id);
+
+  const finished = await services.runs.run(profile.id, next.id);
+  expect(finished.status).toBe('completed');
+  // About half the threshold to the provider: nothing to compact on the first step.
+  expect(summaries).toBe(0);
 });

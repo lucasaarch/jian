@@ -29,6 +29,7 @@ import { fitPrompt, promptTokens, tokenCounter, truncatePrompt } from '../contex
 import { withTurnNote } from '../context/build.js';
 import { compactionThreshold, compactPrompt, needsCompaction } from '../context/compaction.js';
 import type { ContextSource } from '../context/port.js';
+import { defaultScale, measuredScale } from '../context/scale.js';
 import { nowIso } from '../core/clock.js';
 import { GatewayError } from '../core/errors.js';
 import type { Learning } from '../learning/service.js';
@@ -44,6 +45,7 @@ import { resolveModel } from '../providers/models.js';
 import type { Providers } from '../providers/service.js';
 import { providerSecret } from '../providers/service.js';
 import { mergeProviderOptions, speedProviderOptions } from '../providers/speed.js';
+import { lastPromptScale } from '../runs/context-usage.js';
 import { readRunAction, writeRunAction } from '../runs/repository.js';
 import { createSafeFetch } from '../security/outbound.js';
 import type { ObjectiveContinuation } from '../sessions/continuation.js';
@@ -345,7 +347,7 @@ export class AgentRuntime {
     model: LanguageModel,
     instructions: string,
     messages: ModelMessage[],
-    config: { provider: string; modelId: string },
+    config: { provider: string; modelId: string; scale?: number },
     account: (
       usage: LanguageModelUsage,
       inputTokens: number,
@@ -1184,6 +1186,15 @@ export class AgentRuntime {
       let lastMessages = context.messages as ModelMessage[];
       let currentStartIndex = context.currentStartIndex;
       const estimate = tokenCounter(config.provider, config.modelId);
+      // Provider tokens per token of the gateway's estimate (context/scale.ts). Every size
+      // decision of the run goes by the estimate times this, so compaction starts when the
+      // provider's own count nears the threshold, not when a byte count does. Each step the
+      // provider reports measures it again; a turn starts from the conversation's last one.
+      let scale =
+        (await lastPromptScale(this.services.store.db, profileId, run.sessionId, config)) ??
+        defaultScale(config.provider);
+      // The gateway's unscaled count of the prompt the step sent, which its report is held to.
+      let preparedEstimate = 0;
       const account = async (
         usage: LanguageModelUsage,
         fallbackInput: number,
@@ -1340,6 +1351,7 @@ export class AgentRuntime {
           const fixedCost = (withCurrent = false) =>
             promptTokens({
               ...config,
+              scale,
               instructions: codingInstructions,
               // What a summary never shrinks: the request being answered now. Its tool work
               // can be summarised, so it does not count here.
@@ -1375,6 +1387,7 @@ export class AgentRuntime {
 
           const before = promptTokens({
             ...config,
+            scale,
             instructions: codingInstructions,
             messages,
             tools: activeTools,
@@ -1383,6 +1396,7 @@ export class AgentRuntime {
           if (fixedCost() > policy.inputTokens - policy.outputTokens) {
             fitPrompt({
               ...config,
+              scale,
               policy,
               instructions: codingInstructions,
               messages,
@@ -1416,6 +1430,7 @@ export class AgentRuntime {
                 currentStartIndex,
                 includeCurrent: before > limit,
                 previous: session.summary,
+                scale,
                 // Writing a record needs no deliberation, and thinking draws on the same
                 // allowance as the summary: at the owner's effort it ran out before the record.
                 providerOptions: leastReasoningOptions(config),
@@ -1431,6 +1446,7 @@ export class AgentRuntime {
                 // Save the tool work before replacing the request. A later turn can resume it.
                 const afterTokens = promptTokens({
                   ...config,
+                  scale,
                   instructions: codingInstructions,
                   messages: compacted.messages,
                   tools: activeTools,
@@ -1491,6 +1507,7 @@ export class AgentRuntime {
               provider: config.provider,
               modelId: config.modelId,
               policy: within,
+              scale,
               instructions: codingInstructions,
               messages,
               tools: reader ? { ...activeTools, read_artifact: reader } : activeTools,
@@ -1522,6 +1539,7 @@ export class AgentRuntime {
             needsCompaction(
               promptTokens({
                 ...config,
+                scale,
                 instructions: codingInstructions,
                 messages,
                 tools: activeTools,
@@ -1540,6 +1558,7 @@ export class AgentRuntime {
                 provider: config.provider,
                 modelId: config.modelId,
                 policy,
+                scale,
                 instructions: codingInstructions,
                 messages,
                 tools: activeTools,
@@ -1554,8 +1573,13 @@ export class AgentRuntime {
           }
 
           preparedInputTokens = fitted.tokens;
+          preparedEstimate = fitted.estimatedTokens;
+          // The unscaled estimate and the model it was made for: the next turn's first step
+          // takes its scale from this and the input the provider reports for it.
           preparedPrompt = {
-            estimatedTokens: fitted.tokens,
+            estimatedTokens: fitted.estimatedTokens,
+            scale,
+            model: { provider: config.provider, modelId: config.modelId },
             ...fitted.breakdown,
             activeTools: activeNames,
           };
@@ -1590,6 +1614,9 @@ export class AgentRuntime {
             JSON.stringify({ text, toolCalls }),
             1,
           );
+          if (!measured.estimated) {
+            scale = measuredScale(measured.inputTokens, preparedEstimate) ?? scale;
+          }
 
           await this.services.lifecycle.checkpoint(profileId, runId, owner, {
             phase: 'step-completed',
@@ -1798,7 +1825,7 @@ export class AgentRuntime {
             model,
             instructions,
             [...lastMessages, ...((await result.steps).at(-1)?.response.messages ?? [])],
-            config,
+            { ...config, scale },
             account,
             policy,
             signal,

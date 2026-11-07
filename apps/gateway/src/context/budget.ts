@@ -103,20 +103,28 @@ export function blocksOf(messages: readonly ModelMessage[]): ModelMessage[][] {
   return blocks;
 }
 
+/**
+ * An estimate in the provider's tokens. `scale` is what a step measured them to be per token of
+ * the estimate (see `scale.ts`); left out, the estimate stands as counted.
+ */
+const scaled = (tokens: number, scale = 1) => Math.ceil(tokens * scale);
+
 export function promptTokens(input: {
   provider: string;
   modelId: string;
   instructions: string;
   messages: readonly ModelMessage[];
   tools: ToolSet;
+  scale?: number;
 }): number {
   const count = tokenCounter(input.provider, input.modelId);
-  return (
+  return scaled(
     count(input.instructions) +
-    count(schemaText(input.tools)) +
-    32 * Object.keys(input.tools).length +
-    32 +
-    input.messages.reduce((sum, message) => sum + messageCost(message, count), 0)
+      count(schemaText(input.tools)) +
+      32 * Object.keys(input.tools).length +
+      32 +
+      input.messages.reduce((sum, message) => sum + messageCost(message, count), 0),
+    input.scale,
   );
 }
 
@@ -127,10 +135,15 @@ export function fitPrompt(input: {
   instructions: string;
   messages: readonly ModelMessage[];
   tools: ToolSet;
+  scale?: number;
 }): {
   instructions: string;
   messages: ModelMessage[];
+  /** The prompt in the provider's tokens: the estimate times `scale`. */
   tokens: number;
+  /** The gateway's own count, unscaled, which a step's reported input is measured against. */
+  estimatedTokens: number;
+  /** Unscaled, in the same units as `estimatedTokens`. */
   breakdown: { system: number; tools: number; messages: number };
 } {
   const count = tokenCounter(input.provider, input.modelId);
@@ -146,15 +159,17 @@ export function fitPrompt(input: {
   const toolTokens = count(schema) + 32 * Object.keys(input.tools).length;
   const fixedTokens = systemTokens + toolTokens;
 
-  const tokens =
+  const estimatedTokens =
     fixedTokens + input.messages.reduce((sum, message) => sum + messageCost(message, count), 0);
+  const tokens = scaled(estimatedTokens, input.scale);
 
   // Naming the parts is the whole value of this failure: the fixed cost is what the owner can
   // act on, and it is almost always the tool schemas rather than anything they wrote.
   if (tokens > limit) {
     throw new Error(
       `Context budget exceeded: ${tokens} tokens against a limit of ${limit}. ` +
-        `Tool definitions cost ${count(schema)} and the system prompt ${count(input.instructions)}; ` +
+        `Tool definitions cost ${scaled(count(schema), input.scale)} and the system prompt ` +
+        `${scaled(count(input.instructions), input.scale)}; ` +
         'compact the conversation or connect fewer MCP tools.',
     );
   }
@@ -163,7 +178,8 @@ export function fitPrompt(input: {
     instructions: input.instructions,
     messages: [...input.messages],
     tokens,
-    breakdown: { system: systemTokens, tools: toolTokens, messages: tokens - fixedTokens },
+    estimatedTokens,
+    breakdown: { system: systemTokens, tools: toolTokens, messages: estimatedTokens - fixedTokens },
   };
 }
 
@@ -204,11 +220,13 @@ export function truncatePrompt(input: {
   messages: readonly ModelMessage[];
   tools: ToolSet;
   currentStartIndex?: number;
+  scale?: number;
 }):
   | {
       instructions: string;
       messages: ModelMessage[];
       tokens: number;
+      estimatedTokens: number;
       breakdown: { system: number; tools: number; messages: number };
       droppedBlocks: number;
       shedResults: number;

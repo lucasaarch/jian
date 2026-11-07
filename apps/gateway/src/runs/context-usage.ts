@@ -1,6 +1,7 @@
 import type { ContextPolicy, ModelConfig, SessionContext } from '@jian/contracts';
 import { and, desc, eq, isNotNull, sql } from 'drizzle-orm';
 import { compactionThreshold } from '../context/compaction.js';
+import { measuredScale } from '../context/scale.js';
 import type { Queryable } from '../storage/database.js';
 import { checkpoints, runs } from '../storage/schema.js';
 
@@ -90,4 +91,40 @@ export async function sessionContext(
         }
       : null,
   };
+}
+
+/**
+ * The scale the conversation's newest measured step found (see `context/scale.ts`), so a turn's
+ * first step is sized as its predecessor's last one was rather than starting over from a guess.
+ * Only a step of the same model counts: another tokenizer reads the same bytes differently.
+ */
+export async function lastPromptScale(
+  db: Queryable,
+  profileId: string,
+  sessionId: string,
+  model: Pick<ModelConfig, 'provider' | 'modelId'>,
+): Promise<number | undefined> {
+  const [step] = await db
+    .select({ data: checkpoints.data })
+    .from(checkpoints)
+    .innerJoin(runs, eq(runs.id, checkpoints.runId))
+    .where(
+      and(
+        eq(runs.profileId, profileId),
+        eq(runs.sessionId, sessionId),
+        eq(checkpoints.profileId, profileId),
+        sql`${checkpoints.data}->>'phase' = 'step-completed'`,
+        // A step the provider reported nothing for was charged its own estimate: a ratio of one.
+        sql`coalesce(${checkpoints.data}->'usage'->>'estimated', 'false') <> 'true'`,
+        // The step's own model, which a run without a chosen one does not store.
+        sql`${checkpoints.data}->'prompt'->'model'->>'provider' = ${model.provider}`,
+        sql`${checkpoints.data}->'prompt'->'model'->>'modelId' = ${model.modelId}`,
+      ),
+    )
+    .orderBy(desc(checkpoints.createdAt))
+    .limit(1);
+  const data = step?.data as
+    | { usage?: { inputTokens?: unknown }; prompt?: { estimatedTokens?: unknown } }
+    | undefined;
+  return measuredScale(Number(data?.usage?.inputTokens), Number(data?.prompt?.estimatedTokens));
 }

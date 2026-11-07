@@ -49,6 +49,11 @@ export interface ContextSources {
   project?: string[];
   /** Skills the conversation's workspaces offer, beside the profile's. */
   projectSkills?: ReadonlyArray<Pick<Skill, 'name' | 'description'>>;
+  /**
+   * Provider tokens per token of the estimate (`scale.ts`). The Context line is the agent's
+   * cue to compact on its own, so it reads the size the runtime compacts by, not a byte count.
+   */
+  scale?: number;
 }
 
 /** How the turn context opens: what tells the agent, and the runtime, which message it is. */
@@ -332,10 +337,12 @@ export function buildContext(
 
   // How full the request is before any tool has run, said in the turn context: an agent that
   // cannot see its context filling up cannot choose when to compact it.
-  const used =
-    count(system) +
-    count(turn.join('\n\n')) +
-    messages.reduce((sum, message) => sum + count(message.content) + 8, 0);
+  const used = Math.ceil(
+    (count(system) +
+      count(turn.join('\n\n')) +
+      messages.reduce((sum, message) => sum + count(message.content) + 8, 0)) *
+      (sources.scale ?? 1),
+  );
   const share = Math.min(100, Math.round((used / policy.inputTokens) * 100));
 
   const tail = [

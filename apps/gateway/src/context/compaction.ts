@@ -48,6 +48,8 @@ export async function compactPrompt(input: {
   previous?: string;
   providerOptions?: Record<string, Record<string, JSONValue>>;
   policy: { inputTokens: number; outputTokens: number };
+  /** Provider tokens per token of the gateway's estimate, as `fitPrompt` takes it. */
+  scale?: number;
   signal: AbortSignal;
   dress?: (instructions: string) => string;
   onUsage: (usage: LanguageModelUsage, inputTokens: number, text: string) => Promise<void>;

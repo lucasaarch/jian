@@ -10,6 +10,7 @@ import { onOwnerComputer, projectCheckout, workspaceHome } from '../agent/worksp
 import { listConversations } from '../channels/repository.js';
 import type { Judge } from '../decisions/service.js';
 import { findMemories, searchMemories, withLinks } from '../memories/repository.js';
+import { lastPromptScale } from '../runs/context-usage.js';
 import type { RunReader } from '../runs/port.js';
 import { listContextToolCheckpoints } from '../runs/repository.js';
 import { listLoads } from '../sessions/loads.js';
@@ -21,6 +22,7 @@ import type { FolderSignal, Worktrees } from '../worktrees/service.js';
 import { buildContext, rankMemories, withTurnNote } from './build.js';
 import { judgeTurn } from './judgments.js';
 import type { ContextSource } from './port.js';
+import { defaultScale } from './scale.js';
 import { toolRecordsByRun, withToolHistory } from './tool-history.js';
 
 /** What a chat works on beyond one project: told to the agent, since it is why it is here. */
@@ -282,8 +284,13 @@ export class Contexts {
     const guidance = [workspace, projectGuidance, workerGuidance].filter((part): part is string =>
       Boolean(part),
     );
+    const model = run.model ?? run.profile.model;
+    const scale =
+      (await lastPromptScale(this.store.db, run.profileId, run.sessionId, model)) ??
+      defaultScale(model.provider);
     const built = buildContext(run, {
       servers,
+      scale,
       ...(workspaces?.worktrees ? { worktrees: true } : {}),
       ...(!worker && workspaces?.machine ? { machine: workspaces.machine } : {}),
       ...(judged.relevance ? { relevance: judged.relevance } : {}),
