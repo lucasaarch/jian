@@ -1,11 +1,11 @@
 'use client';
 
 import { useQueryClient } from '@tanstack/react-query';
-import { useId, useRef, useState } from 'react';
+import { useId, useState } from 'react';
 import { RowInput, RowTextArea, SettingsGroup, SettingsRow } from '../kit';
 import type { Profile } from '../lib/api';
 import { type SaveState, useAutoSave } from '../lib/auto-save';
-import { panelApi } from '../lib/query/client';
+import { saveProfile } from '../lib/profile-saves';
 import { queries } from '../lib/query/profile';
 
 type Identity = { name: string; summary: string; instructions: string; boundaries: string };
@@ -43,23 +43,18 @@ export function AgentIdentity({ profile }: { profile: Profile }) {
     instructions: profile.instructions,
     boundaries: profile.identity.boundaries.join('\n'),
   });
-  // The version each save is made against: the newest, whether this screen saved it or the
-  // agent edited itself meanwhile.
-  const version = useRef(profile.version);
-  version.current = Math.max(version.current, profile.version);
-
   const status = useAutoSave(
     draft,
     async (next) => {
-      const saved = await panelApi().updateProfile(profile.id, {
-        expectedVersion: version.current,
+      // Made against the newest version, whether this screen saved it, another card of these
+      // settings did, or the agent edited itself meanwhile.
+      const saved = await saveProfile(profile, {
         name: next.name.trim(),
         summary: next.summary.trim(),
         instructions: next.instructions.trim(),
         // The rest of the identity is sent as it stands: the gateway takes it whole.
         identity: { ...profile.identity, boundaries: rules(next.boundaries) },
       });
-      version.current = saved.version;
       client.setQueryData(queries.profiles().queryKey, (profiles = []) =>
         profiles.map((item) => (item.id === saved.id ? saved : item)),
       );

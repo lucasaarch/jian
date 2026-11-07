@@ -5,6 +5,7 @@ import type { Profile } from '../lib/api';
 import { AgentCache } from '../test/agent';
 import { profile as base } from '../test/fixtures';
 import { AgentCompaction } from './agent-compaction';
+import { AgentIdentity } from './agent-identity';
 
 const gateway = vi.hoisted(() => ({ updateProfile: vi.fn() }));
 vi.mock('../lib/query/client', () => ({ panelApi: () => gateway }));
@@ -86,12 +87,71 @@ it('takes a typed size, and goes back to near the limit', async () => {
   expect(saves[1]).toMatchObject({ contextPolicy: { compactAt: 'auto' } });
 });
 
-it('holds back a size too small for the gateway, and says why', async () => {
+it('holds back a size the gateway would refuse, and says why', async () => {
   const { host, saves, type, wait } = await render(600_000);
 
-  await type('10000');
-  await wait(1000);
-
+  for (const [typed, reason] of [
+    ['10000', 'At least 50,000 tokens'],
+    ['30,000,000', 'At most 20,000,000 tokens'],
+    ['lots', 'Write a whole number of tokens'],
+    ['', 'Write a whole number of tokens'],
+  ]) {
+    await type(typed as string);
+    await wait(1000);
+    expect(host.textContent).toContain(reason);
+  }
   expect(saves).toEqual([]);
-  expect(host.textContent).toContain('At least 50,000 tokens');
+});
+
+it('names the size field on its own', async () => {
+  const { host, press } = await render();
+
+  await press('At a set size');
+  const input = host.querySelector('input');
+  expect(document.getElementById(input?.getAttribute('aria-labelledby') ?? '')?.textContent).toBe(
+    'Size in tokens',
+  );
+});
+
+it('saves after the identity card, against the version its save returned', async () => {
+  vi.useFakeTimers();
+  Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+  const profile = { ...base, id: 'b6c0c7a4-0c1e-4b44-9a7e-2f0d3c1e5a10', version: 7 };
+  const saves: Record<string, unknown>[] = [];
+  let version = profile.version;
+  // A save that takes a while, so the second card's save is asked for while the first is out.
+  gateway.updateProfile.mockImplementation(async (_id: string, body: Record<string, unknown>) => {
+    saves.push(body);
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    version += 1;
+    return { ...profile, version };
+  });
+  const host = document.createElement('div');
+  document.body.append(host);
+  const root = createRoot(host);
+  roots.push(() => root.unmount());
+  await act(async () =>
+    root.render(
+      <AgentCache profile={profile}>
+        <AgentIdentity profile={profile} />
+        <AgentCompaction profile={profile} />
+      </AgentCache>,
+    ),
+  );
+
+  const name = host.querySelector('input');
+  if (!name) throw new Error('No name field');
+  Object.getOwnPropertyDescriptor(Object.getPrototypeOf(name) as object, 'value')?.set?.call(
+    name,
+    'Zero Three',
+  );
+  await act(async () => name.dispatchEvent(new Event('input', { bubbles: true })));
+  const set = [...host.querySelectorAll('button')].find(
+    (item) => item.textContent === 'At a set size',
+  );
+  await act(async () => set?.click());
+  await act(async () => void (await vi.advanceTimersByTimeAsync(3000)));
+
+  expect(saves).toHaveLength(2);
+  expect(saves.map((save) => save.expectedVersion)).toEqual([7, 8]);
 });

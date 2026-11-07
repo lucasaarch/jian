@@ -1,16 +1,13 @@
 'use client';
 
-import { type CompactAt, MIN_COMPACT_AT } from '@jian/contracts';
+import { type CompactAt, MAX_COMPACT_AT, MIN_COMPACT_AT } from '@jian/contracts';
 import { useQueryClient } from '@tanstack/react-query';
-import { useId, useRef, useState } from 'react';
+import { useId, useState } from 'react';
 import { RowInput, Segmented, SettingsGroup, SettingsRow } from '../kit';
 import type { Profile } from '../lib/api';
 import { type SaveState, useAutoSave } from '../lib/auto-save';
-import { panelApi } from '../lib/query/client';
+import { saveProfile } from '../lib/profile-saves';
 import { queries } from '../lib/query/profile';
-
-/** The most the gateway takes, in tokens: more than any model's window. */
-const MAX_COMPACT_AT = 20_000_000;
 
 /** Sizes a long conversation is often held to, in tokens. */
 const PRESETS = [200_000, 400_000, 600_000];
@@ -22,21 +19,26 @@ type Draft = { mode: 'auto' | 'set'; tokens: string };
 
 const tokensOf = (text: string) => Number(text.replaceAll(/[\s,._]/g, ''));
 
-/** The size as typed, when the gateway would take it. */
-function sizeOf(draft: Draft): number | undefined {
+/** Why the gateway would refuse the size as typed, or nothing when it would take it. */
+function refusal(draft: Draft): string | undefined {
+  if (draft.mode === 'auto') return undefined;
   const tokens = tokensOf(draft.tokens);
-  return Number.isInteger(tokens) && tokens >= MIN_COMPACT_AT && tokens <= MAX_COMPACT_AT
-    ? tokens
-    : undefined;
+  if (!draft.tokens.trim() || !Number.isInteger(tokens)) return 'Write a whole number of tokens';
+  if (tokens < MIN_COMPACT_AT) return `At least ${MIN_COMPACT_AT.toLocaleString('en')} tokens`;
+  if (tokens > MAX_COMPACT_AT) return `At most ${MAX_COMPACT_AT.toLocaleString('en')} tokens`;
+  return undefined;
 }
+
+/** The size as typed, when the gateway would take it. */
+const sizeOf = (draft: Draft): number | undefined =>
+  draft.mode === 'set' && !refusal(draft) ? tokensOf(draft.tokens) : undefined;
 
 const chosen = (draft: Draft): CompactAt | undefined =>
   draft.mode === 'auto' ? 'auto' : sizeOf(draft);
 
 function saveNote(status: SaveState, draft: Draft) {
-  if (chosen(draft) === undefined) {
-    return <span className="text-bad">At least {MIN_COMPACT_AT.toLocaleString('en')} tokens</span>;
-  }
+  const refused = refusal(draft);
+  if (refused) return <span className="text-bad">{refused}</span>;
   if (status.state === 'saving') return 'Saving…';
   if (status.state === 'saved') return 'Saved';
   if (status.state === 'failed') return <span className="text-bad">{status.reason}</span>;
@@ -55,21 +57,16 @@ export function AgentCompaction({ profile }: { profile: Profile }) {
     mode: stored === 'auto' ? 'auto' : 'set',
     tokens: (stored === 'auto' ? FIRST_SIZE : stored).toLocaleString('en'),
   });
-  // The version each save is made against: the newest, whoever saved it.
-  const version = useRef(profile.version);
-  version.current = Math.max(version.current, profile.version);
-
   const status = useAutoSave(
     draft,
     async (next) => {
       const compactAt = chosen(next);
       if (compactAt === undefined) return;
-      const saved = await panelApi().updateProfile(profile.id, {
-        expectedVersion: version.current,
-        // The gateway takes the policy whole: the rest goes back as it stands.
+      // In turn with the identity's saves, against the newest version. The gateway takes the
+      // policy whole: the rest goes back as it stands.
+      const saved = await saveProfile(profile, {
         contextPolicy: { ...profile.contextPolicy, compactAt },
       });
-      version.current = saved.version;
       client.setQueryData(queries.profiles().queryKey, (profiles = []) =>
         profiles.map((item) => (item.id === saved.id ? saved : item)),
       );
@@ -86,7 +83,7 @@ export function AgentCompaction({ profile }: { profile: Profile }) {
     >
       <SettingsRow
         title="Compact conversations"
-        description="Later, the agent keeps more of the conversation word for word, and each step costs more."
+        description="Compacting later keeps more of the conversation word for word, but each step costs more."
         labelId={id('compact')}
         descriptionId={id('compact-detail')}
         below={
@@ -103,17 +100,20 @@ export function AgentCompaction({ profile }: { profile: Profile }) {
                   label: `${tokens / 1000}K`,
                 }))}
               />
+              <span id={id('size')} className="text-xs text-muted">
+                Size in tokens
+              </span>
               <RowInput
-                labelledBy={id('compact')}
-                describedBy={id('compact-unit')}
+                labelledBy={id('size')}
+                describedBy={id('size-detail')}
                 className="w-32"
                 inputMode="numeric"
                 autoComplete="off"
                 value={draft.tokens}
                 onChange={(event) => setDraft({ mode: 'set', tokens: event.target.value })}
               />
-              <span id={id('compact-unit')} className="text-xs text-muted">
-                tokens, or near the limit if the model reaches that first
+              <span id={id('size-detail')} className="text-xs text-muted">
+                Near the limit instead, if the model reaches that first.
               </span>
             </div>
           )
