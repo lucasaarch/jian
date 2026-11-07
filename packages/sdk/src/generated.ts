@@ -8986,6 +8986,8 @@ export interface operations {
                             tier?: "light" | "standard" | "deep";
                             /** @enum {string} */
                             tierBy?: "agent" | "jev" | "default";
+                            /** Format: date-time */
+                            awaitedUntil?: string;
                         };
                         requestKey: string;
                         input: string;
@@ -9255,6 +9257,8 @@ export interface operations {
                             tier?: "light" | "standard" | "deep";
                             /** @enum {string} */
                             tierBy?: "agent" | "jev" | "default";
+                            /** Format: date-time */
+                            awaitedUntil?: string;
                         };
                         requestKey: string;
                         input: string;
@@ -9523,6 +9527,8 @@ export interface operations {
                             tier?: "light" | "standard" | "deep";
                             /** @enum {string} */
                             tierBy?: "agent" | "jev" | "default";
+                            /** Format: date-time */
+                            awaitedUntil?: string;
                         };
                         requestKey: string;
                         input: string;
@@ -19698,6 +19704,8 @@ export interface operations {
                             tier?: "light" | "standard" | "deep";
                             /** @enum {string} */
                             tierBy?: "agent" | "jev" | "default";
+                            /** Format: date-time */
+                            awaitedUntil?: string;
                         };
                         requestKey: string;
                         input: string;
@@ -20075,6 +20083,8 @@ export interface operations {
                             tier?: "light" | "standard" | "deep";
                             /** @enum {string} */
                             tierBy?: "agent" | "jev" | "default";
+                            /** Format: date-time */
+                            awaitedUntil?: string;
                         };
                         requestKey: string;
                         input: string;
@@ -20347,6 +20357,8 @@ export interface operations {
                             tier?: "light" | "standard" | "deep";
                             /** @enum {string} */
                             tierBy?: "agent" | "jev" | "default";
+                            /** Format: date-time */
+                            awaitedUntil?: string;
                         };
                         requestKey: string;
                         input: string;
@@ -20609,6 +20621,8 @@ export interface operations {
                             tier?: "light" | "standard" | "deep";
                             /** @enum {string} */
                             tierBy?: "agent" | "jev" | "default";
+                            /** Format: date-time */
+                            awaitedUntil?: string;
                         };
                         requestKey: string;
                         input: string;
@@ -21419,6 +21433,8 @@ export interface operations {
                             tier?: "light" | "standard" | "deep";
                             /** @enum {string} */
                             tierBy?: "agent" | "jev" | "default";
+                            /** Format: date-time */
+                            awaitedUntil?: string;
                         };
                         requestKey: string;
                         input: string;
@@ -23447,6 +23463,8 @@ export interface operations {
                             tier?: "light" | "standard" | "deep";
                             /** @enum {string} */
                             tierBy?: "agent" | "jev" | "default";
+                            /** Format: date-time */
+                            awaitedUntil?: string;
                         };
                         requestKey: string;
                         input: string;
@@ -24584,6 +24602,8 @@ export interface operations {
                             tier?: "light" | "standard" | "deep";
                             /** @enum {string} */
                             tierBy?: "agent" | "jev" | "default";
+                            /** Format: date-time */
+                            awaitedUntil?: string;
                         };
                         requestKey: string;
                         input: string;
@@ -24845,6 +24865,8 @@ export interface operations {
                             tier?: "light" | "standard" | "deep";
                             /** @enum {string} */
                             tierBy?: "agent" | "jev" | "default";
+                            /** Format: date-time */
+                            awaitedUntil?: string;
                         };
                         requestKey: string;
                         input: string;
@@ -25106,6 +25128,8 @@ export interface operations {
                             tier?: "light" | "standard" | "deep";
                             /** @enum {string} */
                             tierBy?: "agent" | "jev" | "default";
+                            /** Format: date-time */
+                            awaitedUntil?: string;
                         };
                         requestKey: string;
                         input: string;

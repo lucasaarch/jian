@@ -21,6 +21,8 @@ export interface ContextSource {
       worktrees?: { create: boolean; machine: boolean; signals: boolean; files?: boolean };
       /** The gateway's estimate of the tool definitions the turn sends, unscaled. */
       toolTokens?: number;
+      /** The run has spawn_subagent, so it is told when delegating is worth it. */
+      delegates?: boolean;
     },
   ): Promise<{
     system: string;

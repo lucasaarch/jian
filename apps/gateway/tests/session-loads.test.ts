@@ -36,6 +36,7 @@ const BODY = 'Look things up in the catalog by their exact code.';
 async function conversation(
   skills = [{ name: 'lookup', description: 'Search the catalog', instructions: BODY }],
   model = { provider: 'openai', modelId: 'test' },
+  contextPolicy?: { inputTokens: number },
 ) {
   const services = await testServices();
   const profile = await services.profiles.createProfile({
@@ -43,6 +44,7 @@ async function conversation(
     instructions: 'Help.',
     model: { ...model, apiKeyEnv: 'JIAN_PROVIDER_TEST' },
     skills,
+    ...(contextPolicy ? { contextPolicy } : {}),
   });
   const session = await services.sessions.createSession(profile.id, { title: 'Loads' });
 
@@ -82,7 +84,12 @@ async function conversation(
 }
 
 it('keeps a loaded skill in the instructions, and never sends it twice', async () => {
-  const { services, profile, session, turn, system, rest } = await conversation();
+  // Room for two turns and their records: no summary takes the first one's.
+  const { services, profile, session, turn, system, rest } = await conversation(
+    undefined,
+    undefined,
+    { inputTokens: 64000 },
+  );
 
   const first = await turn('Find X-1', [
     calls({ id: 'skill-1', name: 'load_skill', input: { name: 'lookup' } }),

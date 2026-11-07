@@ -144,6 +144,12 @@ import { RunWorktrees, type WorktreeService, worktreeTools } from './worktree-to
  */
 const STALLED_AFTER_MS = 5 * 60_000;
 
+/**
+ * Tools whose call waits on work outside this run and changes nothing of its own: they run
+ * beside the step's other calls instead of in turn (see `toolQueue`).
+ */
+const WAITS_OUTSIDE = new Set(['spawn_subagent']);
+
 /** Failed summaries in a row after which a turn stops asking for one on its own. */
 const MAX_COMPACTION_FAILURES = 2;
 
@@ -976,6 +982,7 @@ export class AgentRuntime {
       const context = await this.services.contexts.context(run, skillServers, {
         ...project,
         toolTokens,
+        ...('spawn_subagent' in tools ? { delegates: true } : {}),
         ...(worktreeCan ? { worktrees: worktreeCan } : {}),
         ...(conversation.remoteMachineId ? { machine: { files: Boolean(machineFiles) } } : {}),
       });
@@ -1154,14 +1161,21 @@ export class AgentRuntime {
                 input: redactOutput(input, secrets),
               });
 
+              // A call that waits on work outside this run lets the step's next call start: the
+              // checks above ran in turn, and what it waits for touches nothing of this run's.
+              // The watchdog is fed meanwhile, as the wait has a limit of its own.
+              const waits = WAITS_OUTSIDE.has(name);
+              if (waits) release();
+              const feeding = waits
+                ? setInterval(alive, Math.min(30_000, stalledAfter / 4))
+                : undefined;
+
               try {
                 // Read per call: this run or another of its conversation may have changed them.
                 await worktrees?.scope.reload();
-                const raw = await withFolders(
-                  folders,
-                  () => execute(input, options),
-                  worktrees?.scope.guarded,
-                );
+                const raw = await Promise.resolve(
+                  withFolders(folders, () => execute(input, options), worktrees?.scope.guarded),
+                ).finally(() => clearInterval(feeding));
                 // A file write's diff is for the owner, not the agent: it goes to its own
                 // checkpoint, read by the timeline alone, and leaves the result before the
                 // result is bounded, so it can neither cost context nor push the result into an
@@ -1232,6 +1246,10 @@ export class AgentRuntime {
                 if (name === 'inspect_page' || name === 'browser_control') {
                   loadedTools.add('analyze_media');
                   loadedTools.add('save_attachment');
+                }
+                // A worker that is still going may need stopping; nothing else of tasks is asked.
+                if (name === 'spawn_subagent' && 'cancel_subagent' in tools) {
+                  loadedTools.add('cancel_subagent');
                 }
                 if (result && typeof result === 'object' && 'artifactId' in result) {
                   loadedTools.add('read_artifact');

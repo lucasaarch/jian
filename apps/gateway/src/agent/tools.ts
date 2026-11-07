@@ -108,7 +108,10 @@ export type ToolServices = {
   schedules?: Pick<Schedules, 'list' | 'create' | 'update' | 'remove'>;
   settings?: { timeZone(): Promise<string> };
   stats?: Pick<Stats, 'stats' | 'usageRuns'>;
-  work?: Pick<Work, 'spawnInConversation' | 'cancelInConversation' | 'focusInspector'>;
+  work?: Pick<
+    Work,
+    'spawnInConversation' | 'awaitReport' | 'cancelInConversation' | 'focusInspector'
+  >;
   sshKeys: Pick<SshKeys, 'list' | 'create' | 'remove' | 'sync'>;
   remote?: Pick<
     Remote,
@@ -147,6 +150,7 @@ export function skillFor(
     return longRunningWorkFor({
       create: Boolean(can.worktrees?.create),
       machine: Boolean(can.machine ?? can.worktrees?.machine),
+      subagent: Boolean(run.subagent),
     });
   }
   if (skill === remoteControl) return remoteControlFor(can.machine);
@@ -389,14 +393,29 @@ export function profileTools(
             },
           }),
           spawn_subagent: tool({
-            description: `Start a scoped subagent in this conversation for a focused assignment. Give it the objective and necessary context in the brief, and media IDs for needed images; it does not inherit this conversation. ${
+            description: `Hand an assignment to a subagent: a fresh agent with its own context, which reports back. Worth it for work whose intermediate output is not worth keeping here (a wide search, long logs, a test run, many files), independent pieces (calls in one step run in parallel) and a fresh-eyes review; not for a single lookup or a few files. The brief is all it knows: the objective, context, paths and the result you need; pass media IDs for needed images. ${
               remoteTarget
                 ? "It works on the gateway, not on this conversation's machine: its file tools and run_command are the gateway's, and it reaches the machine only through run_remote_command, so name the machine, the paths and the cwd in the brief."
-                : 'It works on the same files as you (same HOME and checkouts), which every agent of this installation shares.'
-            } The call returns when queued, and the result is delivered here when it finishes. Set tier to light, standard or deep for how much model the work needs, or leave it out to let Decisions pick from the brief; each tier runs on a model the installation offers, subscriptions first.`,
+                : 'It works on the same files as you.'
+            } The call waits and returns its report, for up to 15 minutes, after which the report arrives here later; wait false returns at once. Leave tier out to let Decisions pick light, standard or deep.`,
             inputSchema: conversationSubagentInputSchema,
-            execute: async (input, options) =>
-              services.work?.spawnInConversation(run, input, options.toolCallId),
+            execute: async (input, options) => {
+              const work = services.work;
+              if (!work) throw new GatewayError(409, 'Subagents are unavailable');
+              // Parsed again: a call the model made arrives with its defaults, one replayed after
+              // an approval or from a test without them, and `wait` must mean the same in both.
+              const { wait } = conversationSubagentInputSchema.parse(input);
+              const child = await work.spawnInConversation(run, input, options.toolCallId, wait);
+              // The brief is the agent's own words: echoing it back would only cost its context.
+              const { input: _brief, sessionId: _session, ...started } = child;
+              if (!wait) {
+                return {
+                  ...started,
+                  note: 'Its report will arrive in this conversation when it finishes.',
+                };
+              }
+              return work.awaitReport(run, child.runId, options.abortSignal);
+            },
           }),
         }
       : {}),
@@ -920,9 +939,8 @@ export const TOOL_GROUPS = {
   },
   tasks: {
     summary:
-      "delegate subagents, show a subagent, pull request or issue in the owner's Inspector, inspect checkpoints and output, manage resource leases, or compact context",
+      "stop a subagent, show a subagent, pull request or issue in the owner's Inspector, inspect checkpoints and stored output, manage resource leases, or compact context",
     tools: [
-      'spawn_subagent',
       'cancel_subagent',
       'open_in_inspector',
       'read_run_checkpoints',

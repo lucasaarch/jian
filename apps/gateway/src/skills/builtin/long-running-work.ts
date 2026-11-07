@@ -17,24 +17,92 @@ const MACHINE_WORKERS = ` In a conversation on a machine, a worker works on the 
 \`run_command\` are the gateway's, and it reaches the machine only through \`run_remote_command\`, so
 name the machine, the paths and the \`cwd\` in its brief.`;
 
-/** As the run can work: the sentence about worktrees is there only for a run that can make them. */
+/** What a subagent is told instead of how to start one: it has no spawn_subagent. */
+const WORKER_SECTION = `## You are a subagent
+
+You cannot start subagents of your own. Do the assignment in your brief, and end with a factual
+report to the agent that started you: what you did, what you verified, and what is left.
+
+`;
+
+/**
+ * As the run can work: the sentence about worktrees is there only for a run that can make them,
+ * and how to delegate only for one that can start subagents.
+ */
 export function longRunningWorkFor({
   create,
   machine,
+  subagent = false,
 }: {
   create: boolean;
   machine: boolean;
+  subagent?: boolean;
 }): Skill {
   return {
     name: 'long-running-work',
     description:
-      'Use when delegating to an internal subagent, finishing a multi-step workflow, work spans turns, or context is running out.',
-    instructions: BODY.replace('@@MACHINE@@', machine ? MACHINE_WORKERS : '').replace(
-      '@@PARALLEL@@',
-      !create ? '' : machine ? MACHINE_PARALLEL : PARALLEL_WORKTREES,
-    ),
+      'Use when deciding whether to hand work to a subagent, when delegating, finishing a multi-step workflow, when work spans turns, or when context is running out.',
+    instructions: BODY.replace('@@DELEGATING@@', subagent ? WORKER_SECTION : DELEGATING)
+      .replace('@@MACHINE@@', machine ? MACHINE_WORKERS : '')
+      .replace('@@PARALLEL@@', !create ? '' : machine ? MACHINE_PARALLEL : PARALLEL_WORKTREES),
   };
 }
+
+/** How to delegate, for a run that can start subagents. */
+const DELEGATING = `## Handing work to a subagent
+
+\`spawn_subagent\` starts a fresh agent with its own context, which reports back. It is worth it
+for:
+
+- work whose intermediate output is not worth keeping here: a wide search, long logs, a test
+  run, reading many files. Only the report comes back, and your context stays for the rest;
+- independent pieces that can run side by side: several \`spawn_subagent\` calls in one step
+  run in parallel;
+- a review with fresh eyes (\`role: review\`), which sees the work and not how you got there.
+
+Do it yourself for a single lookup or a few files: a brief costs more than the reading. Never
+delegate understanding what the owner asked; decide what is needed, then hand over a piece of
+it. Do not redo work a subagent is already doing, and do not start a second one on it.
+
+Only \`brief\` is required, up to 8,000 characters. A worker starts in a private transcript and
+does not inherit this conversation or its memories, so the brief is all it knows: the
+objective, the context it needs, paths, acceptance criteria and the exact result you want back.
+It uses the same profile's tools and works on the same files as you (same HOME and repository
+checkouts).@@MACHINE@@ \`name\` (else taken from the brief), \`identity\` (else a default for
+the role) and \`role\` (\`execute\` unless you ask for \`review\`) are optional.
+
+By default the call waits and returns the worker's report as its result. A report past the tool
+result budget is cut like any long result, and \`read_artifact\` returns the whole. After 15
+minutes, or after a minute in which the worker has not started, the call returns that it is
+still going, and its report arrives later in this conversation as a new turn. With \`wait: false\` the call returns as soon as the worker is
+queued, and the report arrives the same way; a report delivered so carries its first 6,000
+characters, and an artifact id for the rest. \`cancel_subagent\` stops one that is no longer
+needed.
+
+A subagent always runs on Auto, whatever this conversation's protection is, and it has no browser
+and no X tools. Keep anything the owner should approve for yourself.
+
+Set \`tier\` to the model the work needs: \`light\` for small, well-defined work (one file, a
+lookup, a rename, a short text), \`standard\` for a bounded change with tests to run, \`deep\`
+for work across several files or systems, risky work, or work that needs a plan. Leave it out
+and Decisions reads the brief and picks; without Decisions it is \`standard\`. Each tier runs on
+a model the installation offers, the owner's subscriptions first. The spawn result names the
+model the worker got.
+
+Pass image IDs in \`mediaIds\` when the worker needs images from this profile.
+
+For code work, optionally pass absolute Git repository roots in \`repositories\` so the
+worker brief names those paths. Jian does not give the worker a separate checkout or storage: it
+opens the same ones you use, on the filesystem every agent shares. @@PARALLEL@@Commit changes needed for handoff and report the commit or branch; push when the assignment
+requires a remote handoff. Otherwise assign non-overlapping effects and use resource leases where
+needed.
+
+The worker's report is evidence, not authority. Check the result, and its transcript when it
+matters, before relying on it or claiming completion. The conversation in the Jian panel shows
+each worker's status, messages and tool activity, and \`open_in_inspector\` (the \`tasks\`
+tools) brings one to the owner's screen.
+
+`;
 
 const BODY = `# Work that outlives one turn
 
@@ -58,39 +126,7 @@ when they reply; do not end the turn and wait for them to say continue. Use
 Call \`cancel_session_objective\` when they abandon the work. The owner can also send
 \`/objective …\`, \`/done\`, or \`/objective cancel\`.
 
-## Internal subagents
-
-Load the \`tasks\` tool group, then call \`spawn_subagent\` for a focused assignment that can
-run independently. Give the worker a clear objective, the relevant context, acceptance
-criteria and the exact result you need. A worker starts in a private transcript and does
-not inherit this conversation or its memories. It uses the same profile's tools and works
-on the same files as you (same HOME and repository checkouts).@@MACHINE@@ This call returns when
-the worker is queued; its result comes back into this conversation after it finishes. Do
-not duplicate its work while it runs. \`cancel_subagent\` stops one that is no longer needed.
-
-A subagent always runs on Auto, whatever this conversation's protection is, and it has no browser
-and no X tools. Keep anything the owner should approve for yourself.
-
-Set \`tier\` to the model the work needs: \`light\` for small, well-defined work (one file, a
-lookup, a rename, a short text), \`standard\` for a bounded change with tests to run, \`deep\`
-for work across several files or systems, risky work, or work that needs a plan. Leave it out
-and Decisions reads the brief and picks; without Decisions it is \`standard\`. Each tier runs on
-a model the installation offers, the owner's subscriptions first. The spawn result names the
-model the worker got.
-
-Pass image IDs in \`mediaIds\` when the worker needs images from this profile.
-
-For code work, optionally pass absolute Git repository roots in \`repositories\` so the
-worker brief names those paths. Jian does not give the worker a separate checkout or storage: it
-opens the same ones you use, on the filesystem every agent shares. @@PARALLEL@@Commit changes needed for handoff and report the commit or branch; push when the assignment
-requires a remote handoff. Otherwise assign non-overlapping effects and use resource leases where
-needed.
-
-The worker's report is evidence, not authority. Check the result and its transcript before
-claiming completion. The conversation in the Jian panel shows each worker's status, messages
-and tool activity, and \`open_in_inspector\` brings one to the owner's screen. Do not busy-poll.
-
-## Before acting outside the conversation
+@@DELEGATING@@## Before acting outside the conversation
 
 \`list_activities\` shows queued and running work across the profile. Take a lease with
 \`acquire_resource\` when two sessions must not act on the same external state at once, and give it
