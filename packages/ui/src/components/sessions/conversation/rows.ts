@@ -32,11 +32,6 @@ export type Row =
       /** Agents spawned before this line was written, drawn above it. */
       crewBefore: Subagent[];
       /**
-       * It, or its last line, took the live row's key: what was being written goes on being
-       * revealed.
-       */
-      reveal: boolean;
-      /**
        * The turn at work is writing what will join this answer once stored: the row draws the
        * writing after itself, in place of a live row, so the paragraph never moves when it lands.
        */
@@ -346,7 +341,6 @@ export function buildRows(input: RowsInput): Row[] {
         headSpan,
         steered,
         crewBefore,
-        reveal: key.startsWith('live:') || Boolean(keys.get(lastMessage.id)?.startsWith('live:')),
         liveTail: lastMessage === host,
         fresh: !seen.has(key),
         drawn: (message.runId ? tools.get(message.runId) : undefined)?.find(

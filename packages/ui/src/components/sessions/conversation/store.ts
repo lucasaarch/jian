@@ -40,7 +40,15 @@ export type ConversationState = {
    * What the turn at work is saying now. The only field a text update changes: what draws it
    * is all that redraws as an answer is written.
    */
-  live?: { runId: string; progress: RunProgress };
+  live?: {
+    runId: string;
+    progress: RunProgress;
+    /**
+     * Its words were just handed to the answer they became, and nothing newer was told since:
+     * the turn has nothing of its own to show until the stream speaks again.
+     */
+    handed?: true;
+  };
   subagents: Subagent[];
   people: Map<string, Person>;
   /** Turns whose tools were read after they ended, here and the other agent's: final. */
@@ -307,7 +315,7 @@ function handover(state: ConversationState, messages: Message[]): Partial<Conver
   if (!answer || !live.progress.text) return {};
 
   return {
-    live: { ...live, progress: { ...live.progress, text: '' } },
+    live: { runId: live.runId, progress: { ...live.progress, text: '' }, handed: true },
     keys: new Map(state.keys).set(answer.id, `live:${state.liveSerial}`),
     liveSerial: state.liveSerial + 1,
   };

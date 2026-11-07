@@ -3,8 +3,6 @@
 import type { ReactNode } from 'react';
 import { AgentFace } from '../../../kit';
 import type { Profile } from '../../../lib/api';
-import { Markdown } from '../../ui/markdown';
-import { useSmoothText } from './use-smooth-text';
 
 /** Live and stored messages keep the same author header and text origin. */
 export function ChatSpeaker({ agent }: { agent?: Pick<Profile, 'name' | 'avatar'> }) {
@@ -59,17 +57,5 @@ export function AgentLine({
       {children}
       {reactions}
     </article>
-  );
-}
-
-/** The agent's Markdown, revealed at a steady pace while `reveal` is on. */
-export function AgentText({ text, reveal = false }: { text: string; reveal?: boolean }) {
-  const shown = useSmoothText(text, reveal);
-  const streaming = shown.length < text.length;
-
-  return (
-    <div className={`chat-text markdown${streaming ? ' streaming' : ''}`}>
-      <Markdown text={shown} breaks streaming={streaming} />
-    </div>
   );
 }

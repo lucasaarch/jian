@@ -126,9 +126,10 @@ describe('the conversation store', () => {
     store.getState().progress('run-1', writing('Hello'));
     store.getState().runRead(turn('run-1', 'running', writing('Hello')));
 
-    expect(store.getState().live?.progress.text).toBe('');
+    expect(store.getState().live).toMatchObject({ progress: { text: '' }, handed: true });
     store.getState().progress('run-1', writing('Next', '2026-11-07T10:00:06.000Z'));
     expect(store.getState().live?.progress.text).toBe('Next');
+    expect(store.getState().live?.handed).toBeUndefined();
   });
 
   it('keeps the objects of messages a read brought back unchanged', () => {

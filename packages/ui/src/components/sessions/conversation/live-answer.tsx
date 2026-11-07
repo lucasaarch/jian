@@ -5,6 +5,7 @@ import { useRef } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import type { Run, ToolStep } from '../../../lib/api';
 import { Markdown } from '../../ui/markdown';
+import { cleanText } from '../message';
 import { LiveThought } from '../progress';
 import { type ConversationState, useConversation } from './store';
 import { answers, turnOf } from './turns';
@@ -23,33 +24,46 @@ function progressOf(state: ConversationState, runId: string | undefined, side: S
   return state.live?.runId === runId ? state.live.progress : undefined;
 }
 
+/** Whether a turn's answer already holds these words, cleaned as `said` is. */
+const stored = (state: ConversationState, runId: string | undefined, text: string) =>
+  state.messages.some(
+    (message) =>
+      answers(message) && turnOf(message) === runId && cleanText(message.content) === text,
+  );
+
 /**
  * The text a turn is writing, as it should show: none while a tool runs, and none once it is a
  * stored message of that turn. A message can be read before the progress that wrote it is
- * cleared, and the same words must not show twice.
+ * cleared, and the same words must not show twice. Cleaned as a stored answer is, so the text
+ * revealed so far is always the start of the answer it becomes: a trailing break kept on one
+ * side only would make the answer restart from blank as it lands.
  */
 function writtenOf(state: ConversationState, runId: string | undefined, side: Side) {
   const progress = progressOf(state, runId, side);
   if (!progress?.text || progress.phase === 'tool') return '';
-  const text = progress.text.trim();
-  const stored = state.messages.some(
-    (message) => answers(message) && turnOf(message) === runId && message.content.trim() === text,
-  );
-  return stored ? '' : progress.text;
+  const text = cleanText(progress.text);
+  return stored(state, runId, text) ? '' : text;
 }
 
 /**
- * A turn whose words were all handed to the answer they became, with nothing new since: its live
- * row has nothing to say. Drawing it would flash a working line under an answer that just ended.
+ * A turn with nothing of its own to show: its words were just handed to the answer they became
+ * and the stream has said nothing since, or what it is writing is already a stored answer.
+ * Drawing it would flash a working line under an answer that just ended. Anything newer, such
+ * as a paragraph released while a tool's input is written, shows the working line again.
  */
-export const spentOf = (state: ConversationState, runId: string | undefined, side: Side) =>
-  progressOf(state, runId, side)?.phase === 'writing' && !writtenOf(state, runId, side);
+export function spentOf(state: ConversationState, runId: string | undefined, side: Side) {
+  const progress = progressOf(state, runId, side);
+  if (!progress) return false;
+  if (side === 'self' && state.live?.handed) return true;
+  const text = progress.phase === 'tool' ? '' : cleanText(progress.text);
+  return Boolean(text) && stored(state, runId, text);
+}
 
 /**
  * An answer's text, with what its turn is writing now after it. The same element draws the text
  * as it streams and once it is stored, so the reveal goes on from where it was when the answer
- * lands: what was on screen whole when it was first drawn shows at once, and only what came
- * after is revealed. Only this redraws as the text grows.
+ * lands. Only text this element showed live is revealed: a stored answer, or a line that joined
+ * it without being written here, draws whole. Only this redraws as the text grows.
  */
 export function LiveAnswer({
   said = '',
@@ -64,9 +78,13 @@ export function LiveAnswer({
 }) {
   const live = useConversation((state) => writtenOf(state, runId, side));
   const text = live && said ? `${said}\n\n${live}` : live || said;
-  // A stored answer that changed into something else, rather than grew, shows whole at once.
+  // Whether this element has shown text as it was written, since it was drawn.
+  const lived = useRef(false);
+  if (live) lived.current = true;
+  // What shows whole. Until something is written here, all of it; after, what stood before the
+  // writing began, unless the answer changed into something else rather than grew.
   const settled = useRef(said);
-  if (!text.startsWith(settled.current)) settled.current = text;
+  if (!lived.current || !text.startsWith(settled.current)) settled.current = text;
   const tail = text.slice(settled.current.length);
   const revealed = useSmoothText(tail, true);
   const shown = settled.current + revealed;

@@ -6,6 +6,8 @@ import type { GatewayApi, Run } from '../../lib/api';
 
 vi.mock('sonner', () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
 
+import { QueryClientProvider } from '@tanstack/react-query';
+import { createQueryClient } from '../../lib/query/client';
 import { sendNow, useOutbox } from '../../lib/stores/outbox';
 import { useReconnect } from '../../lib/stores/reconnect';
 import { CrewDrawer } from './crew-drawer';
@@ -269,6 +271,216 @@ it('opens with the latest 40 and reads 40 more near the top', async () => {
     expect(said().indexOf('Said m59.')).toBeLessThan(said().indexOf('Said m60.'));
   } finally {
     await view.done();
+  }
+});
+
+/** Motion on, with frames on the fake clock, so a reveal can be watched step by step. */
+const movingFrames = () => {
+  vi.useFakeTimers();
+  vi.stubGlobal('requestAnimationFrame', (run: (now: number) => void) =>
+    setTimeout(() => run(performance.now()), 16),
+  );
+  vi.stubGlobal('cancelAnimationFrame', (id: number) => clearTimeout(id));
+  vi.stubGlobal('matchMedia', () => ({
+    matches: false,
+    addEventListener: () => {},
+    removeEventListener: () => {},
+  }));
+};
+
+it('keeps the working line while the agent writes a tool after a released paragraph', async () => {
+  stillMotion();
+  const runId = '1d2e3f40-5a6b-4c7d-8e9f-a0b1c2d3e4f5';
+  const sessionId = '2e3f4051-6b7c-4d8e-9fa0-b1c2d3e4f5a6';
+  const at = '2026-11-07T10:00:00.000Z';
+  const working = {
+    id: runId,
+    profileId: 'profile',
+    sessionId,
+    status: 'running',
+    createdAt: at,
+    updatedAt: at,
+    progress: {
+      phase: 'writing',
+      text: 'First paragraph.',
+      steps: 0,
+      updatedAt: '2026-11-07T10:00:02.000Z',
+    },
+  } as Run;
+  const said = (id: string, role: 'user' | 'assistant', content: string) => ({
+    id,
+    profileId: 'profile',
+    sessionId,
+    runId,
+    role,
+    content,
+    createdAt: at,
+  });
+  const api = {
+    messages: async () => [
+      said('request', 'user', 'Write the report'),
+      said('paragraph', 'assistant', 'First paragraph.'),
+    ],
+    activities: async () => [working],
+    timeline: async () => [],
+  };
+  const view = await mount(
+    <History api={api} profileId="profile" sessionId={sessionId} initialRun={working} />,
+  );
+  const workingLine = () => view.element.querySelector('.thought-line[data-working]');
+
+  try {
+    // The paragraph was just handed to the stored answer: nothing new to show under it yet.
+    expect(workingLine()).toBeNull();
+
+    // Released, the stream goes on writing a tool's input, with no text of its own.
+    await act(async () =>
+      hear?.({
+        type: 'run.progress',
+        data: {
+          runId,
+          sessionId,
+          at: '2026-11-07T10:00:03.000Z',
+          progress: { phase: 'writing', text: '', steps: 0, updatedAt: '2026-11-07T10:00:03.000Z' },
+        },
+      }),
+    );
+
+    expect(workingLine()).not.toBeNull();
+    expect(view.element.querySelectorAll('.chat-text')).toHaveLength(2);
+  } finally {
+    await view.done();
+  }
+});
+
+it('the answer never retypes when it lands after text that ended in a break', async () => {
+  movingFrames();
+  let stored = false;
+  const at = '2026-11-07T10:00:00Z';
+  const working = {
+    id: 'break-run',
+    profileId: 'profile',
+    sessionId: 'session',
+    status: 'running',
+    createdAt: at,
+    updatedAt: at,
+    progress: {
+      phase: 'writing',
+      text: 'Hello there.\n\n',
+      steps: 0,
+      updatedAt: '2026-11-07T10:00:02.000Z',
+    },
+  } as Run;
+  const said = (id: string, role: 'user' | 'assistant', content: string) => ({
+    id,
+    profileId: 'profile',
+    sessionId: 'session',
+    runId: 'break-run',
+    role,
+    content,
+    createdAt: at,
+  });
+  const api = {
+    messages: async () => [
+      said('request', 'user', 'Say hello'),
+      ...(stored ? [said('answer', 'assistant', 'Hello there.')] : []),
+    ],
+    activities: async () => [working],
+    timeline: async () => [],
+  };
+  const view = await mount(
+    <History api={api} profileId="profile" sessionId="session" initialRun={working} />,
+  );
+  const answer = () => view.element.querySelector('.chat-line.theirs');
+  const lengths: number[] = [];
+  const watch = async (ms: number) => {
+    for (let waited = 0; waited < ms; waited += 16) {
+      await act(async () => vi.advanceTimersByTimeAsync(16));
+      lengths.push(answer()?.querySelector('.chat-text')?.textContent?.length ?? 0);
+    }
+  };
+
+  try {
+    await watch(80);
+    const live = answer();
+    expect(live?.textContent).toContain('Hel');
+    await watch(600);
+
+    stored = true;
+    await view.show(
+      <History
+        api={api}
+        profileId="profile"
+        sessionId="session"
+        initialRun={working}
+        revision={1}
+      />,
+    );
+    await watch(600);
+
+    expect(lengths.every((length, at) => at === 0 || length >= (lengths[at - 1] ?? 0))).toBe(true);
+    expect(answer()).toBe(live);
+    expect(answer()?.querySelector('.chat-text')?.textContent).toBe('Hello there.');
+  } finally {
+    await view.done();
+    vi.useRealTimers();
+  }
+});
+
+it('animates nothing on open from a kept conversation, even when the first read brings newer lines', async () => {
+  movingFrames();
+  const line = (id: string, runId: string, role: 'user' | 'assistant', content: string) => ({
+    id,
+    profileId: 'profile',
+    sessionId: 'session',
+    runId,
+    role,
+    content,
+    createdAt: '2026-11-07T10:00:00Z',
+  });
+  const kept = [
+    line('ask', 'run-1', 'user', 'Plan the trip'),
+    line('one', 'run-1', 'assistant', 'One.'),
+  ];
+  let read = [
+    ...kept,
+    // A line that joined the kept answer while the owner was away, and a whole new turn.
+    line('two', 'run-1', 'assistant', 'Two.'),
+    line('again', 'run-2', 'user', 'And then?'),
+    line('sure', 'run-2', 'assistant', 'Sure.'),
+  ];
+  const client = createQueryClient({ kept: true });
+  client.setQueryData(['history', 'profile', 'session'], {
+    messages: kept,
+    tools: [],
+    asks: [],
+    callTools: [],
+    subagents: [],
+    people: [],
+  });
+  const api = { messages: async () => read, activities: async () => [], timeline: async () => [] };
+  const page = (revision: number) => (
+    <QueryClientProvider client={client}>
+      <History api={api} profileId="profile" sessionId="session" revision={revision} />
+    </QueryClientProvider>
+  );
+  const view = await mount(page(0));
+
+  try {
+    await act(async () => vi.advanceTimersByTimeAsync(16));
+    const text = view.element.querySelector('.message-list')?.textContent ?? '';
+    expect(text).toContain('Two.');
+    expect(text).toContain('Sure.');
+    expect(view.element.querySelector('[data-fresh]')).toBeNull();
+    expect(view.element.querySelector('.streaming')).toBeNull();
+
+    // Once open, what arrives is news, and enters.
+    read = [...read, line('later', 'run-3', 'user', 'One more thing')];
+    await view.show(page(1));
+    expect(view.element.querySelector('[data-fresh]')?.textContent).toContain('One more thing');
+  } finally {
+    await view.done();
+    vi.useRealTimers();
   }
 });
 

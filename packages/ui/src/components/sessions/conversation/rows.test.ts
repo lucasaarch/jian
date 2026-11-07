@@ -546,7 +546,7 @@ describe('the conversation rows', () => {
     ]);
   });
 
-  it('a message that inherited the live key reveals', () => {
+  it('a message that inherited the live key keeps it, and does not enter again', () => {
     const store = createConversationStore();
     const request = said('request', 'run-1', 'user', 'Hi', '2026-10-01T10:00:00Z');
     store.getState().pageRead([request], false);
@@ -570,9 +570,9 @@ describe('the conversation rows', () => {
     store.getState().runRead(turn('run-1', 'completed', '2026-10-01T10:00:00Z'));
     const rows = buildRows(fromStore(store.getState(), seen));
 
-    expect(only(rows, 'message').map((row) => [row.key, row.reveal, row.fresh])).toEqual([
-      ['request', false, false],
-      ['live:0', true, false],
+    expect(only(rows, 'message').map((row) => [row.key, row.fresh])).toEqual([
+      ['request', false],
+      ['live:0', false],
     ]);
   });
 
@@ -679,8 +679,8 @@ describe('the conversation rows', () => {
       );
     const landed = buildRows(fromStore(store.getState(), new Set(writing.map((row) => row.key))));
     const [, answer] = only(landed, 'message');
-    // The same row, now holding the line that was being written, revealing it from where it was.
-    expect(answer).toMatchObject({ key: 'first', reveal: true, fresh: false, liveTail: false });
+    // The same row, now holding the line that was being written.
+    expect(answer).toMatchObject({ key: 'first', fresh: false, liveTail: false });
     expect(answer?.lastMessage.id).toBe('next');
   });
 
@@ -708,20 +708,5 @@ describe('the conversation rows', () => {
 
     expect(layout(rows)).toEqual(['message request', 'message first', 'live look']);
     expect(only(rows, 'message').some((row) => row.liveTail)).toBe(false);
-  });
-
-  it('reveals a grouped answer whose last line took the live key', () => {
-    const rows = buildRows(
-      input({
-        run: turn('run-1', 'completed', '2026-10-01T10:00:00Z'),
-        messages: [
-          said('first', 'run-1', 'assistant', 'One.', '2026-10-01T10:00:01Z'),
-          said('second', 'run-1', 'assistant', 'Two.', '2026-10-01T10:00:02Z'),
-        ],
-        keys: new Map([['second', 'live:3']]),
-      }),
-    );
-
-    expect(only(rows, 'message').map((row) => [row.key, row.reveal])).toEqual([['first', true]]);
   });
 });

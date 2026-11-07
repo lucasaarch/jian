@@ -92,13 +92,17 @@ export function History({
   const reloads = useReconnect((state) => state.chat);
   const store = useConversationStore(profileId, sessionId, initialRun);
   const [retry, setRetry] = useState(0);
-  const reader = useReader(
+  const { reader, opened } = useReader(
     store,
     { api, profileId, sessionId, group },
     { revision, retry, reloads },
   );
   useLanding(store, sessionId);
-  const { rows, messages, asks, tools, run, subagents, loading } = useRows(store, sessionId);
+  const { rows, messages, asks, tools, run, subagents, loading } = useRows(
+    store,
+    sessionId,
+    opened,
+  );
   const { error, behind, toolsUnread } = useStore(
     store,
     useShallow(({ error, behind, toolsUnread }) => ({ error, behind, toolsUnread })),

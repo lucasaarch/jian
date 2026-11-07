@@ -47,6 +47,8 @@ export function useConversationStore(profileId: string, sessionId: string, initi
 /**
  * The reader of the conversation and the stream it follows, for as long as it is on screen.
  * The first read starts with it; a change of `revision`, `retry` or `reloads` reads again.
+ * `opened` turns on once that first read is over, whatever it found: until then, everything it
+ * brings is part of opening the conversation, not news.
  */
 export function useReader(
   store: ConversationStore,
@@ -59,6 +61,7 @@ export function useReader(
   const reloaded = useRef(reloads);
   reloaded.current = reloads;
   const reader = useRef<Reader>(undefined);
+  const [opened, setOpened] = useState(false);
 
   useEffect(() => {
     const read = createReader({
@@ -71,8 +74,12 @@ export function useReader(
     });
     reader.current = read;
     const unfollow = followConversation({ store, reader: read, sessionId });
-    void read.latest();
+    let gone = false;
+    void read.latest().then(() => {
+      if (!gone) setOpened(true);
+    });
     return () => {
+      gone = true;
       unfollow();
       read.stop();
     };
@@ -87,7 +94,7 @@ export function useReader(
     }
   }, [revision, retry, reloads]);
 
-  return reader;
+  return { reader, opened };
 }
 
 /**
@@ -159,7 +166,7 @@ const pick = (state: ConversationState) => ({
 
 /** Whether the turn at work has text under way, never the text, so text builds no rows. */
 const writingOf = ({ live, run }: ConversationState) =>
-  Boolean(live?.progress.text) &&
+  Boolean(live?.progress.text.trim()) &&
   live?.progress.phase !== 'tool' &&
   live?.runId === run?.id &&
   running(run);
@@ -168,21 +175,20 @@ const still = (row: Row): Row => ('fresh' in row && row.fresh ? { ...row, fresh:
 
 /**
  * The rows to draw, built again only when what they show changed. A row is fresh only when it is
- * new to the conversation: nothing animates as it opens, and an earlier page is not new.
+ * new to the conversation: nothing animates as it opens, kept or read, and an earlier page is
+ * not new. `opened` says the first read is over.
  */
-export function useRows(store: ConversationStore, sessionId: string) {
+export function useRows(store: ConversationStore, sessionId: string, opened: boolean) {
   const state = useStore(store, useShallow(pick));
   const writing = useStore(store, writingOf);
   const outgoing = useOutbox((outbox) => outbox.items);
   const seen = useRef(new Set<string>());
-  const opened = useRef(false);
   const oldest = useRef<string>(undefined);
   // Another conversation in the same view opens as this one did, with nothing seen yet.
   const owner = useRef(store);
   if (owner.current !== store) {
     owner.current = store;
     seen.current = new Set();
-    opened.current = false;
     oldest.current = undefined;
   }
 
@@ -197,12 +203,11 @@ export function useRows(store: ConversationStore, sessionId: string) {
       }
     }
     const built = buildRows({ ...state, outgoing, sessionId, seen: seen.current, writing });
-    return opened.current ? built : built.map(still);
-  }, [state, outgoing, sessionId, writing]);
+    return opened ? built : built.map(still);
+  }, [state, outgoing, sessionId, writing, opened]);
 
   useEffect(() => {
     if (state.loading) return;
-    opened.current = true;
     oldest.current = state.messages[0]?.id;
     for (const row of rows) seen.current.add(row.key);
   }, [rows, state]);

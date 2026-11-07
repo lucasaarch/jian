@@ -5,8 +5,8 @@ import type { ReactNode } from 'react';
 import type { Message, Person, Profile } from '../../lib/api';
 import type { Outgoing } from '../../lib/stores/outbox';
 import { Face } from '../ui';
-import { MarkdownLink } from '../ui/markdown';
-import { AgentLine, AgentText, ChatSpeaker } from './conversation/agent-line';
+import { Markdown, MarkdownLink } from '../ui/markdown';
+import { AgentLine, ChatSpeaker } from './conversation/agent-line';
 import { MessageActions, MessageReactions } from './message-actions';
 
 const GITHUB_LINK =
@@ -264,7 +264,6 @@ export function ChatMessage({
   before,
   children,
   agent,
-  reveal = false,
   onReply,
   onReact,
 }: {
@@ -276,8 +275,6 @@ export function ChatMessage({
   before?: ReactNode;
   children?: ReactNode;
   agent?: Pick<Profile, 'name' | 'avatar'>;
-  /** The agent's text goes on appearing at a steady pace instead of all at once. */
-  reveal?: boolean;
   onReply?: () => void;
   onReact?: (emoji: string | null) => Promise<unknown>;
 }) {
@@ -307,7 +304,13 @@ export function ChatMessage({
       }
       before={before}
       // The agent writes Markdown; what people send is shown as they typed it.
-      text={text ? <AgentText text={text} reveal={reveal} /> : null}
+      text={
+        text ? (
+          <div className="chat-text markdown">
+            <Markdown text={text} breaks />
+          </div>
+        ) : null
+      }
       reactions={<MessageReactions message={message} agentName={agent?.name} />}
     >
       {children}
