@@ -235,8 +235,9 @@ it('reads earlier messages and their tools when the first page is full', async (
   const timeline = vi.fn(async (_profile: string, _session: string, runs?: string[]) =>
     (runs ?? []).includes('run-3') ? [{ runId: 'run-3', steps: [step('old-tool', 3)] }] : [],
   );
-  const messages = vi.fn(async (_profile: string, _session: string, before?: string) =>
-    before ? page(0, 50) : page(50, 150),
+  const messages = vi.fn(
+    async (_profile: string, _session: string, at?: { before?: string; limit?: number }) =>
+      at?.before ? page(0, 50) : page(50, 150),
   );
 
   await show({ messages, activities: async () => [], timeline });
@@ -250,7 +251,7 @@ it('reads earlier messages and their tools when the first page is full', async (
     await new Promise((resolve) => setTimeout(resolve, 0));
   });
 
-  expect(messages.mock.calls.at(-1)?.[2]).toBe('m50');
+  expect(messages.mock.calls.at(-1)?.[2]).toEqual({ before: 'm50' });
   const text = element.textContent ?? '';
   expect(text).toContain('Said m0.');
   expect(text.indexOf('Said m49.')).toBeLessThan(text.indexOf('Said m50.'));
@@ -272,8 +273,12 @@ it('offers nothing earlier when the conversation fits in one page', async () => 
 it('says when earlier messages could not be read, and lets the owner try again', async () => {
   let failing = true;
   await show({
-    messages: async (_profile: string, _session: string, before?: string) => {
-      if (!before) return page(50, 150);
+    messages: async (
+      _profile: string,
+      _session: string,
+      at?: { before?: string; limit?: number },
+    ) => {
+      if (!at?.before) return page(50, 150);
       if (failing) throw new Error('offline');
       return page(0, 50);
     },
