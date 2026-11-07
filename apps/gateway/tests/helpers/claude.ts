@@ -5,6 +5,8 @@ export type ClaudeReply = { tool: string; input?: unknown } | { text: string } |
 
 /** The parts of a Messages API request these tests read. */
 export type ClaudeRequest = {
+  /** The `anthropic-beta` header it was sent with, recorded by the fake. */
+  beta?: string;
   stream?: boolean;
   tools?: Array<{ name: string; defer_loading?: boolean; cache_control?: unknown }>;
   messages: Array<{
@@ -16,6 +18,7 @@ export type ClaudeRequest = {
           tool_use_id?: string;
           id?: string;
           cache_control?: unknown;
+          tool?: { type?: string; name?: string };
           is_error?: boolean;
           content?: string | Array<{ type: string; tool_name?: string; text?: string }>;
         }>;
@@ -38,6 +41,7 @@ export function fakeClaude(
   const requests: ClaudeRequest[] = [];
   const fetch = async (_url: RequestInfo | URL, init?: RequestInit) => {
     const request = JSON.parse(String(init?.body)) as ClaudeRequest;
+    request.beta = new Headers(init?.headers).get('anthropic-beta') ?? undefined;
     requests.push(request);
     const answer = reply(request, requests.length - 1);
     if ('refuse' in answer) {
@@ -137,3 +141,13 @@ export const resultOf = (request: ClaudeRequest | undefined, toolUseId: string) 
   (request?.messages ?? [])
     .flatMap((message) => (typeof message.content === 'string' ? [] : message.content))
     .find((part) => part.type === 'tool_result' && part.tool_use_id === toolUseId);
+
+/** The tools a request adds mid-conversation, by system message, in order. */
+export const addedIn = (request: ClaudeRequest | undefined) =>
+  (request?.messages ?? []).flatMap((message) =>
+    message.role === 'system' && typeof message.content !== 'string'
+      ? message.content.flatMap((block) =>
+          block.type === 'tool_addition' && block.tool?.name ? [block.tool.name] : [],
+        )
+      : [],
+  );

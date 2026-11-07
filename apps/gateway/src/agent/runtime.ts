@@ -73,12 +73,15 @@ import {
 import { compactNote, isCompactCommand, withoutCompactCommands } from './compact-command.js';
 import { withDeferralFallback } from './deferred-fallback.js';
 import {
-  carriedLoads,
+  additionsOf,
+  carriesTools,
   defersTools,
   MAX_DEFERRED,
   markDeferred,
   referencedTools,
   referencing,
+  toolAdditions,
+  withoutAdditions,
   withoutDeferral,
 } from './deferred-tools.js';
 import { splitDiff } from './diff.js';
@@ -114,7 +117,6 @@ import { reason, toolFailure } from './tool-failure.js';
 import {
   deferTools,
   groupMates,
-  groupsOf,
   MACHINE_FILES_SUMMARY,
   profileTools,
   skillFor,
@@ -964,9 +966,11 @@ export class AgentRuntime {
           : (!gated.has(name) && (!minimal || minimal.has(name))) || loadedTools.has(name);
       // On Claude a loaded tool joins the conversation instead of the tool list (see
       // deferred-tools.ts): what each call brought in, and what the step's messages reference.
-      // `defers` turns false for the rest of the run if Anthropic refuses that form.
+      // `defers` turns false for the rest of the run if Anthropic refuses that form, and
+      // `carries` (what earlier turns loaded, added back by a system message) likewise.
       const deferring = defersTools(config.provider, config.modelId);
       let defers = deferring;
+      let carries = deferring && carriesTools(config.modelId);
       const loadable = new Set([...gated, ...mcpToolNames]);
       const broughtIn = new Map<string, string[]>();
       const builtOptions = new Map<string, Tool['providerOptions']>();
@@ -1254,7 +1258,9 @@ export class AgentRuntime {
        * back by a call made outside a step) is sent whole so it stays callable. That flips its
        * definition into the tools, which invalidates the cached system prompt and history behind
        * them too; only a summary, which rewrote the history anyway, should take a reference (a
-       * shed result keeps its references, and carried loads get made-up ones each turn).
+       * shed result keeps its references). What earlier turns loaded is added back by a system
+       * message on the models that take one (`toolAdditions`); elsewhere it is sent whole, so
+       * the first turn after a load reads less from the cache, and the ones after it as before.
        * Undefined when Anthropic would refuse the request (nothing sent whole, or more deferred
        * than it takes): that step narrows the list as other providers do.
        */
@@ -1282,21 +1288,6 @@ export class AgentRuntime {
       let preparedPrompt: unknown;
       let lastMessages = context.messages as ModelMessage[];
       let currentStartIndex = context.currentStartIndex;
-      // On Claude, what the conversation loaded in earlier turns is referenced again, after the
-      // history the cache marks and before this turn's context (see carriedLoads). The turn's
-      // start index points at it, so a summary keeps it with the turn.
-      if (defers && !compactCommand && !learning && currentStartIndex !== undefined) {
-        const carriedTools = [...loadedTools].filter((name) => gated.has(name)).sort();
-        lastMessages.splice(
-          currentStartIndex,
-          0,
-          ...carriedLoads({
-            tools: carriedTools,
-            groups: groupsOf(carriedTools),
-            mcp: [...selectedMcpTools].sort(),
-          }),
-        );
-      }
       const estimate = tokenCounter(config.provider, config.modelId);
       // Provider tokens per token of the gateway's estimate (context/scale.ts). Every size
       // decision of the run goes by the estimate times this, so compaction starts when the
@@ -1396,7 +1387,9 @@ export class AgentRuntime {
               modelId: config.modelId,
               active: () => defers,
               offered: () => new Set(Object.keys(guarded).filter(offeredNow)),
-              refused: () => {
+              refused: (form) => {
+                carries = false;
+                if (form === 'carry') return;
                 defers = false;
                 broughtIn.clear();
                 referencedNow = new Set();
@@ -1404,6 +1397,8 @@ export class AgentRuntime {
               },
             })
           : model,
+        // Where the carried tools' system message goes (see toolAdditions).
+        ...(deferring ? { allowSystemInMessages: true } : {}),
         instructions: codingInstructions,
         tools: guarded,
         stopWhen: stepCountIs(
@@ -1420,8 +1415,9 @@ export class AgentRuntime {
 
           signal.throwIfAborted();
           await this.services.lifecycle.heartbeat(profileId, runId, owner);
-          // Anthropic refused the deferred form earlier in this run: nothing of it is sent again.
+          // Anthropic refused a form earlier in this run: nothing of it is sent again.
           if (deferring && !defers) messages = withoutDeferral(messages);
+          else if (deferring && !carries) messages = withoutAdditions(messages);
 
           // What the person said after this run began. It arrives as their own turn, at the
           // point the loop reached, so the agent answers what they are asking now rather than
@@ -1433,7 +1429,13 @@ export class AgentRuntime {
           if (compact && !compactCommand) compactionRequested = true;
 
           if (steer) {
-            messages.push({ role: 'user', content: steer });
+            // Before the carried tools' system message when it still ends the request: Anthropic
+            // takes it only at the end or right before a reply.
+            const last = messages.at(-1);
+            messages.splice(last && additionsOf(last) ? messages.length - 1 : messages.length, 0, {
+              role: 'user',
+              content: steer,
+            });
             if (cavemanSkill)
               currentCavemanMode = await cavemanMode(
                 this.services.store.db,
@@ -1901,6 +1903,21 @@ export class AgentRuntime {
         }
 
         withNote(context.messages, approvedOutcome(redactOutput(outcome, secrets)));
+      }
+
+      // What the conversation loaded in earlier turns, an approved action's group included, is
+      // added back at the end of the first request on the models that take tool changes, after
+      // the history the cache marks. Not without history before the turn: nothing is cached to
+      // keep there, and the request would open on it.
+      const carried = [...loadable].filter(offeredNow).sort();
+      if (
+        carries &&
+        carried.length &&
+        !compactCommand &&
+        !learning &&
+        (context.currentStartIndex ?? 0) > 0
+      ) {
+        (context.messages as ModelMessage[]).push(toolAdditions(carried));
       }
 
       const stream = await agent.stream({ messages: context.messages, abortSignal: signal });

@@ -10,6 +10,7 @@ import { TOOL_GROUPS } from '../src/agent/tools.js';
 import { truncatePrompt } from '../src/context/budget.js';
 import { createSafeFetch } from '../src/security/outbound.js';
 import {
+  addedIn,
   type ClaudeReply,
   type ClaudeRequest,
   fakeClaude,
@@ -168,10 +169,9 @@ describe('tool loading on Claude', () => {
     expect(resultOf(sent[4], 'toolu_4')?.is_error).not.toBe(true);
   });
 
-  it('keeps the tools sent to Claude the same from one turn to the next', async () => {
-    const modelId = 'claude-opus-5-5';
+  /** A conversation on `modelId` whose first turn loaded the conversations group. */
+  async function afterALoad(modelId: string) {
     const { services, profile, ask } = await conversation({ provider: 'anthropic', modelId });
-    const first = await ask('Load what you need to see my conversations.');
     let plan: ClaudeReply[] = [
       { tool: 'load_tools', input: { groups: ['conversations'] } },
       { text: 'Loaded.' },
@@ -180,41 +180,141 @@ describe('tool loading on Claude', () => {
     const claude = fakeClaude(modelId, (request) =>
       request.stream ? (plan[step++] ?? { text: 'Done.' }) : { text: 'Done.' },
     );
+    const first = await ask('Load what you need to see my conversations.');
     await new AgentRuntime(services, () => claude.model).execute(profile.id, first.id);
-    const lastOfFirst = steps(claude.requests).at(-1);
-    const second = await ask('Now list them.');
-    plan = [{ tool: 'list_sessions' }, { text: 'Only this one.' }];
-    step = 0;
-    const before = claude.requests.length;
+    /** Runs a turn answered by `replies`; returns it, the requests it sent and the first index. */
+    const turn = async (text: string, replies: ClaudeReply[]) => {
+      plan = replies;
+      step = 0;
+      const before = claude.requests.length;
+      const run = await ask(text);
+      await new AgentRuntime(services, () => claude.model).execute(profile.id, run.id);
+      return {
+        run: await services.runs.run(profile.id, run.id),
+        sent: steps(claude.requests.slice(before)),
+        before,
+      };
+    };
+    return { services, claude, lastOfFirst: steps(claude.requests).at(-1), turn };
+  }
 
-    await new AgentRuntime(services, () => claude.model).execute(profile.id, second.id);
+  const offeredIn = (request: ClaudeRequest | undefined) =>
+    CONVERSATIONS.filter((name) => sentTools(request).some((item) => item.name === name));
 
-    expect((await services.runs.run(profile.id, second.id)).output).toBe('Only this one.');
-    const [opening, next] = steps(claude.requests.slice(before));
+  it('keeps the tools sent to Claude the same from one turn to the next', async () => {
+    const { lastOfFirst, turn } = await afterALoad('claude-opus-5-5');
+
+    const { run, sent, before } = await turn('Now list them.', [
+      { tool: 'list_sessions' },
+      { text: 'Only this one.' },
+    ]);
+
+    expect(run.output).toBe('Only this one.');
+    const [opening, next] = sent;
     // The tools are byte for byte what the last turn ended on, so the turn reads its start back.
     expect(JSON.stringify(opening?.tools)).toBe(JSON.stringify(lastOfFirst?.tools));
     expect(sentTools(opening).find((item) => item.name === 'list_sessions')).toEqual({
       name: 'list_sessions',
       deferred: true,
     });
-    // What the conversation kept loaded is referenced again by a made-up load, placed after the
-    // history the cache marks.
-    const offered = CONVERSATIONS.filter((name) =>
-      sentTools(opening).some((item) => item.name === name),
+    // What the conversation kept loaded is added back by a system message ending the request,
+    // after the history the cache marks.
+    const offered = offeredIn(opening);
+    expect(addedIn(opening).toSorted()).toEqual([...offered].toSorted());
+    expect(opening?.messages.at(-1)?.role).toBe('system');
+    expect(opening?.beta).toContain('mid-conversation-tool-changes-2026-07-01');
+    const marked = (opening?.messages ?? []).findIndex(
+      (message) =>
+        typeof message.content !== 'string' && message.content.some((block) => block.cache_control),
     );
-    expect(referencedIn(opening).toSorted()).toEqual([...offered].toSorted());
-    const blocks = (opening?.messages ?? []).flatMap((message) =>
-      typeof message.content === 'string' ? [] : message.content,
-    );
-    const carried = blocks.findIndex(
-      (block) => block.type === 'tool_use' && block.id?.startsWith('jian_carried_'),
-    );
-    expect(carried).toBeGreaterThan(0);
-    expect(blocks.slice(0, carried).some((block) => block.cache_control)).toBe(true);
-    expect(blocks.slice(carried).some((block) => block.cache_control)).toBe(true);
-    expect(JSON.stringify(blocks.slice(carried))).toContain('Now list them.');
+    expect(marked).toBeGreaterThanOrEqual(0);
+    expect(marked).toBeLessThan((opening?.messages.length ?? 0) - 1);
+    // Kept where it was, it now sits right before the first reply.
+    const at = next?.messages.findIndex((message) => message.role === 'system') ?? -1;
+    expect(next?.messages[at + 1]?.role).toBe('assistant');
+    expect(addedIn(next)).toEqual(addedIn(opening));
     // And the carried tool runs.
     expect(resultOf(next, `toolu_${before + 1}`)?.is_error).not.toBe(true);
+  });
+
+  it('sends what an earlier turn loaded whole on a Claude without tool changes', async () => {
+    const { turn } = await afterALoad('claude-sonnet-4-5');
+
+    const { sent } = await turn('Now list them.', [{ text: 'Only this one.' }]);
+
+    const [opening] = sent;
+    expect(addedIn(opening)).toEqual([]);
+    expect(opening?.messages.some((message) => message.role === 'system')).toBe(false);
+    expect(sentTools(opening).find((item) => item.name === 'list_sessions')).toEqual({
+      name: 'list_sessions',
+      deferred: false,
+    });
+  });
+
+  it('drops only the carry when Claude refuses tool additions', async () => {
+    // A model of its own: a refusal is remembered for the model for the rest of the process.
+    const modelId = 'claude-opus-4-8';
+    const { turn } = await afterALoad(modelId);
+    const errors: string[] = [];
+    const spy = vi.spyOn(console, 'error').mockImplementation((line: unknown) => {
+      errors.push(String(line));
+    });
+    try {
+      const { run, sent } = await turn('Now list them.', [
+        { refuse: 'messages.6.content.0: tool_addition is not supported for this model' },
+        { tool: 'list_sessions' },
+        { text: 'Only this one.' },
+      ]);
+
+      expect(run.output).toBe('Only this one.');
+      const [refused, retried, after] = sent;
+      expect(addedIn(refused).length).toBeGreaterThan(0);
+      // Sent again with the carried tools whole, and everything else still deferred.
+      for (const request of [retried, after]) {
+        expect(request?.messages.some((message) => message.role === 'system')).toBe(false);
+        expect(sentTools(request).find((item) => item.name === 'list_sessions')).toEqual({
+          name: 'list_sessions',
+          deferred: false,
+        });
+        expect(sentTools(request).some((item) => item.deferred)).toBe(true);
+      }
+      const said = errors.filter((line) => line.includes('refused carried tool additions'));
+      expect(said).toHaveLength(1);
+      expect(said[0]).toContain(modelId);
+
+      // A later turn on that model starts without the carry, still deferring.
+      const later = await turn('Again.', [{ text: 'Still one.' }]);
+      expect(addedIn(later.sent[0])).toEqual([]);
+      expect(sentTools(later.sent[0]).some((item) => item.deferred)).toBe(true);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('remembers nothing when the retry is refused too', async () => {
+    const modelId = 'claude-fable-5-1';
+    const { turn } = await afterALoad(modelId);
+    const errors: string[] = [];
+    const spy = vi.spyOn(console, 'error').mockImplementation((line: unknown) => {
+      errors.push(String(line));
+    });
+    try {
+      const { run, sent } = await turn('Now list them.', [
+        { refuse: 'messages.6.content.0: tool_addition is not supported for this model' },
+        { refuse: 'messages: something else entirely' },
+      ]);
+
+      expect(run.status).toBe('failed');
+      expect(run.error).toContain('tool_addition');
+      expect(sent).toHaveLength(2);
+      expect(errors.some((line) => line.includes('refused carried tool additions'))).toBe(false);
+
+      // Nothing was believed: the next turn carries again.
+      const later = await turn('Again.', [{ text: 'Still one.' }]);
+      expect(addedIn(later.sent[0]).length).toBeGreaterThan(0);
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it('loads the old way when Claude refuses the deferred form', async () => {
@@ -271,7 +371,7 @@ describe('tool loading on Claude', () => {
         deferred: false,
       });
       expect(referencedIn(opening)).toEqual([]);
-      expect(JSON.stringify(opening?.messages)).not.toContain('jian_carried_');
+      expect(opening?.messages.some((message) => message.role === 'system')).toBe(false);
     } finally {
       spy.mockRestore();
     }

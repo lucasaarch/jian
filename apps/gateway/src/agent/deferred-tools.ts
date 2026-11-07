@@ -12,6 +12,13 @@ import type { ModelMessage, Tool, ToolSet } from 'ai';
  * Anthropic expands a reference in place, so the tool joins the conversation, not the tool list.
  */
 
+const claudeVersion = (modelId: string) => {
+  const match = /claude-(opus|sonnet|haiku|fable|mythos)-(\d+)(?:-(\d{1,2})(?!\d))?/.exec(modelId);
+  return match
+    ? { family: match[1] as string, version: Number(match[2]) + Number(match[3] ?? 0) / 10 }
+    : undefined;
+};
+
 /**
  * Claude 4.5 and newer, and every 5.x, read `defer_loading` and `tool_reference`; Opus 4.1 and
  * older refuse them. The version is read from the id, as `takesAdaptiveThinking` does: a one or
@@ -21,25 +28,35 @@ import type { ModelMessage, Tool, ToolSet } from 'ai';
  * cache. A model Anthropic already refused it for in this process is not offered it again.
  */
 export function defersTools(provider: string, modelId: string): boolean {
-  if (provider !== 'anthropic' || deferralRefused(modelId)) return false;
-  const match = /claude-(?:opus|sonnet|haiku|fable)-(\d+)(?:-(\d{1,2})(?!\d))?/.exec(modelId);
-  if (!match) return false;
-  const major = Number(match[1]);
-  const minor = Number(match[2] ?? 0);
-  return major > 4 || (major === 4 && minor >= 5);
+  if (provider !== 'anthropic' || refused.has(modelId)) return false;
+  const claude = claudeVersion(modelId);
+  return claude !== undefined && claude.version >= 4.5;
 }
 
 /**
- * The models Anthropic refused the deferred form for, by id, while this process runs: a later
- * run goes narrowed from its start rather than pay the refusal again. Kept in memory only, so a
- * restart tries again, as after an upgrade that may have fixed it.
+ * The models that take tool changes in a system message mid-conversation: Opus 4.8 and newer,
+ * Sonnet 5.5 and newer, Fable and Mythos 5 and newer. Not Haiku, Sonnet 5 or anything 4.6 and
+ * older. A model Anthropic refused them for in this process is not offered them again.
+ */
+export function carriesTools(modelId: string): boolean {
+  const claude = claudeVersion(modelId);
+  if (!claude || uncarried.has(modelId)) return false;
+  const from: Record<string, number> = { opus: 4.8, sonnet: 5.5, fable: 5, mythos: 5 };
+  const least = from[claude.family];
+  return least !== undefined && claude.version >= least;
+}
+
+/**
+ * The models Anthropic refused the deferred form (`refused`) or the carried tool changes
+ * (`uncarried`) for, by id, while this process runs: a later run starts without what was
+ * refused rather than pay the refusal again. Kept in memory only, so a restart tries again, as
+ * after an upgrade that may have fixed it.
  */
 const refused = new Set<string>();
+const uncarried = new Set<string>();
 
-export const deferralRefused = (modelId: string) => refused.has(modelId);
-
-export function refuseDeferral(modelId: string) {
-  refused.add(modelId);
+export function forget(form: 'deferral' | 'carry', modelId: string) {
+  (form === 'deferral' ? refused : uncarried).add(modelId);
 }
 
 /** Anthropic refuses a request with more deferred tools than this. */
@@ -63,10 +80,29 @@ const toolNameOf = (part: unknown): string | undefined => {
     : undefined;
 };
 
-/** The tools the messages reference: what Anthropic will have expanded into the context. */
+type Loose = { role: string; content: unknown; providerOptions?: unknown };
+
+/** The tools a system message adds mid-conversation; undefined for any other message. */
+export function additionsOf(message: Loose): string[] | undefined {
+  if (message.role !== 'system') return undefined;
+  const changes = (message.providerOptions as { anthropic?: { toolChanges?: unknown } } | undefined)
+    ?.anthropic?.toolChanges;
+  if (!Array.isArray(changes)) return undefined;
+  return changes.flatMap((change: { type?: unknown; toolName?: unknown }) =>
+    change?.type === 'tool_addition' && typeof change.toolName === 'string'
+      ? [change.toolName]
+      : [],
+  );
+}
+
+/**
+ * The tools the messages bring into the context: a `tool_reference` in a tool result, or a
+ * `tool_addition` in a system message. Anthropic expands both in place.
+ */
 export function referencedTools(messages: readonly ModelMessage[]): Set<string> {
   const names = new Set<string>();
   for (const message of messages) {
+    for (const name of additionsOf(message) ?? []) names.add(name);
     if (message.role !== 'tool') continue;
     for (const part of message.content) {
       if (part.type !== 'tool-result' || part.output.type !== 'content') continue;
@@ -79,126 +115,82 @@ export function referencedTools(messages: readonly ModelMessage[]): Set<string> 
   return names;
 }
 
-/** The prefix of the call ids `carriedLoads` makes up: no model or provider gives one like it. */
-export const CARRIED = 'jian_carried_';
-
 /**
- * What an earlier turn loaded, as a load call and its result made up for this turn. History is
- * replayed as text, so a tool loaded last turn has no reference left; sending it whole instead
- * would change the tools, the very front of the prompt, and the turn would read nothing back
- * from the cache. Placed after the history, the made-up call keeps the tools as the last turn
- * sent them. It is built once a turn and never stored.
+ * What an earlier turn loaded, added back at the end of this turn's first request by a system
+ * message, as Anthropic lets the models of `carriesTools` change their tools mid-conversation.
+ * History is replayed as text, so a tool loaded last turn has no reference left; sending it whole
+ * instead would change the tools, the very front of the prompt, and the turn would read nothing
+ * back from the cache. Anthropic takes such a message only right before an assistant message or
+ * at the end: kept where it is, it sits before the first reply on every later step. Built once a
+ * turn, after the history the cache marks, and never stored. It says nothing in text: the SDK
+ * then sends only the additions.
  */
-export function carriedLoads(input: {
-  tools: readonly string[];
-  groups: readonly string[];
-  mcp: readonly string[];
-}): ModelMessage[] {
-  const loads = [
-    ...(input.tools.length
-      ? [
-          {
-            id: `${CARRIED}tools`,
-            name: 'load_tools',
-            input: { groups: input.groups },
-            result: { loaded: input.tools },
-            names: input.tools,
-          },
-        ]
-      : []),
-    ...(input.mcp.length
-      ? [
-          {
-            id: `${CARRIED}mcp`,
-            name: 'load_mcp_tools',
-            input: { names: input.mcp },
-            result: { selected: input.mcp },
-            names: input.mcp,
-          },
-        ]
-      : []),
-  ];
-  if (!loads.length) return [];
-  return [
-    {
-      role: 'assistant',
-      content: loads.map((load) => ({
-        type: 'tool-call' as const,
-        toolCallId: load.id,
-        toolName: load.name,
-        input: load.input,
-      })),
+export function toolAdditions(names: readonly string[]): ModelMessage {
+  return {
+    role: 'system',
+    content: '',
+    providerOptions: {
+      anthropic: {
+        toolChanges: names.map((toolName) => ({ type: 'tool_addition', toolName })),
+      },
     },
-    {
-      role: 'tool',
-      content: loads.map((load) => ({
-        type: 'tool-result' as const,
-        toolCallId: load.id,
-        toolName: load.name,
-        output: {
-          type: 'content' as const,
-          value: [
-            { type: 'text' as const, text: JSON.stringify(load.result) },
-            ...load.names.map(reference),
-          ],
-        },
-      })),
-    },
-  ];
+  };
 }
 
-type Loose = { role: string; content: unknown };
+/**
+ * The messages without the tool additions of `toolAdditions`. A request Anthropic refused them
+ * in is sent again without; the tools they added are then sent whole.
+ */
+export function withoutAdditions<M extends Loose>(messages: M[]): M[] {
+  const kept = messages.filter((message) => additionsOf(message) === undefined);
+  return kept.length === messages.length ? messages : kept;
+}
 
 /**
- * The messages without what deferral added: tool references, and the loads `carriedLoads` made
- * up. Works on the SDK's messages and on the prompt a provider is handed alike. A request that
- * sends no tools must carry no reference, or Anthropic refuses it; tools let go of under window
- * pressure lose theirs so they leave the context, which is what letting go of them is for; and a
- * request Anthropic refused in this form is sent again without it. Messages with nothing to
- * remove are returned as they were; one left empty is dropped.
+ * The messages without what deferral added: tool references and tool additions. Works on the
+ * SDK's messages and on the prompt a provider is handed alike. A request that sends no tools must
+ * carry neither, or Anthropic refuses it; tools let go of under window pressure lose theirs so
+ * they leave the context, which is what letting go of them is for; and a request Anthropic
+ * refused in this form is sent again without it. Messages with nothing to remove are returned as
+ * they were.
  */
 export function withoutDeferral<M extends Loose>(messages: M[]): M[] {
   let changed = false;
-  const next: M[] = [];
-  for (const message of messages) {
-    if (!Array.isArray(message.content)) {
-      next.push(message);
-      continue;
-    }
+  const next = withoutAdditions(messages).map((message) => {
+    if (!Array.isArray(message.content)) return message;
     const parts = message.content as Array<Record<string, unknown>>;
-    const kept = parts.flatMap((part) => {
-      if (
-        (part.type === 'tool-call' || part.type === 'tool-result') &&
-        typeof part.toolCallId === 'string' &&
-        part.toolCallId.startsWith(CARRIED)
-      )
-        return [];
-      const output = part.type === 'tool-result' ? (part.output as Loose['content']) : undefined;
-      const value = (output as { type?: string; value?: unknown } | undefined)?.value;
-      if (
-        (output as { type?: string } | undefined)?.type === 'content' &&
-        Array.isArray(value) &&
-        value.some((item) => toolNameOf(item) !== undefined)
-      )
-        return [
-          {
-            ...part,
-            output: {
-              ...(output as object),
-              value: value.filter((item) => toolNameOf(item) === undefined),
-            },
-          },
-        ];
-      return [part];
-    });
-    if (kept.length === parts.length && kept.every((part, index) => part === parts[index])) {
-      next.push(message);
-      continue;
-    }
+    if (
+      !parts.some((part) => {
+        const output = part.output as { type?: string; value?: unknown } | undefined;
+        return (
+          part.type === 'tool-result' &&
+          output?.type === 'content' &&
+          Array.isArray(output.value) &&
+          output.value.some((item) => toolNameOf(item) !== undefined)
+        );
+      })
+    )
+      return message;
     changed = true;
-    if (kept.length) next.push({ ...message, content: kept });
-  }
-  return changed ? next : messages;
+    return {
+      ...message,
+      content: parts.map((part) => {
+        const output = part.output as { type?: string; value?: unknown } | undefined;
+        return part.type === 'tool-result' &&
+          output?.type === 'content' &&
+          Array.isArray(output.value)
+          ? {
+              ...part,
+              output: {
+                ...output,
+                value: output.value.filter((item) => toolNameOf(item) === undefined),
+              },
+            }
+          : part;
+      }),
+    };
+  });
+  return changed || next.length !== messages.length ? next : messages;
 }
 
 /** What the SDK makes of a result when the tool has no `toModelOutput` of its own. */
