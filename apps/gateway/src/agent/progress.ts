@@ -27,6 +27,12 @@ export class ProgressReporter {
    */
   private readonly urgent: RunProgress[] = [];
   private writing?: Promise<void>;
+  /**
+   * Writes the held token snapshot once the interval has passed. Without it a snapshot held
+   * back waits for the next change, and the model may change nothing the watcher sees for a long
+   * while: writing a tool's input marks nothing, so the screen would keep a paragraph long gone.
+   */
+  private held?: ReturnType<typeof setTimeout>;
   // Negative infinity rather than zero: the first report goes out at once, whatever the clock
   // reads, so a watcher is never left with an empty bubble for a whole interval.
   private lastWrite = Number.NEGATIVE_INFINITY;
@@ -67,6 +73,9 @@ export class ProgressReporter {
       return;
     }
 
+    // A paragraph just went out as a message: the watcher must stop showing it now, not at the
+    // next token, which may be a whole tool's input away.
+    const released = Boolean(this.text) && !text;
     this.text = text;
 
     if (text) {
@@ -74,7 +83,7 @@ export class ProgressReporter {
       this.tool = undefined;
     }
 
-    this.mark(false);
+    this.mark(released);
   }
 
   /** A new message landed mid-run: the answer being written is not the one that will stand. */
@@ -92,6 +101,9 @@ export class ProgressReporter {
 
   /** Writes whatever is outstanding, whatever the interval says. */
   async flush(): Promise<void> {
+    clearTimeout(this.held);
+    this.held = undefined;
+
     if (this.pending) {
       this.urgent.push(this.pending);
       this.pending = undefined;
@@ -146,6 +158,7 @@ export class ProgressReporter {
         (this.clock() - this.lastWrite >= this.every ? this.pending : undefined);
 
       if (!next) {
+        this.hold();
         return;
       }
 
@@ -157,5 +170,23 @@ export class ProgressReporter {
 
       await this.write(next).catch(() => undefined);
     }
+  }
+
+  /**
+   * Waits out the rest of the interval for a token snapshot the loop skipped. One timer at a
+   * time; it does not keep the process alive, and a write after the run ended changes nothing,
+   * since only a run still at work takes progress.
+   */
+  private hold(): void {
+    if (!this.pending || this.held) {
+      return;
+    }
+
+    const wait = Math.max(0, this.every - (this.clock() - this.lastWrite));
+    this.held = setTimeout(() => {
+      this.held = undefined;
+      void this.pump();
+    }, wait);
+    this.held.unref?.();
   }
 }

@@ -1,5 +1,5 @@
 import type { RunProgress } from '@jian/contracts';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { Narrator } from '../src/agent/narrator.js';
 import { ProgressReporter } from '../src/agent/progress.js';
 
@@ -49,6 +49,55 @@ describe('what a run reports while it runs', () => {
     await settle();
     expect(written).toHaveLength(2);
     expect(written[1]?.text).toBe('abc');
+  });
+
+  it('writes an emptied draft at once after a released paragraph', async () => {
+    const { subject, written, advance } = reporter(250);
+    // A flush would write whatever waits, so let the writer settle on its own instead.
+    const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+    subject.draft('Found the PR.');
+    await settle();
+    advance(100);
+    // The paragraph went out as a message; what follows is a tool's input, which marks nothing.
+    subject.draft('');
+    await settle();
+
+    expect(written).toHaveLength(2);
+    expect(written.at(-1)).toMatchObject({ phase: 'writing', text: '' });
+  });
+
+  it('writes a held token snapshot once the interval passes without another change', async () => {
+    vi.useFakeTimers();
+    try {
+      const written: RunProgress[] = [];
+      let now = 0;
+      const subject = new ProgressReporter(
+        async (snapshot) => {
+          written.push(snapshot);
+        },
+        250,
+        () => now,
+      );
+      const pass = async (ms: number) => {
+        now += ms;
+        await vi.advanceTimersByTimeAsync(ms);
+      };
+
+      subject.draft('Checking');
+      await pass(100);
+      subject.draft('Checking the');
+      await pass(100);
+      expect(written.map((snapshot) => snapshot.text)).toEqual(['Checking']);
+
+      // Nothing else changes, yet the held snapshot goes out as the interval ends.
+      await pass(50);
+      expect(written.map((snapshot) => snapshot.text)).toEqual(['Checking', 'Checking the']);
+      await pass(1_000);
+      expect(written).toHaveLength(2);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('coalesces a burst of tokens into one write', async () => {

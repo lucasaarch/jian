@@ -61,7 +61,9 @@ export function useReader(
   const reloaded = useRef(reloads);
   reloaded.current = reloads;
   const reader = useRef<Reader>(undefined);
-  const [opened, setOpened] = useState(false);
+  // The store whose first read is over. Kept by store, not as a flag, so a conversation that
+  // replaces this one in the same view counts as opening again from its very first render.
+  const [read, setRead] = useState<ConversationStore>();
 
   useEffect(() => {
     const read = createReader({
@@ -76,7 +78,7 @@ export function useReader(
     const unfollow = followConversation({ store, reader: read, sessionId });
     let gone = false;
     void read.latest().then(() => {
-      if (!gone) setOpened(true);
+      if (!gone) setRead(store);
     });
     return () => {
       gone = true;
@@ -94,7 +96,7 @@ export function useReader(
     }
   }, [revision, retry, reloads]);
 
-  return { reader, opened };
+  return { reader, opened: read === store };
 }
 
 /**

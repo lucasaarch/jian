@@ -62,8 +62,9 @@ export function spentOf(state: ConversationState, runId: string | undefined, sid
 /**
  * An answer's text, with what its turn is writing now after it. The same element draws the text
  * as it streams and once it is stored, so the reveal goes on from where it was when the answer
- * lands. Only text this element showed live is revealed: a stored answer, or a line that joined
- * it without being written here, draws whole. Only this redraws as the text grows.
+ * lands. Only text written while this element was on screen is revealed: a stored answer, a
+ * line that joined it without being written here, and what was written before it was drawn all
+ * show whole. Only this redraws as the text grows.
  */
 export function LiveAnswer({
   said = '',
@@ -79,11 +80,13 @@ export function LiveAnswer({
   const live = useConversation((state) => writtenOf(state, runId, side));
   const text = live && said ? `${said}\n\n${live}` : live || said;
   // Whether this element has shown text as it was written, since it was drawn.
-  const lived = useRef(false);
+  const lived = useRef(Boolean(live));
   if (live) lived.current = true;
   // What shows whole. Until something is written here, all of it; after, what stood before the
-  // writing began, unless the answer changed into something else rather than grew.
-  const settled = useRef(said);
+  // writing began, unless the answer changed into something else rather than grew. What was
+  // already written when it was drawn, as when a conversation opens mid-answer, counts as
+  // standing: only what is written after that is revealed.
+  const settled = useRef(text);
   if (!lived.current || !text.startsWith(settled.current)) settled.current = text;
   const tail = text.slice(settled.current.length);
   const revealed = useSmoothText(tail, true);

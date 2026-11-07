@@ -293,7 +293,7 @@ it('keeps the working line while the agent writes a tool after a released paragr
   const runId = '1d2e3f40-5a6b-4c7d-8e9f-a0b1c2d3e4f5';
   const sessionId = '2e3f4051-6b7c-4d8e-9fa0-b1c2d3e4f5a6';
   const at = '2026-11-07T10:00:00.000Z';
-  const working = {
+  let working = {
     id: runId,
     profileId: 'profile',
     sessionId,
@@ -333,19 +333,33 @@ it('keeps the working line while the agent writes a tool after a released paragr
     // The paragraph was just handed to the stored answer: nothing new to show under it yet.
     expect(workingLine()).toBeNull();
 
-    // Released, the stream goes on writing a tool's input, with no text of its own.
+    // The gateway writes the emptied draft at once as the paragraph is released, then nothing
+    // while the model writes a tool's input.
+    const emptied = {
+      phase: 'writing' as const,
+      text: '',
+      steps: 0,
+      updatedAt: '2026-11-07T10:00:03.000Z',
+    };
+    working = { ...working, progress: emptied };
     await act(async () =>
       hear?.({
         type: 'run.progress',
-        data: {
-          runId,
-          sessionId,
-          at: '2026-11-07T10:00:03.000Z',
-          progress: { phase: 'writing', text: '', steps: 0, updatedAt: '2026-11-07T10:00:03.000Z' },
-        },
+        data: { runId, sessionId, at: emptied.updatedAt, progress: emptied },
       }),
     );
+    expect(workingLine()).not.toBeNull();
 
+    // Read again during the tool input, as a quiet stream makes it: the working line stays.
+    await view.show(
+      <History
+        api={api}
+        profileId="profile"
+        sessionId={sessionId}
+        initialRun={working}
+        revision={1}
+      />,
+    );
     expect(workingLine()).not.toBeNull();
     expect(view.element.querySelectorAll('.chat-text')).toHaveLength(2);
   } finally {
@@ -353,44 +367,62 @@ it('keeps the working line while the agent writes a tool after a released paragr
   }
 });
 
+/** A turn and its conversation named as the stream names them, by uuid. */
+const streamed = {
+  runId: '3f405162-7c8d-4e9f-a0b1-c2d3e4f5a6b7',
+  sessionId: '40516273-8d9e-4fa0-b1c2-d3e4f5a6b7c8',
+};
+const told = (text: string, updatedAt: string) =>
+  hear?.({
+    type: 'run.progress',
+    data: {
+      ...streamed,
+      at: updatedAt,
+      progress: { phase: 'writing', text, steps: 0, updatedAt },
+    },
+  });
+const writingTurn = (text: string): Run =>
+  ({
+    id: streamed.runId,
+    profileId: 'profile',
+    sessionId: streamed.sessionId,
+    status: 'running',
+    createdAt: '2026-11-07T10:00:00.000Z',
+    updatedAt: '2026-11-07T10:00:00.000Z',
+    progress: { phase: 'writing', text, steps: 0, updatedAt: '2026-11-07T10:00:01.000Z' },
+  }) as Run;
+const streamedLine = (id: string, role: 'user' | 'assistant', content: string) => ({
+  id,
+  profileId: 'profile',
+  sessionId: streamed.sessionId,
+  runId: streamed.runId,
+  role,
+  content,
+  createdAt: '2026-11-07T10:00:00.000Z',
+});
+
 it('the answer never retypes when it lands after text that ended in a break', async () => {
   movingFrames();
   let stored = false;
-  const at = '2026-11-07T10:00:00Z';
-  const working = {
-    id: 'break-run',
-    profileId: 'profile',
-    sessionId: 'session',
-    status: 'running',
-    createdAt: at,
-    updatedAt: at,
-    progress: {
-      phase: 'writing',
-      text: 'Hello there.\n\n',
-      steps: 0,
-      updatedAt: '2026-11-07T10:00:02.000Z',
-    },
-  } as Run;
-  const said = (id: string, role: 'user' | 'assistant', content: string) => ({
-    id,
-    profileId: 'profile',
-    sessionId: 'session',
-    runId: 'break-run',
-    role,
-    content,
-    createdAt: at,
-  });
+  const working = writingTurn('Hello');
   const api = {
     messages: async () => [
-      said('request', 'user', 'Say hello'),
-      ...(stored ? [said('answer', 'assistant', 'Hello there.')] : []),
+      streamedLine('request', 'user', 'Say hello'),
+      ...(stored ? [streamedLine('answer', 'assistant', 'Hello there.')] : []),
     ],
     activities: async () => [working],
     timeline: async () => [],
   };
-  const view = await mount(
-    <History api={api} profileId="profile" sessionId="session" initialRun={working} />,
+  const page = (revision: number) => (
+    <History
+      api={api}
+      profileId="profile"
+      sessionId={streamed.sessionId}
+      initialRun={working}
+      revision={revision}
+    />
   );
+  const view = await mount(page(0));
   const answer = () => view.element.querySelector('.chat-line.theirs');
   const lengths: number[] = [];
   const watch = async (ms: number) => {
@@ -401,26 +433,55 @@ it('the answer never retypes when it lands after text that ended in a break', as
   };
 
   try {
-    await watch(80);
+    await watch(16);
     const live = answer();
-    expect(live?.textContent).toContain('Hel');
+    // The paragraph grows, ending in the break that releases it, and is revealed as it comes.
+    await act(async () => told('Hello there.\n\n', '2026-11-07T10:00:02.000Z'));
     await watch(600);
+    expect(answer()?.querySelector('.chat-text')?.textContent).toBe('Hello there.');
 
     stored = true;
-    await view.show(
-      <History
-        api={api}
-        profileId="profile"
-        sessionId="session"
-        initialRun={working}
-        revision={1}
-      />,
-    );
+    await view.show(page(1));
     await watch(600);
 
     expect(lengths.every((length, at) => at === 0 || length >= (lengths[at - 1] ?? 0))).toBe(true);
     expect(answer()).toBe(live);
     expect(answer()?.querySelector('.chat-text')?.textContent).toBe('Hello there.');
+  } finally {
+    await view.done();
+    vi.useRealTimers();
+  }
+});
+
+it('shows the text already written when a conversation opens mid-answer', async () => {
+  movingFrames();
+  const written = 'Halfway through the report, the numbers';
+  const api = {
+    messages: async () => [streamedLine('request', 'user', 'Write the report')],
+    activities: async () => [writingTurn(written)],
+    timeline: async () => [],
+  };
+  const view = await mount(
+    <History
+      api={api}
+      profileId="profile"
+      sessionId={streamed.sessionId}
+      initialRun={writingTurn(written)}
+    />,
+  );
+  const shown = () => view.element.querySelector('.chat-line.theirs .chat-text')?.textContent;
+
+  try {
+    // Written before the owner looked: there at once, not typed out again.
+    expect(shown()).toBe(written);
+
+    // What is written from now on is revealed as it comes.
+    await act(async () => told(`${written} look good.`, '2026-11-07T10:00:02.000Z'));
+    await act(async () => vi.advanceTimersByTimeAsync(16));
+    expect(shown()?.length).toBeGreaterThanOrEqual(written.length);
+    expect(shown()?.length).toBeLessThan(`${written} look good.`.length);
+    await act(async () => vi.advanceTimersByTimeAsync(600));
+    expect(shown()).toBe(`${written} look good.`);
   } finally {
     await view.done();
     vi.useRealTimers();
