@@ -222,3 +222,54 @@ it('compacts once on /compact sent while a turn runs, without telling the agent 
   expect(summariesAfter).toBe(1);
   expect(prompts.join('')).not.toContain('/compact');
 });
+
+it('seeds the turn after /compact with the scale a normal step measured', async () => {
+  const { services, profile, session } = await conversation({ inputTokens: 64000 });
+  // The provider reads half of what it is sent, tool definitions included.
+  const reported = (options: { prompt: unknown; tools?: unknown }) =>
+    Math.round(
+      Buffer.byteLength(JSON.stringify(options.prompt) + JSON.stringify(options.tools ?? [])) / 2,
+    );
+  let calls = 0;
+  const model = mockModel({
+    doGenerate: async (options) => {
+      if (calls++ === 0) {
+        return {
+          content: [
+            {
+              type: 'tool-call' as const,
+              toolCallId: 'read',
+              toolName: 'read_memories',
+              input: '{}',
+            },
+          ],
+          finishReason: { unified: 'tool-calls' as const, raw: 'tool-calls' },
+          usage: usageOf(reported(options)),
+          warnings: [],
+        };
+      }
+      return answer('Answered.', reported(options));
+    },
+  });
+  const turn = async (text: string, requestKey: string) => {
+    const run = await services.runs.submit(
+      profile.id,
+      session.id,
+      { text, requestKey },
+      { ownerMessage: true },
+    );
+    await new AgentRuntime(services, () => model).execute(profile.id, run.id);
+    return (await services.lifecycle.checkpoints(profile.id, run.id))
+      .map((checkpoint) => checkpoint.data as { phase?: string; prompt?: { scale?: number } })
+      .filter((data) => data.phase === 'step-completed')
+      .map((data) => data.prompt?.scale ?? 0);
+  };
+
+  // The second step of a turn runs on the scale its first step measured.
+  const measured = Math.min(...(await turn('Check the deploy', 'deploy')));
+  await turn('/compact', 'compact');
+  const [seeded] = await turn('And now?', 'next');
+
+  expect(measured).toBeLessThan(0.9);
+  expect(seeded).toBeCloseTo(measured, 1);
+});

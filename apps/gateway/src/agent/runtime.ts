@@ -1510,7 +1510,11 @@ export class AgentRuntime {
               scale,
               instructions: codingInstructions,
               messages,
-              tools: reader ? { ...activeTools, read_artifact: reader } : activeTools,
+              tools: compactCommand
+                ? {}
+                : reader
+                  ? { ...activeTools, read_artifact: reader }
+                  : activeTools,
               currentStartIndex,
             });
             if (!truncated) return undefined;
@@ -1561,7 +1565,9 @@ export class AgentRuntime {
                 scale,
                 instructions: codingInstructions,
                 messages,
-                tools: activeTools,
+                // What is sent: a /compact turn offers no tools, and its estimate must not count
+                // them, or the scale measured on it would be skewed and seed the next turn.
+                tools: compactCommand ? {} : activeTools,
               });
             } catch (error) {
               signal.throwIfAborted();
