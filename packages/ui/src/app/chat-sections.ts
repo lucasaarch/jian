@@ -3,7 +3,7 @@ import type { Channel, Project, Session } from '../lib/api';
 import { folderName, repositoryName } from '../lib/stores/workspace-choice';
 
 /** Where a conversation came from, for the sections that are not the app's own chats. */
-type ChannelKind = 'whatsapp' | 'telegram' | 'api' | 'agents';
+type ChannelKind = 'whatsapp' | 'telegram' | 'email' | 'api' | 'agents';
 
 /** What a chat works on, by name: a folder and a repository of that name read as one. */
 export function workspaceName(session: Session, projects: Project[]): string | undefined {
@@ -32,6 +32,7 @@ export type ChatSection =
 const channelSections: { channel: ChannelKind; name: string }[] = [
   { channel: 'whatsapp', name: 'WhatsApp' },
   { channel: 'telegram', name: 'Telegram' },
+  { channel: 'email', name: 'Email' },
   { channel: 'api', name: 'API Server' },
   { channel: 'agents', name: 'Agents' },
 ];
@@ -40,6 +41,7 @@ const channelSections: { channel: ChannelKind; name: string }[] = [
 export function channelKind(channel: string): ChannelKind {
   if (channel === 'whatsapp' || channel === 'whatsapp-business') return 'whatsapp';
   if (channel === 'telegram') return 'telegram';
+  if (channel === 'email') return 'email';
   if (channel === AGENT_SESSION_CHANNEL) return 'agents';
   return 'api';
 }

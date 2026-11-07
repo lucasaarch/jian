@@ -11,6 +11,7 @@ import type { Queryable, Store } from '../storage/database.js';
 import { mediaAssets } from '../storage/schema.js';
 import { API_SESSION_START } from './api-conversation.js';
 import type { ChannelType, IncomingMessage } from './channel.js';
+import { isChatChannel } from './kinds.js';
 import {
   findChannel,
   findContact,
@@ -50,7 +51,14 @@ export const CHANNEL_NAMES: Record<ChannelType, string> = {
   'whatsapp-business': 'WhatsApp Business (Meta)',
   telegram: 'Telegram',
   api: 'API',
+  email: 'Email',
 };
+
+/**
+ * Protocols that deliver one message again until they hear back, so a redelivery must be told
+ * from a new message by its request key.
+ */
+const REDELIVERED = new Set<ChannelType>(['whatsapp-business', 'email']);
 
 type ContactServices = {
   profiles: ProfileReader;
@@ -180,7 +188,7 @@ export class Contacts {
     // nothing a stranger sends may drive an automatic reply or a panel update in a loop.
     if (existing.status === 'pending') {
       if (
-        channel.type === 'whatsapp-business' &&
+        REDELIVERED.has(channel.type) &&
         (existing.requestKey === message.requestKey || existing.seen?.includes(message.requestKey))
       )
         return { status: 'pending', announce: false };
@@ -192,7 +200,7 @@ export class Contacts {
           message: held,
           ...(message.channelMessage ? { channelMessage: message.channelMessage } : {}),
           updatedAt: now,
-          ...(channel.type === 'whatsapp-business'
+          ...(REDELIVERED.has(channel.type)
             ? { seen: [...(existing.seen ?? []), message.requestKey] }
             : {}),
         });
@@ -203,7 +211,7 @@ export class Contacts {
 
     // Pending messages were released as a single turn. Replaying an appended event after
     // approval must not submit that fragment as another turn (or restage its media).
-    if (channel.type === 'whatsapp-business' && existing.seen?.includes(message.requestKey))
+    if (REDELIVERED.has(channel.type) && existing.seen?.includes(message.requestKey))
       return { status: 'approved', contact: existing, duplicate: true };
 
     // A renamed room keeps its request: the owner approved the conversation, not its subject.
@@ -266,6 +274,9 @@ export class Contacts {
       throw new GatewayError(409, 'The channel of this contact is disconnected');
     if (channel.type === 'api')
       throw new GatewayError(400, 'Conversation controls are for WhatsApp and Telegram');
+    // Approving is answered in the conversation itself, which only a chat channel has.
+    if (patch.canApprove && !isChatChannel(channel.type))
+      throw new GatewayError(400, 'Approving from the conversation is for WhatsApp and Telegram');
     const now = nowIso(this.clock);
     const aiEnabled = patch.aiEnabled ?? current.aiEnabled;
     const contact: ContactRecord = {

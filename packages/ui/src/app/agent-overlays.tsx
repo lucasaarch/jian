@@ -81,7 +81,7 @@ function AgentSettingsOverlay({ profileId }: { profileId: string }) {
             id: 'channels',
             label: 'Channels',
             icon: <MessagesSquare size={15} />,
-            keywords: ['whatsapp', 'telegram', 'api', 'connect', 'contacts'],
+            keywords: ['whatsapp', 'telegram', 'email', 'api', 'connect', 'contacts'],
             ...(pending > 0 ? { trailing: <WaitingCount count={pending} /> } : {}),
           },
         ]

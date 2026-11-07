@@ -873,6 +873,7 @@ export const channelType = pgEnum('channel_type', [
   'telegram',
   'whatsapp',
   'whatsapp-business',
+  'email',
 ]);
 
 export const channels = pgTable(
@@ -916,6 +917,37 @@ export const metaBindings = pgTable('meta_bindings', {
   phoneNumberId: text('phone_number_id').notNull().unique(),
   businessAccountId: text('business_account_id').notNull(),
 });
+
+/**
+ * The address a live email channel holds, lowercased. Unique because a provider's webhook gets
+ * every message for its domain: two profiles claiming one address would read each other's mail.
+ * Deleted on revoke, so a disconnected address can be connected again.
+ */
+export const emailBindings = pgTable('email_bindings', {
+  channelId: uuid('channel_id')
+    .primaryKey()
+    .references(() => channels.id, { onDelete: 'cascade' }),
+  address: text('address').notNull().unique(),
+});
+
+/**
+ * The email thread a reply to a sender continues: the subject and the last message they sent,
+ * with the `References` chain an email client groups a conversation by.
+ */
+export const emailThreads = pgTable(
+  'email_threads',
+  {
+    channelId: uuid('channel_id')
+      .notNull()
+      .references(() => channels.id, { onDelete: 'cascade' }),
+    chatId: text('chat_id').notNull(),
+    subject: text('subject').notNull(),
+    messageId: text('message_id').notNull(),
+    references: text('references').notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [primaryKey({ columns: [table.channelId, table.chatId] })],
+);
 
 export const metaWindows = pgTable(
   'meta_windows',

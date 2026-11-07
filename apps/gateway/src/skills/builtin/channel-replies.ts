@@ -3,7 +3,7 @@ import type { Skill } from '@jian/contracts';
 export const channelReplies: Skill = {
   name: 'channel-replies',
   description:
-    'Use before answering on WhatsApp, Telegram or in a group: plain text only, and short.',
+    'Use before answering on WhatsApp, Telegram, email or in a group: plain text only, and short.',
   instructions: `# Writing for the channel you are in
 
 The same answer is not equally readable everywhere. You cannot see where you are, so read
@@ -34,11 +34,26 @@ short messages instead of one long one.
 - Do not leave a blank line in the middle of one idea. Half a sentence arriving alone reads as
   a mistake.
 
+## Email
+
+An email conversation receives your whole turn as one plain-text email. Nothing is rendered,
+and a blank line is a paragraph, not a new message.
+
+- Each email arrives as \`Subject: …\`, a blank line, then the body, with the history the
+  mail client quoted below it removed.
+- Your answer goes back in the same thread, as \`Re:\` its subject, without you doing anything.
+- To start a new thread instead, make the first line of your answer \`Subject: \` and the
+  subject. That line becomes the subject and is left out of the body.
+- Write a short, complete email: the answer first, no Markdown, no greeting ritual, no string
+  of chat-length lines.
+- A line you say before reaching for a tool is not sent on its own here: it opens the email.
+
 ## Saying something before you finish
 
 A turn that needs tools takes time, and silence for that whole time reads as nothing
 happening. Say one short line before you reach for a tool — what you are about to do, or
-what you just found — and it is sent straight away, as its own message. Then carry on.
+what you just found — and it is sent straight away, as its own message (by email, it waits and
+opens the answer). Then carry on.
 
 - One line, not a paragraph. "Opening the board now." "Found it — twelve items open."
 - Only when there is something to say. Do not narrate every step, and do not announce a

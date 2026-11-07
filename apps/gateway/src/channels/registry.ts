@@ -1,6 +1,7 @@
 import { GatewayError } from '../core/errors.js';
 import { ApiChannel } from './api.js';
 import type { Channel, ChannelType } from './channel.js';
+import { EmailChannel } from './email/channel.js';
 import { TelegramChannel } from './telegram.js';
 import { WhatsAppBusinessChannel } from './whatsapp-business.js';
 
@@ -12,6 +13,7 @@ export class ChannelRegistry {
       new ApiChannel(),
       new TelegramChannel(),
       new WhatsAppBusinessChannel(),
+      new EmailChannel(),
     ],
   ) {
     for (const channel of channels) {

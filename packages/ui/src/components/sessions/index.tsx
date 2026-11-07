@@ -45,10 +45,18 @@ const isGateway = (session: Session) => session.channel === GATEWAY_SESSION_CHAN
  * read as it arrives, and the gateway sends no notification about a chat being looked at.
  */
 const READING_MS = 30_000;
-/** The chat a channel's conversation is answered in, as people call it. */
-const chatName = (session: Session) => (session.channel === 'telegram' ? 'Telegram' : 'WhatsApp');
+/**
+ * The chat a channel's conversation is answered in, as people call it. Email has none: its
+ * decisions are answered here, in the panel.
+ */
+const chatName = (session: Session) =>
+  session.channel === 'email'
+    ? undefined
+    : session.channel === 'telegram'
+      ? 'Telegram'
+      : 'WhatsApp';
 const isMessaging = (session: Session) =>
-  ['whatsapp', 'whatsapp-business', 'telegram'].includes(session.channel);
+  ['whatsapp', 'whatsapp-business', 'telegram', 'email'].includes(session.channel);
 const isAgent = (session: Session) => session.channel === AGENT_SESSION_CHANNEL;
 /** A conversation with a bar under it: a chat's composer, or a channel's settings. */
 const docked = (session: Session) => isGateway(session) || isMessaging(session) || isAgent(session);

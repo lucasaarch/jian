@@ -36,6 +36,7 @@ import {
   channelInbox,
   contacts,
   deliveries as deliveryRows,
+  emailBindings,
   mediaAssets,
   metaBindings,
   metaInbox,
@@ -52,7 +53,12 @@ import {
 } from './channel.js';
 import { type ContactRecord, Contacts, type Intake } from './contacts.js';
 import { conversational } from './conversation.js';
+import { emailCredential } from './email/channel.js';
+import { EmailInbox, findEmailThread } from './email/inbox.js';
+import type { EmailCredential } from './email/provider.js';
+import { closeEmail, openEmail } from './email/setup.js';
 import { type GroupDecision, Groups } from './groups.js';
+import { isChatChannel } from './kinds.js';
 import { channelLog } from './logging.js';
 import { remainingOutbound } from './outbound.js';
 import {
@@ -223,6 +229,7 @@ export class Channels {
   private metaPending: Promise<void> = Promise.resolve();
   private readonly abort = new AbortController();
   private readonly meta: MetaInbox;
+  private readonly mail: EmailInbox;
   private readonly conversations: ApiConversations;
 
   constructor(
@@ -234,6 +241,7 @@ export class Channels {
     private readonly rooms = new Groups(services.profiles, services.decisions?.ask),
   ) {
     this.meta = new MetaInbox(services.store, services.vault, fetcher, this.abort.signal);
+    this.mail = new EmailInbox(services.store, services.vault, fetcher, this.abort.signal);
     this.conversations = new ApiConversations(services);
   }
 
@@ -248,6 +256,11 @@ export class Channels {
 
   receiveMeta(id: string, raw: Buffer, signature: unknown) {
     return this.meta.receive(id, raw, signature);
+  }
+
+  /** A provider's signed webhook for an email channel, over the bytes as they arrived. */
+  receiveEmail(id: string, raw: Buffer, headers: ChannelRequest['headers']) {
+    return this.mail.receive(id, raw, headers, (channel, data) => this.accept(channel, data));
   }
 
   /** Where the outside world reaches this gateway (`JIAN_PUBLIC_URL`), for webhooks. */
@@ -304,11 +317,12 @@ export class Channels {
   private metadata({
     tokenHash: _hash,
     automationPausedAt: _paused,
-    address: _address,
+    address,
     handle: _handle,
     ...channel
   }: ChannelRecord) {
-    return channel;
+    // An email address is the owner's own setting, not a protocol identity: they see it.
+    return channel.type === 'email' && address ? { ...channel, emailAddress: address } : channel;
   }
 
   /** Asked once, when the channel is connected: a protocol that cannot say stays unidentified. */
@@ -377,13 +391,18 @@ export class Channels {
    * told where to deliver, and the owner registers the webhook by hand.
    */
   async connect(profileId: string, input: unknown, origin?: string) {
-    const { botToken, whatsappBusiness, ...data } = channelInputSchema.parse(input);
+    const { botToken, whatsappBusiness, email, ...data } = channelInputSchema.parse(input);
 
-    await this.services.profiles.profile(profileId);
+    const profile = await this.services.profiles.profile(profileId);
     this.registry.get(data.type);
 
     if (await findLiveChannel(this.services.store.db, profileId, data.type)) {
       throw new GatewayError(409, 'This channel type is already connected');
+    }
+
+    // Asked before the provider is told anything; the unique index still decides a race.
+    if (email && (await this.emailTaken(email.address))) {
+      throw new GatewayError(409, 'This email address is already connected to an agent');
     }
 
     const configured =
@@ -392,9 +411,18 @@ export class Channels {
 
     const issued = issueToken();
     const identity = botToken ? await this.identify(data.type, botToken) : undefined;
+    const id = randomUUID();
+    // The provider learns this channel's webhook before the channel exists, so the id is
+    // chosen first and the webhook is taken back if storing the channel fails.
+    const mail = email
+      ? await openEmail(email, id, profile.name, this.publicUrl ?? origin, {
+          fetch: this.fetcher,
+          signal: this.abort.signal,
+        })
+      : undefined;
 
     const record: ChannelRecord = {
-      id: randomUUID(),
+      id,
       profileId,
       type: data.type,
       allowAllContacts: false,
@@ -404,52 +432,61 @@ export class Channels {
         : {}),
       tokenHash: issued.hash,
       ...(identity?.address ? { address: identity.address } : {}),
+      ...(mail ? { address: mail.address } : {}),
       ...(identity?.handle ? { handle: identity.handle } : {}),
       createdAt: new Date().toISOString(),
     };
 
-    await this.services.store.transaction(profileId, async (tx) => {
-      // The vault owns the bot token, addressed by this channel; revoking it takes the token.
-      if (botToken) {
-        await this.services.vault.put(profileId, channelSecret(record.id), botToken, tx);
-      }
+    await this.services.store
+      .transaction(profileId, async (tx) => {
+        // The vault owns the bot token, addressed by this channel; revoking it takes the token.
+        if (botToken) {
+          await this.services.vault.put(profileId, channelSecret(record.id), botToken, tx);
+        }
 
-      if (whatsappBusiness) {
-        await this.services.vault.put(
-          profileId,
-          channelSecret(record.id),
-          JSON.stringify(whatsappBusiness),
-          tx,
-        );
-      }
-
-      try {
-        await insertChannel(tx, record);
-        if (configured)
-          await tx.insert(metaBindings).values({
-            channelId: record.id,
-            phoneNumberId: configured.phoneNumberId,
-            businessAccountId: configured.businessAccountId,
-          });
-      } catch (error) {
-        // The partial unique index has the last word on one live channel per type. Reaching it
-        // means another request connected this type first, which is a conflict for the owner
-        // rather than a gateway fault.
-        if (isUniqueViolation(error)) {
-          throw new GatewayError(
-            409,
-            'This channel type or Meta phone number is already connected',
+        if (whatsappBusiness || mail) {
+          await this.services.vault.put(
+            profileId,
+            channelSecret(record.id),
+            JSON.stringify(whatsappBusiness ?? mail),
+            tx,
           );
         }
 
-        throw error;
-      }
+        try {
+          await insertChannel(tx, record);
+          if (configured)
+            await tx.insert(metaBindings).values({
+              channelId: record.id,
+              phoneNumberId: configured.phoneNumberId,
+              businessAccountId: configured.businessAccountId,
+            });
+          if (mail) await tx.insert(emailBindings).values({ channelId: id, address: mail.address });
+        } catch (error) {
+          // The partial unique index has the last word on one live channel per type. Reaching it
+          // means another request connected this type first, which is a conflict for the owner
+          // rather than a gateway fault.
+          if (isUniqueViolation(error)) {
+            throw new GatewayError(
+              409,
+              mail
+                ? 'This channel type or email address is already connected, here or on another agent'
+                : 'This channel type or Meta phone number is already connected',
+            );
+          }
 
-      await recordEvent(tx, () => Date.parse(record.createdAt), profileId, 'channel.connected', {
-        id: record.id,
-        type: record.type,
+          throw error;
+        }
+
+        await recordEvent(tx, () => Date.parse(record.createdAt), profileId, 'channel.connected', {
+          id: record.id,
+          type: record.type,
+        });
+      })
+      .catch(async (error) => {
+        if (mail) await this.forgetEmail(mail, id);
+        throw error;
       });
-    });
 
     // The address the owner set for the outside world wins over the one they happen to be
     // using: a panel opened on localhost is not an address Telegram can call.
@@ -473,6 +510,20 @@ export class Channels {
           }
         : {}),
     };
+  }
+
+  private async emailTaken(address: string) {
+    const [row] = await this.services.store.db
+      .select({ channelId: emailBindings.channelId })
+      .from(emailBindings)
+      .where(eq(emailBindings.address, address.trim().toLowerCase()))
+      .limit(1);
+    return Boolean(row);
+  }
+
+  /** Best effort, after the fact: see `closeEmail`. */
+  private forgetEmail(credential: EmailCredential, channelId: string) {
+    return closeEmail(credential, channelId, { fetch: this.fetcher, signal: this.abort.signal });
   }
 
   async list(profileId: string) {
@@ -526,7 +577,8 @@ export class Channels {
           await this.cancelAutomationRuns(tx, profileId, id);
         }
       } else if ('messages' in data) {
-        if (channel.type === 'api') {
+        // Elsewhere approvals and questions are answered in the panel, never in the conversation.
+        if (!isChatChannel(channel.type)) {
           throw new GatewayError(400, 'Approval and question wording is for WhatsApp and Telegram');
         }
         await setChannelMessages(tx, id, data.messages);
@@ -616,13 +668,29 @@ export class Channels {
     });
   }
 
-  private async revokeWithin(profileId: string, id: string, tx: Queryable): Promise<ChannelRecord> {
+  /**
+   * `mail` is the email credential the channel held, read before the vault lets it go, so its
+   * webhook can be taken off the provider once the revocation is committed.
+   */
+  private async revokeWithin(
+    profileId: string,
+    id: string,
+    tx: Queryable,
+  ): Promise<{ record: ChannelRecord; mail?: EmailCredential }> {
     const value = await findChannel(tx, id);
     const channel = assertFound(value?.profileId === profileId ? value : null, 'Channel');
     const record = { ...channel, revokedAt: new Date().toISOString() };
+    const mail =
+      channel.type === 'email' && !channel.revokedAt
+        ? await this.services.vault
+            .read(profileId, channelSecret(id), tx)
+            .then(emailCredential)
+            .catch(() => undefined)
+        : undefined;
 
     await markChannelRevoked(tx, id, new Date(record.revokedAt));
     await tx.delete(metaBindings).where(eq(metaBindings.channelId, id));
+    await tx.delete(emailBindings).where(eq(emailBindings.channelId, id));
     await this.services.vault.discard(profileId, channelSecret(id), tx);
 
     await recordEvent(tx, () => Date.parse(record.revokedAt), profileId, 'channel.disconnected', {
@@ -645,13 +713,15 @@ export class Channels {
       await writeAuthChunks(tx, id, profileId, [], new Date(record.revokedAt));
     }
 
-    return record;
+    return { record, ...(mail ? { mail } : {}) };
   }
 
   async revoke(profileId: string, id: string) {
-    const record = await this.services.store.transaction(profileId, (tx) =>
+    const { record, mail } = await this.services.store.transaction(profileId, (tx) =>
       this.revokeWithin(profileId, id, tx),
     );
+
+    if (mail) await this.forgetEmail(mail, id);
 
     return this.metadata(record);
   }
@@ -668,7 +738,9 @@ export class Channels {
     const live = (await listChannels(tx, profileId)).filter((channel) => !channel.revokedAt);
 
     for (const channel of live) {
-      await this.revokeWithin(profileId, channel.id, tx);
+      const { mail } = await this.revokeWithin(profileId, channel.id, tx);
+      // The caller's transaction commits later; a webhook left behind only meets a 401.
+      if (mail) void this.forgetEmail(mail, channel.id);
     }
   }
 
@@ -1347,7 +1419,9 @@ export class Channels {
       );
       await recordEvent(tx, Date.now, channel.profileId, 'session.message', { sessionId });
 
-      if (tell && this.registry.get(channel.type).send) {
+      // Only a chat is told: a notice sent by email to whoever wrote would answer spam and
+      // forged senders alike.
+      if (tell && isChatChannel(channel.type) && this.registry.get(channel.type).send) {
         await insertDelivery(tx, {
           id:
             channel.type === 'whatsapp-business'
@@ -1610,6 +1684,9 @@ export class Channels {
         : text;
     const judge = this.services.decisions?.judge;
 
+    // Only a chat decides for the owner; an email's sender is not that sure of being who it says.
+    if (!isChatChannel(channel.type)) return {};
+
     if (waiting?.approval && !waiting.approval.decision) {
       if (!contact.canApprove) return {};
       const read = await readApprovalReply(
@@ -1636,7 +1713,8 @@ export class Channels {
     connectionGeneration?: number,
     inboundEventId?: string,
   ) {
-    if (!this.registry.get(channel.type).send) {
+    // A stranger's email is not answered: the reply would go to whatever address it claimed.
+    if (!isChatChannel(channel.type) || !this.registry.get(channel.type).send) {
       return;
     }
 
@@ -1822,6 +1900,10 @@ export class Channels {
       }
 
       const currentChannel = await findChannel(this.services.store.db, delivery.channelId);
+      // A channel that sends a turn as one message holds what the agent said on the way.
+      const whole = Boolean(currentChannel && this.registry.get(currentChannel.type).wholeMessages);
+      const saySoFar = (said: string[]) =>
+        whole ? Promise.resolve(false) : this.saySoFar(delivery, said);
       const paused =
         currentChannel && (await this.automationDeliveryError(currentChannel, delivery));
       if (paused) {
@@ -1851,7 +1933,7 @@ export class Channels {
         if (run.status === 'queued' || run.status === 'running') {
           // Anything the agent has said on its way to a tool goes out now. The answer follows
           // when the run ends, so the chat moves with the work instead of after it.
-          if (!(await this.saySoFar(delivery, commentary))) {
+          if (!(await saySoFar(commentary))) {
             await this.showProgress(delivery);
           }
 
@@ -1862,20 +1944,25 @@ export class Channels {
           // Flush earlier commentary, then send the question or the approval once and close
           // this delivery, in the channel's own wording. The resume run gets its own delivery
           // after the reply.
-          await this.saySoFar(delivery, commentary);
+          await saySoFar(commentary);
           const wording =
             (await findChannel(this.services.store.db, delivery.channelId))?.messages ??
             DEFAULT_CHANNEL_MESSAGES;
+          const chat = Boolean(currentChannel && isChatChannel(currentChannel.type));
 
           if (run.approval) {
-            const asked = approvalMessage(wording, run.approval);
-            text = asked.text;
-            poll = { question: asked.text, options: asked.options };
+            // Outside a chat the owner decides in the panel, and the conversation hears only
+            // what the agent said before asking.
+            if (chat) {
+              const asked = approvalMessage(wording, run.approval);
+              text = asked.text;
+              poll = { question: asked.text, options: asked.options };
+            }
           } else if (run.question) {
             // The question is the owner's. A chat they let decide for them is asked it; anyone
             // else would be answering in their place, so it stays in the panel, and this
             // delivery closes with only what the agent said before asking.
-            if (await this.chatAnswers(delivery.profileId, run.sessionId)) {
+            if (chat && (await this.chatAnswers(delivery.profileId, run.sessionId))) {
               text = questionMessage(wording, run.question);
               if (run.question.choices?.length) {
                 poll = { question: text, options: run.question.choices };
@@ -1919,7 +2006,7 @@ export class Channels {
 
       // A run that finished between two ticks leaves its last lines unsent; they belong in
       // front of the answer, not lost.
-      await this.saySoFar(delivery, commentary);
+      await saySoFar(commentary);
 
       if (!(await this.claimDelivery(delivery))) {
         continue;
@@ -1928,8 +2015,12 @@ export class Channels {
       // Commentary already on the phone must not leave again as the "answer". Exact last-line
       // match covers a trailing blank line; stripping leading flushed paragraphs covers a final
       // that restates earlier lines (WhatsApp would otherwise show the same bubble twice).
-      // A media-only delivery has no text left on purpose — it still has to go out.
-      const outbound = remainingOutbound(text, commentary);
+      // A media-only delivery has no text left on purpose — it still has to go out. Held
+      // commentary leads the answer instead, in the one message the turn becomes.
+      const rest = remainingOutbound(text, commentary);
+      const outbound = whole
+        ? [...commentary, ...(rest ? [rest] : [])].filter(Boolean).join('\n\n') || undefined
+        : rest;
       const outcome =
         !outbound && !delivery.mediaId && !delivery.reaction
           ? { status: 'sent' as const, remoteMessageIds: [] as string[] }
@@ -2233,12 +2324,18 @@ export class Channels {
         credential,
         fetch: this.fetcher,
         signal: this.abort.signal,
+        deliveryId: delivery.id,
         canReply: async (chatId: string) =>
           chatId === delivery.chatId &&
           !(await this.automationDeliveryError(channel, delivery)) &&
           !(await this.metaDeliveryError(channel, delivery)),
       };
       const people = await this.groupPeople(delivery);
+      const emailThread =
+        channel.type === 'email'
+          ? await findEmailThread(this.services.store.db, channel.id, delivery.chatId)
+          : undefined;
+      const thread = emailThread ? { emailThread } : {};
 
       if (delivery.reaction)
         return adapter.send(
@@ -2261,14 +2358,17 @@ export class Channels {
               ...(media.name ? { name: media.name } : {}),
             },
             people,
+            ...thread,
           },
           context,
         );
       }
 
-      const parts = adapter.rendersMarkdown
-        ? [text.trim()]
-        : conversational(plainText(text), MESSAGE_LIMIT);
+      const parts = adapter.wholeMessages
+        ? [adapter.rendersMarkdown ? text.trim() : plainText(text)]
+        : adapter.rendersMarkdown
+          ? [text.trim()]
+          : conversational(plainText(text), MESSAGE_LIMIT);
 
       const remoteMessageIds: Array<string | number> = [];
 
@@ -2292,6 +2392,7 @@ export class Channels {
             chatId: delivery.chatId,
             text: part,
             people,
+            ...thread,
             // Choices ride on the last bubble, as its own text: one reply keyboard, under the
             // line that asks, and no bubble said twice.
             ...(index === parts.length - 1 && poll ? { poll: { ...poll, question: part } } : {}),

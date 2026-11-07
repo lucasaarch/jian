@@ -14507,7 +14507,8 @@
                       "whatsapp",
                       "whatsapp-business",
                       "telegram",
-                      "api"
+                      "api",
+                      "email"
                     ]
                   },
                   "botToken": {
@@ -14573,6 +14574,33 @@
                         "additionalProperties": false
                       }
                     ]
+                  },
+                  "email": {
+                    "type": "object",
+                    "properties": {
+                      "provider": {
+                        "type": "string",
+                        "const": "resend"
+                      },
+                      "apiKey": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 16000,
+                        "writeOnly": true
+                      },
+                      "address": {
+                        "type": "string",
+                        "maxLength": 254,
+                        "format": "email",
+                        "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+                      }
+                    },
+                    "required": [
+                      "provider",
+                      "apiKey",
+                      "address"
+                    ],
+                    "additionalProperties": false
                   }
                 },
                 "required": [
@@ -14607,7 +14635,8 @@
                         "whatsapp",
                         "whatsapp-business",
                         "telegram",
-                        "api"
+                        "api",
+                        "email"
                       ]
                     },
                     "enabled": {
@@ -14624,6 +14653,9 @@
                         "pending",
                         "configured"
                       ]
+                    },
+                    "emailAddress": {
+                      "type": "string"
                     },
                     "messages": {
                       "type": "object",
@@ -14839,7 +14871,8 @@
                           "whatsapp",
                           "whatsapp-business",
                           "telegram",
-                          "api"
+                          "api",
+                          "email"
                         ]
                       },
                       "enabled": {
@@ -14856,6 +14889,9 @@
                           "pending",
                           "configured"
                         ]
+                      },
+                      "emailAddress": {
+                        "type": "string"
                       },
                       "messages": {
                         "type": "object",
@@ -15193,7 +15229,8 @@
                         "whatsapp",
                         "whatsapp-business",
                         "telegram",
-                        "api"
+                        "api",
+                        "email"
                       ]
                     },
                     "enabled": {
@@ -15210,6 +15247,9 @@
                         "pending",
                         "configured"
                       ]
+                    },
+                    "emailAddress": {
+                      "type": "string"
                     },
                     "messages": {
                       "type": "object",
@@ -15423,7 +15463,8 @@
                         "whatsapp",
                         "whatsapp-business",
                         "telegram",
-                        "api"
+                        "api",
+                        "email"
                       ]
                     },
                     "enabled": {
@@ -15440,6 +15481,9 @@
                         "pending",
                         "configured"
                       ]
+                    },
+                    "emailAddress": {
+                      "type": "string"
                     },
                     "messages": {
                       "type": "object",
@@ -15652,7 +15696,8 @@
                           "whatsapp",
                           "whatsapp-business",
                           "telegram",
-                          "api"
+                          "api",
+                          "email"
                         ]
                       },
                       "scope": {
@@ -15911,7 +15956,8 @@
                         "whatsapp",
                         "whatsapp-business",
                         "telegram",
-                        "api"
+                        "api",
+                        "email"
                       ]
                     },
                     "scope": {
@@ -16150,7 +16196,8 @@
                         "whatsapp",
                         "whatsapp-business",
                         "telegram",
-                        "api"
+                        "api",
+                        "email"
                       ]
                     },
                     "scope": {
@@ -16389,7 +16436,8 @@
                         "whatsapp",
                         "whatsapp-business",
                         "telegram",
-                        "api"
+                        "api",
+                        "email"
                       ]
                     },
                     "scope": {
@@ -16594,7 +16642,8 @@
                           "whatsapp",
                           "whatsapp-business",
                           "telegram",
-                          "api"
+                          "api",
+                          "email"
                         ]
                       },
                       "chatId": {
@@ -19302,6 +19351,174 @@
                   "properties": {
                     "accepted": {
                       "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "accepted"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/email/{channelId}": {
+      "post": {
+        "operationId": "emailIngress",
+        "security": [
+          {
+            "channelWebhook": []
+          }
+        ],
+        "description": "Required permission: webhook.",
+        "parameters": [
+          {
+            "name": "channelId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "description": "A Resend webhook event, authenticated with its Svix signature over the original bytes. Maximum 256 KB."
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "accepted": {
+                      "type": "boolean"
+                    },
+                    "runId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "contact": {
+                      "description": "Absent when the payload carried no message to route.",
+                      "type": "string",
+                      "enum": [
+                        "approved",
+                        "pending",
+                        "blocked"
+                      ]
+                    },
+                    "silence": {
+                      "description": "Why an approved message produced no run.",
+                      "type": "string",
+                      "enum": [
+                        "unaddressed",
+                        "budget",
+                        "reaction",
+                        "no-model"
+                      ]
                     }
                   },
                   "required": [

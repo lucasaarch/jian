@@ -1,7 +1,7 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import { Terminal } from 'lucide-react';
+import { Mail, Terminal } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { kindName } from '../../components/channels/connect';
 import { TelegramLogo, WhatsAppLogo } from '../../components/ui';
@@ -9,9 +9,10 @@ import { StatusPill } from '../../kit';
 import type { Channel, ChannelType, GatewayApi } from '../../lib/api';
 import { keys } from '../../lib/query/keys';
 
-/** A channel's mark: its app's logo, or a terminal for the owner's own systems. */
+/** A channel's mark: its app's logo, an envelope for email, a terminal for the owner's systems. */
 function ChannelMark({ type }: { type: ChannelType }) {
   if (type === 'telegram') return <TelegramLogo size={15} />;
+  if (type === 'email') return <Mail size={15} className="text-muted" aria-hidden="true" />;
   if (type === 'api') return <Terminal size={15} className="text-muted" aria-hidden="true" />;
   return <WhatsAppLogo size={15} />;
 }

@@ -83,8 +83,8 @@ export function ChannelContacts({
 /**
  * One contact: its name and its answers. A request carries what it said, since that is what the
  * owner decides on. Approving actions is trust beyond talking to the agent — it runs what the
- * agent asked to do — and in a room anyone's yes counts; an API server's senders have no chat
- * to approve from.
+ * agent asked to do — and in a room anyone's yes counts; an API server's senders and email
+ * correspondents have no chat to approve from.
  */
 function ContactLine({
   channel,
@@ -147,7 +147,7 @@ function ContactLine({
         )}
         {contact.status === 'approved' && (
           <>
-            {channel.type !== 'api' && (
+            {channel.type !== 'api' && channel.type !== 'email' && (
               <span className="flex items-center gap-1.5 text-xs text-muted">
                 Can approve
                 <SwitchControl

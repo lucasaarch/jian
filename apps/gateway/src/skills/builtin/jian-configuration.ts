@@ -51,8 +51,11 @@ One agent's own, from the agent chooser at the foot of the sidebar.
   conversations: whether its conversations are summarised near the model's limit, the default,
   or at a size the owner sets. See \`managing-context\`.
 - **Skills** and **Memories**: this agent's.
-- **Channels**: on a server gateway, WhatsApp, Telegram and API Server, with contact approvals and
-  groups.
+- **Channels**: on a server gateway, WhatsApp, Telegram, Email and API Server, with contact
+  approvals and groups. Email goes through Resend: an API key with full access, an address on a
+  domain verified there with receiving on and its MX record, and JIAN_PUBLIC_URL set so Resend
+  can reach the gateway. Its senders, actions and questions are approved in the panel, never by
+  email.
 
 ## In the conversation
 

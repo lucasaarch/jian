@@ -1,7 +1,7 @@
 'use client';
 
 import { GATEWAY_SESSION_CHANNEL } from '@jian/contracts';
-import { AlarmClock, Bot, MessageSquare, SquarePen, Terminal } from 'lucide-react';
+import { AlarmClock, Bot, Mail, MessageSquare, SquarePen, Terminal } from 'lucide-react';
 import { type ReactNode, Suspense, useEffect, useRef } from 'react';
 import { choiceOfSession } from '../components/sessions/workspace-choice';
 import { TelegramLogo, WhatsAppLogo } from '../components/ui';
@@ -42,6 +42,7 @@ function conversationIcon(session: Session) {
   const kind = channelKind(session.channel);
   if (kind === 'whatsapp') return <WhatsAppLogo size={13} />;
   if (kind === 'telegram') return <TelegramLogo size={13} />;
+  if (kind === 'email') return <Mail size={14} />;
   if (kind === 'agents') return <Bot size={14} />;
   return <Terminal size={14} />;
 }

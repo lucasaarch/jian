@@ -126,7 +126,8 @@ export function registerChannelRoutes(app: FastifyInstance, deps: ChannelRouteSe
         .send(await linkedDevices().disconnect(request.params.profileId, request.params.channelId)),
   );
 
-  // Encapsulation keeps the raw parser and 3 MB ceiling off every other API route.
+  // Encapsulation keeps the raw parser and its ceilings off every other API route. Signatures
+  // are checked over these bytes, never over JSON parsed and written again.
   void app.register(async (meta) => {
     meta.removeContentTypeParser('application/json');
     meta.addContentTypeParser('application/json', { parseAs: 'buffer' }, (_request, body, done) =>
@@ -149,6 +150,15 @@ export function registerChannelRoutes(app: FastifyInstance, deps: ChannelRouteSe
           request.body,
           request.headers['x-hub-signature-256'],
         );
+      },
+    );
+    // An email event is a notice that mail arrived, not the mail: it stays small.
+    meta.post<{ Params: { channelId: string } }>(
+      '/v1/email/:channelId',
+      { bodyLimit: 256 * 1024 },
+      async (request) => {
+        if (!Buffer.isBuffer(request.body)) throw new GatewayError(400, 'Expected a JSON body');
+        return channels().receiveEmail(request.params.channelId, request.body, request.headers);
       },
     );
   });

@@ -29,6 +29,11 @@ export interface OutgoingMessage {
    * do not; adapters that understand polls prefer this over sending only the text.
    */
   poll?: { question: string; options: string[] };
+  /**
+   * On email: the thread the person last wrote in, which a reply continues. The service reads
+   * it, so the adapter never touches the database.
+   */
+  emailThread?: { subject: string; messageId: string; references: string };
 }
 
 export interface DeliveryContext {
@@ -37,6 +42,8 @@ export interface DeliveryContext {
   credential?: string;
   fetch: typeof globalThis.fetch;
   signal: AbortSignal;
+  /** The delivery being sent, which a protocol with idempotent sends uses as the key. */
+  deliveryId?: string;
   /** Rechecked before each Meta message write, including notices and audio. */
   canReply?: (chatId: string) => Promise<boolean>;
 }
@@ -71,6 +78,13 @@ export interface Channel {
    * carries them itself; WhatsApp numbers read each other like anyone else.
    */
   readonly hidesAgentsFromEachOther?: boolean;
+
+  /**
+   * True when a turn must leave as one message: what the agent says while working is held and
+   * put in front of the answer instead of going out on its own. Email, where each part would
+   * be another message in the person's inbox.
+   */
+  readonly wholeMessages?: boolean;
 
   receive(payload: unknown): IncomingMessage | null;
 

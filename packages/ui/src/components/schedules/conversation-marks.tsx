@@ -1,4 +1,4 @@
-import { MessagesSquare, Terminal } from 'lucide-react';
+import { Mail, MessagesSquare, Terminal } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { TelegramLogo, WhatsAppLogo } from '../ui';
 import type { Provider } from './conversations';
@@ -8,6 +8,7 @@ export const marks: Record<Provider, ReactNode> = {
   chats: <MessagesSquare size={16} aria-hidden="true" />,
   whatsapp: <WhatsAppLogo size={16} />,
   telegram: <TelegramLogo size={16} />,
+  email: <Mail size={16} aria-hidden="true" />,
   api: <Terminal size={16} aria-hidden="true" />,
 };
 
