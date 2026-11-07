@@ -1,4 +1,4 @@
-import { STREAM_OPENED_EVENT } from '@jian/contracts';
+import { runProgressEventSchema, STREAM_OPENED_EVENT } from '@jian/contracts';
 import { onlineManager, type QueryKey, useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import type { GatewayEvent } from '../api/events';
@@ -41,9 +41,11 @@ export function affected(event: GatewayEvent, profileId: string): QueryKey[] {
       // What the agent said may have linked a pull request.
       keys.sessionPulls(profileId),
       // A worktree is made, merged or discarded by a turn, and its counts move as the turn
-      // commits. Read again when the turn starts or ends, or one changes: not on each step, since
-      // on a machine every read is a task its worker runs.
-      ...(type === 'run.step' ? [] : [keys.sessionWorktrees(profileId)]),
+      // commits. Read again when the turn starts or ends, or one changes: not on each step or
+      // each paragraph said, since on a machine every read is a task its worker runs.
+      ...(type === 'run.step' || type === 'session.message'
+        ? []
+        : [keys.sessionWorktrees(profileId)]),
     ];
   }
   if (type.startsWith('profile.')) return [keys.profiles];
@@ -59,6 +61,35 @@ export function affected(event: GatewayEvent, profileId: string): QueryKey[] {
   }
 
   return [];
+}
+
+/** How many runs' last activity is remembered before the memory starts over. */
+const RUNS_REMEMBERED = 64;
+
+/**
+ * What each event makes stale, remembering what each working run was last told doing. A progress
+ * frame comes four times a second while a run writes, and the lists it would read again carry the
+ * text: every screen showing them would draw again for words only the conversation shows. Only a
+ * change of phase, tool or step count is news to them. A frame without progress, from an older
+ * gateway, says only that the run moved, and is taken as news every time.
+ */
+export function staleOf(profileId: string) {
+  const doing = new Map<string, string>();
+
+  return (event: GatewayEvent): QueryKey[] => {
+    if (event.type === 'run.progress') {
+      const told = runProgressEventSchema.safeParse(event.data);
+      const progress = told.success ? told.data.progress : undefined;
+      if (told.success && progress) {
+        const now = JSON.stringify([progress.phase, progress.tool, progress.steps]);
+        if (doing.get(told.data.runId) === now) return [];
+        if (doing.size >= RUNS_REMEMBERED) doing.clear();
+        doing.set(told.data.runId, now);
+      }
+    }
+
+    return affected(event, profileId);
+  };
 }
 
 /**
@@ -85,8 +116,9 @@ export function useEventStream(profileId: string) {
     let flush: ReturnType<typeof setTimeout>;
     let drops = 0;
 
+    const staleFor = staleOf(profileId);
     const invalidate = (event: GatewayEvent) => {
-      const stale = affected(event, profileId);
+      const stale = staleFor(event);
 
       if (!stale.length) return;
       for (const key of stale) pending.set(JSON.stringify(key), key);
