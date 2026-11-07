@@ -4,6 +4,23 @@ Every release of Jian, newest first.
 
 <!-- Generated from docs/releases by scripts/changelog.mjs. Edit the release note, then run `make changelog`. -->
 
+## 1.6.1 — 2026-11-06
+
+Loading tools on Claude no longer makes it read the whole conversation again, and release notes catch up after a gateway update.
+
+### Claude
+
+* **Loading tools keeps the cache:** Each time an agent loaded tools or an app's tools, Claude read the whole conversation again without its cache, about 630,000 tokens in one long turn. Loaded tools are now added to the conversation, and the tool list Claude caches stays the same. This applies to Claude 4.5 and newer.
+
+### Release notes
+
+* **They catch up after a gateway update:** A desktop app left open while its server gateway was updated kept saying "1 release behind" and showed the old version's notes until you reloaded it. They now refresh when the panel reconnects.
+
+### Upgrading
+
+* The desktop app updates itself to this release.
+* **Servers:** Recreate the gateway and web containers with the 1.6.1 images, or follow the `latest` tags. There is no migration.
+
 ## 1.6.0 — 2026-11-06
 
 Pair a phone with your gateway by scanning a QR code, and get a push when an agent replies or needs you.
