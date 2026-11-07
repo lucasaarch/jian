@@ -68,7 +68,7 @@ export type ConversationState = {
   atBeginning: boolean;
 };
 
-export type ConversationActions = {
+type ConversationActions = {
   /** The latest page. `fresh` starts over from it, as a reload the owner asked for does. */
   pageRead(page: Message[], fresh: boolean): void;
   /** The page before the oldest message known. */

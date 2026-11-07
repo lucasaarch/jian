@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 
 /** Characters revealed per second when little is waiting. */
-export const BASE_CHARS_PER_SECOND = 80;
+const BASE_CHARS_PER_SECOND = 80;
 /** Whatever is waiting is shown within this long, so a big block never lags far behind. */
-export const CATCH_UP_SECONDS = 0.5;
+const CATCH_UP_SECONDS = 0.5;
 /** A cut lands on the next whitespace when it is this close, so words do not appear half-typed. */
 const WORD_REACH = 12;
 
