@@ -192,6 +192,8 @@ export type RuntimeServices = ToolServices & {
  * load back what it needs, one group at a time, and to read back what was put aside.
  */
 const MINIMAL_TOOLS = ['load_tools', 'load_mcp_tools', 'load_skill', 'read_artifact'];
+/** The tools whose whole answer is which tools they made available. */
+const LOADERS = new Set(['load_tools', 'load_mcp_tools']);
 
 const LEARNING_TOOLS = new Set([
   'read_memories',
@@ -995,7 +997,11 @@ export class AgentRuntime {
 
         guarded[name] = {
           ...definition,
-          ...(deferring
+          // Only a load answers with references, and with nothing else: Anthropic refuses them
+          // beside text, and a load only lists what it loaded. Any other call that brings tools
+          // in (a stored result's read_artifact, a group's mates) keeps its own result; what it
+          // brought in is sent whole from the next step, unreferenced.
+          ...(deferring && LOADERS.has(name)
             ? { toModelOutput: referencing(definition, (id) => broughtIn.get(id)) }
             : {}),
           execute: async (input, options) => {

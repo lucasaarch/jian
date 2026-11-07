@@ -132,6 +132,35 @@ describe('tool loading on Claude', () => {
     expect(started).toHaveLength(0);
   });
 
+  it('keeps what a tool said when its call brings other tools in', async () => {
+    const modelId = 'claude-opus-5-5';
+    const { services, profile, ask } = await conversation({ provider: 'anthropic', modelId });
+    if (!services.web) throw new Error('Web tools unavailable');
+    // Past the result budget: it is stored, and its call brings read_artifact in.
+    services.web.tools = () => ({
+      large_result: tool({
+        description: 'Return a large synthetic result.',
+        inputSchema: z.object({}),
+        execute: async () => `Report begins. ${'x'.repeat(200_000)}`,
+      }),
+    });
+    const run = await ask('Read the report.');
+    const plan: ClaudeReply[] = [{ tool: 'large_result' }, { text: 'Read.' }];
+    let step = 0;
+    const claude = fakeClaude(modelId, (request) =>
+      request.stream ? (plan[step++] ?? { text: 'Done.' }) : { text: 'Done.' },
+    );
+
+    await new AgentRuntime(services, () => claude.model).execute(profile.id, run.id);
+
+    const sent = steps(claude.requests);
+    const result = JSON.stringify(resultOf(sent[1], 'toolu_1')?.content);
+    // Only a load answers with references alone; any other result keeps its own words.
+    expect(result).toContain('Report begins.');
+    expect(result).toContain('truncated');
+    expect(result).not.toContain('tool_reference');
+  });
+
   it('a loaded tool whose reference left the history is sent loaded', async () => {
     const modelId = 'claude-opus-5-5';
     const { services, profile, ask } = await conversation({ provider: 'anthropic', modelId });
