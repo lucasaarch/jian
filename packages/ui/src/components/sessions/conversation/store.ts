@@ -83,6 +83,8 @@ export type ConversationActions = {
   peopleRead(list: Person[]): void;
   /** A message sent from here was stored: its row keeps the key it was drawn with. */
   sent(messageId: string, outboxKey: string): void;
+  /** One message as the gateway has it now, after a reaction: only its row draws again. */
+  messageChanged(message: Message): void;
   patch(
     change: Partial<
       Pick<
@@ -242,6 +244,15 @@ export function createConversationStore(kept?: HistorySnapshot): ConversationSto
         state.keys.get(messageId) === outboxKey
           ? {}
           : { keys: new Map(state.keys).set(messageId, outboxKey) },
+      ),
+
+    messageChanged: (message) =>
+      set((state) =>
+        state.messages.some((known) => known.id === message.id)
+          ? {
+              messages: state.messages.map((known) => (known.id === message.id ? message : known)),
+            }
+          : {},
       ),
 
     patch: (change) => set(change),

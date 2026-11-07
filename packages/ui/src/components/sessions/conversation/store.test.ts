@@ -373,4 +373,28 @@ describe('the conversation store', () => {
     expect(a).toBe(first[0]);
     expect(b?.status).toBe('completed');
   });
+
+  it('replaces one message a reaction changed, and keeps every other as it was', () => {
+    const store = createConversationStore();
+    store.getState().pageRead([said('a'), answer('b', 'run-1')], false);
+    const [first] = store.getState().messages;
+
+    store
+      .getState()
+      .messageChanged({ ...answer('b', 'run-1'), reactions: [{ actor: 'owner', emoji: '🎉' }] });
+
+    const [kept, changed] = store.getState().messages;
+    expect(kept).toBe(first);
+    expect(changed?.reactions).toEqual([{ actor: 'owner', emoji: '🎉' }]);
+  });
+
+  it('leaves the conversation alone when the changed message is not in it', () => {
+    const store = createConversationStore();
+    store.getState().pageRead([said('a')], false);
+    const before = store.getState().messages;
+
+    store.getState().messageChanged(said('gone'));
+
+    expect(store.getState().messages).toBe(before);
+  });
 });
