@@ -35,12 +35,13 @@ const BODY = 'Look things up in the catalog by their exact code.';
 
 async function conversation(
   skills = [{ name: 'lookup', description: 'Search the catalog', instructions: BODY }],
+  model = { provider: 'openai', modelId: 'test' },
 ) {
   const services = await testServices();
   const profile = await services.profiles.createProfile({
     name: 'Atlas',
     instructions: 'Help.',
-    model: { provider: 'openai', modelId: 'test', apiKeyEnv: 'JIAN_PROVIDER_TEST' },
+    model: { ...model, apiKeyEnv: 'JIAN_PROVIDER_TEST' },
     skills,
   });
   const session = await services.sessions.createSession(profile.id, { title: 'Loads' });
@@ -162,4 +163,26 @@ it('lets the least recently used skill go past a tenth of the window, and one th
   expect(
     (await listLoads(services.store.db, profile.id, session.id)).map((load) => load.name),
   ).toEqual(['newer']);
+});
+
+it('keeps loaded skills on Claude up to their room in Claude tokens, not bytes', async () => {
+  const big = (name: string) => ({
+    name,
+    description: `Skill ${name}`,
+    // About 2,000 bytes each: some 1,000 of Claude's tokens at the half a token it starts from.
+    // A tenth of the default 32,000 holds both; counted a byte a token, as before, only one.
+    instructions: `${name} `.repeat(330),
+  });
+  const { services, profile, session, turn, system } = await conversation(
+    [big('older'), big('newer')],
+    { provider: 'anthropic', modelId: 'claude-test' },
+  );
+  const scope = { profileId: profile.id, sessionId: session.id };
+  await useLoads(services.store.db, scope, 'skill', ['older'], new Date(Date.now() - 60_000));
+  await useLoads(services.store.db, scope, 'skill', ['newer'], new Date());
+
+  const [opening] = await turn('Go on', [answer('Going.')]);
+
+  expect(system(opening as LanguageModelV3CallOptions)).toContain('## Skill: newer');
+  expect(system(opening as LanguageModelV3CallOptions)).toContain('## Skill: older');
 });

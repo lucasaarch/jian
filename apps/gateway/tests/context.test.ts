@@ -256,6 +256,47 @@ describe('context', () => {
     expect(context.messages.at(-1)?.content).toBe('When was the deployment?');
   });
 
+  it('recalls memories up to their budget in Claude tokens, not bytes', async () => {
+    const services = await testServices();
+    const profile = await services.profiles.createProfile({
+      name: 'Atlas',
+      instructions: 'Help the owner.',
+      model: { provider: 'anthropic', modelId: 'claude-opus-5-5', apiKeyEnv: 'JIAN_PROVIDER_TEST' },
+      contextPolicy: { memoryTokens: 8000 },
+    });
+    const session = await services.sessions.createSession(profile.id, { title: 'Recall' });
+    const run = await services.runs.submit(profile.id, session.id, {
+      text: 'When was the deployment?',
+      requestKey: 'recall',
+    });
+    const remember = async (count: number) => {
+      for (let index = 0; index < count; index++) {
+        await services.memories.remember(profile.id, {
+          key: `deployment-${count}-${index}`,
+          content: `Deployment note ${index}: ${'the release went out on time. '.repeat(70)}`,
+          expectedVersion: 0,
+        });
+      }
+    };
+    const recalled = async () => {
+      const turn = buildContext(run, {
+        servers: [],
+        memories: await services.memories.memories(profile.id),
+        activities: [],
+        history: [],
+      }).messages.at(-2)?.content;
+      return (turn?.match(/"key":"deployment-/g) ?? []).length;
+    };
+
+    // Six of about 2 KB: some 6,000 of Claude's tokens at the half a token it starts from, all
+    // within 8,000. Counted a byte a token, as before, three came back.
+    await remember(6);
+    expect(await recalled()).toBe(6);
+    // Twenty-four are well past it: only what the budget holds is recalled.
+    await remember(18);
+    expect(await recalled()).toBeLessThan(10);
+  });
+
   it('refuses an oversized prompt instead of silently dropping tool-call/result blocks', () => {
     const messages = [
       { role: 'user' as const, content: 'old'.repeat(5000) },

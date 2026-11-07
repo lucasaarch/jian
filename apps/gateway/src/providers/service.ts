@@ -36,6 +36,18 @@ import { takesFast } from './speed.js';
 /** Most a turn keeps back for the answer and its thinking, in tokens. */
 const MAX_OUTPUT_RESERVE = 64_000;
 
+/**
+ * The share of the window one tool result may take before it is stored and paged, and the most
+ * it may take, in the provider's tokens (the estimate times the run's scale, `context/scale.ts`).
+ * A result stays in every later step of the turn, so a large window does not earn a larger one.
+ */
+export const TOOL_RESULT_SHARE = 0.02;
+export const TOOL_RESULT_CEILING = 12_000;
+
+/** The same for the memories a turn recalls, in the provider's tokens. */
+export const MEMORY_SHARE = 0.02;
+export const MEMORY_CEILING = 8_000;
+
 export const providerSecret = (providerId: string) => `provider:${providerId}`;
 
 /** True when the owner is keeping a stored choice, including one that no longer passes role checks. */
@@ -340,11 +352,16 @@ export class Providers {
           Math.max(1024, Math.min(MAX_OUTPUT_RESERVE, Math.floor(model.contextWindow / 4))),
           model.contextWindow - 256,
         ),
-        memoryTokens: Math.min(8_000, Math.max(1500, Math.floor(model.contextWindow * 0.02))),
+        memoryTokens: Math.min(
+          MEMORY_CEILING,
+          Math.max(1500, Math.floor(model.contextWindow * MEMORY_SHARE)),
+        ),
         historyTokens: model.contextWindow,
-        // A result stays in every later step of the turn, so a large window does not earn a
-        // larger one: past this it is stored and paged with read_artifact.
-        toolResultTokens: Math.min(12_000, Math.max(1500, Math.floor(model.contextWindow * 0.02))),
+        // Past this a result is stored and paged with read_artifact.
+        toolResultTokens: Math.min(
+          TOOL_RESULT_CEILING,
+          Math.max(1500, Math.floor(model.contextWindow * TOOL_RESULT_SHARE)),
+        ),
         maxSteps: 500,
       },
     };

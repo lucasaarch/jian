@@ -170,6 +170,11 @@ export function profileTools(
   worktrees?: { create: boolean; machine: boolean; signals: boolean; files?: boolean },
   /** The file tools' reach on the machine this run targets, when it offers them there. */
   machineFiles?: FileBackend,
+  /**
+   * The run's scale now (`context/scale.ts`): a page of read_artifact is sized as the runtime
+   * bounds its result, or a page sized in other units would be cut again.
+   */
+  scale?: () => number,
 ): ToolSet {
   const coordination = new Coordination(services);
   const rechecked = new Set<string>();
@@ -604,7 +609,7 @@ export function profileTools(
           if (recorded === undefined) throw new GatewayError(404, 'Tool call not found');
           const content =
             typeof recorded === 'string' ? recorded : (JSON.stringify(recorded, null, 2) ?? '');
-          return { toolCallId, ...artifactPage(content, offset, limit, run) };
+          return { toolCallId, ...artifactPage(content, offset, limit, run, undefined, scale?.()) };
         }
         // The profile in the where clause is the owner check: another profile's artifact is
         // not found rather than read, whatever id the model guesses.
@@ -617,7 +622,7 @@ export function profileTools(
           .limit(1);
 
         const { content } = assertFound(record, 'Artifact');
-        return artifactPage(content, offset, limit, run, artifactId);
+        return artifactPage(content, offset, limit, run, artifactId, scale?.());
       },
     }),
 

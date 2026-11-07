@@ -12,6 +12,7 @@ import { gatewayTimeZone } from '../core/time-zone.js';
 import { sanitizeObjectiveText } from '../sessions/objective.js';
 import { availableSkills } from '../skills/builtin/index.js';
 import { tokenCounter } from './budget.js';
+import { defaultScale } from './scale.js';
 
 export interface ContextSources {
   /** The MCP servers this run reaches: the skills it is offered follow them. */
@@ -50,8 +51,10 @@ export interface ContextSources {
   /** Skills the conversation's workspaces offer, beside the profile's. */
   projectSkills?: ReadonlyArray<Pick<Skill, 'name' | 'description'>>;
   /**
-   * Provider tokens per token of the estimate (`scale.ts`). The Context line is the agent's
-   * cue to compact on its own, so it reads the size the runtime compacts by, not a byte count.
+   * Provider tokens per token of the estimate (`scale.ts`): the session's last measured one, or
+   * the provider's default when left out. The memory budget is in the provider's tokens, and
+   * the Context line, the agent's cue to compact on its own, reads the size the runtime
+   * compacts by, not a byte count.
    */
   scale?: number;
 }
@@ -102,6 +105,7 @@ export function buildContext(
   const model = run.model ?? run.profile.model;
   const worker = Boolean(run.subagent);
   const count = tokenCounter(model.provider, model.modelId);
+  const scale = sources.scale ?? defaultScale(model.provider);
   const relevance = sources.relevance ?? {};
   const judged = (key: string) => relevance[key] ?? -1;
   // Judged memories lead, by how much they help; those the judgement did not reach follow in
@@ -126,7 +130,8 @@ export function buildContext(
       sourceSessionId: memory.sourceSessionId,
       ...(recalledWith ? { recalledWith } : {}),
     };
-    const cost = count(JSON.stringify(entry)) + 4;
+    // Rounded up: a budget in the provider's tokens may be met, never passed.
+    const cost = Math.ceil((count(JSON.stringify(entry)) + 4) * scale);
 
     if (memoryTokens + cost <= policy.memoryTokens) {
       relevant.push(entry);
@@ -341,7 +346,7 @@ export function buildContext(
     (count(system) +
       count(turn.join('\n\n')) +
       messages.reduce((sum, message) => sum + count(message.content) + 8, 0)) *
-      (sources.scale ?? 1),
+      scale,
   );
   const share = Math.min(100, Math.round((used / policy.inputTokens) * 100));
 

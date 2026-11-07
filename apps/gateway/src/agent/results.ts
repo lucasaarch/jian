@@ -1,6 +1,21 @@
 import type { Run } from '@jian/contracts';
 import { tokenCounter } from '../context/budget.js';
+import { defaultScale } from '../context/scale.js';
 import type { RuntimeOptions } from './types.js';
+
+/**
+ * Sizes in the provider's tokens, as the result budget is written: the gateway's estimate times
+ * the run's scale (`context/scale.ts`), rounded up. Counted as bytes, Claude's 12,000 held about
+ * 5,000 of its tokens, and the agent paged with read_artifact what would have fit, each page a
+ * step that sends the whole prompt again. With no scale given, the provider's default, which is
+ * above anything measured, so a result is only ever cut early, never let in too large.
+ */
+function resultTokens(run: Run, scale?: number) {
+  const model = run.model ?? run.profile.model;
+  const estimate = tokenCounter(model.provider, model.modelId);
+  const by = scale ?? defaultScale(model.provider);
+  return { count: (text: string) => Math.ceil(estimate(text) * by), scale: by };
+}
 
 // Replace longer secrets first so an overlapping shorter value cannot leave a suffix exposed.
 export function redactText(text: string, secrets: ReadonlySet<string>): string {
@@ -69,10 +84,11 @@ export function artifactPage(
   limit: number,
   run: Run,
   artifactId?: string,
+  /** The run's scale; the page must pass `boundToolResult` counted the same way. */
+  scale?: number,
 ) {
   if (offset > content.length) throw new Error('Artifact offset is beyond the end of the result');
-  const model = run.model ?? run.profile.model;
-  const count = tokenCounter(model.provider, model.modelId);
+  const { count } = resultTokens(run, scale);
   const budget = (run.contextPolicy ?? run.profile.contextPolicy).toolResultTokens;
   const metadata: { artifactId?: string; totalCharacters?: number; instruction?: string } =
     artifactId
@@ -140,14 +156,15 @@ export async function boundToolResult(
   secrets: ReadonlySet<string>,
   options: Pick<RuntimeOptions, 'storeArtifact'>,
   concise = false,
+  /** Provider tokens per token of the estimate, as the run measured it (`context/scale.ts`). */
+  scale?: number,
 ): Promise<unknown> {
   const sanitized = redactOutput(
     toolName.startsWith('mcp__') ? structuredMcpResult(output) : output,
     secrets,
   );
   const json = JSON.stringify(sanitized) ?? 'null';
-  const model = run.model ?? run.profile.model;
-  const count = tokenCounter(model.provider, model.modelId);
+  const { count, scale: by } = resultTokens(run, scale);
   const limit = (run.contextPolicy ?? run.profile.contextPolicy).toolResultTokens;
 
   if (count(json) <= limit) {
@@ -163,10 +180,11 @@ export async function boundToolResult(
   }
 
   if (artifact && toolName.startsWith('mcp__')) {
-    return artifactPage(json, 0, json.length, run, artifact.artifactId);
+    return artifactPage(json, 0, json.length, run, artifact.artifactId, scale);
   }
 
-  let previewSize = Math.min(json.length, limit);
+  // Characters, started at what the budget holds at this scale and halved until it fits.
+  let previewSize = Math.min(json.length, Math.floor(limit / by));
   const previewAt = (size: number) =>
     (concise && artifact ? concisePreview(sanitized, toolName, size) : undefined) ??
     json.slice(0, size);

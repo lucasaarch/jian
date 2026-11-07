@@ -163,8 +163,8 @@ const LIMIT_MARGIN = 1.15;
  * instructions, and the most they may take in tokens: a tenth of a 1M window let 100k of skills
  * ride in every step. Past it the least recently used goes, and is loaded again if needed.
  */
-const PINNED_SHARE = 0.1;
-const PINNED_CEILING = 16_000;
+export const PINNED_SHARE = 0.1;
+export const PINNED_CEILING = 16_000;
 
 export type { RuntimeOptions } from './types.js';
 
@@ -261,7 +261,8 @@ export class AgentRuntime {
   /**
    * The instructions of the skills this conversation loaded, written for this run, to sit at the
    * end of its instructions. One the profile no longer has is forgotten; past a tenth of the
-   * model's window, or 16k tokens, the least recently used go, and the catalog offers them again.
+   * model's window, or 16k of its tokens, the least recently used go, and the catalog offers
+   * them again.
    */
   private async pinnedSkills(
     run: Run,
@@ -269,11 +270,14 @@ export class AgentRuntime {
     servers: readonly McpServer[],
     can: Parameters<typeof skillFor>[3],
     projectSkills: readonly Skill[],
+    /** Provider tokens per token of the estimate: the room is in the provider's tokens. */
+    scale: number,
   ): Promise<string> {
     const scope = { profileId: run.profileId, sessionId: run.sessionId };
     const policy = run.contextPolicy ?? run.profile.contextPolicy;
     const model = run.model ?? run.profile.model;
-    const count = tokenCounter(model.provider, model.modelId);
+    const estimate = tokenCounter(model.provider, model.modelId);
+    const count = (text: string) => Math.ceil(estimate(text) * scale);
     const kept = loads
       .filter((load) => load.kind === 'skill')
       .map((load) => ({ load, skill: skillFor(run, servers, load.name, can, projectSkills) }));
@@ -597,6 +601,19 @@ export class AgentRuntime {
       );
       const session = await this.services.sessions.session(profileId, run.sessionId);
       const learning = session.channel === LEARNING_SESSION_CHANNEL;
+      // Provider tokens per token of the gateway's estimate (context/scale.ts). Every size
+      // decision of the run goes by the estimate times this, so compaction starts when the
+      // provider's own count nears the threshold, not when a byte count does, and a result,
+      // the memories and the loaded skills get the room their budgets name. Each step the
+      // provider reports measures it again; a turn starts from the conversation's last one.
+      const seeded = await lastPromptScale(
+        this.services.store.db,
+        profileId,
+        run.sessionId,
+        config,
+      );
+      let scale = seeded ?? defaultScale(config.provider);
+      let margin = seeded === undefined ? 1 : LIMIT_MARGIN;
       // The installation's servers, read now rather than frozen with the profile: one the owner
       // connects is there from the next turn. A look back reaches none.
       const installed = await this.services.mcp.list();
@@ -767,6 +784,7 @@ export class AgentRuntime {
           project.skills,
           worktreeCan,
           machineFiles,
+          () => scale,
         ),
         ...(!learning && this.options.github && gitPlace
           ? githubGitTools({
@@ -914,6 +932,7 @@ export class AgentRuntime {
               ...(session.remoteMachineId ? { machine: { files: Boolean(machineFiles) } } : {}),
             },
             project.skills,
+            scale,
           );
       if (githubMcpFailure) unavailable.push(githubMcpFailure);
 
@@ -1165,7 +1184,15 @@ export class AgentRuntime {
                     toolName: name,
                     toolCallId: options.toolCallId,
                     reason: said ? reason(said, secrets, 600) : MCP_ERROR_UNSAID,
-                    result: await boundToolResult(answered, name, run, secrets, this.options),
+                    result: await boundToolResult(
+                      answered,
+                      name,
+                      run,
+                      secrets,
+                      this.options,
+                      false,
+                      scale,
+                    ),
                   });
                 }
 
@@ -1176,6 +1203,7 @@ export class AgentRuntime {
                   secrets,
                   this.options,
                   currentCavemanMode !== 'off',
+                  scale,
                 );
                 for (const mate of groupMates(name, tools)) loadedTools.add(mate);
                 if (name === 'inspect_page' || name === 'browser_control') {
@@ -1295,18 +1323,6 @@ export class AgentRuntime {
       let lastMessages = context.messages as ModelMessage[];
       let currentStartIndex = context.currentStartIndex;
       const estimate = tokenCounter(config.provider, config.modelId);
-      // Provider tokens per token of the gateway's estimate (context/scale.ts). Every size
-      // decision of the run goes by the estimate times this, so compaction starts when the
-      // provider's own count nears the threshold, not when a byte count does. Each step the
-      // provider reports measures it again; a turn starts from the conversation's last one.
-      const seeded = await lastPromptScale(
-        this.services.store.db,
-        profileId,
-        run.sessionId,
-        config,
-      );
-      let scale = seeded ?? defaultScale(config.provider);
-      let margin = seeded === undefined ? 1 : LIMIT_MARGIN;
       // The gateway's unscaled count of the prompt the step sent, which its report is held to.
       let preparedEstimate = 0;
       const account = async (
