@@ -296,4 +296,25 @@ describe('outbound policy', () => {
       await new Promise<void>((resolve) => server.close(() => resolve()));
     }
   });
+
+  it('keeps the codes of a failed request, and nothing else of what it was raised from', async () => {
+    const lookupFailure = Object.assign(
+      new Error('getaddrinfo EAI_AGAIN api.example.test token=synthetic-secret'),
+      { code: 'EAI_AGAIN', syscall: 'getaddrinfo' },
+    );
+    const client = createSafeFetch({
+      lookup: async () => {
+        throw lookupFailure;
+      },
+    });
+
+    clients.push(client);
+
+    const failure = await client.fetch('https://api.example.test/v1').catch((error) => error);
+
+    // The codes say why it failed, so a caller can tell a blip from a refusal without reading
+    // the message. The original error, which can carry the address and a credential, stays out.
+    expect(failure).toMatchObject({ codes: ['EAI_AGAIN'] });
+    expect(failure.cause).toBeUndefined();
+  });
 });
