@@ -24,6 +24,14 @@ import { useReconnect } from '../../lib/stores/reconnect';
 import { plainText } from '../ui/markdown';
 import { FilePath } from './code-change';
 import { Confetti } from './confetti';
+import {
+  answers,
+  endedTurns,
+  joinHistory,
+  overTurns,
+  toldTurn,
+  turnOf,
+} from './conversation/turns';
 import { ConversationMap } from './conversation-map';
 import { CrewCards, placeCrew, reportOf } from './crew';
 import { ApprovalCard, QuestionCard } from './decision-cards';
@@ -40,10 +48,9 @@ import { running } from './status';
 import { ThoughtLine } from './thought-line';
 import { TroubleCard } from './trouble';
 
-/**
- * Who answers a message: the agent, or — on a question this profile carried to another agent —
- * that agent, whose run is kept in its own profile.
- */
+// Its tests import it from here.
+export { joinHistory } from './conversation/turns';
+
 /**
  * How long a turn at work may go without a word from the stream before the conversation is read
  * anyway, in ms, and the longest the wait grows to while the silence lasts.
@@ -53,12 +60,6 @@ const QUIET_READ_MAX_MS = 30_000;
 /** How close to the top of the conversation, in px, reading further back begins. */
 const EARLIER_WITHIN_PX = 400;
 
-const answers = (message: Message) =>
-  message.call ? message.role === 'user' : message.role === 'assistant';
-const turnOf = (message: Message) => message.call?.runId ?? message.runId;
-/** A person's own line in a turn: the one that opened it, or one sent while it ran. */
-const toldTurn = (message: Message) =>
-  message.role === 'user' && !message.call && !message.purpose && Boolean(message.runId);
 /** When a stretch of tools ended: its last tool's end, so a settled line stops its clock there. */
 const endOf = (steps: ToolStep[]) =>
   steps
@@ -138,50 +139,6 @@ const fallbacks = {
   interrupted: 'It stopped before it finished.',
   cancelled: 'It stopped before it finished.',
 } as const;
-
-/**
- * What was just read, joined to what is already known. A new line pushes the oldest out of the
- * latest page, and it stays: the reader has it on screen, and earlier pages end right above it.
- * What was read that does not meet what is known starts over, since keeping both would hide a
- * gap in the conversation behind what looks like a whole one.
- */
-export function joinHistory<Item extends { id: string }>(known: Item[], latest: Item[]): Item[] {
-  const first = latest[0];
-  if (!first) return [];
-  const meets = known.findIndex((item) => item.id === first.id);
-
-  return meets < 0 ? latest : [...known.slice(0, meets), ...latest];
-}
-
-/** What a read says of each turn it asked about, over what was known of the others. */
-function overTurns<Value>(known: Map<string, Value>, asked: string[], read: [string, Value][]) {
-  const next = new Map(known);
-  for (const turn of asked) next.delete(turn);
-  for (const [turn, value] of read) next.set(turn, value);
-
-  return next;
-}
-
-/** How a run ends: its tools and its question can no longer change. */
-const ENDED = new Set<Run['status']>(['completed', 'failed', 'interrupted', 'cancelled']);
-
-/**
- * The turns of a page whose tools are final, by the profile's recent runs as the gateway listed
- * them before the tools were read. A turn missing from the list is ended when it began before the
- * oldest run listed: the list holds the latest ones, so it is older than all of them. One missing
- * and newer started after the list was read, and is not.
- */
-function endedTurns(turns: string[], page: Message[], recent: Run[]): string[] {
-  const listed = new Map(recent.map((item) => [item.id, item.status]));
-  const oldest = recent.map((item) => item.createdAt).sort()[0];
-
-  return turns.filter((turn) => {
-    const status = listed.get(turn);
-    if (status) return ENDED.has(status);
-    const began = page.find((message) => message.runId === turn)?.createdAt;
-    return Boolean(oldest && began && began < oldest);
-  });
-}
 
 export function History({
   api,
