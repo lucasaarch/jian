@@ -181,6 +181,7 @@ export function ThoughtLine({
   startedAt,
   finishedAt,
   failed = false,
+  after,
 }: {
   working: boolean;
   /** It ended without finishing: the settled mark is a cross, not a check. */
@@ -192,6 +193,8 @@ export function ThoughtLine({
   startedAt?: string | number;
   /** When the work ended; a settled line without it ends at its last known moment. */
   finishedAt?: string | number;
+  /** What follows the clock in the head, such as the countdown to a retry. */
+  after?: ReactNode;
 }) {
   // Nothing opens itself, not even an in-progress run; each tool's details are independently folded.
   const [open, setOpen] = useState(false);
@@ -247,6 +250,7 @@ export function ThoughtLine({
             {lasted(working ? seconds(Date.now()) : (settled ?? 0))}
           </span>
         )}
+        {after}
         {foldable && <ChevronDown size={14} className="thought-chevron" aria-hidden="true" />}
         <span className="sr-only" role="status">
           {working || settled === undefined ? current : `${summary} · ${spoken(settled)}`}

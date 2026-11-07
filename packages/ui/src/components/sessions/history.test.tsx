@@ -235,6 +235,69 @@ it('a progress event shows new text without reading the conversation', async () 
   }
 });
 
+it('a progress frame that is reconnecting shows it, counting down to the next attempt', async () => {
+  vi.useFakeTimers({ now: Date.parse('2026-11-07T10:00:10Z') });
+  const runId = '1c9f3c1e-5d1a-4f7e-9a51-1c2d3e4f5a6b';
+  const sessionId = '2d1d2e3f-4a5b-4c6d-8e7f-9a0b1c2d3e4f';
+  const working = {
+    id: runId,
+    profileId: 'profile',
+    sessionId,
+    status: 'running',
+    createdAt: '2026-11-07T10:00:00Z',
+    updatedAt: '2026-11-07T10:00:00Z',
+  } as Run;
+  const api = {
+    messages: async () => [],
+    activities: async () => [working],
+    timeline: async () => [],
+  };
+  const view = await mount(
+    <History api={api} profileId="profile" sessionId={sessionId} initialRun={working} />,
+  );
+  const line = () => view.element.querySelector('.thought-line');
+
+  try {
+    await act(async () => {
+      hear?.({
+        type: 'run.progress',
+        data: {
+          runId,
+          sessionId,
+          at: '2026-11-07T10:00:10Z',
+          progress: {
+            phase: 'thinking',
+            text: '',
+            steps: 0,
+            reconnecting: {
+              attempts: 12,
+              nextAt: '2026-11-07T10:00:40.000Z',
+              reason: 'connection timed out',
+            },
+            updatedAt: '2026-11-07T10:00:10.000Z',
+          },
+        },
+      });
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    expect(line()?.querySelector('.thought-label')?.textContent).toBe('Reconnecting to the model');
+    const retry = line()?.querySelector('.thought-retry');
+    expect(retry?.textContent).toBe('attempt 12 · next in 30s');
+
+    // The countdown paints its own element: nothing else is drawn again for it.
+    const label = line()?.querySelector('.thought-label');
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5_000);
+    });
+    expect(line()?.querySelector('.thought-retry')?.textContent).toBe('attempt 12 · next in 25s');
+    expect(line()?.querySelector('.thought-label')).toBe(label);
+  } finally {
+    await view.done();
+    vi.useRealTimers();
+  }
+});
+
 it('opens with the latest 40 and reads 40 more near the top', async () => {
   const all = Array.from({ length: 100 }, (_, number) => ({
     id: `m${number}`,

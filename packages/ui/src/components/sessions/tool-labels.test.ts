@@ -52,6 +52,27 @@ it('says which server tool is running while it runs', () => {
   expect(statusOf(run).label).toBe('github · issue_write');
 });
 
+it('says the run is reconnecting to the model, over the tool it last used', () => {
+  // The same words in the open conversation and on a crew card, which reads only the label.
+  const run = {
+    status: 'running' as const,
+    progress: {
+      phase: 'tool' as const,
+      tool: 'read_file',
+      text: '',
+      steps: 1,
+      reconnecting: {
+        attempts: 4,
+        nextAt: '2026-11-07T12:00:05.000Z',
+        reason: 'connection timed out',
+      },
+      updatedAt: '2026-11-07T12:00:04.000Z',
+    },
+  };
+
+  expect(statusOf(run)).toMatchObject({ label: 'Reconnecting to the model', tool: false });
+});
+
 it('names the worktree tools as what they do', () => {
   expect(
     traceOf([
