@@ -100,6 +100,75 @@ describe('what a run reports while it runs', () => {
     }
   });
 
+  it('never writes a held token snapshot over a newer change of activity', async () => {
+    // The fake clock moves with the fake timers, so the held write fires when it would for real.
+    vi.useFakeTimers({ now: 0 });
+    try {
+      const written: RunProgress[] = [];
+      const subject = new ProgressReporter(
+        async (snapshot) => {
+          written.push(snapshot);
+        },
+        250,
+        () => Date.now(),
+      );
+
+      subject.draft('Para one.');
+      subject.draft('Para one. Still');
+      subject.draft('');
+      subject.usingTool('shell');
+      await vi.advanceTimersByTimeAsync(1_000);
+
+      expect(written.map(({ phase, text }) => `${phase} "${text}"`)).toEqual([
+        'writing "Para one."',
+        'writing ""',
+        'tool ""',
+      ]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('writes a change of activity at once, even while a token snapshot waits', async () => {
+    vi.useFakeTimers({ now: 0 });
+    try {
+      const written: RunProgress[] = [];
+      const subject = new ProgressReporter(
+        async (snapshot) => {
+          written.push(snapshot);
+        },
+        250,
+        () => Date.now(),
+      );
+
+      subject.draft('Para one.');
+      await vi.advanceTimersByTimeAsync(10);
+      // Held: the interval has not passed. The emptied draft right after must not wait for it.
+      subject.draft('Para one. Still');
+      subject.draft('');
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(written.map((snapshot) => snapshot.text)).toEqual(['Para one.', '']);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('stamps marks in the same millisecond strictly later, so each is told', async () => {
+    const { subject, written } = reporter(0);
+
+    subject.draft('Para one.');
+    subject.draft('');
+    subject.usingTool('shell');
+    await subject.flush();
+
+    const stamps = written.map((snapshot) => Date.parse(snapshot.updatedAt));
+    expect(written.map((snapshot) => snapshot.phase)).toEqual(['writing', 'writing', 'tool']);
+    for (let at = 1; at < stamps.length; at += 1) {
+      expect(stamps[at]).toBeGreaterThan(stamps[at - 1] as number);
+    }
+  });
+
   it('coalesces a burst of tokens into one write', async () => {
     const { subject, written, advance } = reporter();
 

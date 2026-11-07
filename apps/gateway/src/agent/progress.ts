@@ -28,6 +28,14 @@ export class ProgressReporter {
   private readonly urgent: RunProgress[] = [];
   private writing?: Promise<void>;
   /**
+   * True from the moment the loop starts until the moment it decides to stop, flipped in the same
+   * tick as that decision. The promise above settles a microtask later, so a mark made in between
+   * would trust a loop that has already left and wait for the held timer.
+   */
+  private draining = false;
+  /** The last `updatedAt` handed out, in epoch milliseconds. */
+  private stamped = Number.NEGATIVE_INFINITY;
+  /**
    * Writes the held token snapshot once the interval has passed. Without it a snapshot held
    * back waits for the next change, and the model may change nothing the watcher sees for a long
    * while: writing a tool's input marks nothing, so the screen would keep a paragraph long gone.
@@ -114,13 +122,17 @@ export class ProgressReporter {
   }
 
   private snapshot(): RunProgress {
+    // Strictly increasing per run: the stream tells a frame once per `updatedAt`, and the panel
+    // takes only a strictly newer one, so two marks in one millisecond would hide the second.
+    this.stamped = Math.max(this.clock(), this.stamped + 1);
+
     return {
       phase: this.phase,
       ...(this.tool ? { tool: this.tool, ...(this.mcp ? { mcp: this.mcp } : {}) } : {}),
       // The tail is what a reader is looking at; the head is already on their screen.
       text: this.text.length > 8000 ? this.text.slice(-8000) : this.text,
       steps: this.steps,
-      updatedAt: new Date(this.clock()).toISOString(),
+      updatedAt: new Date(this.stamped).toISOString(),
     };
   }
 
@@ -129,6 +141,11 @@ export class ProgressReporter {
     const snapshot = this.snapshot();
 
     if (force) {
+      // The urgent snapshot is newer than any held one: writing the held one after it would put
+      // the screen back to a state the run has left.
+      this.pending = undefined;
+      clearTimeout(this.held);
+      this.held = undefined;
       this.urgent.push(snapshot);
       this.urgent.splice(0, Math.max(0, this.urgent.length - URGENT_BACKLOG));
     } else {
@@ -139,15 +156,13 @@ export class ProgressReporter {
   }
 
   private async pump(): Promise<void> {
-    if (this.writing) {
-      // The loop below re-reads `pending` when its current write lands.
+    if (this.draining) {
+      // The loop below re-reads the queue and `pending` when its current write lands.
       return;
     }
 
-    this.writing = this.drain().finally(() => {
-      this.writing = undefined;
-    });
-
+    this.draining = true;
+    this.writing = this.drain();
     await this.writing;
   }
 
@@ -158,6 +173,8 @@ export class ProgressReporter {
         (this.clock() - this.lastWrite >= this.every ? this.pending : undefined);
 
       if (!next) {
+        // In the same tick as the decision, so the next mark starts a loop of its own.
+        this.draining = false;
         this.hold();
         return;
       }
