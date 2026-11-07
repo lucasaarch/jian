@@ -197,6 +197,12 @@ export const cursorSchema = z.strictObject({
  */
 export const streamCursorSchema = z.strictObject({
   after: z.coerce.number().int().min(0).max(Number.MAX_SAFE_INTEGER).optional(),
+  /**
+   * `1` asks for what each working run is writing in its `run.progress` frames: up to 8000
+   * characters, four times a second, per run. Only a client that shows the text asks for it;
+   * any other hears that a run moved, as before.
+   */
+  progress: z.literal('1').optional(),
 });
 
 export const STREAM_OPENED_EVENT = 'stream.opened';

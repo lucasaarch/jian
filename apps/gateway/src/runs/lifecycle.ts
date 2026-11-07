@@ -161,6 +161,16 @@ export class RunLifecycle {
         content: text,
         createdAt: nowIso(this.clock),
       });
+      // Durable, as every new message is: a client that shows the conversation reads it now,
+      // not when the turn ends, and one that was away hears of it when it resumes.
+      await recordEvent(
+        tx,
+        this.clock,
+        profileId,
+        'session.message',
+        { sessionId: run.sessionId },
+        runId,
+      );
     });
   }
 

@@ -25519,6 +25519,7 @@ export interface operations {
         parameters: {
             query?: {
                 after?: number;
+                progress?: "1";
             };
             header?: never;
             path: {

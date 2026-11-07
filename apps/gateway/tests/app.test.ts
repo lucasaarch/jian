@@ -489,6 +489,29 @@ it('opens a stream with no cursor from now, telling where to resume and only wha
   }
 });
 
+describe('what the agent says mid-turn', () => {
+  it('records each released paragraph as a durable event naming its conversation', async () => {
+    const { services } = await setup();
+    const profile = await services.profiles.createProfile(input);
+    const session = await services.sessions.createSession(profile.id, { channel: 'api' });
+    const run = await services.runs.submit(profile.id, session.id, {
+      text: 'Hi',
+      requestKey: 'said',
+    });
+
+    await services.lifecycle.claim(run.id, profile.id, 'worker');
+    const before = (await events(services.store, profile.id)).at(-1)?.id ?? 0;
+    await services.lifecycle.say(profile.id, run.id, 'worker', 'Found the PR.');
+
+    const said = (await events(services.store, profile.id, before)).filter(
+      (event) => event.type === 'session.message',
+    );
+
+    expect(said).toHaveLength(1);
+    expect(said[0]).toMatchObject({ runId: run.id, data: { sessionId: session.id } });
+  });
+});
+
 describe('reading a long conversation', () => {
   const lines = (read: { json: () => { content: string }[] }) =>
     read.json().map((message) => message.content);
@@ -729,7 +752,7 @@ it('streams an agent at work as it goes, without moving the cursor a client resu
   await services.lifecycle.claim(run.id, profile.id, 'worker');
 
   try {
-    const response = await fetch(`${url}/v1/profiles/${profile.id}/events/stream`, {
+    const response = await fetch(`${url}/v1/profiles/${profile.id}/events/stream?progress=1`, {
       headers,
       signal: controller.signal,
     });
@@ -769,6 +792,60 @@ it('streams an agent at work as it goes, without moving the cursor a client resu
     // Only durable events carry an id; a live update between them has none.
     expect(progress.split('\n\n')[0]).not.toContain('id: ');
     await reader.cancel();
+  } finally {
+    controller.abort();
+  }
+});
+
+it('tells what an agent is writing only to a stream that asks for it', async () => {
+  const { app, services } = await setup();
+  const profile = await services.profiles.createProfile(input);
+  const session = await services.sessions.createSession(profile.id, { channel: 'api' });
+  const run = await services.runs.submit(profile.id, session.id, {
+    text: 'Hi',
+    requestKey: 'quiet',
+  });
+  const url = await app.listen({ host: '127.0.0.1', port: 0 });
+  const controller = new AbortController();
+
+  await services.lifecycle.claim(run.id, profile.id, 'worker');
+  await services.lifecycle.progress(run.id, 'worker', {
+    phase: 'writing',
+    text: 'A long answer in the making',
+    steps: 1,
+    updatedAt: new Date(Date.now() + 1000).toISOString(),
+  });
+
+  const frameOf = async (query: string) => {
+    const response = await fetch(`${url}/v1/profiles/${profile.id}/events/stream${query}`, {
+      headers,
+      signal: controller.signal,
+    });
+
+    assert.ok(response.body, 'SSE response must have a body');
+    const reader = response.body.getReader();
+    let data = '';
+    while (!data.includes('event: run.progress\ndata: ') || !data.endsWith('\n\n')) {
+      const chunk = await reader.read();
+      if (chunk.done) break;
+      data += new TextDecoder().decode(chunk.value);
+    }
+    await reader.cancel();
+    const line = data
+      .slice(data.indexOf('event: run.progress'))
+      .split('\n')
+      .find((row) => row.startsWith('data: '));
+
+    return runProgressEventSchema.parse(JSON.parse(line?.slice('data: '.length) ?? ''));
+  };
+
+  try {
+    const plain = await frameOf('');
+    const asked = await frameOf('?progress=1');
+
+    expect(plain).toMatchObject({ runId: run.id, sessionId: session.id });
+    expect(plain.progress).toBeUndefined();
+    expect(asked.progress?.text).toBe('A long answer in the making');
   } finally {
     controller.abort();
   }

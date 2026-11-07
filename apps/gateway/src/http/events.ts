@@ -62,10 +62,11 @@ export function registerEventRoutes(app: FastifyInstance, options: EventOptions)
     },
   );
 
-  app.get<{ Params: ProfileParams; Querystring: { after?: string } }>(
+  app.get<{ Params: ProfileParams; Querystring: { after?: string; progress?: '1' } }>(
     '/v1/profiles/:profileId/events/stream',
     async (request, reply) => {
       const profileId = request.params.profileId;
+      const withText = request.query.progress === '1';
 
       await options.profiles.profile(profileId);
 
@@ -182,13 +183,15 @@ export function registerEventRoutes(app: FastifyInstance, options: EventOptions)
           }
 
           // Progress changes many times a second and is not worth a row each time; a stream
-          // hears of it here, without an id, so it never moves the cursor it resumes from.
+          // hears of it here, without an id, so it never moves the cursor it resumes from. Its
+          // text goes only to a stream that asked: a phone told of every working run's answer
+          // four times a second would spend its data on screens it is not showing.
           const working = await readProgress(options.store.db, profileId);
 
           for (const { progress, ...run } of working) {
             if (told.get(run.runId) !== run.at) {
               told.set(run.runId, run.at);
-              const frame = progress ? { ...run, progress } : run;
+              const frame = progress && withText ? { ...run, progress } : run;
               reply.raw.write(`event: run.progress\ndata: ${JSON.stringify(frame)}\n\n`);
             }
           }
