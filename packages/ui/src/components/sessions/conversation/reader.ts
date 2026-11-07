@@ -2,6 +2,7 @@ import { MESSAGES_FIRST_PAGE } from '@jian/contracts';
 import { toast } from 'sonner';
 import type { GatewayApi, Message, ToolStep } from '../../../lib/api';
 import { running } from '../status';
+import { released } from './live-text';
 import type { Asks, ConversationStore } from './store';
 import { endedTurns } from './turns';
 
@@ -300,18 +301,22 @@ export function createReader(options: {
       await latest();
       return;
     }
-    let ended = false;
+    let page = false;
     for (const runId of new Set(asked)) {
       const current = await api.run(profileId, runId).catch(() => undefined);
       if (stopped) return;
       if (!current || current.sessionId !== sessionId) continue;
+      const before = state().live;
       // An ended turn goes through the page first, or its answer would land after the live row
       // was cleared, and be drawn as a new element instead of taking that row's.
-      if (!running(current)) ended = true;
+      if (!running(current)) page = true;
       else if (state().run?.id === current.id) state().runRead(current);
       else if (current.progress) state().progress(current.id, current.progress);
+      // Text that stopped going on was released as a message: the page has it.
+      const after = state().live;
+      if (after && released(before, after)) page = true;
     }
-    if (ended) await latest();
+    if (page) await latest();
   }, isStopped);
 
   const call = singleFlight<never>(async () => {

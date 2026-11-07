@@ -62,6 +62,7 @@ export function overTurns<Value>(
 
 /** How a run ends: its tools and its question can no longer change. */
 const ENDED = new Set<Run['status']>(['completed', 'failed', 'interrupted', 'cancelled']);
+export const ended = (status: Run['status']) => ENDED.has(status);
 
 /**
  * The turns of a page whose tools are final, by the profile's recent runs as the gateway listed

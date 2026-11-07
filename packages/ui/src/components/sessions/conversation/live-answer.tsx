@@ -5,59 +5,10 @@ import { useRef } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import type { Run, ToolStep } from '../../../lib/api';
 import { Markdown } from '../../ui/markdown';
-import { cleanText } from '../message';
 import { LiveThought } from '../progress';
-import { type ConversationState, useConversation } from './store';
-import { answers, turnOf } from './turns';
+import { progressOf, type Side, writtenOf } from './live-text';
+import { useConversation } from './store';
 import { useSmoothText } from './use-smooth-text';
-
-/** Whose turn a live row follows: this conversation's, or the other agent's answering it. */
-export type Side = 'self' | 'call';
-
-/**
- * What a turn is doing now. Its own turn's progress comes with the stream into `live`; the other
- * agent's comes with each read of its run.
- */
-function progressOf(state: ConversationState, runId: string | undefined, side: Side) {
-  if (!runId) return undefined;
-  if (side === 'call') return state.callRun?.id === runId ? state.callRun.progress : undefined;
-  return state.live?.runId === runId ? state.live.progress : undefined;
-}
-
-/** Whether a turn's answer already holds these words, cleaned as `said` is. */
-const stored = (state: ConversationState, runId: string | undefined, text: string) =>
-  state.messages.some(
-    (message) =>
-      answers(message) && turnOf(message) === runId && cleanText(message.content) === text,
-  );
-
-/**
- * The text a turn is writing, as it should show: none while a tool runs, and none once it is a
- * stored message of that turn. A message can be read before the progress that wrote it is
- * cleared, and the same words must not show twice. Cleaned as a stored answer is, so the text
- * revealed so far is always the start of the answer it becomes: a trailing break kept on one
- * side only would make the answer restart from blank as it lands.
- */
-function writtenOf(state: ConversationState, runId: string | undefined, side: Side) {
-  const progress = progressOf(state, runId, side);
-  if (!progress?.text || progress.phase === 'tool') return '';
-  const text = cleanText(progress.text);
-  return stored(state, runId, text) ? '' : text;
-}
-
-/**
- * A turn with nothing of its own to show: its words were just handed to the answer they became
- * and the stream has said nothing since, or what it is writing is already a stored answer.
- * Drawing it would flash a working line under an answer that just ended. Anything newer, such
- * as a paragraph released while a tool's input is written, shows the working line again.
- */
-export function spentOf(state: ConversationState, runId: string | undefined, side: Side) {
-  const progress = progressOf(state, runId, side);
-  if (!progress) return false;
-  if (side === 'self' && state.live?.handed) return true;
-  const text = progress.phase === 'tool' ? '' : cleanText(progress.text);
-  return Boolean(text) && stored(state, runId, text);
-}
 
 /**
  * An answer's text, with what its turn is writing now after it. The same element draws the text

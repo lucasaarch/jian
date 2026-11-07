@@ -147,6 +147,29 @@ function steady({ message, index, lastIndex }: DisplayMessage, messages: Message
 }
 
 /**
+ * The key of a line, or of lines joined into one answer: the first line's, so the element that
+ * drew it keeps them all. Except when that line was never drawn on its own and a later one holds
+ * the live row's key: the paragraphs of an answer can land in one read, and the element the owner
+ * watched them written in is the live row's, wherever the text it showed landed among them.
+ */
+function keyOf(
+  { index, lastIndex }: DisplayMessage,
+  messages: Message[],
+  keys: ReadonlyMap<string, string>,
+  seen: ReadonlySet<string>,
+) {
+  const first = messages[index];
+  const own = (first && keys.get(first.id)) ?? first?.id ?? '';
+  if (seen.has(own)) return own;
+  const live = messages
+    .slice(index + 1, lastIndex + 1)
+    .map((message) => keys.get(message.id))
+    .find((key) => key?.startsWith('live:'));
+
+  return live ?? own;
+}
+
+/**
  * What each row asks of the whole page, read once: where each turn's lines start and end, and
  * the last place each kind of line appears, so no row looks through the lines after it.
  */
@@ -330,7 +353,7 @@ export function buildRows(input: RowsInput): Row[] {
         fresh: !seen.has(key),
       });
     } else {
-      const key = keys.get(message.id) ?? message.id;
+      const key = keyOf(group, messages, keys, seen);
       rows.push({
         kind: 'message',
         key,
@@ -388,7 +411,10 @@ export function buildRows(input: RowsInput): Row[] {
     const live = isRunning && run?.id === runId;
     const tail =
       runId && !live && messages[lastIndex + 1]?.runId !== runId ? crew.tail.get(runId) : undefined;
-    if (runId && tail?.length) rows.push({ kind: 'crew', key: `crew:${runId}`, agents: tail });
+    // Keyed by the line it follows: one turn's lines interleaved with another's draw it again.
+    if (runId && tail?.length) {
+      rows.push({ kind: 'crew', key: `crew:${lastMessage.id}`, agents: tail });
+    }
 
     // Every settled turn keeps its files under its last line, not only the latest, which the
     // next message replaces as the conversation's run.

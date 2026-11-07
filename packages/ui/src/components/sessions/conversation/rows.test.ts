@@ -576,6 +576,65 @@ describe('the conversation rows', () => {
     ]);
   });
 
+  it('a joined answer takes the live key a later line holds when its first was never drawn', () => {
+    const at = '2026-10-01T10:00:00Z';
+    const messages = [
+      said('request', 'run-1', 'user', 'Hi', at),
+      said('alpha', 'run-1', 'assistant', 'Alpha.', at),
+      said('beta', 'run-1', 'assistant', 'Beta.', at),
+    ];
+    const keys = new Map([['beta', 'live:0']]);
+    const rows = buildRows(input({ messages, keys, seen: new Set(['request', 'live:0']) }));
+
+    expect(only(rows, 'message').map((row) => [row.key, row.fresh])).toEqual([
+      ['request', false],
+      ['live:0', false],
+    ]);
+  });
+
+  it('a joined answer keeps its first line’s key once that line was drawn alone', () => {
+    const at = '2026-10-01T10:00:00Z';
+    const messages = [
+      said('request', 'run-1', 'user', 'Hi', at),
+      said('alpha', 'run-1', 'assistant', 'Alpha.', at),
+      said('beta', 'run-1', 'assistant', 'Beta.', at),
+    ];
+    const keys = new Map([['beta', 'live:1']]);
+    const rows = buildRows(input({ messages, keys, seen: new Set(['request', 'alpha']) }));
+
+    expect(only(rows, 'message').map((row) => row.key)).toEqual(['request', 'alpha']);
+  });
+
+  it('keys a turn’s agents by the line they follow, so interleaved turns repeat no key', () => {
+    const at = (second: number) => `2026-10-01T10:00:0${second}Z`;
+    const rows = buildRows(
+      input({
+        messages: [
+          said('ask-1', 'run-1', 'user', 'Check.', at(0)),
+          said('ask-2', 'run-2', 'user', 'And this.', at(1)),
+          said('more-1', 'run-1', 'user', 'Also.', at(2)),
+          said('ask-3', 'run-2', 'user', 'And that.', at(3)),
+        ],
+        subagents: [
+          {
+            runId: 'child-run',
+            parentRunId: 'run-1',
+            sessionId: 'child-session',
+            name: 'Verifier',
+            role: 'execute',
+            status: 'running',
+            input: 'Check the build.',
+            createdAt: at(0),
+            updatedAt: at(4),
+          } as Subagent,
+        ],
+      }),
+    );
+    const keys = rows.map((row) => row.key);
+
+    expect(new Set(keys).size).toBe(keys.length);
+  });
+
   it('sameRow is true for a rebuilt row of an untouched turn', () => {
     const store = createConversationStore();
     const page = [

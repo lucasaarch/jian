@@ -65,7 +65,7 @@ describe('the conversation store', () => {
     const store = createConversationStore();
     store.getState().pageRead([said('1', { runId: 'run-1' })], false);
     store.getState().runRead(turn('run-1'));
-    store.getState().progress('run-1', writing('Hello'));
+    store.getState().progress('run-1', writing('Answer'));
 
     store.getState().pageRead([said('1', { runId: 'run-1' }), answer('2', 'run-1')], false);
 
@@ -100,11 +100,11 @@ describe('the conversation store', () => {
     expect(store.getState().live?.progress.text).toBe('Still going');
   });
 
-  it('hands the live key only to the last answer of the turn that lands', () => {
+  it('hands the live key only to the answer the text shown became', () => {
     const store = createConversationStore();
     store.getState().pageRead([said('1', { runId: 'run-1' })], false);
     store.getState().runRead(turn('run-1'));
-    store.getState().progress('run-1', writing('Second part'));
+    store.getState().progress('run-1', writing('Answer 3'));
 
     store
       .getState()
@@ -120,16 +120,117 @@ describe('the conversation store', () => {
     const store = createConversationStore();
     store.getState().pageRead([said('1', { runId: 'run-1' })], false);
     store.getState().runRead(turn('run-1'));
-    store.getState().progress('run-1', writing('Hello'));
+    store.getState().progress('run-1', writing('Answer'));
     store.getState().pageRead([said('1', { runId: 'run-1' }), answer('2', 'run-1')], false);
 
-    store.getState().progress('run-1', writing('Hello'));
-    store.getState().runRead(turn('run-1', 'running', writing('Hello')));
+    store.getState().progress('run-1', writing('Answer'));
+    store.getState().runRead(turn('run-1', 'running', writing('Answer')));
 
     expect(store.getState().live).toMatchObject({ progress: { text: '' }, handed: true });
     store.getState().progress('run-1', writing('Next', '2026-11-07T10:00:06.000Z'));
     expect(store.getState().live?.progress.text).toBe('Next');
     expect(store.getState().live?.handed).toBeUndefined();
+  });
+
+  it('holds a paragraph the stream stopped showing until its message is read', () => {
+    const store = createConversationStore();
+    store.getState().pageRead([said('1', { runId: 'run-1' })], false);
+    store.getState().runRead(turn('run-1'));
+    store.getState().progress('run-1', writing('Answer 2\n\n', '2026-11-07T10:00:05.000Z'));
+
+    // The gateway released the paragraph and emptied its draft; the message is not read yet.
+    const released = store.getState().progress('run-1', writing('', '2026-11-07T10:00:06.000Z'));
+
+    expect(released).toBe(true);
+    expect(store.getState().live?.held).toEqual(['Answer 2\n\n']);
+
+    store.getState().pageRead([said('1', { runId: 'run-1' }), answer('2', 'run-1')], false);
+
+    const state = store.getState();
+    expect(state.keys.get('2')).toBe('live:0');
+    expect(state.liveSerial).toBe(1);
+    expect(state.live?.held).toBeUndefined();
+    // The line goes on, empty, for the next paragraph: nothing it showed was under way.
+    expect(state.live?.handed).toBeUndefined();
+  });
+
+  it('holds text the stream replaced with text that does not go on from it', () => {
+    const store = createConversationStore();
+    store.getState().runRead(turn('run-1'));
+    store.getState().progress('run-1', writing('Answer 2', '2026-11-07T10:00:05.000Z'));
+    expect(
+      store.getState().progress('run-1', writing('Answer 2 and', '2026-11-07T10:00:06.000Z')),
+    ).toBe(false);
+
+    expect(store.getState().progress('run-1', writing('Then', '2026-11-07T10:00:07.000Z'))).toBe(
+      true,
+    );
+    expect(store.getState().live).toMatchObject({
+      progress: { text: 'Then' },
+      held: ['Answer 2 and'],
+    });
+  });
+
+  it('hands every paragraph that lands in one read to its message, the first taking the key', () => {
+    const store = createConversationStore();
+    store.getState().pageRead([said('1', { runId: 'run-1' })], false);
+    store.getState().runRead(turn('run-1'));
+    const at = (second: number) => `2026-11-07T10:00:0${second}.000Z`;
+    store.getState().progress('run-1', writing('Answer 2', at(1)));
+    store.getState().progress('run-1', writing('Answer 3', at(2)));
+    store.getState().progress('run-1', writing('Answer', at(3)));
+
+    store
+      .getState()
+      .pageRead(
+        [
+          said('1', { runId: 'run-1' }),
+          answer('2', 'run-1'),
+          answer('3', 'run-1'),
+          answer('4', 'run-1'),
+        ],
+        false,
+      );
+
+    const state = store.getState();
+    expect(state.keys.get('2')).toBe('live:0');
+    expect([...state.keys.keys()]).toEqual(['2']);
+    expect(state.live).toMatchObject({ progress: { text: '' }, handed: true });
+    expect(state.live?.held).toBeUndefined();
+  });
+
+  it('keeps holding a paragraph no message read matches', () => {
+    const store = createConversationStore();
+    store.getState().pageRead([said('1', { runId: 'run-1' })], false);
+    store.getState().runRead(turn('run-1'));
+    store.getState().progress('run-1', writing('Answer 3', '2026-11-07T10:00:05.000Z'));
+    store.getState().progress('run-1', writing('', '2026-11-07T10:00:06.000Z'));
+
+    // A paragraph the stream never showed lands first; the held one is still to come.
+    store.getState().pageRead([said('1', { runId: 'run-1' }), answer('2', 'run-1')], false);
+
+    expect(store.getState().keys.size).toBe(0);
+    expect(store.getState().live?.held).toEqual(['Answer 3']);
+  });
+
+  it('lets held text go when the turn ends', () => {
+    const store = createConversationStore();
+    store.getState().runRead(turn('run-1'));
+    store.getState().progress('run-1', writing('Answer 2', '2026-11-07T10:00:05.000Z'));
+    store.getState().progress('run-1', writing('', '2026-11-07T10:00:06.000Z'));
+
+    store.getState().runRead(turn('run-1', 'completed'));
+
+    expect(store.getState().live).toBeUndefined();
+  });
+
+  it('ignores progress of a turn it knows has ended', () => {
+    const store = createConversationStore();
+    store.getState().runRead(turn('run-1', 'completed'));
+
+    store.getState().progress('run-1', writing('A late frame', '2026-11-07T10:00:09.000Z'));
+
+    expect(store.getState().live).toBeUndefined();
   });
 
   it('keeps the objects of messages a read brought back unchanged', () => {

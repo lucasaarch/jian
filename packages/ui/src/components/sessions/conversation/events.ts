@@ -1,4 +1,8 @@
-import { runProgressEventSchema, STREAM_OPENED_EVENT } from '@jian/contracts';
+import {
+  type RunProgressEvent,
+  runProgressEventSchema,
+  STREAM_OPENED_EVENT,
+} from '@jian/contracts';
 import { onlineManager } from '@tanstack/react-query';
 import { subscribe } from '../../../lib/events';
 import { focusInspector } from '../inspector-host';
@@ -26,6 +30,17 @@ const callKey = (state: ConversationState) => {
   const call = pendingCall(state.messages);
   return call ? `${call.profileId} ${call.sessionId} ${call.runId}` : '';
 };
+
+/**
+ * A `run.progress` frame, read. One whose progress alone does not parse, as a newer gateway's
+ * may not, still says which run moved, without what it is doing.
+ */
+function progressFrame(data: unknown): RunProgressEvent | undefined {
+  const told = runProgressEventSchema.safeParse(data);
+  if (told.success) return told.data;
+  const bare = runProgressEventSchema.safeParse({ ...(data as object), progress: undefined });
+  return bare.success ? bare.data : undefined;
+}
 
 /**
  * Turns what the gateway's stream says into what the conversation reads. Text under way is
@@ -79,13 +94,24 @@ export function followConversation(options: {
       return;
     }
     if (event.type === 'run.progress') {
-      const told = runProgressEventSchema.safeParse(event.data);
-      if (!told.success || told.data.sessionId !== sessionId) return;
+      const told = progressFrame(event.data);
+      if (!told || told.sessionId !== sessionId) return;
       streamAt = Date.now();
-      // At once, and with no read: the text is all that changed, and the stream carries it.
-      if (told.data.progress) store.getState().progress(told.data.runId, told.data.progress);
-      // A gateway older than progress in the stream says only that something changed.
-      else want((into) => into.runs.add(told.data.runId));
+      const { runId, progress } = told;
+      // A gateway older than progress in the stream says only that something changed, and a
+      // newer one may say it in a shape this panel does not know: the run is read instead.
+      if (!progress) {
+        want((into) => into.runs.add(runId));
+        return;
+      }
+      // At once, and with no read: the text is all that changed, and the stream carries it. Text
+      // that stops going on from what was shown went out as a message; a gateway that does not
+      // tell of that message by itself is read for it.
+      if (store.getState().progress(runId, progress)) {
+        want((into) => {
+          into.latest = true;
+        });
+      }
       return;
     }
     if (event.type === STREAM_OPENED_EVENT) {

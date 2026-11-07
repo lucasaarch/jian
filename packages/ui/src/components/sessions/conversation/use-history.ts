@@ -8,6 +8,7 @@ import { forgetLanded, landed, useOutbox } from '../../../lib/stores/outbox';
 import { useKeptHistory } from '../kept-history';
 import { running } from '../status';
 import { followConversation } from './events';
+import { writtenOf } from './live-text';
 import { createReader, type HistoryApi, type Reader } from './reader';
 import { buildRows, type Row } from './rows';
 import { type ConversationState, type ConversationStore, createConversationStore } from './store';
@@ -166,12 +167,12 @@ const pick = (state: ConversationState) => ({
   loading: state.loading,
 });
 
-/** Whether the turn at work has text under way, never the text, so text builds no rows. */
-const writingOf = ({ live, run }: ConversationState) =>
-  Boolean(live?.progress.text.trim()) &&
-  live?.progress.phase !== 'tool' &&
-  live?.runId === run?.id &&
-  running(run);
+/**
+ * Whether the turn at work shows text, under way or held for its message, never the text, so
+ * text builds no rows.
+ */
+const writingOf = (state: ConversationState) =>
+  running(state.run) && Boolean(writtenOf(state, state.run?.id, 'self'));
 
 const still = (row: Row): Row => ('fresh' in row && row.fresh ? { ...row, fresh: false } : row);
 

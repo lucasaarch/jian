@@ -10,7 +10,8 @@ import { authored, cleanText, mine, PersonLine } from '../message';
 import { MessageActions, MessageReactions } from '../message-actions';
 import { OutgoingState, sentMessage } from '../outgoing';
 import { AgentLine } from './agent-line';
-import { LiveAnswer, LiveWork, spentOf } from './live-answer';
+import { LiveAnswer, LiveWork } from './live-answer';
+import { spentOf } from './live-text';
 import { type Row, type Span, sameRow } from './rows';
 import { useConversation } from './store';
 import { answers } from './turns';
@@ -130,7 +131,7 @@ function draw(
         <PersonLine
           key="line"
           message={message}
-          group={false}
+          group={env.group}
           people={people}
           opensRun={false}
           outgoing={row.item.state}

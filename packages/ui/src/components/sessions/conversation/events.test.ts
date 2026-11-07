@@ -154,6 +154,63 @@ describe('following a conversation', () => {
     unfollow();
   });
 
+  it('reads the conversation once when the text told stops going on from what was shown', async () => {
+    const { reads, before, unfollow } = await following({ run: turn(RUN) });
+    const frame = (text: string, updatedAt: string) =>
+      hear?.({
+        id: 0,
+        type: 'run.progress',
+        data: {
+          runId: RUN,
+          sessionId: SESSION,
+          at: updatedAt,
+          progress: { ...writing(text), updatedAt },
+        },
+      });
+
+    frame('First paragraph.', '2026-11-07T10:00:05.000Z');
+    frame('First paragraph. Still', '2026-11-07T10:00:06.000Z');
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(reads.messages).toBe(before.messages);
+
+    // An older gateway says nothing when it stores the paragraph: the emptied draft is the sign.
+    frame('', '2026-11-07T10:00:07.000Z');
+    frame('Second', '2026-11-07T10:00:08.000Z');
+    await vi.advanceTimersByTimeAsync(1_000);
+
+    expect(reads.messages).toBe(before.messages + 1);
+    unfollow();
+  });
+
+  it('a progress frame it cannot read reads that run rather than dropping it', async () => {
+    const { reads, unfollow } = await following({ run: turn(RUN) });
+
+    hear?.({
+      id: 0,
+      type: 'run.progress',
+      data: {
+        runId: RUN,
+        sessionId: SESSION,
+        at: 'now',
+        progress: { phase: 'composing', text: 'Hello', steps: 0, updatedAt: 'soon' },
+      },
+    });
+    await vi.advanceTimersByTimeAsync(200);
+
+    expect(reads.run).toBe(1);
+    unfollow();
+  });
+
+  it('a message stored mid-turn reads the conversation', async () => {
+    const { reads, before, unfollow } = await following({ run: turn(RUN) });
+
+    hear?.({ id: 7, type: 'session.message', data: { sessionId: SESSION } });
+    await vi.advanceTimersByTimeAsync(200);
+
+    expect(reads.messages).toBe(before.messages + 1);
+    unfollow();
+  });
+
   it('a step event naming only the session reads the live turn’s tools', async () => {
     const { store, reads, before, unfollow } = await following({ run: turn(RUN) });
     store.getState().progress(RUN, writing('Hello'));

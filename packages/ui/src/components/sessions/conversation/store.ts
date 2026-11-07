@@ -15,7 +15,8 @@ import type {
 } from '../../../lib/api';
 import type { HistorySnapshot } from '../kept-history';
 import { running } from '../status';
-import { answers, joinHistory, overTurns, sameMessage, sameValue, turnOf } from './turns';
+import { advance, handover, type Live, released } from './live-text';
+import { ended, joinHistory, overTurns, sameMessage, sameValue } from './turns';
 
 /** What a turn asked the owner to decide or answer. */
 export type Asks = { approval?: RunApproval; question?: RunQuestion };
@@ -40,15 +41,7 @@ export type ConversationState = {
    * What the turn at work is saying now. The only field a text update changes: what draws it
    * is all that redraws as an answer is written.
    */
-  live?: {
-    runId: string;
-    progress: RunProgress;
-    /**
-     * Its words were just handed to the answer they became, and nothing newer was told since:
-     * the turn has nothing of its own to show until the stream speaks again.
-     */
-    handed?: true;
-  };
+  live?: Live;
   subagents: Subagent[];
   people: Map<string, Person>;
   /** Turns whose tools were read after they ended, here and the other agent's: final. */
@@ -85,8 +78,11 @@ type ConversationActions = {
   callsRead(asked: string[], steps: [string, ToolStep[]][]): void;
   /** The conversation's latest turn, as a read found it. */
   runRead(run: Run | undefined): void;
-  /** What the stream says a turn is doing now. Touches nothing but `live`. */
-  progress(runId: string, progress: RunProgress): void;
+  /**
+   * What the stream says a turn is doing now. Touches nothing but `live`. True when the text told
+   * stopped going on from what was shown: a paragraph went out as a message, to be read.
+   */
+  progress(runId: string, progress: RunProgress): boolean;
   subagentsRead(list: Subagent[]): void;
   peopleRead(list: Person[]): void;
   /** A message sent from here was stored: its row keeps the key it was drawn with. */
@@ -115,23 +111,24 @@ type ConversationActions = {
 
 export type ConversationStore = StoreApi<ConversationState & ConversationActions>;
 
-type Live = ConversationState['live'];
-
 /**
  * Whether progress told of a turn replaces what is known of it: only when strictly newer. A read
  * that began before the latest event must not step the text back, and an event told again after
  * a handover, with the `updatedAt` the cleared line kept, must not bring handed-over text back.
  */
-const newer = (known: Live, runId: string, progress: RunProgress) =>
+const newer = (known: Live | undefined, runId: string, progress: RunProgress) =>
   known?.runId !== runId || progress.updatedAt > known.progress.updatedAt;
 
-/** The live line after a read of the run: none once it stopped working. */
-function liveAfter(known: Live, run: Run, progress: RunProgress | undefined): Live {
+/**
+ * The live line after a read of the run: none once it stopped working, and with it whatever text
+ * was held, since the read that ended it brought every message the turn wrote.
+ */
+function liveAfter(known: Live | undefined, run: Run, progress: RunProgress | undefined) {
   if (!running(run)) return undefined;
   const mine = known?.runId === run.id ? known : undefined;
   if (!progress || !newer(mine, run.id, progress)) return mine;
 
-  return { runId: run.id, progress };
+  return advance(mine, run.id, progress);
 }
 
 /**
@@ -208,7 +205,7 @@ export function createConversationStore(kept?: HistorySnapshot): ConversationSto
             }
           : {};
 
-        return { ...read, ...restart, ...handover(state, messages) };
+        return { ...read, ...restart, ...handed(state, messages) };
       }),
 
     earlierRead: (page) =>
@@ -240,8 +237,16 @@ export function createConversationStore(kept?: HistorySnapshot): ConversationSto
           : { run: undefined, live: undefined },
       ),
 
-    progress: (runId, progress) =>
-      set((state) => (newer(state.live, runId, progress) ? { live: { runId, progress } } : {})),
+    progress: (runId, progress) => {
+      const state = get();
+      // A late frame of a turn known to be over would bring back a line it already left.
+      const over =
+        state.ended.runs.has(runId) || (state.run?.id === runId && ended(state.run.status));
+      if (over || !newer(state.live, runId, progress)) return false;
+      const live = advance(state.live, runId, progress);
+      set({ live });
+      return released(state.live, live);
+    },
 
     subagentsRead: (list) => set((state) => ({ subagents: steadyAgents(state.subagents, list) })),
 
@@ -300,23 +305,16 @@ export function createConversationStore(kept?: HistorySnapshot): ConversationSto
 }
 
 /**
- * The answer a read brought for the turn being written takes the live row's key, so the element
- * that showed the text as it came is the one that keeps it, and the live row starts over empty
- * under a new key. Nothing was being written, nothing is handed over: the answer is new.
+ * The answer a read brought for the text the live row showed takes that row's key, and the live
+ * row starts over under a new one. Nothing shown became it, nothing is handed over: it is new.
  */
-function handover(state: ConversationState, messages: Message[]): Partial<ConversationState> {
-  const live = state.live;
-  if (!live) return {};
-  const known = new Set(state.messages.map((message) => message.id));
-  const landed = messages.filter(
-    (message) => answers(message) && turnOf(message) === live.runId && !known.has(message.id),
-  );
-  const answer = landed.at(-1);
-  if (!answer || !live.progress.text) return {};
+function handed(state: ConversationState, messages: Message[]): Partial<ConversationState> {
+  const given = handover(state.live, state.messages, messages);
+  if (!given) return {};
 
   return {
-    live: { runId: live.runId, progress: { ...live.progress, text: '' }, handed: true },
-    keys: new Map(state.keys).set(answer.id, `live:${state.liveSerial}`),
+    live: given.live,
+    keys: new Map(state.keys).set(given.taker.id, `live:${state.liveSerial}`),
     liveSerial: state.liveSerial + 1,
   };
 }

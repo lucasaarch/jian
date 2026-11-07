@@ -488,6 +488,129 @@ it('shows the text already written when a conversation opens mid-answer', async 
   }
 });
 
+/** A turn of the streamed conversation at work, with nothing told of it yet. */
+const quietTurn = (status: Run['status'] = 'running'): Run =>
+  ({
+    id: streamed.runId,
+    profileId: 'profile',
+    sessionId: streamed.sessionId,
+    status,
+    createdAt: '2026-11-07T10:00:00.000Z',
+    updatedAt: '2026-11-07T10:00:00.000Z',
+  }) as Run;
+
+it('a paragraph released mid-run never disappears', async () => {
+  stillMotion();
+  vi.useFakeTimers();
+  let page = [streamedLine('request', 'user', 'Write the report')];
+  const api = {
+    messages: async () => page,
+    activities: async () => [quietTurn()],
+    timeline: async () => [],
+  };
+  const view = await mount(
+    <History
+      api={api}
+      profileId="profile"
+      sessionId={streamed.sessionId}
+      initialRun={quietTurn()}
+    />,
+  );
+  const holding = (words: string) =>
+    [...view.element.querySelectorAll('article')].find((item) => item.textContent?.includes(words));
+
+  try {
+    await act(async () => told('First paragraph.\n\n', '2026-11-07T10:00:02.000Z'));
+    const live = holding('First paragraph.');
+    expect(live).toBeDefined();
+
+    // The gateway releases the paragraph as a message and empties its draft at once. The read
+    // that brings the message has not landed.
+    await act(async () => told('', '2026-11-07T10:00:03.000Z'));
+    expect(holding('First paragraph.')).toBe(live);
+
+    // The message is stored, and the stream says so; the read lands.
+    page = [...page, streamedLine('first', 'assistant', 'First paragraph.')];
+    await act(async () => {
+      hear?.({ type: 'session.message', data: { sessionId: streamed.sessionId } });
+      await vi.advanceTimersByTimeAsync(1_000);
+    });
+
+    expect(holding('First paragraph.')).toBe(live);
+    expect(live?.getAttribute('data-message-id')).toBe('first');
+    expect(
+      [...view.element.querySelectorAll('.chat-text')].filter((text) =>
+        text.textContent?.includes('First paragraph.'),
+      ),
+    ).toHaveLength(1);
+    // The turn goes on, its working line empty, for the next paragraph.
+    expect(view.element.querySelector('.chat-line.pending')).not.toBeNull();
+    expect(view.element.querySelector('.thought-line[data-working]')).not.toBeNull();
+  } finally {
+    await view.done();
+    vi.useRealTimers();
+  }
+});
+
+it('a multi-paragraph answer that lands in one read keeps the live element', async () => {
+  stillMotion();
+  vi.useFakeTimers();
+  let ended = false;
+  const lines = ['Alpha one.', 'Beta two.', 'Gamma three.'];
+  const api = {
+    messages: async () => [
+      streamedLine('request', 'user', 'Write the report'),
+      ...(ended
+        ? lines.map((line, at) => ({
+            ...streamedLine(`line-${at}`, 'assistant', line),
+            createdAt: `2026-11-07T10:00:0${at + 1}.000Z`,
+          }))
+        : []),
+    ],
+    activities: async () => [quietTurn(ended ? 'completed' : 'running')],
+    timeline: async () => [],
+  };
+  const view = await mount(
+    <History
+      api={api}
+      profileId="profile"
+      sessionId={streamed.sessionId}
+      initialRun={quietTurn()}
+    />,
+  );
+  const holding = (words: string) =>
+    [...view.element.querySelectorAll('article')].find((item) => item.textContent?.includes(words));
+
+  try {
+    // Each paragraph is released as the next begins; no read brings any of them meanwhile.
+    for (const [at, line] of lines.entries()) {
+      await act(async () => {
+        told(line, `2026-11-07T10:00:0${at + 2}.000Z`);
+        await vi.advanceTimersByTimeAsync(1_000);
+      });
+    }
+    const live = holding('Alpha one.');
+    expect(live).toBeDefined();
+    expect(holding('Gamma three.')).toBe(live);
+
+    ended = true;
+    await act(async () => {
+      hear?.({ type: 'run.completed', data: { sessionId: streamed.sessionId } });
+      await vi.advanceTimersByTimeAsync(1_000);
+    });
+
+    expect(holding('Gamma three.')).toBe(live);
+    expect(live?.isConnected).toBe(true);
+    expect(live?.textContent).toContain('Alpha one.');
+    expect(view.element.querySelectorAll('.chat-line.theirs')).toHaveLength(1);
+    expect(view.element.querySelector('.pending')).toBeNull();
+    expect(view.element.querySelector('[data-fresh]')).toBeNull();
+  } finally {
+    await view.done();
+    vi.useRealTimers();
+  }
+});
+
 it('animates nothing on open from a kept conversation, even when the first read brings newer lines', async () => {
   movingFrames();
   const line = (id: string, runId: string, role: 'user' | 'assistant', content: string) => ({

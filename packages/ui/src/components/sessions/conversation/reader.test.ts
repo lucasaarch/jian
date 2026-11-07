@@ -373,6 +373,36 @@ describe('the conversation reader', () => {
     expect(asked.messages).toHaveLength(1);
   });
 
+  it('a run read whose text stopped going on reads the page for the paragraph it released', async () => {
+    let text = 'First paragraph.';
+    let second = 5;
+    const { api, asked } = fakeApi({
+      activities: async () => [turn('run-1')],
+      run: async () =>
+        ({
+          ...turn('run-1'),
+          progress: {
+            phase: 'writing',
+            text,
+            steps: 0,
+            updatedAt: `2026-11-07T10:00:0${second}.000Z`,
+          },
+        }) as Run,
+    });
+    const { reader } = open(api);
+    await reader.latest();
+
+    await reader.run('run-1');
+    expect(asked.messages).toHaveLength(1);
+
+    // A gateway older than progress text in the stream: only a read of the run tells the text.
+    text = 'Second';
+    second = 6;
+    await reader.run('run-1');
+
+    expect(asked.messages).toHaveLength(2);
+  });
+
   it('a run read after it ended reads the page first', async () => {
     let status: Run['status'] = 'running';
     const { api, asked } = fakeApi({

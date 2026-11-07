@@ -39,7 +39,7 @@ of more than a thousand lines:
 | Events | `events.ts` | Turns stream events into store changes and reads |
 | Rows | `rows.ts`, `rows-live.ts`, `turns.ts` | Pure: from messages and tools to the list of rows |
 | Row | `row.tsx`, `agent-line.tsx`, `work.tsx` | Draws one row |
-| Live answer | `live-answer.tsx`, `use-smooth-text.ts` | The part that updates on every chunk |
+| Live answer | `live-answer.tsx`, `live-text.ts`, `use-smooth-text.ts` | The part that updates on every chunk, and the text held until its message lands |
 | Entry | `history.tsx` | Assembles the pieces; its props are the public surface |
 
 Copy that split before adding to a big file.
