@@ -1,9 +1,12 @@
 import { randomUUID } from 'node:crypto';
+import type { RunProgress } from '@jian/contracts';
 import { tool } from 'ai';
+import { errors } from 'undici';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { AgentRuntime } from '../src/agent/runtime.js';
 import { compactionThreshold } from '../src/context/compaction.js';
+import { createSafeFetch } from '../src/security/outbound.js';
 import { insertMessage } from '../src/sessions/repository.js';
 import { isSummary, mockModel } from './helpers/model.js';
 import { events } from './helpers/rows.js';
@@ -167,8 +170,92 @@ it('reports a missing final response when the recovery also returns no text', as
   expect(calls).toBe(2);
 });
 
+it('waits out a model it cannot reach and completes once it answers', async () => {
+  const { services, profile, run } = await fixture();
+  // The failure as production raises it: safeFetch, its connection timing out. Planted in its
+  // lookup, so nothing leaves this computer.
+  const unreachable = createSafeFetch({
+    lookup: async () => {
+      throw new errors.ConnectTimeoutError();
+    },
+  });
+  let attempts = 0;
+  const model = mockModel({
+    doGenerate: async () => {
+      attempts += 1;
+      if (attempts <= 3) await unreachable.fetch('https://api.provider.test/v1/messages');
+      return answer('Deploy time noted.');
+    },
+  });
+  const told: RunProgress[] = [];
+  const progress = services.lifecycle.progress.bind(services.lifecycle);
+  services.lifecycle.progress = async (runId, owner, snapshot) => {
+    if (snapshot) told.push(snapshot);
+    await progress(runId, owner, snapshot);
+  };
+
+  try {
+    await new AgentRuntime(services, () => model, { modelRetryDelay: () => 20 }).execute(
+      profile.id,
+      run.id,
+    );
+  } finally {
+    await unreachable.close();
+  }
+
+  const finished = await services.runs.run(profile.id, run.id);
+  expect(finished.status).toBe('completed');
+  expect(finished.output).toBe('Deploy time noted.');
+  expect(attempts).toBe(4);
+  expect(told.map((frame) => frame.reconnecting?.attempts).filter(Boolean)).toEqual([1, 2, 3]);
+  expect(told.find((frame) => frame.reconnecting)?.reconnecting?.reason).toBe(
+    'connection timed out',
+  );
+  expect(told.at(-1)).not.toHaveProperty('reconnecting');
+});
+
 const naming = (options: { prompt: unknown }) =>
   JSON.stringify(options.prompt).includes('You name a conversation');
+
+it('leaves a side call that cannot reach the model to its own fallback, untried again', async () => {
+  const services = await testServices();
+  const profile = await services.profiles.createProfile(input);
+  const session = await services.sessions.createSession(profile.id, {});
+  const run = await services.runs.submit(profile.id, session.id, {
+    text: 'Check the deployment',
+    requestKey: 'side-call',
+  });
+  const unreachable = createSafeFetch({
+    lookup: async () => {
+      throw new errors.ConnectTimeoutError();
+    },
+  });
+  let titles = 0;
+  const model = mockModel({
+    doGenerate: async (options) => {
+      if (!naming(options)) return answer('Checked.');
+      titles += 1;
+      await unreachable.fetch('https://api.provider.test/v1/messages');
+      return answer('"Never"');
+    },
+  });
+
+  try {
+    await new AgentRuntime(services, () => model, { modelRetryDelay: () => 20 }).execute(
+      profile.id,
+      run.id,
+    );
+  } finally {
+    await unreachable.close();
+  }
+
+  // The title has a way of its own to do without an answer: the opening itself.
+  expect(titles).toBe(1);
+  expect((await services.sessions.session(profile.id, session.id)).title).toBe(
+    'Check the deployment',
+  );
+  expect((await services.runs.run(profile.id, run.id)).output).toBe('Checked.');
+});
 
 it('names a new conversation with its own model, counted on the run', async () => {
   const services = await testServices();

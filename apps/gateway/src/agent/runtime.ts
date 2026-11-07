@@ -132,6 +132,7 @@ import { guardrail } from './guardrail.js';
 import { machineBackend, offersMachineFiles } from './machine-files.js';
 import { availableNote, connectMcpTools, type McpEntry, unavailableNote } from './mcp.js';
 import { MCP_ERROR_UNSAID, mcpErrorText, mcpOutcomeUncertain } from './mcp-errors.js';
+import { withModelRetry } from './model-retry.js';
 import { Narrator, ToolCalls } from './narrator.js';
 import { ProgressReporter } from './progress.js';
 import {
@@ -684,6 +685,18 @@ export class AgentRuntime {
         withConversationAffinity(outbound.fetch, config.baseURL, run.sessionId),
         providerKey,
       );
+      // What the run waits on to go on — every step, its summaries, its closing words — is
+      // retried without end when the provider cannot be reached or cannot take it now, and the
+      // owner is told it is reconnecting. The side calls beside the turn (the title, the
+      // guardrail, the approval card) keep `model`: they have their own short limits and a way
+      // of their own to do without an answer.
+      const steady = withModelRetry(model, {
+        label: `run ${runId}`,
+        alive,
+        waiting: (state) => progress.reconnecting(state),
+        through: () => progress.reconnected(),
+        ...(this.options.modelRetryDelay ? { delay: this.options.modelRetryDelay } : {}),
+      });
       const session = await this.services.sessions.session(profileId, run.sessionId);
       const learning = session.channel === LEARNING_SESSION_CHANNEL;
       // Provider tokens per token of the gateway's estimate (context/scale.ts). Every size
@@ -1691,7 +1704,7 @@ export class AgentRuntime {
 
       const agent = new ToolLoopAgent({
         model: deferring
-          ? withDeferralFallback(model, {
+          ? withDeferralFallback(steady, {
               modelId: config.modelId,
               active: () => defers,
               offered: () => new Set(Object.keys(guarded).filter(offeredNow)),
@@ -1704,7 +1717,7 @@ export class AgentRuntime {
                 markDeferred(guarded, new Set(), builtOptions);
               },
             })
-          : model,
+          : steady,
         // Where the carried tools' system message goes (see toolAdditions).
         ...(deferring ? { allowSystemInMessages: true } : {}),
         instructions: codingInstructions,
@@ -1952,7 +1965,7 @@ export class AgentRuntime {
                 if (total > limit) return undefined;
                 if (!cached) request = { ...request, messages: uncached(request.messages) };
                 return summaryCall({
-                  model,
+                  model: steady,
                   tools: guarded,
                   request,
                   instructions,
@@ -1965,7 +1978,7 @@ export class AgentRuntime {
               // The conversation's own model. A separately chosen one can be the provider whose
               // quota just ran out, which is how a full window used to report nothing to compact.
               const compacted = await compactPrompt({
-                model,
+                model: steady,
                 ...config,
                 messages,
                 currentStartIndex,
@@ -2467,7 +2480,7 @@ export class AgentRuntime {
             ...((await result.steps).at(-1)?.response.messages ?? []),
           ];
           answer = await this.closingWords(
-            model,
+            steady,
             instructions,
             // Sent without tools: a reference to one would be refused.
             deferring ? withoutDeferral(closing) : closing,

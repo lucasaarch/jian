@@ -26,7 +26,7 @@ Every size here is in the model's own tokens.
   the point in use, so measure against it, not the window. Recent work and
   the latest request are kept whole; when they are most of the request, no summary is
   attempted, since it could not shrink it. A summary that fails or is skipped is reported
-  with its cause, such as the provider's quota, and is not retried on every step: the oldest
+  with its cause, such as the provider refusing it, and is not retried on every step: the oldest
   turns, then the oldest results of this turn, are dropped from the request instead, to well
   under that size. The summary itself is never dropped; only after the results does what was
   kept beside it go, the files first, then people's words. A dropped result is read back with

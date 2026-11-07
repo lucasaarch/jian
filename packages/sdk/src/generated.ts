@@ -6115,6 +6115,12 @@ export interface operations {
                             text: string;
                             /** @default 0 */
                             steps: number;
+                            reconnecting?: {
+                                attempts: number;
+                                /** Format: date-time */
+                                nextAt: string;
+                                reason: string;
+                            };
                             /** Format: date-time */
                             updatedAt: string;
                         };
@@ -9085,6 +9091,12 @@ export interface operations {
                             text: string;
                             /** @default 0 */
                             steps: number;
+                            reconnecting?: {
+                                attempts: number;
+                                /** Format: date-time */
+                                nextAt: string;
+                                reason: string;
+                            };
                             /** Format: date-time */
                             updatedAt: string;
                         };
@@ -9358,6 +9370,12 @@ export interface operations {
                             text: string;
                             /** @default 0 */
                             steps: number;
+                            reconnecting?: {
+                                attempts: number;
+                                /** Format: date-time */
+                                nextAt: string;
+                                reason: string;
+                            };
                             /** Format: date-time */
                             updatedAt: string;
                         };
@@ -9630,6 +9648,12 @@ export interface operations {
                             text: string;
                             /** @default 0 */
                             steps: number;
+                            reconnecting?: {
+                                attempts: number;
+                                /** Format: date-time */
+                                nextAt: string;
+                                reason: string;
+                            };
                             /** Format: date-time */
                             updatedAt: string;
                         };
@@ -19832,6 +19856,12 @@ export interface operations {
                             text: string;
                             /** @default 0 */
                             steps: number;
+                            reconnecting?: {
+                                attempts: number;
+                                /** Format: date-time */
+                                nextAt: string;
+                                reason: string;
+                            };
                             /** Format: date-time */
                             updatedAt: string;
                         };
@@ -20213,6 +20243,12 @@ export interface operations {
                             text: string;
                             /** @default 0 */
                             steps: number;
+                            reconnecting?: {
+                                attempts: number;
+                                /** Format: date-time */
+                                nextAt: string;
+                                reason: string;
+                            };
                             /** Format: date-time */
                             updatedAt: string;
                         };
@@ -20489,6 +20525,12 @@ export interface operations {
                             text: string;
                             /** @default 0 */
                             steps: number;
+                            reconnecting?: {
+                                attempts: number;
+                                /** Format: date-time */
+                                nextAt: string;
+                                reason: string;
+                            };
                             /** Format: date-time */
                             updatedAt: string;
                         };
@@ -20755,6 +20797,12 @@ export interface operations {
                             text: string;
                             /** @default 0 */
                             steps: number;
+                            reconnecting?: {
+                                attempts: number;
+                                /** Format: date-time */
+                                nextAt: string;
+                                reason: string;
+                            };
                             /** Format: date-time */
                             updatedAt: string;
                         };
@@ -21570,6 +21618,12 @@ export interface operations {
                             text: string;
                             /** @default 0 */
                             steps: number;
+                            reconnecting?: {
+                                attempts: number;
+                                /** Format: date-time */
+                                nextAt: string;
+                                reason: string;
+                            };
                             /** Format: date-time */
                             updatedAt: string;
                         };
@@ -23602,6 +23656,12 @@ export interface operations {
                             text: string;
                             /** @default 0 */
                             steps: number;
+                            reconnecting?: {
+                                attempts: number;
+                                /** Format: date-time */
+                                nextAt: string;
+                                reason: string;
+                            };
                             /** Format: date-time */
                             updatedAt: string;
                         };
@@ -24743,6 +24803,12 @@ export interface operations {
                             text: string;
                             /** @default 0 */
                             steps: number;
+                            reconnecting?: {
+                                attempts: number;
+                                /** Format: date-time */
+                                nextAt: string;
+                                reason: string;
+                            };
                             /** Format: date-time */
                             updatedAt: string;
                         };
@@ -25008,6 +25074,12 @@ export interface operations {
                             text: string;
                             /** @default 0 */
                             steps: number;
+                            reconnecting?: {
+                                attempts: number;
+                                /** Format: date-time */
+                                nextAt: string;
+                                reason: string;
+                            };
                             /** Format: date-time */
                             updatedAt: string;
                         };
@@ -25273,6 +25345,12 @@ export interface operations {
                             text: string;
                             /** @default 0 */
                             steps: number;
+                            reconnecting?: {
+                                attempts: number;
+                                /** Format: date-time */
+                                nextAt: string;
+                                reason: string;
+                            };
                             /** Format: date-time */
                             updatedAt: string;
                         };

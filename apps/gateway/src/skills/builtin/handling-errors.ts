@@ -31,6 +31,15 @@ By the HTTP status:
 - **500, 502, 503, 504** — the provider is failing or overloaded. The gateway already tried
   again; trying later usually works. Another model for that activity avoids the wait.
 
+The conversation's own model is different: a call to it that cannot connect (a timeout, a
+refused or reset connection, DNS, TLS) or is answered 408, 409, 425, 429, 5xx or 529, before
+any of its answer arrived, does not fail the turn. The gateway tries it again ten times a second apart, then after 30 seconds, 1,
+2 and 4 minutes, then every 5 minutes, for as long as it takes, and never sooner than the
+provider's \`retry-after\`. The panel says **Reconnecting to the model** meanwhile, with the
+attempts and when the next one goes. The turn goes on where it was once a call gets through;
+the owner's Cancel stops it. Any other status, such as 400 for a request too large or 401,
+fails at once.
+
 Other messages you may see:
 
 - "Provider key is not configured" — no provider is set for that activity: **Providers**,

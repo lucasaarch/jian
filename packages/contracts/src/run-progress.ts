@@ -24,6 +24,20 @@ export const runProgressSchema = z.strictObject({
   /** The current answer segment, reset whenever a tool interrupts it, so it converges. */
   text: z.string().max(8000).default(''),
   steps: z.number().int().nonnegative().default(0),
+  /**
+   * Set while the run waits to try the model again after a call failed for a network or
+   * availability reason; absent once a call gets through. Those calls are retried without end.
+   */
+  reconnecting: z
+    .strictObject({
+      /** Failed attempts in a row so far. */
+      attempts: z.number().int().positive(),
+      /** When the next attempt goes out. */
+      nextAt: z.iso.datetime(),
+      /** Why the last one failed, in a few words: a status or a network failure, never a body. */
+      reason: z.string().max(200),
+    })
+    .optional(),
   updatedAt: z.iso.datetime(),
 });
 
