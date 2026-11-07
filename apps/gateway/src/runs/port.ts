@@ -41,6 +41,11 @@ export type SubmitOptions = {
    * not show it. The auto-continue of an open objective is a `resume`.
    */
   purpose?: Message['purpose'];
+  /**
+   * A subagent's report to its parent conversation: the agent's own worker speaking, which never
+   * answers a question the agent asked the owner.
+   */
+  subagentReport?: boolean;
 };
 
 export interface RunReader {

@@ -480,15 +480,74 @@ it('counts a single line in characters, and never keeps half of a character', ()
 });
 
 it('tells the size the command printed when its own capture already left part out', () => {
-  // As Jian Remote sends a long output: its ends, and how much of the middle it dropped.
-  const stdout = `FIRST\n${'kept line\n'.repeat(2000)}[… 50,000 lines (600,000 characters) of this output were not kept]\n${'kept line\n'.repeat(2000)}error: the build failed\n`;
+  // As Jian Remote writes it (remote-core `ends.ts`): `head\n[marker]\n tail`, cut mid-line.
+  const printed = `FIRST\n${Array.from({ length: 54_000 }, (_, n) => `line ${n} of the build\n`).join('')}error: the build failed\n`;
+  const head = printed.slice(0, 20_003);
+  const tail = printed.slice(-20_007);
+  const dropped = printed.slice(head.length, printed.length - tail.length);
+  const lost = dropped.split('\n').length - 1;
+  const stdout = `${head}\n[… ${lost.toLocaleString('en')} lines (${dropped.length.toLocaleString('en')} characters) of this output were not kept]\n${tail}`;
+  const lines = printed.split('\n').length - 1;
   const cut = headTail(
     stdout,
     2000,
     10_000,
     'read_artifact with artifactId "x" returns everything.',
   );
-  expect(cut.startsWith('[54,002 lines, about ')).toBe(true);
-  expect(cut).toContain('50,000 lines of them were never kept');
+  expect(cut.startsWith(`[${lines.toLocaleString('en')} lines, about `)).toBe(true);
+  expect(cut).toContain(`${lost.toLocaleString('en')} lines of them were never kept`);
   expect(cut).toContain('error: the build failed');
+});
+
+it('tells a size in characters when the capture dropped part of a single line', () => {
+  const head = 'a'.repeat(3000);
+  const tail = 'b'.repeat(3000);
+  const stdout = `${head}\n[… 0 lines (50,000 characters) of this output were not kept]\n${tail}`;
+  const cut = headTail(
+    stdout,
+    1000,
+    20_000,
+    'read_artifact with artifactId "x" returns everything.',
+  );
+  expect(cut.startsWith('[56,000 characters, about ')).toBe(true);
+  expect(cut).toContain('50,000 characters of them were never kept');
+});
+
+it('still cuts the other results when pages of read_artifact take the whole room', async () => {
+  const { run } = await fixture();
+  const count = tokenCounter('openai', 'test');
+  const page = (n: number) => ({
+    artifactId: `6f1b8f40-58c4-4c39-9a4f-0d5c8a3f1e2${n}`,
+    content: 'x'.repeat(2450),
+    nextOffset: 2450 * n,
+  });
+  const log = (tag: string) => ({
+    exitCode: 1,
+    stdout: `${tag} FIRST\n${`${tag} line of the build log\n`.repeat(3000)}${tag} LAST`,
+    stderr: '',
+  });
+  const step = [
+    ...[1, 2, 3].map((n) => ({
+      toolCallId: `page-${n}`,
+      toolName: 'read_artifact',
+      output: page(n),
+      result: page(n),
+    })),
+    ...(await Promise.all(
+      ['a', 'b'].map(async (tag) => ({
+        toolCallId: tag,
+        toolName: 'run_command',
+        output: log(tag),
+        result: await boundToolResult(log(tag), 'run_command', run, new Set(), stored),
+      })),
+    )),
+  ];
+  const fitted = await fitStep(step, run, new Set(), stored);
+  // The pages stay whole; each log is cut to the least share (400 tokens here), its end kept.
+  for (const tag of ['a', 'b']) {
+    const cut = fitted.get(tag) as { stdout: string };
+    expect(count(JSON.stringify(cut))).toBeLessThanOrEqual(400);
+    expect(cut.stdout).toContain(`${tag} LAST`);
+  }
+  expect([...fitted.keys()].some((id) => id.startsWith('page'))).toBe(false);
 });

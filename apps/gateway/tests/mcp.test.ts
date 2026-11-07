@@ -1000,14 +1000,22 @@ it('fits one step’s plain-text MCP results together, each keeping its end and 
                 },
               ],
             }
-          : {
-              content: [
-                {
-                  type: 'text',
-                  text: `${tag} FIRST\n${`${tag} line of the build log\n`.repeat(lines[tag] ?? 1)}${tag} LAST ERROR`,
-                },
-              ],
-            };
+          : tag === 'chart'
+            ? // An image under one budget, large beside the step's share: it stays an image.
+              {
+                content: [
+                  { type: 'image', data: 'A'.repeat(2000), mimeType: 'image/png' },
+                  { type: 'text', text: 'The build time chart.' },
+                ],
+              }
+            : {
+                content: [
+                  {
+                    type: 'text',
+                    text: `${tag} FIRST\n${`${tag} line of the build log\n`.repeat(lines[tag] ?? 1)}${tag} LAST ERROR`,
+                  },
+                ],
+              };
     res
       .writeHead(200, { 'Content-Type': 'application/json' })
       .end(JSON.stringify({ jsonrpc: '2.0', id: message.id, result }));
@@ -1061,7 +1069,7 @@ it('fits one step’s plain-text MCP results together, each keeping its end and 
         }
         if (prompts.length === 2) {
           return {
-            content: Object.keys(lines).map((tag) => ({
+            content: [...Object.keys(lines), 'chart'].map((tag) => ({
               type: 'tool-call' as const,
               toolCallId: `log-${tag}`,
               toolName: remoteName,
@@ -1085,7 +1093,7 @@ it('fits one step’s plain-text MCP results together, each keeping its end and 
       storeArtifact: async () => ({ artifactId: crypto.randomUUID(), bytes: 1 }),
     }).execute(profile.id, run.id);
 
-    const texts = (prompts[2]?.prompt ?? []).flatMap((message) =>
+    const all = (prompts[2]?.prompt ?? []).flatMap((message) =>
       message.role === 'tool'
         ? message.content.flatMap((part) =>
             part.type === 'tool-result' &&
@@ -1103,6 +1111,16 @@ it('fits one step’s plain-text MCP results together, each keeping its end and 
           )
         : [],
     );
+    const chart = (prompts[2]?.prompt ?? []).flatMap((message) =>
+      message.role === 'tool'
+        ? message.content.filter(
+            (part) => part.type === 'tool-result' && part.toolCallId === 'log-chart',
+          )
+        : [],
+    )[0] as { output: { type: string; value: Array<{ type: string }> } } | undefined;
+    expect(chart?.output.type).toBe('content');
+    expect(chart?.output.value.map((item) => item.type)).toContain('file');
+    const texts = all.filter((item) => item.id !== 'log-chart');
     expect(texts).toHaveLength(4);
     // Each result's own budget would let the four through at nearly 4 × 2,560 bytes.
     expect(texts.reduce((sum, item) => sum + Buffer.byteLength(item.text), 0)).toBeLessThan(

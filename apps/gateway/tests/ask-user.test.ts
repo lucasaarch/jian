@@ -265,7 +265,7 @@ it('keeps the question for the owner when a subagent report arrives while it wai
     profile.id,
     session.id,
     { text: report, requestKey: 'task-worker-finished:pricing' },
-    { purpose: 'resume' },
+    { purpose: 'resume', subagentReport: true },
   );
   expect(joined.id).toBe(run.id);
   const still = await services.runs.run(profile.id, run.id);
@@ -286,4 +286,52 @@ it('keeps the question for the owner when a subagent report arrives while it wai
   // The report is in what the resumed turn reads, as data beside the answer.
   await new AgentRuntime(services, () => model).execute(profile.id, resume.id);
   expect(resumed).toContain('Gemini Live costs less per minute.');
+});
+
+it('refuses to continue another run while the agent waits on the owner, and keeps the question', async () => {
+  const services = await testServices();
+  const profile = await services.profiles.createProfile(input);
+  const session = await services.sessions.createSession(profile.id, {
+    channel: 'api',
+    title: 'Questions',
+  });
+  // A run that stopped, which the owner may continue with a reconciliation.
+  const stopped = await services.runs.submit(profile.id, session.id, {
+    text: 'Deploy the release.',
+    requestKey: 'deploy',
+  });
+  await services.lifecycle.claim(stopped.id, profile.id, 'stopped');
+  await services.lifecycle.finish(profile.id, stopped.id, 'stopped', 'interrupted', 'Lost.');
+  const asking = await services.runs.submit(profile.id, session.id, {
+    text: 'Which provider first?',
+    requestKey: 'ask',
+  });
+  const model = mockModel({
+    doGenerate: async () => ({
+      content: [
+        {
+          type: 'tool-call',
+          toolCallId: 'ask',
+          toolName: 'ask_user',
+          input: JSON.stringify({ prompt: 'Which provider should I wire first?' }),
+        },
+      ],
+      finishReason: { unified: 'tool-calls', raw: 'tool-calls' },
+      usage,
+      warnings: [],
+    }),
+  });
+  await new AgentRuntime(services, () => model).execute(profile.id, asking.id);
+  expect((await services.runs.run(profile.id, asking.id)).status).toBe('waiting');
+
+  await expect(
+    services.runs.continueRun(profile.id, stopped.id, {
+      text: 'Carry on.',
+      requestKey: 'continue',
+      reconciliation: 'Nothing was deployed.',
+    }),
+  ).rejects.toMatchObject({ statusCode: 409 });
+  const still = await services.runs.run(profile.id, asking.id);
+  expect(still.status).toBe('waiting');
+  expect(still.question?.answer).toBeUndefined();
 });

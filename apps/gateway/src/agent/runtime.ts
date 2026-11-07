@@ -119,7 +119,14 @@ import { availableNote, connectMcpTools, type McpEntry, unavailableNote } from '
 import { MCP_ERROR_UNSAID, mcpErrorText, mcpOutcomeUncertain } from './mcp-errors.js';
 import { Narrator, ToolCalls } from './narrator.js';
 import { ProgressReporter } from './progress.js';
-import { boundToolResult, fitStep, redactOutput, redactText, type StepResult } from './results.js';
+import {
+  boundToolResult,
+  carriesMedia,
+  fitStep,
+  redactOutput,
+  redactText,
+  type StepResult,
+} from './results.js';
 import { type StepRequest, summaryCall } from './summary-call.js';
 import { plainTitle, type TitleModel, writeTitle } from './title.js';
 import { reason, toolFailure } from './tool-failure.js';
@@ -1314,7 +1321,7 @@ export class AgentRuntime {
                   judge && outsideContent(name, mcpToolNames)
                     ? await markSteering(judge, result, signal)
                     : result;
-                if (inStep && fitsStep) {
+                if (inStep && fitsStep && !carriesMedia(answered)) {
                   stepResults.set(options.toolCallId, {
                     toolCallId: options.toolCallId,
                     toolName: name,

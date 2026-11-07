@@ -250,10 +250,18 @@ export class Runs {
 
       const waiting = await findWaitingSessionRun(tx, profileId, sessionId);
 
-      // The gateway's own words (a subagent's report, an objective's nudge) never answer what
-      // the agent asked the owner: they join the waiting turn as data, read when it resumes, and
-      // the question stays theirs to answer.
-      if (waiting?.question && options.purpose === 'resume') {
+      // Continuing another run would answer the question with the reconciliation, on the
+      // owner's behalf and without their saying so: they answer it first.
+      if (waiting?.question && continuationOf) {
+        throw new GatewayError(
+          409,
+          'The agent is waiting for an answer to its question in this conversation. Answer it before continuing another run.',
+        );
+      }
+
+      // A subagent's report never answers what the agent asked the owner: it joins the waiting
+      // turn as data, read when it resumes, and the question stays theirs to answer.
+      if (waiting?.question && options.subagentReport) {
         const stored = await insertKeyedMessage(
           tx,
           {

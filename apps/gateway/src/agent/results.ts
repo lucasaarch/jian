@@ -217,12 +217,15 @@ function notKept(text: string) {
   let markers = 0;
   let lines = 0;
   let characters = 0;
+  /** What the markers themselves take, with the line breaks either side of each. */
+  let written = 0;
   for (const found of text.matchAll(NOT_KEPT)) {
     markers++;
     lines += Number((found[1] ?? '0').replaceAll(',', ''));
     characters += Number((found[2] ?? '0').replaceAll(',', ''));
+    written += found[0].length + 2;
   }
-  return { markers, lines, characters };
+  return { markers, lines, characters, written };
 }
 
 /**
@@ -231,12 +234,21 @@ function notKept(text: string) {
  */
 export function headTail(text: string, room: number, tokens: number, where: string): string {
   if (text.length <= room) return text;
-  // The size the command printed, not what reached Jian: a marker of its own capture stands
-  // for the lines it dropped.
+  // The size the command printed, not what reached Jian: a capture's marker stands for what it
+  // dropped. Each is written as `head\n[marker]\n tail`, so it adds its own line and splits the
+  // line it was cut in: two lines to take off for each, before adding back the ones it lost.
   const lost = notKept(text);
-  const lines = lineCount(text) - lost.markers + lost.lines;
+  const lines = lineCount(text) - 2 * lost.markers + lost.lines;
+  const characters = text.length - lost.written + lost.characters;
   const printed = Math.round(tokens * (1 + lost.characters / Math.max(1, text.length)));
-  const header = `[${lines > 1 ? `${figure(lines)} lines` : `${figure(text.length + lost.characters)} characters`}, about ${figure(printed)} tokens; its first and last parts follow.${lost.markers ? ` ${figure(lost.lines)} lines of them were never kept, by the command's own capture.` : ''}]\n`;
+  // Part of one line dropped is a size in characters, whatever was kept around it.
+  const inLines = lines > 1 && !(lost.markers && !lost.lines);
+  const never = !lost.markers
+    ? ''
+    : lost.lines
+      ? ` ${figure(lost.lines)} lines of them were never kept, by the command's own capture.`
+      : ` ${figure(lost.characters)} characters of them were never kept, by the command's own capture.`;
+  const header = `[${inLines ? `${figure(lines)} lines` : `${figure(characters)} characters`}, about ${figure(printed)} tokens; its first and last parts follow.${never}]\n`;
   // The marker's own length, at most: its figures are at most as long as the text's.
   const keep = Math.max(0, room - header.length - where.length - 60);
   let head = text.slice(0, whole(text, Math.ceil(keep / 2)));
@@ -317,7 +329,9 @@ export async function boundToolResult(
     // What the rest of the result takes, the cut's marks included, leaves the texts the room.
     let room =
       fits - JSON.stringify({ ...marks, ...shape.rebuild(shape.texts.map(() => where)) }).length;
-    while (room > 200) {
+    // Down to a few dozen characters: even then the last line, where an error is, is worth more
+    // than the start of the JSON.
+    while (room > 40) {
       const sizes = shares(
         shape.texts.map((text) => text.length),
         room,
@@ -354,6 +368,16 @@ export async function boundToolResult(
   return result;
 }
 
+/**
+ * An MCP result carrying more than text (an image, a resource): what reaches the model is those
+ * blocks, which a cut would turn into a JSON preview of their data. It stays out of a step's
+ * fitting, as a screenshot does.
+ */
+export function carriesMedia(output: unknown): boolean {
+  const content = (output as { content?: unknown } | null)?.content;
+  return Array.isArray(content) && content.some((block) => !isTextBlock(block));
+}
+
 /** One call of a step, as it ran and as it was bounded on its own. */
 export type StepResult = { toolCallId: string; toolName: string; output: unknown; result: unknown };
 
@@ -371,7 +395,9 @@ export async function fitStep(
   scale?: number,
 ): Promise<Map<string, unknown>> {
   const { count } = resultTokens(run, scale);
-  const room = STEP_RESULTS * (run.contextPolicy ?? run.profile.contextPolicy).toolResultTokens;
+  const budget = (run.contextPolicy ?? run.profile.contextPolicy).toolResultTokens;
+  const room = STEP_RESULTS * budget;
+  const least = Math.max(400, Math.floor(budget / 10));
   const all = step.map((entry) => ({
     ...entry,
     tokens: count(JSON.stringify(entry.result) ?? 'null'),
@@ -387,7 +413,10 @@ export async function fitStep(
     .sort((a, b) => a.tokens - b.tokens);
   let left = room - pages.reduce((sum, entry) => sum + entry.tokens, 0);
   for (const [position, entry] of sized.entries()) {
-    const share = Math.max(0, Math.floor(left / (sized.length - position)));
+    // Never below a tenth of one result's room, and 400 tokens, which a cut's header and marker
+    // need with a few lines of each end: pages that took the room would leave the rest nothing
+    // to fit into, and a result that cannot be cut is kept whole, far past it.
+    const share = Math.max(least, Math.floor(left / (sized.length - position)));
     if (entry.tokens <= share) {
       left -= entry.tokens;
       continue;
