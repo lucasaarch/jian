@@ -58,6 +58,11 @@ export interface ContextSources {
    * compacts by, not a byte count.
    */
   scale?: number;
+  /**
+   * The gateway's estimate of the tool definitions the turn sends, unscaled: part of the size
+   * the runtime compacts by, so part of what the Context line says.
+   */
+  toolTokens?: number;
 }
 
 /** How the turn context opens: what tells the agent, and the runtime, which message it is. */
@@ -344,7 +349,8 @@ export function buildContext(
   // How full the request is before any tool has run, said in the turn context: an agent that
   // cannot see its context filling up cannot choose when to compact it.
   const used = Math.ceil(
-    (count(system) +
+    ((sources.toolTokens ?? 0) +
+      count(system) +
       count(turn.join('\n\n')) +
       messages.reduce((sum, message) => sum + count(message.content) + 8, 0)) *
       scale,

@@ -23,10 +23,30 @@ export interface StepRequest {
  * tools' system message when that ends them: Anthropic takes it only at the end or right before
  * a reply (see `toolAdditions`). Unmarked, so the cache marks stay where the step put them.
  */
-export function withSummaryRequest(messages: ModelMessage[], instructions: string) {
+export function withSummaryRequest(
+  messages: ModelMessage[],
+  instructions: string,
+  /** An effort for this one reply, on the models that take one per message. */
+  effort?: 'low',
+): ModelMessage[] {
   const ask: ModelMessage = { role: 'user', content: instructions };
   const last = messages.at(-1);
-  return last && additionsOf(last) ? [...messages.slice(0, -1), ask, last] : [...messages, ask];
+  const additions = last && additionsOf(last) ? last : undefined;
+  const before = additions ? messages.slice(0, -1) : messages;
+  if (!effort) return additions ? [...before, ask, additions] : [...before, ask];
+  // A system message with no text and only an effort sets the effort of the reply that follows
+  // (Anthropic's mid-conversation effort). It comes after the ask, past every byte the cache
+  // holds; carried additions, which must end the messages, take the effort on themselves.
+  const anthropic = { ...(additions?.providerOptions?.anthropic ?? {}), effort };
+  return [
+    ...before,
+    ask,
+    {
+      role: 'system',
+      content: '',
+      providerOptions: { ...additions?.providerOptions, anthropic },
+    } as ModelMessage,
+  ];
 }
 
 /**
@@ -36,9 +56,11 @@ export function withSummaryRequest(messages: ModelMessage[], instructions: strin
  * scratch. Everything else stays as the step had it, because each of these changes the cache key
  * on Anthropic: the tools and their order (the deferred form included), the system blocks, the
  * thinking and effort (a summary at the least effort invalidated the cached messages), and
- * `tool_choice`, which the SDK sets from the tools as it did for the step. `max_tokens` is
- * outside the cached prefix; it stays the step's as well, since the thinking at the owner's
- * effort draws on it before the summary is written. And it is streamed, as a step is: the
+ * `tool_choice`, which the SDK sets from the tools as it did for the step. Where the model takes
+ * an effort per message, a lower one for the summary goes in a message after the prefix
+ * (`effort`), never in the request's own options. `max_tokens` is outside the cached prefix; it
+ * stays the step's as well, since thinking draws on it before the summary is written, and the
+ * record's length is asked for in the instructions. And it is streamed, as a step is: the
  * Anthropic provider marks each tool `eager_input_streaming` only on a streamed request, so a
  * generated one sent tool definitions that differ from the step's.
  *
@@ -52,7 +74,11 @@ export async function summaryCall(input: {
   request: StepRequest;
   instructions: string;
   allowSystemInMessages: boolean;
+  /** Set where the model takes an effort per message: the record is asked for at `low`. */
+  effort?: 'low';
   signal: AbortSignal;
+  /** Fed on every part: a long record streams for minutes and is not a stalled call. */
+  alive?: () => void;
 }) {
   const tools = Object.fromEntries(
     Object.entries(input.tools).map(([name, definition]) => [
@@ -66,12 +92,13 @@ export async function summaryCall(input: {
     model: input.model,
     tools,
     instructions: request.instructions,
-    messages: withSummaryRequest(request.messages, input.instructions),
+    messages: withSummaryRequest(request.messages, input.instructions, input.effort),
+    // The effort message is a system message after the ask, whatever the conversation allows.
+    allowSystemInMessages: input.allowSystemInMessages || input.effort !== undefined,
     activeTools: request.activeTools,
     ...(request.toolOrder ? { toolOrder: request.toolOrder } : {}),
     maxOutputTokens: request.maxOutputTokens,
     ...(request.providerOptions ? { providerOptions: request.providerOptions } : {}),
-    allowSystemInMessages: input.allowSystemInMessages,
     abortSignal: input.signal,
     maxRetries: 0,
   });
@@ -79,6 +106,7 @@ export async function summaryCall(input: {
   // instead of "no output generated".
   let failure: unknown;
   for await (const part of result.fullStream) {
+    input.alive?.();
     if (part.type === 'error') failure ??= part.error;
   }
   if (failure) throw failure;

@@ -47,12 +47,13 @@ import {
   leastReasoningOptions,
   lightEffort,
   reasoningProviderOptions,
+  takesMessageEffort,
 } from '../providers/effort.js';
 import { resolveModel } from '../providers/models.js';
 import type { Providers } from '../providers/service.js';
 import { providerSecret } from '../providers/service.js';
 import { mergeProviderOptions, speedProviderOptions } from '../providers/speed.js';
-import { lastPromptScale } from '../runs/context-usage.js';
+import { lastPromptScale, lastStepAt } from '../runs/context-usage.js';
 import { readRunAction, writeRunAction } from '../runs/repository.js';
 import { createSafeFetch } from '../security/outbound.js';
 import type { ObjectiveContinuation } from '../sessions/continuation.js';
@@ -164,6 +165,9 @@ const SHED_TO = 0.6;
  * above anything measured (a byte a token; a half for Claude, which measured 0.41).
  */
 const LIMIT_MARGIN = 1.15;
+
+/** How long Anthropic keeps a cached prefix for each tier (see agent/cache.ts), in ms. */
+const CACHE_LIFETIME_MS: Record<CacheTtl, number> = { '5m': 5 * 60_000, '1h': 60 * 60_000 };
 
 /**
  * The share of the model's input window the conversation's loaded skills may take, kept in its
@@ -501,13 +505,17 @@ export class AgentRuntime {
     // a turn is the owner's Cancel, the step and token budgets, and this: a model call or a
     // tool that has produced nothing for STALLED_AFTER_MS is not coming back.
     const stalled = new AbortController();
+    const stalledAfter = this.options.stalledAfterMs ?? STALLED_AFTER_MS;
     let lastSign = Date.now();
     const alive = () => {
       lastSign = Date.now();
     };
-    const watchdog = setInterval(() => {
-      if (Date.now() - lastSign > STALLED_AFTER_MS) stalled.abort();
-    }, 5_000);
+    const watchdog = setInterval(
+      () => {
+        if (Date.now() - lastSign > stalledAfter) stalled.abort();
+      },
+      Math.min(5_000, stalledAfter / 4),
+    );
 
     watchdog.unref();
 
@@ -951,8 +959,23 @@ export class AgentRuntime {
         console.warn(`jian: MCP server ${server.name} is unavailable — ${server.reason}`);
       }
 
+      // Whether the run offers a tool now, by its own bookkeeping: always offered, or loaded.
+      const mcpNames = new Set(mcpToolNames);
+      const offeredNow = (name: string) =>
+        mcpNames.has(name)
+          ? selectedMcpTools.has(name)
+          : (!gated.has(name) && (!minimal || minimal.has(name))) || loadedTools.has(name);
+      // What the first step counts for its tools, as `before` does: those offered now. The rest
+      // are deferred or left out, and what earlier turns loaded is among those offered.
+      const toolTokens = promptTokens({
+        ...config,
+        instructions: '',
+        messages: [],
+        tools: Object.fromEntries(Object.entries(tools).filter(([name]) => offeredNow(name))),
+      });
       const context = await this.services.contexts.context(run, skillServers, {
         ...project,
+        toolTokens,
         ...(worktreeCan ? { worktrees: worktreeCan } : {}),
         ...(conversation.remoteMachineId ? { machine: { files: Boolean(machineFiles) } } : {}),
       });
@@ -985,12 +1008,6 @@ export class AgentRuntime {
             })
           : undefined;
 
-      // Whether the run offers a tool now, by its own bookkeeping: always offered, or loaded.
-      const mcpNames = new Set(mcpToolNames);
-      const offeredNow = (name: string) =>
-        mcpNames.has(name)
-          ? selectedMcpTools.has(name)
-          : (!gated.has(name) && (!minimal || minimal.has(name))) || loadedTools.has(name);
       // On Claude a loaded tool joins the conversation instead of the tool list (see
       // deferred-tools.ts): what each call brought in, and what the step's messages reference.
       // `defers` turns false for the rest of the run if Anthropic refuses that form, and
@@ -1393,8 +1410,20 @@ export class AgentRuntime {
        * deferred form and carried tool additions: a refusal since changes what may be sent.
        */
       let sent:
-        | { request: StepRequest; tokens: number; defers: boolean; carries: boolean }
+        | { request: StepRequest; tokens: number; defers: boolean; carries: boolean; at: number }
         | undefined;
+      /**
+       * The effort the summary is asked for, on the models that take one for a single reply:
+       * output is most of what a summary costs once its input comes from the cache, and the
+       * record needs little thought. Set by a message after the cached prefix, so the prefix
+       * stays as the step sent it. A turn already at low effort or below is left as it is.
+       */
+      const turnEffort = (context.light ? lightEffort(config) : config).reasoningEffort;
+      const summaryEffort =
+        takesMessageEffort(config.provider, config.modelId) &&
+        !['none', 'minimal', 'low'].includes(turnEffort ?? '')
+          ? ('low' as const)
+          : undefined;
 
       if (!session.title && !learning) {
         const options = leastReasoningOptions(config);
@@ -1639,8 +1668,18 @@ export class AgentRuntime {
                * (even for /compact, whose own answer offers none): the last turn wrote that
                * prefix to the cache. None when it would not fit the window.
                */
+              // The cache holds a prefix for its TTL from the last request that wrote it. Past
+              // that, a summary in place writes the whole prompt to the cache again, at a
+              // quarter or double the price of reading it fresh: the segments cost less.
+              const wroteAt =
+                sent?.at ??
+                (
+                  await lastStepAt(this.services.store.db, profileId, run.sessionId, config)
+                )?.getTime();
+              const cached =
+                wroteAt !== undefined && Date.now() - wroteAt < CACHE_LIFETIME_MS[cacheTtl];
               const inPlace = (instructions: string) => {
-                if (before > limit) return undefined;
+                if (before > limit || !cached) return undefined;
                 const reused =
                   sent && sent.defers === defers && sent.carries === carries ? sent : undefined;
                 let request = reused?.request;
@@ -1659,7 +1698,9 @@ export class AgentRuntime {
                   request,
                   instructions,
                   allowSystemInMessages: deferring,
+                  ...(summaryEffort ? { effort: summaryEffort } : {}),
                   signal,
+                  alive,
                 }).then((answer) => ({ answer, tokens: total }));
               };
               // The conversation's own model. A separately chosen one can be the provider whose
@@ -1876,7 +1917,7 @@ export class AgentRuntime {
             compactCommand ? [] : (sendAll ?? activeNames),
             sendAll,
           );
-          sent = { request, tokens: fitted.tokens, defers, carries };
+          sent = { request, tokens: fitted.tokens, defers, carries, at: Date.now() };
           return request;
         },
         onStepEnd: async ({ text, toolCalls, toolResults, finishReason, usage }) => {
@@ -2221,7 +2262,7 @@ export class AgentRuntime {
             owner,
             externalUncertain || signal.aborted ? 'interrupted' : 'failed',
             stalled.signal.aborted
-              ? `Stopped: nothing came back from the model or a tool for ${STALLED_AFTER_MS / 60_000} minutes. Completed steps are saved; inspect them before continuing.`
+              ? `Stopped: nothing came back from the model or a tool for ${stalledAfter / 60_000} minutes. Completed steps are saved; inspect them before continuing.`
               : executionFailureMessage(
                   error,
                   externalUncertain,

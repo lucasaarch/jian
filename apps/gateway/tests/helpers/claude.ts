@@ -32,6 +32,7 @@ export type ClaudeRequest = {
           is_error?: boolean;
           content?: string | Array<{ type: string; tool_name?: string; text?: string }>;
         }>;
+    output_config?: unknown;
   }>;
 };
 
@@ -172,5 +173,6 @@ export const addedIn = (request: ClaudeRequest | undefined) =>
  * them in its system prompt.
  */
 export const isSummary = (request: ClaudeRequest | undefined) =>
-  JSON.stringify(request?.messages.at(-1) ?? '').includes(CHECKPOINT_TASK) ||
-  JSON.stringify(request?.system ?? '').includes(CHECKPOINT_TASK);
+  JSON.stringify(request?.messages.findLast((message) => message.role === 'user') ?? '').includes(
+    CHECKPOINT_TASK,
+  ) || JSON.stringify(request?.system ?? '').includes(CHECKPOINT_TASK);

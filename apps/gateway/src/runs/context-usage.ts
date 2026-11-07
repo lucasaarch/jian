@@ -128,3 +128,33 @@ export async function lastPromptScale(
     | undefined;
   return measuredScale(Number(data?.usage?.inputTokens), Number(data?.prompt?.estimatedTokens));
 }
+
+/**
+ * When the conversation last sent a step on this model, which is when the provider last wrote
+ * its prompt to the cache; undefined when it never did. Another model's steps wrote another
+ * cache, so they do not count.
+ */
+export async function lastStepAt(
+  db: Queryable,
+  profileId: string,
+  sessionId: string,
+  model: Pick<ModelConfig, 'provider' | 'modelId'>,
+): Promise<Date | undefined> {
+  const [step] = await db
+    .select({ at: checkpoints.createdAt })
+    .from(checkpoints)
+    .innerJoin(runs, eq(runs.id, checkpoints.runId))
+    .where(
+      and(
+        eq(runs.profileId, profileId),
+        eq(runs.sessionId, sessionId),
+        eq(checkpoints.profileId, profileId),
+        sql`${checkpoints.data}->>'phase' = 'step-completed'`,
+        sql`${checkpoints.data}->'prompt'->'model'->>'provider' = ${model.provider}`,
+        sql`${checkpoints.data}->'prompt'->'model'->>'modelId' = ${model.modelId}`,
+      ),
+    )
+    .orderBy(desc(checkpoints.createdAt))
+    .limit(1);
+  return step?.at;
+}

@@ -19,16 +19,17 @@ Every size here is in the model's own tokens.
 - Past 80% of the budget or 200,000 tokens, whichever comes first, and at the start of a turn
   already past it, older turns are summarised by this conversation's own model, and the
   summary stays in the conversation. On a model with a window of a million tokens that point
-  is a fifth of it, so the Context line measures against it, not the window. Recent work and the latest request are kept whole; when
-  they are most of the request, no summary is attempted, since it could not shrink it. A
-  summary that fails or is skipped is reported with its cause, such as the provider's quota,
-  and is not retried on every step: the oldest turns, then the oldest results of this turn,
-  are dropped from the request instead, to well under that size. A dropped result is read
-  back with \`read_artifact\`.
-- You write that summary yourself. A message at the end of the conversation asks for the
-  record under the headings it names, among them every request the person made, in their
-  words; past the window, the older turns come to you on their own, in parts. Answer with text
-  alone: a tool called then runs nothing, and the summary fails.
+  is a fifth of it, so the Context line measures against it, not the window. Recent work and
+  the latest request are kept whole; when they are most of the request, no summary is
+  attempted, since it could not shrink it. A summary that fails or is skipped is reported
+  with its cause, such as the provider's quota, and is not retried on every step: the oldest
+  turns, then the oldest results of this turn, are dropped from the request instead, to well
+  under that size. A dropped result is read back with \`read_artifact\`.
+- You write that summary yourself. A message at the end of the conversation asks for a record
+  of at most about 2,500 words under the headings it names, among them every request the
+  person made, quoted briefly; the latest exchanges stay word for word after it. Past the
+  window, the older turns come to you on their own, in parts. Answer with text alone: a tool
+  called then runs nothing, and the summary fails.
 - Instructions and tool definitions are fixed: a summary cannot shrink them. When they alone
   overflow the window, as after switching to a model with a smaller one, the tool groups and
   MCP tools you loaded are let go, and if that is not enough only \`load_tools\`,
@@ -51,8 +52,8 @@ Every size here is in the model's own tokens.
   and loaded again if you need it.
 
 If even the current request and fixed instructions cannot fit after that, the gateway reports
-an explicit context error, naming what the tools and instructions cost. What you lose to a successful
-summary is detail; the original messages remain searchable.
+an explicit context error, naming what the tools and instructions cost. What you lose to a
+successful summary is detail; the original messages remain searchable.
 
 ## When to compact yourself
 

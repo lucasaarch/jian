@@ -51,6 +51,8 @@ export interface RuntimeOptions {
    */
   pulls?: Pick<PullWatchers, 'created' | 'pushed'>;
   outbound?: ReturnType<typeof createSafeFetch>;
+  /** How long a model call or a tool may send nothing before the turn is stopped, in ms. */
+  stalledAfterMs?: number;
   storeArtifact?: (
     run: Run,
     toolName: string,

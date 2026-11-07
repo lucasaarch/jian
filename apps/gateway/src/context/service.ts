@@ -293,6 +293,7 @@ export class Contexts {
       scale,
       ...(workspaces?.worktrees ? { worktrees: true } : {}),
       ...(!worker && workspaces?.machine ? { machine: workspaces.machine } : {}),
+      ...(workspaces?.toolTokens ? { toolTokens: workspaces.toolTokens } : {}),
       ...(judged.relevance ? { relevance: judged.relevance } : {}),
       ...(judged.skill ? { suggestedSkill: judged.skill } : {}),
       ...(this.settings ? { timeZone: await this.settings.timeZone() } : {}),

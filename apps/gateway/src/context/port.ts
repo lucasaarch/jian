@@ -19,6 +19,8 @@ export interface ContextSource {
        */
       machine?: { files: boolean };
       worktrees?: { create: boolean; machine: boolean; signals: boolean; files?: boolean };
+      /** The gateway's estimate of the tool definitions the turn sends, unscaled. */
+      toolTokens?: number;
     },
   ): Promise<{
     system: string;

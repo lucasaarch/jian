@@ -256,6 +256,24 @@ describe('context', () => {
     expect(context.messages.at(-1)?.content).toBe('When was the deployment?');
   });
 
+  it('counts the tools the turn sends in the Context line', async () => {
+    const { run } = await fixture();
+    const line = (toolTokens?: number) => {
+      const turn = buildContext(run, {
+        servers: [],
+        memories: [],
+        activities: [],
+        history: [],
+        scale: 1,
+        ...(toolTokens ? { toolTokens } : {}),
+      }).messages.at(-2)?.content;
+      return Number(/starts at about ([\d,]+) tokens/.exec(turn ?? '')?.[1]?.replaceAll(',', ''));
+    };
+
+    // The runtime compacts by a size that includes the tool definitions; the line did not.
+    expect(line(9_000) - line()).toBe(9_000);
+  });
+
   it('recalls memories up to their budget in Claude tokens, not bytes', async () => {
     const services = await testServices();
     const profile = await services.profiles.createProfile({
@@ -658,6 +676,46 @@ describe('compaction', () => {
       expect(call.read).toBeLessThanOrEqual(SEGMENT_TOKENS + 1000);
       expect(call.allowed).toBe(SUMMARY_TOKENS);
     }
+  });
+
+  it('gives a segment room to rewrite a record longer than the usual summary', async () => {
+    const asked: Array<number | undefined> = [];
+    const summarise = (previous: string | undefined) =>
+      compactPrompt({
+        provider: 'test',
+        modelId: 'large',
+        policy: { inputTokens: 1_000_000, outputTokens: 64_000 },
+        messages: Array.from({ length: 6 }, (_, index) => ({
+          role: 'user' as const,
+          content: `turn-${index}: ${'details '.repeat(2000)}`,
+        })),
+        previous,
+        signal: AbortSignal.timeout(20000),
+        onUsage: async () => {},
+        model: mockModel({
+          doGenerate: async (options) => {
+            asked.push(options.maxOutputTokens);
+            return {
+              content: [{ type: 'text', text: 'Checkpoint.' }],
+              finishReason: { unified: 'stop', raw: 'stop' },
+              usage: {
+                inputTokens: { total: 10, noCache: 10, cacheRead: 0, cacheWrite: 0 },
+                outputTokens: { total: 5, text: 5, reasoning: 0 },
+              },
+              warnings: [],
+            };
+          },
+        }),
+      });
+
+    // A record of 12,000 tokens, as one written in place on a large window can be: folding the
+    // turns into it at the usual 8,192 cut it off, and compaction failed twice for good.
+    await summarise('r'.repeat(12_000));
+    expect(asked.at(-1)).toBe(15_000);
+    await summarise('r'.repeat(40_000));
+    expect(asked.at(-1)).toBe(32_000);
+    await summarise('r'.repeat(1_000));
+    expect(asked.at(-1)).toBe(SUMMARY_TOKENS);
   });
 
   it('leaves a short conversation alone', async () => {

@@ -48,6 +48,26 @@ export function takesAdaptiveThinking(modelId: string): boolean {
 }
 
 /**
+ * The Claude models that take an effort for one reply from a mid-conversation system message:
+ * Opus 5 and newer, Fable and Mythos 5.1 and newer, Sonnet and Haiku 5.5 and newer. Not Opus
+ * 4.8, Sonnet 5 or anything 4.x. Read from the id as `takesAdaptiveThinking` does.
+ */
+export function takesMessageEffort(provider: string, modelId: string): boolean {
+  if (provider !== 'anthropic') return false;
+  const match = /claude-(opus|sonnet|haiku|fable|mythos)-(\d+)(?:-(\d{1,2})(?!\d))?/.exec(modelId);
+  if (!match) return false;
+  const version = Number(match[2]) + Number(match[3] ?? 0) / 10;
+  const from: Record<string, number> = {
+    opus: 5,
+    fable: 5.1,
+    mythos: 5.1,
+    sonnet: 5.5,
+    haiku: 5.5,
+  };
+  return version >= (from[match[1] as string] ?? Number.POSITIVE_INFINITY);
+}
+
+/**
  * The effort for a turn judged light: `low` in place of anything above it, never higher than
  * the owner's pick and never switched off — a model the owner set to think still thinks, and
  * `low` is a level every provider that offers `medium` or `high` also offers.
