@@ -1,0 +1,308 @@
+/* biome-ignore-all lint/style/noDescendingSpecificity: Component descendants are grouped by surface and do not overlap. */
+@reference "tailwindcss";
+@reference "./themes.css";
+@reference "./kit.css";
+
+/* Composer, notices above it and attachments. */
+@layer components {
+  /* Above the composer, in its column: the title, what went wrong, a way to close it and a way
+     on. Quiet, as a notice is, so the conversation above it still leads. */
+  /* Floats over the end of the conversation, so it is glass, as everything that floats is. */
+  .trouble-card {
+    @apply glass-strong mx-auto mb-3 grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-3 gap-y-2 rounded-2xl px-4 py-3 text-sm;
+    width: min(
+      calc(var(--chat-column) + 2 * var(--chat-gutter)),
+      calc(100% - 3rem + 2 * var(--chat-gutter))
+    );
+  }
+  .trouble-text {
+    @apply grid min-w-0 gap-0.5;
+  }
+  .trouble-text strong {
+    @apply font-medium;
+    color: var(--ink);
+  }
+  .trouble-text p {
+    @apply line-clamp-3 break-words;
+    color: var(--muted);
+  }
+  .trouble-close {
+    @apply -mr-1 -mt-0.5 grid h-7 w-7 place-items-center rounded-full transition-colors hover:bg-glass-hover;
+    color: var(--muted);
+  }
+  .trouble-close:hover {
+    color: var(--ink);
+  }
+  .trouble-card .trouble-action {
+    @apply col-span-2 justify-self-end;
+  }
+  /* The composer as AI chats draw it: one rounded box holding the files, the text and the
+     buttons, floating over the end of the conversation. */
+  .composer {
+    @apply grid gap-2 px-6 pb-5 pt-2;
+    padding-inline: calc(1.5rem - var(--chat-gutter, 0.75rem));
+  }
+  /* Its column never grows past the screen for something wide inside it. */
+  /* Uses the shared glass surface so content scrolling behind it stays softly visible. */
+  .composer-box {
+    @apply glass grid min-w-0 grid-cols-[minmax(0,1fr)] gap-2 rounded-3xl p-3 transition-colors;
+    container: composer / inline-size;
+    background: linear-gradient(135deg, var(--glass-light), transparent 55%), var(--glass);
+  }
+  .composer-box:focus-within {
+    border-color: color-mix(in srgb, var(--ink) 18%, transparent);
+  }
+  .composer-box[data-dragging="true"] {
+    @apply border-dashed border-accent;
+  }
+  /* The box draws the border and the focus; the field inside is only text. */
+  .composer-box textarea,
+  .composer-box textarea:focus {
+    @apply max-h-48 min-h-10 resize-none border-0 bg-transparent px-2 py-1.5 text-[15px];
+    box-shadow: none;
+    field-sizing: content;
+  }
+  /* One height and one gap for everything in the row: every control is a 32px target, the
+     size of send, and the same 8px sits between any two of them. */
+  .composer-actions {
+    @apply flex items-center gap-2;
+  }
+  /* Conversation status stays above the input surface. */
+  .composer-context {
+    @apply flex min-w-0 flex-wrap items-center gap-1 px-1;
+  }
+  .composer-model-control.session-model {
+    @apply flex w-auto min-w-0 shrink gap-2;
+  }
+  /* Only the model's name gives up width; the effort beside it is a word and stays whole. */
+  .composer-model-control > .model-trigger + .model-trigger {
+    @apply shrink-0;
+  }
+  /* A narrow composer has no room for the recording capsule and the menus at once, and the
+     menus have nothing to do while it records: they step aside until it stops. Measured on the
+     composer, since a desktop pane beside the sidebar and the chat list can be as narrow. */
+  @container composer (max-width: 32rem) {
+    .composer-actions:has(.voice-pill[data-state="listening"]) .composer-model-control,
+    .composer-actions:has(.voice-pill[data-state="listening"]) > .model-trigger {
+      @apply hidden;
+    }
+  }
+  /* Every control in the row is the same 32px: the menus, the tools and send. */
+  .composer-tool {
+    @apply grid size-8 place-items-center rounded-full text-muted transition-colors hover:bg-glass-hover hover:text-ink;
+  }
+  .composer-tool.recording {
+    @apply bg-bad text-white hover:bg-bad hover:text-white;
+  }
+  .composer-send {
+    @apply grid size-8 shrink-0 place-items-center rounded-full bg-accent text-on-accent transition-opacity disabled:opacity-40;
+  }
+  .composer-error {
+    @apply text-sm text-bad;
+  }
+  .composer-recording {
+    @apply flex min-h-10 items-center gap-2 px-2 text-sm font-medium text-ink;
+  }
+  .recording-dot {
+    @apply h-2.5 w-2.5 rounded-full bg-bad;
+    animation: recording 1s ease-in-out infinite alternate;
+  }
+  .composer-attachments {
+    @apply flex flex-wrap gap-2;
+  }
+  .attachment {
+    @apply relative;
+  }
+  /* Every attachment is one tile tall, whatever it carries, so the row reads as one row. */
+  .attachment.image img {
+    @apply h-14 w-14 rounded-xl border border-glass-edge bg-glass-hover object-cover;
+  }
+  .attachment.audio .audio-player {
+    @apply h-14 w-72 bg-glass-hover py-0;
+  }
+  .attachment[data-state="failed"] {
+    @apply rounded-xl ring-1 ring-bad;
+  }
+  .attachment-file {
+    @apply flex h-14 w-56 items-center gap-3 rounded-xl border border-glass-edge bg-glass-hover px-3;
+  }
+  .attachment-busy {
+    @apply absolute inset-0 grid place-items-center rounded-xl bg-surface/70 text-accent;
+  }
+  .attachment-remove {
+    @apply absolute -right-1.5 -top-1.5 grid h-5 w-5 place-items-center rounded-full bg-ink text-surface shadow;
+  }
+  /* A document, in the composer and in the conversation alike. */
+  .file-card {
+    @apply glass flex w-72 max-w-full items-center gap-3 rounded-2xl px-3 py-2.5 text-ink transition-colors hover:bg-glass-hover;
+  }
+  .file-icon {
+    @apply grid h-9 w-9 shrink-0 place-items-center rounded-full bg-glass-press text-ink;
+  }
+  .file-text {
+    @apply grid min-w-0 flex-1;
+  }
+  .file-text strong {
+    @apply truncate text-sm font-medium;
+  }
+  .file-text small {
+    @apply truncate text-xs text-muted;
+  }
+  /* Equal-width attachment tiles share a row when the message has room for them. */
+  .message-media {
+    @apply mt-3 flex w-full min-w-0 flex-col items-start gap-2;
+  }
+  .message-files {
+    @apply m-0 grid w-full min-w-0 list-none gap-2 p-0;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
+  }
+  .message-files[data-count="1"] {
+    @apply max-w-80;
+  }
+  .message-files > li {
+    @apply min-w-0;
+  }
+  .message-files :is(.file-card, .audio-player) {
+    @apply h-14 w-full rounded-2xl;
+  }
+  .chat-line.member .message-media {
+    @apply items-end;
+  }
+  .file-card {
+    @apply text-left;
+  }
+  /* A mosaic as WhatsApp lays one out: one picture alone, two side by side, three as one large
+     and two small, four and more as a square whose last tile counts what it hides. */
+  .mosaic {
+    @apply grid w-80 max-w-full gap-1 overflow-hidden rounded-2xl;
+  }
+  .mosaic[data-count="1"] {
+    @apply w-auto;
+  }
+  .mosaic[data-count="2"],
+  .mosaic[data-count="3"],
+  .mosaic[data-count="4"] {
+    @apply h-80 grid-cols-2;
+  }
+  .mosaic[data-count="2"] {
+    @apply h-44;
+  }
+  .mosaic[data-count="3"] .mosaic-tile:first-child {
+    @apply row-span-2;
+  }
+  .mosaic-tile {
+    @apply relative block min-h-0 overflow-hidden bg-canvas;
+  }
+  .mosaic-tile img {
+    @apply h-full w-full object-cover transition-transform duration-200;
+  }
+  .mosaic-tile:hover img {
+    @apply scale-[1.03];
+  }
+  /* Over the frame rather than around it, so the frame stays the same element from the moment
+     the tile is loading to the moment it can be opened. */
+  .mosaic-open {
+    @apply absolute inset-0;
+  }
+  .mosaic-more {
+    @apply absolute inset-0 grid place-items-center bg-black/55 text-3xl font-semibold text-white;
+  }
+  /* The viewer takes the whole screen so photos have a quiet backdrop. */
+  .viewer {
+    @apply m-0 h-(--app-height) max-h-none w-screen max-w-none bg-transparent p-0 text-white;
+    /* A host whose title bar lies over the window (desktop: the traffic lights, or the window
+       buttons) sets --title-bar; the viewer starts under it so its name and buttons stay clear. */
+    padding-top: var(--title-bar, 0px);
+  }
+  .viewer[open] {
+    @apply flex flex-col;
+  }
+  .viewer::backdrop {
+    background: rgb(0 0 0 / 0.88);
+    backdrop-filter: blur(6px);
+  }
+  .viewer > header {
+    @apply flex items-center gap-3 px-5 py-3 text-sm;
+  }
+  .viewer > header strong {
+    @apply min-w-0 flex-1 truncate font-medium;
+  }
+  .viewer > header span {
+    @apply font-mono text-xs text-white/70;
+  }
+  .viewer-button {
+    @apply grid h-10 w-10 place-items-center rounded-full text-white/85 transition-colors hover:bg-white/15 hover:text-white;
+  }
+  /* One track the size of the box, not of its content: an implicit `auto` row grows to the
+     picture's own height, so `h-full` and `max-h-full` below it never bind and a tall picture
+     opens cropped instead of fitted. */
+  .viewer-stage,
+  .zoom-frame {
+    grid-template: minmax(0, 1fr) / minmax(0, 1fr);
+  }
+  .viewer-stage {
+    @apply grid min-h-0 flex-1 place-items-center px-16 pb-8;
+  }
+  .viewer[open] > * {
+    animation: viewer-in 200ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+  .viewer[open]::backdrop {
+    animation: viewer-fade 200ms ease-out;
+  }
+  .viewer[data-closing="true"] > * {
+    animation: viewer-out 160ms ease-in forwards;
+  }
+  .viewer[data-closing="true"]::backdrop {
+    animation: viewer-fade 160ms ease-in reverse forwards;
+  }
+  /* The picture is looked at, never selected or dragged out as a file. */
+  .viewer {
+    user-select: none;
+  }
+  .viewer-code,
+  .viewer-document {
+    user-select: text;
+  }
+  .zoom-frame {
+    @apply grid h-full w-full place-items-center overflow-hidden;
+    touch-action: none;
+  }
+  .zoom-frame img {
+    @apply max-h-full max-w-full rounded-lg object-contain;
+    transform-origin: center;
+    will-change: transform;
+    -webkit-user-drag: none;
+  }
+  .zoom-frame[data-zoomed="true"] {
+    @apply cursor-grab active:cursor-grabbing;
+  }
+  .zoom-frame[data-zoomed="false"] {
+    @apply cursor-zoom-in;
+  }
+  .viewer-pdf {
+    @apply h-full w-full max-w-5xl rounded-lg bg-white;
+  }
+  .viewer-video {
+    @apply max-h-full max-w-full rounded-lg bg-black;
+  }
+  .viewer-file {
+    @apply grid justify-items-center gap-2 rounded-lg bg-surface px-10 py-8 text-center text-ink;
+  }
+  .viewer-file span,
+  .viewer-file p {
+    @apply text-sm text-muted;
+  }
+  .viewer-html {
+    @apply flex h-full w-full max-w-5xl flex-col gap-2;
+  }
+  .viewer-html iframe {
+    @apply min-h-0 w-full flex-1 rounded-lg bg-white;
+  }
+  .viewer-note {
+    @apply rounded-lg bg-surface px-4 py-2 text-sm text-muted;
+    user-select: text;
+  }
+  .viewer-document {
+    @apply h-full w-full max-w-4xl overflow-auto rounded-lg bg-surface px-10 py-8 text-ink;
+  }
+}

@@ -1,0 +1,439 @@
+/* biome-ignore-all lint/style/noDescendingSpecificity: Component descendants are grouped by surface and do not overlap. */
+@reference "tailwindcss";
+@reference "./themes.css";
+@reference "./kit.css";
+
+/* Code colours, voice notes, the chat layout, phone sizes and the version notice. */
+@layer components {
+  /* Code reads on a dark page, as it does in an editor; the colours are the
+     GitHub dark palette, keyed to the classes highlight.js gives each token, shared by the file
+     viewer and the diffs in a conversation. */
+  .viewer-code {
+    @apply h-full w-full max-w-5xl overflow-auto whitespace-pre-wrap break-words rounded-lg p-6 font-mono text-sm leading-6;
+    background: #0d1117;
+    color: #e6edf3;
+  }
+  :is(.viewer-code, .code-diff-lines, .decision-request pre, .code-block-lines)
+    :is(.hljs-keyword, .hljs-doctag, .hljs-template-tag) {
+    color: #ff7b72;
+  }
+  :is(.viewer-code, .code-diff-lines, .decision-request pre, .code-block-lines)
+    :is(.hljs-title, .hljs-title.class_, .hljs-title.function_) {
+    color: #d2a8ff;
+  }
+  :is(.viewer-code, .code-diff-lines, .decision-request pre, .code-block-lines)
+    :is(
+      .hljs-attr,
+      .hljs-attribute,
+      .hljs-literal,
+      .hljs-meta,
+      .hljs-number,
+      .hljs-operator,
+      .hljs-variable,
+      .hljs-selector-attr,
+      .hljs-selector-class,
+      .hljs-selector-id
+    ) {
+    color: #79c0ff;
+  }
+  :is(.viewer-code, .code-diff-lines, .decision-request pre, .code-block-lines)
+    :is(.hljs-regexp, .hljs-string) {
+    color: #a5d6ff;
+  }
+  :is(.viewer-code, .code-diff-lines, .decision-request pre, .code-block-lines)
+    :is(.hljs-built_in, .hljs-symbol, .hljs-type) {
+    color: #ffa657;
+  }
+  :is(.viewer-code, .code-diff-lines, .decision-request pre, .code-block-lines)
+    :is(.hljs-comment, .hljs-code, .hljs-formula) {
+    color: #8b949e;
+  }
+  :is(.viewer-code, .code-diff-lines, .decision-request pre, .code-block-lines)
+    :is(.hljs-name, .hljs-quote, .hljs-selector-tag, .hljs-selector-pseudo) {
+    color: #7ee787;
+  }
+  :is(.viewer-code, .code-diff-lines, .decision-request pre, .code-block-lines) .hljs-section {
+    @apply font-bold;
+    color: #79c0ff;
+  }
+  /* The same code on a light ground: the light theme's diffs, requests and code blocks. The
+     file viewer stays dark in both themes. */
+  :root[data-theme="light"] :is(.code-diff-lines, .decision-request pre, .code-block-lines) {
+    & :is(.hljs-keyword, .hljs-doctag, .hljs-template-tag) {
+      color: #cf222e;
+    }
+    & :is(.hljs-title, .hljs-title.class_, .hljs-title.function_) {
+      color: #8250df;
+    }
+    &
+      :is(
+        .hljs-attr,
+        .hljs-attribute,
+        .hljs-literal,
+        .hljs-meta,
+        .hljs-number,
+        .hljs-operator,
+        .hljs-variable
+      ) {
+      color: #0550ae;
+    }
+    & :is(.hljs-regexp, .hljs-string) {
+      color: #0a3069;
+    }
+    & :is(.hljs-built_in, .hljs-symbol, .hljs-type) {
+      color: #953800;
+    }
+    & :is(.hljs-comment, .hljs-code, .hljs-formula) {
+      color: #6e7781;
+    }
+    & :is(.hljs-name, .hljs-quote, .hljs-selector-tag) {
+      color: #116329;
+    }
+  }
+  :is(.viewer-code, .code-diff-lines, .decision-request pre, .code-block-lines) .hljs-bullet {
+    color: #f2cc60;
+  }
+  :is(.viewer-code, .code-diff-lines, .decision-request pre, .code-block-lines) .hljs-emphasis {
+    @apply italic;
+  }
+  .viewer-code .hljs-strong {
+    @apply font-bold;
+  }
+  .viewer-code .hljs-addition {
+    color: #aff5b4;
+    background: #033a16;
+  }
+  .viewer-code .hljs-deletion {
+    color: #ffdcd7;
+    background: #67060c;
+  }
+  .viewer-previous,
+  .viewer-next {
+    @apply absolute top-1/2 -translate-y-1/2 bg-white/10;
+  }
+  .viewer-previous {
+    @apply left-4;
+  }
+  .viewer-next {
+    @apply right-4;
+  }
+  /* A voice note: the round button, the waveform that fills in as it plays, time and speed. */
+  .audio-player {
+    @apply glass flex w-80 max-w-full items-center gap-3 rounded-full px-3 py-2;
+  }
+  .audio-toggle {
+    @apply grid h-9 w-9 shrink-0 place-items-center rounded-full bg-accent text-on-accent;
+  }
+  .audio-track {
+    --audio-progress: 0;
+    @apply relative h-8 min-w-0 flex-1;
+  }
+  .audio-bars {
+    @apply flex h-full items-center gap-[2px];
+  }
+  .audio-bars span {
+    @apply min-h-[3px] flex-1 rounded-full bg-muted/35;
+  }
+  /* Uncovered to the playhead each frame, so the fill sweeps through a bar instead of
+     flipping whole bars four times a second. */
+  .audio-bars.played {
+    @apply pointer-events-none absolute inset-0;
+    clip-path: inset(0 calc((1 - var(--audio-progress)) * 100%) 0 0);
+  }
+  .audio-bars.played span {
+    @apply bg-accent;
+  }
+  /* The range drives seeking and the keyboard; the bars under it are what shows. */
+  .audio-track input[type="range"] {
+    @apply absolute inset-0 h-full w-full cursor-pointer opacity-0;
+  }
+  .audio-time {
+    @apply w-9 shrink-0 text-right font-mono text-[11px] tabular-nums text-muted;
+  }
+  .audio-speed {
+    @apply h-6 shrink-0 rounded-full bg-glass-press px-2 text-[11px] font-semibold text-muted hover:text-ink;
+  }
+
+  /* A chat as AI chats lay it out: what the reader asked in a card across the column, the
+     answer as plain text under it. The column keeps lines short enough to read. In a group,
+     where several people write, the reader's side stays on the right. */
+  .chat-line {
+    @apply mb-6 flex w-full flex-col;
+  }
+  /* Work alone on its line belongs to the turn around it: close to what the agent said before
+     it, and as close to what it says next as the first stretch sits inside its message. Before
+     a message of the owner's, a new turn, it keeps the space between turns. */
+  .chat-line.work .thought-line {
+    @apply mb-0;
+  }
+  .chat-line.theirs + .chat-line.work {
+    @apply -mt-2;
+  }
+  .chat-line.work:has(+ .chat-line.theirs) {
+    @apply mb-2;
+  }
+  /* The same, where each line is a row of its own. A row contains its margins, so the pull up
+     goes on the row itself: inside it, the line would be clipped. */
+  .history-row:has(> .chat-line.theirs:last-child)
+  + .history-row:has(> .chat-line.work:first-child) {
+    @apply -mt-2;
+  }
+  .history-row:has(+ .history-row > .chat-line.theirs:first-child) > .chat-line.work:last-child {
+    @apply mb-2;
+  }
+  .chat-text {
+    @apply whitespace-pre-wrap break-words text-[15px] leading-7 text-ink;
+  }
+  /* The message a reply answers, inside the reply, as messengers draw it: four lines at most. */
+  .chat-quote {
+    @apply mb-1 flex min-w-0 items-center gap-1.5 text-xs leading-5 text-muted;
+  }
+  .chat-quote strong {
+    @apply shrink-0 font-medium text-ink/75;
+  }
+  .chat-quote span {
+    @apply min-w-0 truncate;
+  }
+  /* A reaction is a mark on a message, not a message: small, and without a bubble. */
+  .chat-reaction {
+    @apply flex max-w-[80%] items-center gap-2 text-xs text-muted;
+  }
+  .chat-reaction-emoji {
+    @apply text-lg leading-none;
+  }
+  .chat-reaction > span:last-child {
+    @apply min-w-0 truncate;
+  }
+  .chat-reaction q {
+    @apply ml-1 italic;
+  }
+  /* The agent's answer, as Markdown: blocks spaced like paragraphs of a chat, not a page. */
+  .chat-text.markdown {
+    @apply whitespace-normal;
+  }
+  .chat-text.markdown p {
+    @apply text-ink;
+  }
+  .markdown > * + * {
+    @apply mt-3;
+  }
+  .markdown h3 {
+    @apply mt-5 text-base font-semibold;
+  }
+  .markdown h4 {
+    @apply mt-4 text-[15px] font-semibold;
+  }
+  .markdown > :first-child {
+    @apply mt-0;
+  }
+  .markdown ul {
+    @apply list-disc pl-5;
+  }
+  .markdown ol {
+    @apply list-decimal pl-5;
+  }
+  .markdown li + li {
+    @apply mt-1;
+  }
+  .markdown blockquote {
+    @apply border-l-2 border-line pl-3 text-muted;
+  }
+  .markdown code {
+    @apply rounded-md px-1.5 py-0.5 font-mono text-[13px];
+    background: color-mix(in srgb, var(--ink) 8%, transparent);
+  }
+  .markdown pre:not(.code-block-lines) {
+    @apply overflow-x-auto rounded-xl border p-3 font-mono text-[13px] leading-6;
+    background: color-mix(in srgb, var(--ink) 4%, transparent);
+    border-color: color-mix(in srgb, var(--ink) 9%, transparent);
+  }
+  .markdown pre code {
+    @apply bg-transparent p-0;
+  }
+  .markdown hr {
+    @apply border-line;
+  }
+  .markdown-table {
+    @apply overflow-x-auto rounded-lg border border-line;
+  }
+  .markdown table {
+    @apply w-full border-collapse text-sm leading-6;
+  }
+  .markdown th {
+    @apply bg-surface text-left font-semibold;
+  }
+  .markdown th,
+  .markdown td {
+    @apply border-b border-line px-3 py-1.5 align-top;
+  }
+  .markdown tr:last-child td {
+    @apply border-b-0;
+  }
+  /* Shared text origin: authorship and spacing distinguish turns without indenting words. */
+  .chat-speaker {
+    @apply mb-2 inline-flex min-h-5 items-center gap-2 text-xs font-semibold text-ink;
+  }
+  .chat-speaker[data-author="assistant"] {
+    @apply text-muted;
+  }
+  .chat-line.mine .chat-text {
+    @apply text-left;
+  }
+  .chat-line.mine:not(.member) {
+    @apply relative isolate py-3;
+  }
+  /* The surface extends into the gutter; text and attachments keep the answer's exact origin. */
+  .chat-line.mine:not(.member)::before {
+    @apply glass pointer-events-none absolute inset-y-0 -z-10 rounded-2xl;
+    inset-inline: calc(-1 * var(--chat-gutter));
+    content: "";
+  }
+  .chat-speaker + .message-media {
+    @apply mt-0;
+  }
+  .chat-line.mine.member .chat-text {
+    @apply rounded-2xl px-4 py-2.5;
+    background: color-mix(in srgb, var(--ink) 7%, transparent);
+  }
+  /* A message on its way: its bubble as it will be, a quiet word under it; one that did not go
+     takes the bad ink, with why, and the way to send it again or let it go. */
+  .chat-line.mine[data-outgoing="sending"] {
+    @apply opacity-80;
+  }
+  .chat-line.mine[data-outgoing="failed"]:not(.member)::before,
+  .chat-line.mine.member[data-outgoing="failed"] .chat-text {
+    background: color-mix(in srgb, var(--bad) 14%, transparent);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--bad) 45%, transparent);
+  }
+  .outgoing-state {
+    @apply mt-1.5 flex max-w-full items-center justify-end gap-2 self-end text-xs;
+    color: var(--muted);
+  }
+  .chat-line[data-outgoing="failed"] .outgoing-state {
+    color: var(--bad);
+  }
+  .outgoing-state button {
+    @apply glass inline-flex shrink-0 cursor-pointer items-center gap-1 rounded-full px-2.5 py-1 font-medium transition-colors;
+  }
+  .outgoing-state button:hover {
+    background: var(--glass-hover);
+    color: var(--ink);
+  }
+  .chat-line.member .chat-text {
+    @apply max-w-[80%];
+  }
+  /* A voice note someone sent is their message too: it takes the bubble's ground and corners,
+     as wide as the player, and stands alone when it came without words. */
+  .chat-line.mine.member .message-media .audio-player {
+    @apply rounded-2xl border-0 py-2.5;
+    background: color-mix(in srgb, var(--ink) 7%, transparent);
+  }
+  .chat-line.mine > .message-media:first-child {
+    @apply mt-0;
+  }
+  /* In a group each person's run of messages opens with their face and name; the rest of the
+     run lines up under it. */
+  /* A schedule's instruction, arriving at its time: set apart from what people wrote. */
+  .chat-line.scheduled {
+    @apply items-center;
+  }
+  .scheduled-label {
+    @apply mb-1.5 inline-flex items-center gap-1.5 rounded-full bg-glass-press px-2.5 py-0.5 text-[11px] font-medium text-muted;
+  }
+  .chat-line.scheduled .chat-text {
+    @apply max-w-[80%] text-center text-sm text-muted;
+  }
+  .chat-line.member {
+    @apply flex-row-reverse items-start gap-3;
+  }
+  .chat-line.member .chat-body {
+    @apply flex flex-col items-end;
+  }
+  .chat-line.member:not(.opens) {
+    @apply -mt-4;
+  }
+  .chat-face,
+  .face.chat-face {
+    @apply grid h-8 w-8 shrink-0 place-items-center overflow-hidden rounded-full bg-accent-soft object-cover text-[11px] font-semibold text-accent;
+  }
+  span.chat-face:empty {
+    @apply bg-transparent;
+  }
+  .chat-body {
+    @apply min-w-0 flex-1;
+  }
+  .chat-author {
+    @apply mb-1 block text-xs font-semibold text-muted;
+  }
+}
+
+@media (max-width: 760px) {
+  .conversation-pane {
+    --chat-gutter: 0.5rem;
+  }
+  .conversation-pane .message-history {
+    @apply px-3;
+  }
+  .trouble-card {
+    width: min(
+      calc(var(--chat-column) + 2 * var(--chat-gutter)),
+      calc(100% - 1.5rem + 2 * var(--chat-gutter))
+    );
+  }
+  /* Clear of the home indicator and the rounded corners, which are the margin themselves; on
+     the keyboard there is neither. */
+  .composer,
+  .agent-toolbar {
+    @apply px-3;
+    padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+  }
+  .composer {
+    padding-inline: calc(0.75rem - var(--chat-gutter, 0.5rem));
+  }
+  :root[data-keyboard] :is(.composer, .agent-toolbar) {
+    @apply pb-2;
+  }
+  .attachment.audio .audio-player {
+    @apply w-64;
+  }
+
+  /* What a new chat says before its first message steps aside for the keyboard, and never
+     spills over the header in the room left. */
+  .draft-empty {
+    @apply overflow-hidden;
+    align-items: safe center;
+  }
+}
+
+/* Under 16px, iOS zooms the page in on a field's focus. Outside any layer, so no component's
+   smaller size can win over it on a phone. */
+@media (max-width: 760px) {
+  input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"], [type="file"]),
+  textarea,
+  select {
+    font-size: 16px;
+  }
+}
+
+/* The panel and the gateway on different releases: one notice in the middle of the screen,
+   in place of everything else, since nothing else would work as it should. */
+@layer components {
+  .version-mismatch {
+    @apply grid min-h-(--app-height) place-items-center bg-canvas px-4 py-10;
+  }
+  .version-mismatch section {
+    @apply grid w-full max-w-lg gap-3 rounded-2xl border border-line bg-surface p-7 text-sm leading-relaxed text-muted;
+  }
+  .version-mismatch-mark {
+    @apply mb-1 grid h-11 w-11 place-items-center rounded-xl bg-warn-soft text-warn;
+  }
+  .version-mismatch h1 {
+    @apply text-xl font-semibold leading-snug text-ink;
+  }
+  .version-mismatch strong {
+    @apply font-semibold text-ink;
+  }
+  .version-mismatch code {
+    @apply whitespace-nowrap rounded-md bg-canvas px-1.5 py-0.5 font-mono text-[12.5px] text-ink;
+  }
+}

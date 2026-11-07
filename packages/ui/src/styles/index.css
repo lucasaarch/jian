@@ -1,6 +1,8 @@
 @import "./themes.css";
 @import "./kit.css";
-@import "./surfaces.css";
+@import "./surfaces-shell.css";
+@import "./surfaces-composer.css";
+@import "./surfaces-content.css";
 @import "./flight.css";
 @import "./controls.css";
 @import "./conversations.css";

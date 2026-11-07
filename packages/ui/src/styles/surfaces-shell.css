@@ -1,0 +1,353 @@
+/* biome-ignore-all lint/style/noDescendingSpecificity: Component descendants are grouped by surface and do not overlap. */
+@reference "tailwindcss";
+@reference "./themes.css";
+@reference "./kit.css";
+
+/* Shared component surfaces, expressed in the same Tailwind semantic tokens as page layouts. The rest
+   of the surfaces follow in surfaces-composer.css and surfaces-content.css. */
+@layer components {
+  .brand-mark {
+    @apply block h-12 w-12 shrink-0 text-accent;
+  }
+  .brand-mark.small {
+    @apply h-9 w-9;
+  }
+
+  /* An open dialog holds the page still: the wheel scrolls its content, or nothing. */
+  html:has(dialog[open]) {
+    @apply overflow-hidden;
+  }
+
+  .text-link {
+    @apply text-accent underline-offset-2 hover:underline;
+  }
+  .release-notes section + section {
+    @apply mt-6 border-t border-line pt-6;
+  }
+  .release-notes h2 {
+    @apply text-xl;
+  }
+  .release-notes h2 small {
+    @apply ml-2 text-xs text-muted;
+  }
+  .release-notes h3 {
+    @apply mt-5 mb-2 text-base font-semibold;
+  }
+  .release-notes p,
+  .release-notes ul,
+  .release-notes ol,
+  .release-notes blockquote {
+    @apply mb-3 text-sm;
+  }
+  .release-notes ul {
+    @apply list-disc pl-5;
+  }
+  .release-notes ol {
+    @apply list-decimal pl-5;
+  }
+  .release-notes blockquote {
+    @apply border-l-2 border-line pl-3 text-muted;
+  }
+  .release-notes pre {
+    @apply mb-3 overflow-x-auto rounded-md bg-surface p-3 font-mono text-xs leading-5;
+  }
+  .release-notes pre code {
+    @apply bg-transparent p-0;
+  }
+  .release-notes > h3:first-child {
+    @apply mt-0;
+  }
+  .release-notes li + li {
+    @apply mt-1;
+  }
+  .release-notes code {
+    @apply rounded-sm bg-surface px-1 font-mono text-xs;
+  }
+
+  .session-history {
+    @apply flex min-h-0 min-w-0 flex-1 flex-col px-6 pb-4 pt-3;
+  }
+  /* The history keeps the reader's place itself (follow-bottom.ts); the browser's own anchoring,
+     where it exists, would correct the same shift a second time. */
+  .message-history {
+    @apply min-h-0 flex-1 overscroll-contain overflow-auto p-1;
+    overflow-anchor: none;
+  }
+
+  /* The conversation, the whole area beside the sidebar, which lists the chats. */
+  .messenger {
+    @apply grid h-full min-h-0 grid-cols-1;
+  }
+
+  .draft-empty {
+    @apply flex min-h-0 flex-1 items-center justify-center px-6;
+  }
+  /* The conversation reads in one column, centred, however wide the screen: the history
+     scrolls edge to edge, so its scrollbar stays at the edge, but what it holds keeps to the
+     column, and the composer lines up with it. */
+  .conversation-pane {
+    --chat-column: 52rem;
+    --chat-gutter: 0.75rem;
+    @apply flex min-h-0 min-w-0 flex-col;
+  }
+  .conversation-pane .message-list {
+    @apply mx-auto w-full;
+    max-width: var(--chat-column);
+  }
+  .conversation-pane .composer > * {
+    @apply mx-auto w-full;
+    max-width: calc(var(--chat-column) + 2 * var(--chat-gutter));
+  }
+  /* Cards share the user bubble's outer edges; prose keeps its aligned text column. */
+  .message-list .chat-line.theirs > :is(.decision-card, .code-changes, .crew, .run-change-summary),
+  .message-list .chat-line.theirs > .markdown > .code-block {
+    width: calc(100% + 2 * var(--chat-gutter));
+    margin-inline: calc(-1 * var(--chat-gutter));
+  }
+  /* The crew's cards reach the bubble's edges; its heading is a line of text, and reads with the
+     agent's name and words above and below it. */
+  .message-list .chat-line.theirs > .crew > .crew-head {
+    padding-inline: var(--chat-gutter);
+  }
+  /* Above the first message shown: the way further back, and what happened when it was tried. */
+  .history-earlier {
+    @apply mb-4 flex flex-col items-center gap-1 text-xs;
+    color: var(--muted);
+  }
+  /* A conversation has no header: its one control floats round in the top corner, over the
+     conversation. One with no bar at the bottom keeps its badges in the bottom corner, where the
+     composer would show them, since a host's own buttons take the top one. */
+  .conversation-pane,
+  .conversation-column {
+    @apply relative;
+  }
+  .pane-badges {
+    @apply absolute right-3 z-10;
+    bottom: max(0.75rem, env(safe-area-inset-bottom));
+  }
+  /* What the conversation leaves after its last message, as it does for a dock. */
+  .conversation-column:has(> .pane-badges .session-badges > *) {
+    --dock-height: 2.5rem;
+  }
+  /* The objective and the listeners are badges at the end of the row where the chat runs; what
+     each one holds opens from it. */
+  .session-badges {
+    @apply ml-auto flex shrink-0 items-center gap-1.5 empty:hidden;
+  }
+  .session-badge-trigger {
+    @apply shrink-0 cursor-pointer transition-opacity hover:opacity-80;
+  }
+  /* Built on the model menu's popup, which loads later and sizes itself to its content: named
+     with it, so a long goal wraps in a readable column instead of running across the screen. */
+  .model-menu.session-badge-popup {
+    @apply gap-2 p-4 leading-relaxed;
+    width: min(26rem, calc(100vw - 2rem));
+    max-width: min(26rem, calc(100vw - 2rem));
+    color: var(--ink);
+    overflow-wrap: anywhere;
+  }
+  .session-badge-title {
+    @apply text-xs font-medium;
+    color: var(--muted);
+  }
+  .session-objective-note {
+    color: var(--warn);
+  }
+  /* The pull requests in the badge's list. Named with the model menu, whose rule for its lists would
+     otherwise put back their padding and margin. The negative margins take the rows' padding back,
+     so a row's text lines up with the title, and long lists scroll inside it. */
+  .model-menu.session-pulls-popup {
+    @apply gap-1 p-3 leading-snug;
+  }
+  .model-menu > .session-pulls {
+    @apply -mx-1.5 -mb-1.5 grid max-h-80 list-none gap-0.5 overflow-y-auto p-0 text-xs;
+    color: var(--muted);
+  }
+  .session-pull {
+    @apply flex w-full min-w-0 items-start gap-2 rounded-lg p-1.5 text-left transition-colors;
+  }
+  a.session-pull:hover,
+  button.session-pull:hover,
+  .session-pull:focus-visible {
+    background: var(--glass-press);
+  }
+  .session-pull-mark {
+    @apply mt-0.5 shrink-0;
+    color: var(--good);
+  }
+  .session-pull-mark[data-state="draft"] {
+    color: var(--muted);
+  }
+  .session-pull-mark[data-state="merged"] {
+    color: var(--merged);
+  }
+  .session-pull-mark[data-state="closed"] {
+    color: var(--bad);
+  }
+  .session-pull-text {
+    @apply grid min-w-0 flex-1;
+  }
+  .session-pull-title {
+    @apply truncate;
+    color: var(--ink);
+  }
+  .session-pull-number {
+    @apply shrink-0 font-mono tabular-nums;
+  }
+  /* A worktree in the badge's list: what it is above, what can be done with it below. The grid has
+     one column so a long branch or base name wraps inside the popup, on a phone too. */
+  .session-worktree {
+    @apply grid grid-cols-1 gap-1 rounded-lg p-1.5;
+  }
+  .session-worktree-text {
+    @apply grid min-w-0 grid-cols-1;
+  }
+  .session-worktree-name {
+    @apply truncate;
+    color: var(--ink);
+  }
+  .session-worktree-meta {
+    @apply break-words;
+  }
+  .session-worktree-actions {
+    @apply -ml-2 flex flex-wrap gap-x-0.5 gap-y-0.5;
+  }
+  /* A long base name wraps inside the button instead of widening the popup. */
+  .session-worktree-actions > button {
+    @apply h-auto min-h-7 max-w-full py-1 text-left whitespace-normal;
+    /* Breaks only a word too long for the line, where break-all would split every word. */
+    overflow-wrap: anywhere;
+  }
+  /* A channel's conversation has, where a chat has its composer, its agent settings: whether
+     the agent answers this contact, and on which model. Same column, same box, no text. */
+  .agent-toolbar {
+    @apply px-6 pb-5 pt-2;
+  }
+  .agent-toolbar-context {
+    @apply mx-auto mb-1.5 flex w-full min-w-0 justify-end px-1;
+    max-width: var(--chat-column);
+  }
+  /* No badge to show: no row at all over the box. */
+  .agent-toolbar-context:not(:has(.session-badges > *)) {
+    @apply hidden;
+  }
+  .agent-toolbar-box {
+    @apply mx-auto flex w-full min-w-0 items-center gap-2 rounded-2xl border border-line bg-surface p-2;
+    max-width: var(--chat-column);
+  }
+  .agent-toolbar-switch {
+    @apply flex h-9 shrink-0 items-center gap-2.5 px-2 text-sm text-ink;
+  }
+  .agent-toolbar {
+    container: toolbar / inline-size;
+  }
+  /* On a phone everything stays on one row: the shield says the protection without its word,
+     and the switch says "AI", its own label naming it in full. */
+  @container toolbar (max-width: 30rem) {
+    .agent-toolbar-box {
+      @apply gap-1;
+    }
+    .agent-toolbar-box .protection-trigger .model-trigger-name,
+    .agent-toolbar-switch-word {
+      @apply sr-only;
+    }
+    .agent-toolbar-switch {
+      @apply gap-2 px-1;
+    }
+  }
+  /* In the pane the history runs edge to edge; only the messages keep the inner margin. */
+  .conversation-pane .session-history {
+    @apply p-0;
+  }
+  /* Room at the top for the corner control, so the first message is never under it. */
+  .conversation-pane .message-history {
+    @apply px-6 pb-4 pt-14;
+  }
+  /* The composer floats over the end of the conversation (dock.tsx), which keeps scrolling
+     beneath it: its last message gets room after it for the dock and the tray above it. */
+  .conversation-chat {
+    @apply relative;
+  }
+  .conversation-chat .message-history {
+    padding-bottom: calc(var(--dock-height, 0px) + var(--tray-height, 0px) + 1rem);
+  }
+  .conversation-chat .history-tray {
+    @apply absolute inset-x-0 z-[2] grid;
+    bottom: var(--dock-height, 0px);
+  }
+  .conversation-dock {
+    @apply absolute inset-x-0 bottom-0 z-[2];
+  }
+  /* Glass behind the dock: the blur comes in by degrees from above the project and machine
+     menus, light first and then deep, so the text going under it fades out of focus instead
+     of being cut. Two masked layers make the gradient; a backdrop blur cannot vary on its own. */
+  .conversation-glass {
+    @apply pointer-events-none absolute inset-x-0 bottom-0 z-[1];
+    height: calc(var(--dock-height, 0px) + var(--tray-height, 0px) + 2.5rem);
+  }
+  .conversation-glass::before,
+  .conversation-glass::after {
+    @apply absolute inset-0;
+    content: "";
+  }
+  .conversation-glass::before {
+    -webkit-backdrop-filter: blur(3px);
+    backdrop-filter: blur(3px);
+    -webkit-mask-image: linear-gradient(to bottom, transparent, black 2.5rem);
+    mask-image: linear-gradient(to bottom, transparent, black 2.5rem);
+  }
+  .conversation-glass::after {
+    -webkit-backdrop-filter: blur(16px);
+    backdrop-filter: blur(16px);
+    background: color-mix(in srgb, var(--canvas) 60%, transparent);
+    -webkit-mask-image: linear-gradient(to bottom, transparent 1rem, black 5.5rem);
+    mask-image: linear-gradient(to bottom, transparent 1rem, black 5.5rem);
+  }
+  /* Glass at the top, where a host draws its title bar over the chat; no bar, no height, no glass.
+     A backdrop blur cannot vary on its own, and two strengths read as a line where one ends. Each
+     layer here is a little stronger, starts higher and overlaps the last, so sharp text loses
+     focus by degrees, and the tint thins out along an eased curve for the same reason. */
+  .conversation-glass-top {
+    @apply pointer-events-none absolute inset-x-0 top-0 z-[1];
+    height: calc(var(--chrome-top, 0px) * 1.8);
+    background: linear-gradient(
+      to bottom,
+      color-mix(in srgb, var(--canvas) 72%, transparent) 0%,
+      color-mix(in srgb, var(--canvas) 58%, transparent) 30%,
+      color-mix(in srgb, var(--canvas) 30%, transparent) 60%,
+      color-mix(in srgb, var(--canvas) 9%, transparent) 85%,
+      transparent 100%
+    );
+  }
+  .conversation-glass-top i {
+    @apply absolute inset-0;
+    -webkit-backdrop-filter: blur(var(--glass-step));
+    backdrop-filter: blur(var(--glass-step));
+    -webkit-mask-image: linear-gradient(
+      to top,
+      transparent var(--glass-from),
+      black var(--glass-to)
+    );
+    mask-image: linear-gradient(to top, transparent var(--glass-from), black var(--glass-to));
+  }
+  .conversation-glass-top i:nth-child(1) {
+    --glass-step: 0.5px;
+    --glass-from: 0%;
+    --glass-to: 30%;
+  }
+  .conversation-glass-top i:nth-child(2) {
+    --glass-step: 1px;
+    --glass-from: 15%;
+    --glass-to: 50%;
+  }
+  .conversation-glass-top i:nth-child(3) {
+    --glass-step: 2.5px;
+    --glass-from: 35%;
+    --glass-to: 70%;
+  }
+  .conversation-glass-top i:nth-child(4) {
+    --glass-step: 5px;
+    --glass-from: 55%;
+    --glass-to: 95%;
+  }
+}

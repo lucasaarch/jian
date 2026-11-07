@@ -39,6 +39,7 @@ make release VERSION=1.2.3   # only when asked; needs docs/releases/1.2.3.md
 - All UI lives in `packages/ui`, with relative imports. A host only supplies what it alone has.
 - A change on desktop or web is a change on both. Adapt it to the other host in the same work, or
   say why it cannot apply. Read the `desktop-and-web` skill.
+- No UI file over 600 lines. Read the `ui-components` skill.
 
 **Writing**
 - English only in the product: UI, gateway messages, built-in skills, docs, fixtures. Examples use
