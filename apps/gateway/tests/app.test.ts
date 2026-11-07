@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
+import { runProgressEventSchema } from '@jian/contracts';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../src/app.js';
@@ -723,6 +724,12 @@ it('streams an agent at work as it goes, without moving the cursor a client resu
     const progress = data.slice(data.lastIndexOf('event: run.progress'));
 
     expect(progress).toContain(`"sessionId":"${session.id}"`);
+
+    const line = progress.split('\n').find((row) => row.startsWith('data: '));
+    const told = runProgressEventSchema.parse(JSON.parse(line?.slice('data: '.length) ?? ''));
+
+    expect(told.progress?.text).toBe('Hi');
+    expect(told.progress?.phase).toBe('writing');
     // Only durable events carry an id; a live update between them has none.
     expect(progress.split('\n\n')[0]).not.toContain('id: ');
     await reader.cancel();

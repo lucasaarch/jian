@@ -23,6 +23,34 @@ function reporter(every = 1000) {
 }
 
 describe('what a run reports while it runs', () => {
+  it('writes tokens at most every 250 ms by default', async () => {
+    const written: RunProgress[] = [];
+    let now = 0;
+    const subject = new ProgressReporter(
+      async (snapshot) => {
+        written.push(snapshot);
+      },
+      undefined,
+      () => now,
+    );
+
+    // A flush would write whatever waits, so let the writer settle on its own instead.
+    const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+    subject.draft('a');
+    await settle();
+    now = 200;
+    subject.draft('ab');
+    await settle();
+    expect(written).toHaveLength(1);
+
+    now = 260;
+    subject.draft('abc');
+    await settle();
+    expect(written).toHaveLength(2);
+    expect(written[1]?.text).toBe('abc');
+  });
+
   it('coalesces a burst of tokens into one write', async () => {
     const { subject, written, advance } = reporter();
 

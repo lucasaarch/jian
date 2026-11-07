@@ -1,4 +1,4 @@
-import type { GatewayEvent } from '@jian/contracts';
+import type { GatewayEvent, RunProgress } from '@jian/contracts';
 import { and, asc, desc, eq, gt, inArray, sql } from 'drizzle-orm';
 import type { Queryable } from '../storage/database.js';
 import { events, runs } from '../storage/schema.js';
@@ -46,12 +46,13 @@ export async function latestEventId(db: Queryable, profileId: string): Promise<n
 export async function readProgress(
   db: Queryable,
   profileId: string,
-): Promise<Array<{ runId: string; sessionId: string; at: string }>> {
+): Promise<Array<{ runId: string; sessionId: string; at: string; progress: RunProgress | null }>> {
   const rows = await db
     .select({
       runId: runs.id,
       sessionId: runs.sessionId,
       at: sql<string | null>`${runs.progress}->>'updatedAt'`,
+      progress: runs.progress,
       status: runs.status,
     })
     .from(runs)
@@ -61,5 +62,6 @@ export async function readProgress(
     runId: row.runId,
     sessionId: row.sessionId,
     at: row.at ?? row.status,
+    progress: row.progress,
   }));
 }

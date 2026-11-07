@@ -185,10 +185,11 @@ export function registerEventRoutes(app: FastifyInstance, options: EventOptions)
           // hears of it here, without an id, so it never moves the cursor it resumes from.
           const working = await readProgress(options.store.db, profileId);
 
-          for (const run of working) {
+          for (const { progress, ...run } of working) {
             if (told.get(run.runId) !== run.at) {
               told.set(run.runId, run.at);
-              reply.raw.write(`event: run.progress\ndata: ${JSON.stringify(run)}\n\n`);
+              const frame = progress ? { ...run, progress } : run;
+              reply.raw.write(`event: run.progress\ndata: ${JSON.stringify(frame)}\n\n`);
             }
           }
 

@@ -35,11 +35,11 @@ export class ProgressReporter {
    * @param write  persists one snapshot; a failure is swallowed, since presentation must never
    *               end a run.
    * @param every  the floor between two token writes. Tokens arrive every few milliseconds and
-   *               every watcher refreshes far slower than that.
+   *               a screen shows far fewer frames than that; 250 ms reads as typing, not steps.
    */
   constructor(
     private readonly write: (progress: RunProgress) => Promise<void>,
-    private readonly every = 1000,
+    private readonly every = 250,
     private readonly clock: () => number = Date.now,
   ) {}
 
