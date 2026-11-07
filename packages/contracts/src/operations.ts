@@ -204,8 +204,17 @@ export const STREAM_OPENED_EVENT = 'stream.opened';
 /** How many messages one read of a conversation returns, newest first to be read. */
 export const MESSAGES_PAGE = 100;
 
-/** The page before a message of the conversation; absent, the conversation's latest messages. */
-export const messagePageSchema = z.strictObject({ before: z.uuid().optional() });
+/** How many messages the panel asks for when it opens a conversation and for each earlier page. */
+export const MESSAGES_FIRST_PAGE = 40;
+
+/**
+ * The page before a message of the conversation; absent, the conversation's latest messages.
+ * `limit` asks for fewer than a full page; absent, the gateway returns `MESSAGES_PAGE`.
+ */
+export const messagePageSchema = z.strictObject({
+  before: z.uuid().optional(),
+  limit: z.coerce.number().int().min(1).max(MESSAGES_PAGE).optional(),
+});
 
 /**
  * The turns to read the tools of, comma-separated, however old; absent, the latest turns. A list,

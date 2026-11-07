@@ -55,10 +55,14 @@ export const sessionCalls = (client: Client) => ({
       }),
     ),
   /** The conversation's latest messages, or the page just before one of them. */
-  messages: (profileId: string, sessionId: string, before?: string) =>
+  messages: (
+    profileId: string,
+    sessionId: string,
+    page: { before?: string; limit?: number } = {},
+  ) =>
     result(
       client.GET('/v1/profiles/{profileId}/sessions/{sessionId}/messages', {
-        params: { path: { profileId, sessionId }, query: before ? { before } : {} },
+        params: { path: { profileId, sessionId }, query: page },
       }),
     ),
   deleteSession: (profileId: string, sessionId: string) =>

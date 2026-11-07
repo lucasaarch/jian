@@ -517,6 +517,42 @@ describe('reading a long conversation', () => {
     expect(lines(older)).toEqual(['Hi', ...[0, 1, 2, 3, 4].map((line) => `line ${line}`)]);
   });
 
+  it('returns the latest messages up to the limit asked for, and the page before one', async () => {
+    const { app, services } = await setup();
+    const profile = await services.profiles.createProfile(input);
+    const session = await services.sessions.createSession(profile.id, { channel: 'api' });
+    const run = await services.runs.submit(profile.id, session.id, {
+      text: 'line 0',
+      requestKey: 'limited',
+    });
+
+    await services.lifecycle.claim(run.id, profile.id, 'worker');
+    for (let line = 1; line < 5; line++) {
+      await services.lifecycle.say(profile.id, run.id, 'worker', `line ${line}`);
+    }
+
+    const url = `/v1/profiles/${profile.id}/sessions/${session.id}/messages`;
+    const latest = await app.inject({ url: `${url}?limit=2`, headers });
+    const before = latest.json<{ id: string }[]>()[0]?.id;
+    const older = await app.inject({ url: `${url}?before=${before}&limit=2`, headers });
+    const unlimited = await app.inject({ url, headers });
+
+    expect(lines(latest)).toEqual(['line 3', 'line 4']);
+    expect(lines(older)).toEqual(['line 1', 'line 2']);
+    expect(lines(unlimited)).toHaveLength(5);
+  });
+
+  it('refuses a limit above the page', async () => {
+    const { app, services } = await setup();
+    const profile = await services.profiles.createProfile(input);
+    const session = await services.sessions.createSession(profile.id, { channel: 'api' });
+    const url = `/v1/profiles/${profile.id}/sessions/${session.id}/messages`;
+
+    expect((await app.inject({ url: `${url}?limit=101`, headers })).statusCode).toBe(400);
+    expect((await app.inject({ url: `${url}?limit=0`, headers })).statusCode).toBe(400);
+    expect((await app.inject({ url: `${url}?limit=100`, headers })).statusCode).toBe(200);
+  });
+
   it('refuses to page from a message of another conversation', async () => {
     const { app, services } = await setup();
     const profile = await services.profiles.createProfile(input);

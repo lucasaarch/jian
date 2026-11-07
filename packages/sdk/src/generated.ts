@@ -21273,6 +21273,7 @@ export interface operations {
         parameters: {
             query?: {
                 before?: string;
+                limit?: number;
             };
             header?: never;
             path: {

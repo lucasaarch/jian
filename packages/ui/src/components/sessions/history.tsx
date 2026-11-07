@@ -647,7 +647,7 @@ export function History({
     readingEarlier.current = true;
     setEarlier('reading');
     try {
-      const page = await api.messages(profileId, sessionId, oldest.id);
+      const page = await api.messages(profileId, sessionId, { before: oldest.id });
       const shownIds = new Set(messages.map((message) => message.id));
       // A gateway that cannot page answers its latest messages again: nothing new, so stop.
       const fresh = page.filter((message) => !shownIds.has(message.id));

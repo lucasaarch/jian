@@ -159,13 +159,13 @@ export function registerSessionRoutes(app: FastifyInstance, deps: SessionRouteSe
     },
   );
 
-  app.get<{ Params: SessionParams; Querystring: { before?: string } }>(
+  app.get<{ Params: SessionParams; Querystring: { before?: string; limit?: number } }>(
     '/v1/profiles/:profileId/sessions/:sessionId/messages',
     async (request) =>
       deps.sessions.messages(
         request.params.profileId,
         request.params.sessionId,
-        undefined,
+        request.query.limit,
         undefined,
         request.query.before,
       ),
