@@ -8,6 +8,8 @@ type Turns = {
   crew: { tail: Map<string, Subagent[]> };
   /** The question carried to another agent whose answer has not come back. */
   call: Message['call'];
+  /** The writing under way is drawn by the answer it will join: no live row of its own. */
+  hosted: boolean;
 };
 
 /** A turn under way keeps the tools since its last line for its live row at the end. */
@@ -24,7 +26,7 @@ function trailing(turn: Run, known: Map<string, ToolStep[]>, placed: Map<string,
  * message will stand, then the turns at work. Sent and not yet seen at work, the agent is drawn
  * starting under the same key it keeps once at work, so the row only changes its label.
  */
-export function liveRows(input: RowsInput, { placed, crew, call }: Turns): Row[] {
+export function liveRows(input: RowsInput, { placed, crew, call, hosted }: Turns): Row[] {
   const { messages, run, callRun, sessionId } = input;
   const isRunning = running(run);
   const pending = input.outgoing.filter(
@@ -69,7 +71,7 @@ export function liveRows(input: RowsInput, { placed, crew, call }: Turns): Row[]
     });
   }
 
-  if (run && isRunning) {
+  if (run && isRunning && !hosted) {
     rows.push({
       kind: 'live',
       key,

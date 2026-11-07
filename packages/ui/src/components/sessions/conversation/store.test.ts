@@ -1,6 +1,6 @@
 import { MESSAGES_FIRST_PAGE, type RunProgress } from '@jian/contracts';
 import { describe, expect, it } from 'vitest';
-import type { Message, Run, ToolStep } from '../../../lib/api';
+import type { Message, Run, Subagent, ToolStep } from '../../../lib/api';
 import { createConversationStore } from './store';
 
 const said = (id: string, extra: Partial<Message> = {}): Message => ({
@@ -346,5 +346,31 @@ describe('the conversation store', () => {
     expect(state.people.get('person-1')?.name).toBe('Mara Quill');
     expect(state.run?.id).toBe('run-1');
     expect(createConversationStore().getState().loading).toBe(true);
+  });
+
+  it('keeps the agents a poll found unchanged, and the list when none changed', () => {
+    const store = createConversationStore();
+    const agent = (runId: string, status: Subagent['status']): Subagent =>
+      ({
+        runId,
+        parentRunId: 'run-1',
+        sessionId: `${runId}-session`,
+        name: 'Scout',
+        role: 'execute',
+        status,
+        input: 'Look.',
+        createdAt: '2026-11-07T10:00:00.000Z',
+        updatedAt: '2026-11-07T10:00:00.000Z',
+      }) as Subagent;
+    store.getState().subagentsRead([agent('a', 'running'), agent('b', 'running')]);
+    const first = store.getState().subagents;
+
+    store.getState().subagentsRead([agent('a', 'running'), agent('b', 'running')]);
+    expect(store.getState().subagents).toBe(first);
+
+    store.getState().subagentsRead([agent('a', 'running'), agent('b', 'completed')]);
+    const [a, b] = store.getState().subagents;
+    expect(a).toBe(first[0]);
+    expect(b?.status).toBe('completed');
   });
 });

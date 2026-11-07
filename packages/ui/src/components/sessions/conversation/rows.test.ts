@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { Message, Run, RunQuestion, Subagent, ToolStep } from '../../../lib/api';
 import type { Outgoing } from '../../../lib/stores/outbox';
 import { buildRows, type Row, type RowsInput, sameRow } from './rows';
-import { createConversationStore } from './store';
+import { type ConversationState, createConversationStore } from './store';
 
 const said = (
   id: string,
@@ -57,7 +57,21 @@ const input = (change: Partial<RowsInput> = {}): RowsInput => ({
   outgoing: [],
   sessionId: 'session',
   seen: new Set(),
+  writing: false,
   ...change,
+});
+
+/** What the history passes from its store: whether text is being written, never the text. */
+const fromStore = (
+  state: ConversationState,
+  seen: ReadonlySet<string> = new Set(),
+  outgoing: Outgoing[] = [],
+): RowsInput => ({
+  ...state,
+  outgoing,
+  sessionId: 'session',
+  seen,
+  writing: Boolean(state.live?.progress.text),
 });
 
 /** What the rows draw, in order, as short labels a reader can check against the old layout. */
@@ -321,12 +335,7 @@ describe('the conversation rows', () => {
     );
     store.getState().pageRead([said('delivered', 'handoff-run', 'assistant', content, at)], false);
 
-    const rows = buildRows({
-      ...store.getState(),
-      outgoing: [],
-      sessionId: 'session',
-      seen: new Set(),
-    });
+    const rows = buildRows(fromStore(store.getState()));
 
     const answers = only(rows, 'message').filter((row) => row.message.content === content);
     expect(answers).toHaveLength(1);
@@ -490,8 +499,7 @@ describe('the conversation rows', () => {
       item({ key: 'command', text: '/compact', quiet: true, state: 'sending' }),
       item({ key: 'refused', text: '/compact', quiet: true, state: 'failed' }),
     ];
-    const rows = (state = store.getState()) =>
-      buildRows({ ...state, outgoing, sessionId: 'session', seen: new Set() });
+    const rows = (state = store.getState()) => buildRows(fromStore(state, new Set(), outgoing));
 
     expect(layout(rows())).toEqual([
       'message old',
@@ -549,12 +557,7 @@ describe('the conversation rows', () => {
       steps: 0,
       updatedAt: '2026-10-01T10:00:02Z',
     });
-    const before = buildRows({
-      ...store.getState(),
-      outgoing: [],
-      sessionId: 'session',
-      seen: new Set(),
-    });
+    const before = buildRows(fromStore(store.getState()));
     const seen = new Set(before.map((row) => row.key));
     expect(seen.has('live:0')).toBe(true);
 
@@ -565,7 +568,7 @@ describe('the conversation rows', () => {
         false,
       );
     store.getState().runRead(turn('run-1', 'completed', '2026-10-01T10:00:00Z'));
-    const rows = buildRows({ ...store.getState(), outgoing: [], sessionId: 'session', seen });
+    const rows = buildRows(fromStore(store.getState(), seen));
 
     expect(only(rows, 'message').map((row) => [row.key, row.reveal, row.fresh])).toEqual([
       ['request', false, false],
@@ -583,8 +586,7 @@ describe('the conversation rows', () => {
       said('ask-2', 'run-2', 'user', 'Second', '2026-10-01T10:01:00Z'),
       said('two-a', 'run-2', 'assistant', 'On it.', '2026-10-01T10:01:01Z'),
     ];
-    const build = () =>
-      buildRows({ ...store.getState(), outgoing: [], sessionId: 'session', seen: new Set() });
+    const build = () => buildRows(fromStore(store.getState()));
     store.getState().pageRead(page, false);
     store.getState().turnsRead(
       ['run-1', 'run-2'],
@@ -644,5 +646,82 @@ describe('the conversation rows', () => {
       ['two-a', true],
       [expect.stringContaining('two-a'), false],
     ]);
+  });
+  it('hosts writing that will join the last answer in that answer’s row', () => {
+    const store = createConversationStore();
+    const request = said('request', 'run-1', 'user', 'Go', '2026-10-01T10:00:00Z');
+    const first = said('first', 'run-1', 'assistant', 'One paragraph.', '2026-10-01T10:00:01Z');
+    store.getState().pageRead([request, first], false);
+    store.getState().runRead(turn('run-1', 'running', '2026-10-01T10:00:00Z'));
+    store.getState().progress('run-1', {
+      phase: 'writing',
+      text: 'And the next',
+      steps: 0,
+      updatedAt: '2026-10-01T10:00:02Z',
+    });
+
+    const writing = buildRows(fromStore(store.getState()));
+    expect(layout(writing)).toEqual(['message request', 'message first']);
+    expect(only(writing, 'message').map((row) => [row.key, row.liveTail])).toEqual([
+      ['request', false],
+      ['first', true],
+    ]);
+
+    store
+      .getState()
+      .pageRead(
+        [
+          request,
+          first,
+          said('next', 'run-1', 'assistant', 'And the next.', '2026-10-01T10:00:03Z'),
+        ],
+        false,
+      );
+    const landed = buildRows(fromStore(store.getState(), new Set(writing.map((row) => row.key))));
+    const [, answer] = only(landed, 'message');
+    // The same row, now holding the line that was being written, revealing it from where it was.
+    expect(answer).toMatchObject({ key: 'first', reveal: true, fresh: false, liveTail: false });
+    expect(answer?.lastMessage.id).toBe('next');
+  });
+
+  it('keeps a separate live row when tools came after the last line', () => {
+    const store = createConversationStore();
+    store
+      .getState()
+      .pageRead(
+        [
+          said('request', 'run-1', 'user', 'Go', '2026-10-01T10:00:00Z'),
+          said('first', 'run-1', 'assistant', 'Reading.', '2026-10-01T10:00:01Z'),
+        ],
+        false,
+      );
+    store.getState().runRead(turn('run-1', 'running', '2026-10-01T10:00:00Z'));
+    store.getState().turnsRead(['run-1'], [['run-1', [tool('look', '2026-10-01T10:00:02Z')]]], []);
+    store.getState().progress('run-1', {
+      phase: 'writing',
+      text: 'Found it',
+      steps: 1,
+      updatedAt: '2026-10-01T10:00:03Z',
+    });
+
+    const rows = buildRows(fromStore(store.getState()));
+
+    expect(layout(rows)).toEqual(['message request', 'message first', 'live look']);
+    expect(only(rows, 'message').some((row) => row.liveTail)).toBe(false);
+  });
+
+  it('reveals a grouped answer whose last line took the live key', () => {
+    const rows = buildRows(
+      input({
+        run: turn('run-1', 'completed', '2026-10-01T10:00:00Z'),
+        messages: [
+          said('first', 'run-1', 'assistant', 'One.', '2026-10-01T10:00:01Z'),
+          said('second', 'run-1', 'assistant', 'Two.', '2026-10-01T10:00:02Z'),
+        ],
+        keys: new Map([['second', 'live:3']]),
+      }),
+    );
+
+    expect(only(rows, 'message').map((row) => [row.key, row.reveal])).toEqual([['first', true]]);
   });
 });

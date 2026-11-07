@@ -30,7 +30,7 @@ export function joinHistory<Item extends { id: string }>(known: Item[], latest: 
  * so a reaction or a channel detail added to a message counts as a change. Key order is ignored:
  * a kept snapshot and a fresh read need not list fields alike.
  */
-function sameValue(a: unknown, b: unknown): boolean {
+export function sameValue(a: unknown, b: unknown): boolean {
   if (a === b) return true;
   if (typeof a !== 'object' || typeof b !== 'object' || !a || !b) return false;
   if (Array.isArray(a) !== Array.isArray(b)) return false;

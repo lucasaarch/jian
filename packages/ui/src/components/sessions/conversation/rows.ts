@@ -31,8 +31,16 @@ export type Row =
       steered: boolean;
       /** Agents spawned before this line was written, drawn above it. */
       crewBefore: Subagent[];
-      /** It took the live row's key: what was being written goes on being revealed. */
+      /**
+       * It, or its last line, took the live row's key: what was being written goes on being
+       * revealed.
+       */
       reveal: boolean;
+      /**
+       * The turn at work is writing what will join this answer once stored: the row draws the
+       * writing after itself, in place of a live row, so the paragraph never moves when it lands.
+       */
+      liveTail: boolean;
       /** Never drawn before: the only rows that animate in. */
       fresh: boolean;
       /** The aspect ratio of an image the turn drew, so its frame holds before it loads. */
@@ -95,6 +103,8 @@ export type RowsInput = Pick<
   sessionId: string;
   /** The row keys already drawn: the first build of a page and an earlier page count as seen. */
   seen: ReadonlySet<string>;
+  /** The turn at work has text under way. Only whether, never the text, so text builds nothing. */
+  writing: boolean;
 };
 
 export type Placed = ReturnType<typeof placeSteps>;
@@ -219,6 +229,31 @@ const changed = (steps: ToolStep[]) =>
   steps.some((step) => step.status === 'done' && Boolean(step.diff));
 
 /**
+ * The last line of the conversation when the text the turn at work is writing will join it once
+ * stored, by the rule `groupMessages` joins lines by: an answer of that turn with nothing after
+ * it that divides answers, no tools, no agent spawned, no card. Undefined when the writing will
+ * stand on its own.
+ */
+function hostOf(
+  { writing, run, asks }: RowsInput,
+  last: Message | undefined,
+  placed: Map<string, Placed>,
+  tail: Map<string, Subagent[]>,
+) {
+  if (!writing || !run || !running(run) || !last) return undefined;
+  if (last.role !== 'assistant' || last.call || last.purpose || last.runId !== run.id) {
+    return undefined;
+  }
+  const asked = asks.get(run.id);
+  const divided =
+    Boolean(placed.get(run.id)?.after.get(last.id)?.length) ||
+    Boolean(tail.get(run.id)?.length) ||
+    Boolean(asked?.approval || asked?.question);
+
+  return divided ? undefined : last;
+}
+
+/**
  * The conversation as rows to draw, in order: each line or joined answer with the work around
  * it, then what was sent and has not come back, then the turns at work. Never reads the text a
  * turn is writing, so a text update builds nothing.
@@ -238,7 +273,10 @@ export function buildRows(input: RowsInput): Row[] {
   ]);
   const rows: Row[] = [];
 
-  for (const group of groupMessages(messages, placed, crew.before, asks)) {
+  const groups = groupMessages(messages, placed, crew.before, asks);
+  const host = hostOf(input, groups.at(-1)?.lastMessage, placed, crew.tail);
+
+  for (const group of groups) {
     const { lastMessage, index, lastIndex } = group;
     const message = steady(group, messages);
     const steered = steers.has(message.id);
@@ -308,7 +346,8 @@ export function buildRows(input: RowsInput): Row[] {
         headSpan,
         steered,
         crewBefore,
-        reveal: key.startsWith('live:'),
+        reveal: key.startsWith('live:') || Boolean(keys.get(lastMessage.id)?.startsWith('live:')),
+        liveTail: lastMessage === host,
         fresh: !seen.has(key),
         drawn: (message.runId ? tools.get(message.runId) : undefined)?.find(
           (step) => step.toolName === 'generate_image' && step.aspectRatio,
@@ -370,5 +409,5 @@ export function buildRows(input: RowsInput): Row[] {
     }
   }
 
-  return [...rows, ...liveRows(input, { placed, crew, call })];
+  return [...rows, ...liveRows(input, { placed, crew, call, hosted: Boolean(host) })];
 }

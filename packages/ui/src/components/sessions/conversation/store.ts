@@ -15,7 +15,7 @@ import type {
 } from '../../../lib/api';
 import type { HistorySnapshot } from '../kept-history';
 import { running } from '../status';
-import { answers, joinHistory, overTurns, sameMessage, turnOf } from './turns';
+import { answers, joinHistory, overTurns, sameMessage, sameValue, turnOf } from './turns';
 
 /** What a turn asked the owner to decide or answer. */
 export type Asks = { approval?: RunApproval; question?: RunQuestion };
@@ -140,6 +140,23 @@ function joined(known: Message[], page: Message[], fresh: boolean): Message[] {
     : next;
 }
 
+/**
+ * The agents a poll found, keeping each known one it found unchanged, and the list itself when
+ * none changed: a poll runs every 1.5 s while one works, and the rows that show the others must
+ * not be drawn again for it.
+ */
+function steadyAgents(known: Subagent[], read: Subagent[]): Subagent[] {
+  const byRun = new Map(known.map((agent) => [agent.runId, agent]));
+  const next = read.map((agent) => {
+    const was = byRun.get(agent.runId);
+    return was && sameValue(was, agent) ? was : agent;
+  });
+
+  return next.length === known.length && next.every((agent, at) => agent === known[at])
+    ? known
+    : next;
+}
+
 /** A run without its progress, which only `live` carries. */
 function bare(run: Run): Run {
   const { progress: _progress, ...rest } = run;
@@ -216,7 +233,7 @@ export function createConversationStore(kept?: HistorySnapshot): ConversationSto
     progress: (runId, progress) =>
       set((state) => (newer(state.live, runId, progress) ? { live: { runId, progress } } : {})),
 
-    subagentsRead: (list) => set({ subagents: list }),
+    subagentsRead: (list) => set((state) => ({ subagents: steadyAgents(state.subagents, list) })),
 
     peopleRead: (list) => set({ people: new Map(list.map((person) => [person.id, person])) }),
 
