@@ -1,4 +1,4 @@
-import { act } from 'react';
+import { act, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { toast } from 'sonner';
 import { expect, it, vi } from 'vitest';
@@ -29,7 +29,7 @@ const openTools = (root: ParentNode) =>
     }
   });
 
-let hear: ((event: { type: string }) => void) | undefined;
+let hear: ((event: { type: string; data?: unknown }) => void) | undefined;
 vi.mock('../../lib/events', () => ({
   subscribe: (listener: () => void) => {
     hear = listener;
@@ -38,6 +38,239 @@ vi.mock('../../lib/events', () => ({
     };
   },
 }));
+
+/** Reduced motion shows streamed text whole, so a test reads it without waiting on frames. */
+const stillMotion = () =>
+  vi.stubGlobal('matchMedia', () => ({
+    matches: true,
+    addEventListener: () => {},
+    removeEventListener: () => {},
+  }));
+
+const mount = async (view: ReactNode) => {
+  Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+  const element = document.createElement('div');
+  document.body.append(element);
+  const root = createRoot(element);
+  await act(async () => root.render(view));
+  return {
+    element,
+    show: (next: ReactNode) => act(async () => root.render(next)),
+    done: async () => {
+      await act(async () => root.unmount());
+      element.remove();
+      useOutbox.setState({ items: [] });
+      vi.unstubAllGlobals();
+    },
+  };
+};
+
+it('a sent message keeps its element when it lands', async () => {
+  let stored = false;
+  const hello = {
+    id: 'hello',
+    profileId: 'profile',
+    sessionId: 'session',
+    runId: 'hello-run',
+    role: 'user' as const,
+    content: 'Hello there',
+    createdAt: '2026-11-07T10:00:00Z',
+  };
+  const api = {
+    messages: async () => (stored ? [hello] : []),
+    activities: async () => [],
+    timeline: async () => [],
+  };
+  const view = await mount(<History api={api} profileId="profile" sessionId="session" />);
+
+  try {
+    await act(async () =>
+      sendNow({
+        sessionId: 'session',
+        text: 'Hello there',
+        mediaIds: [],
+        deliver: async () => ({ id: 'hello-run' }),
+        delivered: () => {},
+      }),
+    );
+    const sent = view.element.querySelector('.chat-line.mine');
+    expect(sent?.textContent).toContain('Hello there');
+
+    stored = true;
+    await view.show(<History api={api} profileId="profile" sessionId="session" revision={1} />);
+
+    expect(sent?.isConnected).toBe(true);
+    expect(sent?.getAttribute('data-message-id')).toBe('hello');
+    expect(view.element.querySelectorAll('.chat-line.mine')).toHaveLength(1);
+  } finally {
+    await view.done();
+  }
+});
+
+it('the answer keeps its element when the turn ends', async () => {
+  stillMotion();
+  let ended = false;
+  const at = '2026-11-07T10:00:00Z';
+  const turn = (): Run =>
+    ({
+      id: 'answer-run',
+      profileId: 'profile',
+      sessionId: 'session',
+      status: ended ? 'completed' : 'running',
+      createdAt: at,
+      updatedAt: at,
+      ...(ended
+        ? {}
+        : {
+            progress: {
+              phase: 'writing',
+              text: 'The build passed',
+              steps: 0,
+              updatedAt: '2026-11-07T10:00:02Z',
+            },
+          }),
+    }) as Run;
+  const said = (id: string, role: 'user' | 'assistant', content: string) => ({
+    id,
+    profileId: 'profile',
+    sessionId: 'session',
+    runId: 'answer-run',
+    role,
+    content,
+    createdAt: at,
+  });
+  const api = {
+    messages: async () => [
+      said('request', 'user', 'Run the build'),
+      ...(ended ? [said('answer', 'assistant', 'The build passed and the tests are green.')] : []),
+    ],
+    activities: async () => [turn()],
+    timeline: async () => [],
+  };
+  const answer = (root: ParentNode, words: string) =>
+    [...root.querySelectorAll('article')].find((item) => item.textContent?.includes(words));
+  const view = await mount(
+    <History api={api} profileId="profile" sessionId="session" initialRun={turn()} />,
+  );
+
+  try {
+    const live = answer(view.element, 'The build passed');
+    expect(live?.querySelector('.streaming')).not.toBeNull();
+
+    ended = true;
+    await view.show(
+      <History
+        api={api}
+        profileId="profile"
+        sessionId="session"
+        initialRun={turn()}
+        revision={1}
+      />,
+    );
+
+    expect(answer(view.element, 'the tests are green')).toBe(live);
+    expect(live?.isConnected).toBe(true);
+    expect(view.element.querySelectorAll('.chat-line.theirs')).toHaveLength(1);
+    expect(view.element.querySelector('.pending')).toBeNull();
+  } finally {
+    await view.done();
+  }
+});
+
+it('a progress event shows new text without reading the conversation', async () => {
+  stillMotion();
+  vi.useFakeTimers();
+  const runId = '0b9f3c1e-5d1a-4f7e-9a51-1c2d3e4f5a6b';
+  const sessionId = '7c1d2e3f-4a5b-4c6d-8e7f-9a0b1c2d3e4f';
+  const working = {
+    id: runId,
+    profileId: 'profile',
+    sessionId,
+    status: 'running',
+    createdAt: '2026-11-07T10:00:00Z',
+    updatedAt: '2026-11-07T10:00:00Z',
+  } as Run;
+  let reads = 0;
+  const api = {
+    messages: async () => {
+      reads += 1;
+      return [];
+    },
+    activities: async () => [working],
+    timeline: async () => [],
+  };
+  const view = await mount(
+    <History api={api} profileId="profile" sessionId={sessionId} initialRun={working} />,
+  );
+
+  try {
+    const before = reads;
+    await act(async () => {
+      hear?.({
+        type: 'run.progress',
+        data: {
+          runId,
+          sessionId,
+          at: '2026-11-07T10:00:03Z',
+          progress: {
+            phase: 'writing',
+            text: 'Halfway through the report.',
+            steps: 0,
+            updatedAt: '2026-11-07T10:00:03.000Z',
+          },
+        },
+      });
+      await vi.advanceTimersByTimeAsync(1_000);
+    });
+
+    expect(view.element.querySelector('.streaming')?.textContent).toBe(
+      'Halfway through the report.',
+    );
+    expect(reads).toBe(before);
+  } finally {
+    await view.done();
+    vi.useRealTimers();
+  }
+});
+
+it('opens with the latest 40 and reads 40 more near the top', async () => {
+  const all = Array.from({ length: 100 }, (_, number) => ({
+    id: `m${number}`,
+    profileId: 'profile',
+    sessionId: 'session',
+    runId: `run-${number}`,
+    role: 'assistant' as const,
+    content: `Said m${number}.`,
+    createdAt: new Date(Date.UTC(2026, 10, 7, 10, 0, 0, number)).toISOString(),
+  }));
+  const messages = vi.fn(
+    async (_profile: string, _session: string, at?: { before?: string; limit?: number }) => {
+      const end = at?.before ? all.findIndex((item) => item.id === at.before) : all.length;
+      return all.slice(Math.max(0, end - (at?.limit ?? 100)), end);
+    },
+  );
+  const api = { messages, activities: async () => [], timeline: async () => [] };
+  const view = await mount(<History api={api} profileId="profile" sessionId="session" />);
+  const said = () => view.element.querySelector('.message-list')?.textContent ?? '';
+
+  try {
+    expect(messages.mock.calls[0]?.[2]).toEqual({ limit: 40 });
+    expect(said()).toContain('Said m60.');
+    expect(said()).not.toContain('Said m59.');
+
+    await act(async () => {
+      view.element.querySelector('.message-history')?.dispatchEvent(new Event('scroll'));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    expect(messages.mock.calls.at(-1)?.[2]).toEqual({ before: 'm60', limit: 40 });
+    expect(said()).toContain('Said m20.');
+    expect(said()).not.toContain('Said m19.');
+    expect(said().indexOf('Said m59.')).toBeLessThan(said().indexOf('Said m60.'));
+  } finally {
+    await view.done();
+  }
+});
 
 it('outlines the conversation while it is loading', async () => {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
@@ -1023,6 +1256,7 @@ it('does not duplicate a delivered answer while the writing snapshot is still in
 
 it('keeps spawned agents before text written later when the streamed answer becomes history', async () => {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+  stillMotion();
   let finished = false;
   const reply = 'I launched the agents. Their reports will arrive here.';
   const run = () =>
@@ -1111,6 +1345,7 @@ it('keeps spawned agents before text written later when the streamed answer beco
   } finally {
     await act(async () => root.unmount());
     element.remove();
+    vi.unstubAllGlobals();
   }
 });
 
@@ -1186,9 +1421,9 @@ it('asks for an ended turn’s tools once, and for the turn at work on every rea
   const element = document.createElement('div');
   document.body.append(element);
   const root = createRoot(element);
-  const step = async () =>
+  const step = async (type = 'run.step') =>
     act(async () => {
-      hear?.({ type: 'run.step' });
+      hear?.({ type });
       await vi.advanceTimersByTimeAsync(150);
     });
 
@@ -1201,7 +1436,7 @@ it('asks for an ended turn’s tools once, and for the turn at work on every rea
     expect(asked.at(-1)).toEqual(['live']);
     // Its last tools are read once more as it ends, then never again.
     live = { ...live, status: 'completed' };
-    await step();
+    await step('run.completed');
     expect(asked.at(-1)).toEqual(['live']);
     const reads = asked.length;
     await step();

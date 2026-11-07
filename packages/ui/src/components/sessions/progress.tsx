@@ -4,8 +4,8 @@ import type { OrbState } from 'thinking-orbs';
 import type { Message, Profile, Run, ToolStep } from '../../lib/api';
 import { Markdown } from '../ui/markdown';
 import { RefineFrame } from '../ui/refine-frame';
+import { AgentLine } from './conversation/agent-line';
 import { drawnBox } from './media';
-import { ChatSpeaker } from './message';
 import { ThoughtLine, type ThoughtStep } from './thought-line';
 import { isMcpName, toolLabel } from './tool-labels';
 
@@ -81,8 +81,8 @@ export function traceOf(steps: ToolStep[]): ThoughtStep[] {
   });
 }
 
-/** The working Thought Line of a run and the files it has changed so far. */
-function LiveThought({
+/** The working Thought Line of a run and the pictures it is drawing so far. */
+export function LiveThought({
   run,
   steps,
   startedAt,
@@ -183,17 +183,22 @@ export function LiveTurn({
   const writing = !tool && Boolean(progress?.text);
 
   return (
-    <article className="chat-line pending theirs" aria-live="polite">
-      <div className="chat-author-row">
-        <ChatSpeaker agent={agent} />
-      </div>
-      <LiveThought run={run} steps={steps} startedAt={startedAt} />
-      {children}
-      {writing && (
-        <div className="chat-text markdown streaming">
-          <Markdown text={progress?.text ?? ''} breaks streaming />
-        </div>
-      )}
-    </article>
+    <AgentLine
+      agent={agent}
+      pending
+      before={
+        <>
+          <LiveThought run={run} steps={steps} startedAt={startedAt} />
+          {children}
+        </>
+      }
+      text={
+        writing ? (
+          <div className="chat-text markdown streaming">
+            <Markdown text={progress?.text ?? ''} breaks streaming />
+          </div>
+        ) : null
+      }
+    />
   );
 }

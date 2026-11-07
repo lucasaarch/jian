@@ -6,17 +6,25 @@
   animation: spin 1s linear infinite;
 }
 
-/* Position-stable Markdown nodes animate once as they arrive, never on token updates. */
-.message-list :is(.chat-line, .decision-card, .code-diff, .code-block, .message-media),
-.message-list .markdown > * {
+/* A row new to the conversation enters once: an answer, someone else's line, a card. A row
+   already on screen, one that takes over another's element, and earlier pages never do, and
+   text growing inside a row never animates. */
+.message-list > .history-row[data-fresh] {
   animation: history-enter 260ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+/* A long conversation is laid out and painted only near the view. Containment clips what
+   overflows a row, so the row reaches into the gutter, where bubbles and cards draw, while its
+   content keeps to the column; the clip margin leaves room for their shadows. A row out of
+   view keeps the size it last had, or 120px before it was ever drawn. */
+.message-list > .history-row {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 120px;
+  margin-inline: calc(-1 * var(--chat-gutter, 0px));
+  padding-inline: var(--chat-gutter, 0px);
+  overflow-clip-margin: 3rem;
 }
 .history-tray > * {
   animation: history-enter 260ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
-}
-.message-list .chat-line[data-entered],
-.message-list .chat-line[data-entered] :is(.markdown > *, .code-block, .message-media) {
-  animation: none;
 }
 @keyframes history-enter {
   from {

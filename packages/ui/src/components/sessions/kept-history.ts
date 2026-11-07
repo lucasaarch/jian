@@ -13,8 +13,8 @@ import type {
 } from '../../lib/api';
 
 /**
- * A conversation as it was last read in full, in a form a kept cache can write down: what was
- * said, the tools of each turn, what each turn asked, who spoke and the turn last under way.
+ * A conversation as it was last read, in a form a kept cache can write down: its latest page,
+ * the tools of that page's turns, what each turn asked, who spoke and the turn last under way.
  */
 export type HistorySnapshot = {
   messages: Message[];
@@ -27,9 +27,9 @@ export type HistorySnapshot = {
 };
 
 /**
- * The last full read of a conversation, kept with the panel's other reads so a kept cache holds
- * it too: opened again, the conversation shows at once, even with the gateway out of reach.
- * Without a cache around it — a story, a test — nothing is kept.
+ * The last read of a conversation, as its store's snapshot, kept with the panel's other reads so
+ * a kept cache holds it too: opened again, the conversation shows at once, even with the gateway
+ * out of reach. Without a cache around it — a story, a test — nothing is kept.
  */
 export function useKeptHistory(profileId: string, sessionId: string) {
   const client = useContext(QueryClientContext);

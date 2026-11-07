@@ -235,26 +235,27 @@ it('reads earlier messages and their tools when the first page is full', async (
   const timeline = vi.fn(async (_profile: string, _session: string, runs?: string[]) =>
     (runs ?? []).includes('run-3') ? [{ runId: 'run-3', steps: [step('old-tool', 3)] }] : [],
   );
+  // Pages of 40, as the panel asks for: the latest, then the 30 before it, which is the start.
   const messages = vi.fn(
     async (_profile: string, _session: string, at?: { before?: string; limit?: number }) =>
-      at?.before ? page(0, 50) : page(50, 150),
+      at?.before ? page(0, 30) : page(30, 70),
   );
 
   await show({ messages, activities: async () => [], timeline });
 
-  expect(element.textContent).not.toContain('Said m49.');
+  expect(element.textContent).not.toContain('Said m29.');
   // A page's tools are asked for by its own turns, so an old page never lacks them.
-  expect(timeline.mock.calls[0]?.[2]).toContain('run-50');
+  expect(timeline.mock.calls[0]?.[2]).toContain('run-30');
 
   await act(async () => earlier()?.click());
   await act(async () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
   });
 
-  expect(messages.mock.calls.at(-1)?.[2]).toEqual({ before: 'm50' });
+  expect(messages.mock.calls.at(-1)?.[2]).toEqual({ before: 'm30', limit: 40 });
   const text = element.textContent ?? '';
   expect(text).toContain('Said m0.');
-  expect(text.indexOf('Said m49.')).toBeLessThan(text.indexOf('Said m50.'));
+  expect(text.indexOf('Said m29.')).toBeLessThan(text.indexOf('Said m30.'));
   expect(text).toContain('1 tool call');
   // That was the beginning of the conversation: nothing further to offer.
   expect(earlier()).toBeUndefined();

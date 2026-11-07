@@ -2,24 +2,15 @@
 
 import { AlarmClock, GraduationCap, Reply } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { AgentFace } from '../../kit';
 import type { Message, Person, Profile } from '../../lib/api';
+import type { Outgoing } from '../../lib/stores/outbox';
 import { Face } from '../ui';
-import { Markdown, MarkdownLink } from '../ui/markdown';
+import { MarkdownLink } from '../ui/markdown';
+import { AgentLine, AgentText, ChatSpeaker } from './conversation/agent-line';
 import { MessageActions, MessageReactions } from './message-actions';
 
 const GITHUB_LINK =
   /https:\/\/github\.com\/[^\s/]+\/[^\s/]+\/(?:pull|issues)\/\d+(?:[^\s<>()]*[^\s<>().,;:!?'"])?/g;
-
-/** Live and stored messages keep the same author header and text origin. */
-export function ChatSpeaker({ agent }: { agent?: Pick<Profile, 'name' | 'avatar'> }) {
-  return (
-    <span className="chat-speaker" data-author="assistant">
-      <AgentFace name={agent?.name ?? 'Agent'} avatar={agent?.avatar} size={1.25} />
-      {agent?.name ?? 'Agent'}
-    </span>
-  );
-}
 
 /**
  * What a person typed, as typed, except that a pull request or an issue they link to is shown
@@ -137,12 +128,34 @@ function PersonText({ text }: { text: string }) {
 }
 
 /**
- * One message, as an AI chat shows it, in every conversation alike: whoever wrote to the agent
- * on the same text column, the agent that answers as plain text under it with its tools
- * above. In a group the writers are several people, on the right, so each run of messages from
- * one of them opens with their face and name.
+ * The text of a message as the conversation draws it. Attachment markers and the gateway's notes
+ * about files are drawn as attachments below. A channel writes "[Voice message]" or "[Photo]" for
+ * a message that is only a file: with the file drawn, those words would only say it again.
  */
-export function ChatMessage({
+export function cleanText(text: string) {
+  const words = text
+    .replace(/\[Attached media: [0-9a-f-]{36}\]/g, '')
+    .replace(/^\[Voice call · [^\]]+\]\n/, '')
+    .replace(/\n?\[File not (opened|kept)[^\]]*\]/g, '')
+    .trim();
+  return /\[Attached media: /.test(text) && STANDS_FOR_FILE.test(words) ? '' : words;
+}
+
+/**
+ * Whether a message is the writer's side of the conversation rather than the answering agent's.
+ * In an agent conversation this profile started, it only carried the question: the other agent
+ * is the one who works and answers, so it takes the agent's side, on the left.
+ */
+export const mine = (message: Message) =>
+  message.call ? message.role === 'assistant' : message.role === 'user';
+
+/**
+ * What a person wrote, on the writer's side: as sent, while on its way, and as stored, all one
+ * element, so a sent message is never drawn again when the conversation brings it back. In a
+ * group the writers are several people, on the right, so each run of messages from one of them
+ * opens with their face and name.
+ */
+export function PersonLine({
   message,
   group,
   people,
@@ -150,47 +163,27 @@ export function ChatMessage({
   before,
   children,
   agent,
-  entered = false,
-  onReply,
-  onReact,
+  outgoing,
 }: {
   message: Message;
   group: boolean;
   people: Map<string, Person>;
   opensRun: boolean;
-  /** Shown above the text, as the tools the agent used to write it. */
-  before?: React.ReactNode;
-  children?: React.ReactNode;
+  before?: ReactNode;
+  children?: ReactNode;
   agent?: Pick<Profile, 'name' | 'avatar'>;
-  /** A streamed answer already entered; storing it must not play that entrance again. */
-  entered?: boolean;
-  onReply?: () => void;
-  onReact?: (emoji: string | null) => Promise<unknown>;
+  /** Still in the outbox: how its sending goes. */
+  outgoing?: Outgoing['state'];
 }) {
-  // Attachment markers and the gateway's notes about files are drawn as attachments below. A
-  // channel writes "[Voice message]" or "[Photo]" for a message that is only a file: with the
-  // file drawn, those words would only say it again.
-  const clean = (text: string) => {
-    const words = text
-      .replace(/\[Attached media: [0-9a-f-]{36}\]/g, '')
-      .replace(/^\[Voice call · [^\]]+\]\n/, '')
-      .replace(/\n?\[File not (opened|kept)[^\]]*\]/g, '')
-      .trim();
-    return /\[Attached media: /.test(text) && STANDS_FOR_FILE.test(words) ? '' : words;
-  };
-
-  // In an agent conversation this profile started, it only carried the question: the other
-  // agent is the one who works and answers, so it takes the agent's side, on the left.
-  const mine = message.call ? message.role === 'assistant' : message.role === 'user';
   // Written by a schedule at its time, not by anyone in the conversation: shown as what it is.
   const scheduled =
     message.role === 'user' && !message.call
       ? /^\[Scheduled: ([^\]]+)\] ([\s\S]*)$/.exec(message.content)
       : null;
-
   // The brief of a look back is the gateway's, written for the agent: only its first line, which
   // says what is being looked back on, is for the owner.
   const learning = message.role === 'user' ? /^\[Learning\] ([^\n]*)/.exec(message.content) : null;
+
   if (learning) {
     return (
       <article className="chat-line scheduled">
@@ -210,37 +203,23 @@ export function ChatMessage({
           <AlarmClock size={13} />
           {scheduled[1]}
         </span>
-        <div className="chat-text">{clean(scheduled[2] ?? '')}</div>
+        <div className="chat-text">{cleanText(scheduled[2] ?? '')}</div>
         {children}
       </article>
     );
   }
 
-  if (!mine || !group) {
+  if (!group) {
+    const text = cleanText(message.content);
     return (
-      <article
-        className={`chat-line ${mine ? 'mine' : 'theirs'}`}
-        data-message-id={message.id}
-        data-entered={entered || undefined}
-      >
-        {(!mine || message.call) && (
+      <article className="chat-line mine" data-message-id={message.id} data-outgoing={outgoing}>
+        {message.call && (
           <div className="chat-author-row">
             <ChatSpeaker agent={agent} />
-            {message.role === 'assistant' && !message.call && (
-              <MessageActions message={message} onReply={onReply} onReact={onReact} />
-            )}
           </div>
         )}
         {before}
-        {clean(message.content) &&
-          (mine ? (
-            <PersonText text={clean(message.content)} />
-          ) : (
-            // The agent writes Markdown; what people send is shown as they typed it.
-            <div className="chat-text markdown">
-              <Markdown text={clean(message.content)} breaks />
-            </div>
-          ))}
+        {text && <PersonText text={text} />}
         {children}
         <MessageReactions message={message} agentName={agent?.name} />
       </article>
@@ -250,11 +229,13 @@ export function ChatMessage({
   const author = authored(message);
   const person = author.id ? people.get(author.id) : undefined;
   const name = person?.name ?? author.name ?? (author.id ? handleOf(author.id) : 'Someone');
+  const text = cleanText(author.text);
 
   return (
     <article
       className={`chat-line mine member ${opensRun ? 'opens' : ''}`}
       data-message-id={message.id}
+      data-outgoing={outgoing}
     >
       {opensRun ? (
         <Face name={name} picture={person?.avatar} className="chat-face" />
@@ -263,10 +244,73 @@ export function ChatMessage({
       )}
       <div className="chat-body">
         {opensRun && <strong className="chat-author">{name}</strong>}
-        {clean(author.text) && <PersonText text={clean(author.text)} />}
+        {text && <PersonText text={text} />}
         {children}
       </div>
       <MessageReactions message={message} agentName={agent?.name} />
     </article>
+  );
+}
+
+/**
+ * One message, as an AI chat shows it, in every conversation alike: whoever wrote to the agent
+ * on the same text column, the agent that answers as plain text under it with its tools above.
+ */
+export function ChatMessage({
+  message,
+  group,
+  people,
+  opensRun,
+  before,
+  children,
+  agent,
+  reveal = false,
+  onReply,
+  onReact,
+}: {
+  message: Message;
+  group: boolean;
+  people: Map<string, Person>;
+  opensRun: boolean;
+  /** Shown above the text, as the tools the agent used to write it. */
+  before?: ReactNode;
+  children?: ReactNode;
+  agent?: Pick<Profile, 'name' | 'avatar'>;
+  /** The agent's text goes on appearing at a steady pace instead of all at once. */
+  reveal?: boolean;
+  onReply?: () => void;
+  onReact?: (emoji: string | null) => Promise<unknown>;
+}) {
+  if (mine(message)) {
+    return (
+      <PersonLine
+        message={message}
+        group={group}
+        people={people}
+        opensRun={opensRun}
+        before={before}
+        agent={agent}
+      >
+        {children}
+      </PersonLine>
+    );
+  }
+  const text = cleanText(message.content);
+
+  return (
+    <AgentLine
+      agent={agent}
+      messageId={message.id}
+      actions={
+        message.role === 'assistant' &&
+        !message.call && <MessageActions message={message} onReply={onReply} onReact={onReact} />
+      }
+      before={before}
+      // The agent writes Markdown; what people send is shown as they typed it.
+      text={text ? <AgentText text={text} reveal={reveal} /> : null}
+      reactions={<MessageReactions message={message} agentName={agent?.name} />}
+    >
+      {children}
+    </AgentLine>
   );
 }

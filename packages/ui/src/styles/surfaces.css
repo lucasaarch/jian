@@ -816,6 +816,15 @@
   .chat-line.work:has(+ .chat-line.theirs) {
     @apply mb-2;
   }
+  /* The same, where each line is a row of its own. A row contains its margins, so the pull up
+     goes on the row itself: inside it, the line would be clipped. */
+  .history-row:has(> .chat-line.theirs:last-child)
+  + .history-row:has(> .chat-line.work:first-child) {
+    @apply -mt-2;
+  }
+  .history-row:has(+ .history-row > .chat-line.theirs:first-child) > .chat-line.work:last-child {
+    @apply mb-2;
+  }
   .chat-text {
     @apply whitespace-pre-wrap break-words text-[15px] leading-7 text-ink;
   }
@@ -932,11 +941,11 @@
   }
   /* A message on its way: its bubble as it will be, a quiet word under it; one that did not go
      takes the bad ink, with why, and the way to send it again or let it go. */
-  .outgoing[data-state="sending"] .chat-line.mine {
+  .chat-line.mine[data-outgoing="sending"] {
     @apply opacity-80;
   }
-  .outgoing[data-state="failed"] .chat-line.mine:not(.member)::before,
-  .outgoing[data-state="failed"] .chat-line.mine.member .chat-text {
+  .chat-line.mine[data-outgoing="failed"]:not(.member)::before,
+  .chat-line.mine.member[data-outgoing="failed"] .chat-text {
     background: color-mix(in srgb, var(--bad) 14%, transparent);
     box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--bad) 45%, transparent);
   }
@@ -944,7 +953,7 @@
     @apply mt-1.5 flex max-w-full items-center justify-end gap-2 self-end text-xs;
     color: var(--muted);
   }
-  .outgoing[data-state="failed"] .outgoing-state {
+  .chat-line[data-outgoing="failed"] .outgoing-state {
     color: var(--bad);
   }
   .outgoing-state button {

@@ -2,7 +2,8 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it } from 'vitest';
 import { type Outgoing, sendNow, useOutbox } from '../../lib/stores/outbox';
-import { OutgoingMessage } from './outgoing';
+import { PersonLine } from './message';
+import { OutgoingState, sentMessage } from './outgoing';
 
 let element: HTMLDivElement;
 let root: Root;
@@ -22,7 +23,17 @@ afterEach(async () => {
 
 const show = (item: Outgoing) =>
   act(async () =>
-    root.render(<OutgoingMessage item={item} profileId="profile" people={new Map()} api={{}} />),
+    root.render(
+      <PersonLine
+        message={sentMessage(item, 'profile')}
+        group={false}
+        people={new Map()}
+        opensRun={false}
+        outgoing={item.state}
+      >
+        <OutgoingState item={item} />
+      </PersonLine>,
+    ),
   );
 
 it('draws the message at once without a sending footer', async () => {
