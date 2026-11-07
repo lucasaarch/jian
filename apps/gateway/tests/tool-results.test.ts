@@ -1,7 +1,7 @@
 import { tool } from 'ai';
 import { expect, it } from 'vitest';
 import { z } from 'zod';
-import { boundToolResult, fitStep } from '../src/agent/results.js';
+import { boundToolResult, fitStep, headTail } from '../src/agent/results.js';
 import { AgentRuntime } from '../src/agent/runtime.js';
 import { profileTools } from '../src/agent/tools.js';
 import { tokenCounter } from '../src/context/budget.js';
@@ -434,4 +434,61 @@ it('fits one step’s parallel results in the conversation and records them as t
   for (const item of results) {
     expect(step?.tools?.find((entry) => entry.toolCallId === item.id)?.result).toEqual(item.value);
   }
+});
+
+it('leaves a page of read_artifact whole, and fits the step’s other results around it', async () => {
+  const { run } = await fixture();
+  const count = tokenCounter('openai', 'test');
+  const log = (tag: string) => ({
+    exitCode: 1,
+    // Under one budget each, but larger together than the page beside them.
+    stdout: `${tag} FIRST\n${`${tag} line of the build log\n`.repeat(85)}${tag} LAST`,
+    stderr: '',
+  });
+  const page = {
+    artifactId: '6f1b8f40-58c4-4c39-9a4f-0d5c8a3f1e21',
+    content: 'x'.repeat(2400),
+    nextOffset: 2400,
+  };
+  const step = [
+    ...(await Promise.all(
+      ['a', 'b', 'c'].map(async (tag) => ({
+        toolCallId: tag,
+        toolName: 'run_command',
+        output: log(tag),
+        result: await boundToolResult(log(tag), 'run_command', run, new Set(), stored),
+      })),
+    )),
+    { toolCallId: 'page', toolName: 'read_artifact', output: page, result: page },
+  ];
+  const fitted = await fitStep(step, run, new Set(), stored);
+  expect(fitted.has('page')).toBe(false);
+  expect(fitted.size).toBe(3);
+  const total = step.reduce(
+    (sum, entry) => sum + count(JSON.stringify(fitted.get(entry.toolCallId) ?? entry.result)),
+    0,
+  );
+  expect(total).toBeLessThanOrEqual(3 * 2560);
+});
+
+it('counts a single line in characters, and never keeps half of a character', () => {
+  const text = '😀'.repeat(5000);
+  const cut = headTail(text, 1001, 9000, 'read_artifact with artifactId "x" returns everything.');
+  expect(cut.startsWith('[10,000 characters, about 9,000 tokens;')).toBe(true);
+  expect(cut).toMatch(/\[… [\d,]+ characters left out here\./);
+  expect(cut).not.toMatch(/[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/);
+});
+
+it('tells the size the command printed when its own capture already left part out', () => {
+  // As Jian Remote sends a long output: its ends, and how much of the middle it dropped.
+  const stdout = `FIRST\n${'kept line\n'.repeat(2000)}[… 50,000 lines (600,000 characters) of this output were not kept]\n${'kept line\n'.repeat(2000)}error: the build failed\n`;
+  const cut = headTail(
+    stdout,
+    2000,
+    10_000,
+    'read_artifact with artifactId "x" returns everything.',
+  );
+  expect(cut.startsWith('[54,002 lines, about ')).toBe(true);
+  expect(cut).toContain('50,000 lines of them were never kept');
+  expect(cut).toContain('error: the build failed');
 });

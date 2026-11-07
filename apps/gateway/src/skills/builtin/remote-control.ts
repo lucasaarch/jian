@@ -81,6 +81,8 @@ Load the \`remote\` tool group with \`load_tools\` before calling these tools.
 - \`run_remote_command\` — shell on that computer (PowerShell on Windows, \`/bin/sh\` on
   macOS/Linux). Open apps, install software, Git, builds, scripts — anything a local user
   would type. Prefer \`remote_computer\` for GUI and screenshots, and pull/push for files.
+  A long output keeps its first and last parts, with a marker saying how many lines were not
+  kept; a machine on an older Jian Remote keeps only the start.
   In a conversation that targets the machine, clone, fetch, pull and push GitHub repositories
   there with \`github_git\` (\`github\` skill), which lends the GitHub App's access to it.
 - \`remote_computer\` — Anthropic-style desktop control on **macOS, Linux (X11), and Windows**

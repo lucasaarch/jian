@@ -151,6 +151,8 @@ const STALLED_AFTER_MS = 5 * 60_000;
  */
 const WAITS_OUTSIDE = new Set(['spawn_subagent']);
 
+type ModelOutputOptions = Parameters<NonNullable<Tool['toModelOutput']>>[0];
+
 /** Failed summaries in a row after which a turn stops asking for one on its own. */
 const MAX_COMPACTION_FAILURES = 2;
 
@@ -1071,6 +1073,13 @@ export class AgentRuntime {
           continue;
         }
 
+        // Text to fit with the step's other results: a connected service's result, or one the
+        // SDK shows as it is. A tool that shows its own (a screenshot) is not text, and a load
+        // on Claude answers with references alone.
+        const fitsStep =
+          !(deferring && LOADERS.has(name)) &&
+          (mcpToolNames.includes(name) || !definition.toModelOutput);
+
         guarded[name] = {
           ...definition,
           // Only a load answers with references, and with nothing else: Anthropic refuses them
@@ -1079,17 +1088,18 @@ export class AgentRuntime {
           // brought in is sent whole from the next step, unreferenced.
           ...(deferring && LOADERS.has(name)
             ? { toModelOutput: referencing(definition, (id) => broughtIn.get(id)) }
-            : definition.toModelOutput
-              ? {}
-              : {
-                  toModelOutput: async ({
-                    toolCallId,
-                    output,
-                  }: {
-                    toolCallId: string;
-                    output: unknown;
-                  }) => plainOutput(await fittedOutput(toolCallId, output)),
-                }),
+            : fitsStep
+              ? {
+                  // What the step's fitting left of the result, shown as the tool shows its
+                  // own: an MCP result as its text blocks, the rest as the SDK would.
+                  toModelOutput: async (options: ModelOutputOptions) => {
+                    const output = await fittedOutput(options.toolCallId, options.output);
+                    return definition.toModelOutput
+                      ? definition.toModelOutput({ ...options, output })
+                      : plainOutput(output);
+                  },
+                }
+              : {}),
           execute: async (input, options) => {
             // An approved action runs before any step: its result is no step's to fit.
             const inStep = approvedCallId !== options.toolCallId;
@@ -1304,8 +1314,7 @@ export class AgentRuntime {
                   judge && outsideContent(name, mcpToolNames)
                     ? await markSteering(judge, result, signal)
                     : result;
-                // A tool with an output of its own (a screenshot) is not text to fit.
-                if (inStep && !definition.toModelOutput) {
+                if (inStep && fitsStep) {
                   stepResults.set(options.toolCallId, {
                     toolCallId: options.toolCallId,
                     toolName: name,

@@ -178,6 +178,27 @@ test('executeShellTask runs a real shell when cwd is valid', async () => {
   }
 });
 
+test('a command that prints more than the cap keeps its start and its end', {
+  skip: process.platform === 'win32',
+}, async () => {
+  const result = await executeShellTask({
+    id: 'task-long',
+    kind: 'shell',
+    command:
+      'echo FIRST; i=0; while [ $i -lt 30000 ]; do echo "line of build output $i"; i=$((i+1)); done; echo "error: the build failed"',
+    cwd: tmpdir(),
+    timeoutMs: 60_000,
+  });
+  assert.equal(result.exitCode, 0, result.stderr);
+  assert.ok(result.stdout.length <= 400_000);
+  assert.ok(result.stdout.startsWith('FIRST\n'));
+  assert.ok(result.stdout.endsWith('error: the build failed\n'));
+  assert.match(
+    result.stdout,
+    /\[… [\d,]+ lines \([\d,]+ characters\) of this output were not kept\]/,
+  );
+});
+
 test('executeShellTask recovers when agent cwd is missing (real spawn)', async () => {
   const result = await executeShellTask({
     id: 'task-3',

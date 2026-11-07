@@ -2,6 +2,7 @@ import { type ChildProcess, spawn, spawnSync } from 'node:child_process';
 import { existsSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import type { RemoteResult, RemoteTask } from '@jian/contracts';
+import { OutputEnds } from './ends.ts';
 import { hostWording } from './host.ts';
 
 /** How a child is started: `spawn`, or a test's stand-in. */
@@ -15,7 +16,10 @@ type Spawn = (
  * usual tools live, Homebrew's included.
  */
 export const MINIMAL_PATH = '/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin';
-/** Soft stdout/stderr caps while capturing a command (chars). Gateway schema matches these. */
+/**
+ * Stdout/stderr caps while capturing a command (chars), its first and last halves kept with a
+ * marker between them (see `ends.ts`). Gateway schema matches these.
+ */
 export const STDOUT_CAP = 400_000;
 export const STDERR_CAP = 50_000;
 
@@ -169,9 +173,9 @@ export function executeShellTask(
       stdio: ['ignore', 'pipe', 'pipe'],
     });
     const masked = (text: string) => maskSecrets(text, task.env);
-    let stdout = '';
-    let stderr = resolved.note ? `${resolved.note}\n` : '';
-    let stdoutSeen = 0;
+    const stdout = new OutputEnds(STDOUT_CAP);
+    const stderr = new OutputEnds(STDERR_CAP);
+    if (resolved.note) stderr.push(`${resolved.note}\n`);
     let timedOut = false;
     const timeout = setTimeout(() => {
       timedOut = true;
@@ -187,43 +191,26 @@ export function executeShellTask(
         }
       }, 2000).unref();
     }, task.timeoutMs);
-    child.stdout?.on('data', (chunk: Buffer) => {
-      stdoutSeen += chunk.toString('utf8').length;
-      stdout = cappedAppend(stdout, chunk, STDOUT_CAP);
-    });
-    child.stderr?.on('data', (chunk: Buffer) => {
-      stderr = cappedAppend(stderr, chunk, STDERR_CAP);
-    });
+    child.stdout?.on('data', (chunk: Buffer) => stdout.push(chunk));
+    child.stderr?.on('data', (chunk: Buffer) => stderr.push(chunk));
     child.on('error', (error) => {
       clearTimeout(timeout);
+      stderr.push(formatShellSpawnError(error, { shell, cwd: resolved.cwd }));
       resolveResult({
         taskId: task.id,
         exitCode: null,
-        stdout: masked(stdout),
-        stderr: masked(
-          cappedAppend(
-            stderr,
-            formatShellSpawnError(error, { shell, cwd: resolved.cwd }),
-            STDERR_CAP,
-          ),
-        ),
+        stdout: masked(stdout.text()),
+        stderr: masked(stderr.text()),
         timedOut,
       });
     });
     child.on('close', (code) => {
       clearTimeout(timeout);
-      if (stdoutSeen > STDOUT_CAP) {
-        stderr = cappedAppend(
-          stderr,
-          '\n[jian-remote] stdout truncated at the worker channel cap\n',
-          STDERR_CAP,
-        );
-      }
       resolveResult({
         taskId: task.id,
         exitCode: code,
-        stdout: masked(stdout),
-        stderr: masked(stderr),
+        stdout: masked(stdout.text()),
+        stderr: masked(stderr.text()),
         timedOut,
       });
     });

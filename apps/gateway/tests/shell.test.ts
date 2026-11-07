@@ -139,7 +139,9 @@ describe('running commands on the machine the gateway runs on', () => {
     expect(result.stdout.length).toBeLessThanOrEqual(61_000);
     expect(result.stdout.startsWith('FIRST\n')).toBe(true);
     expect(result.stdout.endsWith('error: the build failed\n')).toBe(true);
-    expect(result.stdout).toMatch(/\[… [\d,]+ characters of this output were not kept\]/);
+    expect(result.stdout).toMatch(
+      /\[… [\d,]+ lines \([\d,]+ characters\) of this output were not kept\]/,
+    );
   });
 
   it('starts in the shared directory, which is its home and holds its temporary files', async () => {

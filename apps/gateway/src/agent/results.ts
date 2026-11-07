@@ -195,24 +195,59 @@ function shares(lengths: number[], room: number): number[] {
   return out;
 }
 
+/** An index moved off the middle of a surrogate pair, so no half of a character is kept. */
+function whole(text: string, index: number): number {
+  const code = text.charCodeAt(index);
+  return index > 0 && index < text.length && code >= 0xdc00 && code <= 0xdfff ? index + 1 : index;
+}
+
+/** A size as a reader takes it in: lines when there are several, characters for one. */
+const size = (lines: number, characters: number) =>
+  lines > 1
+    ? `${figure(lines)} lines (${figure(characters)} characters)`
+    : `${figure(characters)} characters`;
+
+/**
+ * What a command's own capture left out before the result reached Jian, in the form the
+ * gateway's shell (`shell.ts`) and Jian Remote (`ends.ts` in remote-core) write: kept nowhere.
+ */
+const NOT_KEPT = /\[… ([\d,]+) lines \(([\d,]+) characters\) of this output were not kept\]/g;
+
+function notKept(text: string) {
+  let markers = 0;
+  let lines = 0;
+  let characters = 0;
+  for (const found of text.matchAll(NOT_KEPT)) {
+    markers++;
+    lines += Number((found[1] ?? '0').replaceAll(',', ''));
+    characters += Number((found[2] ?? '0').replaceAll(',', ''));
+  }
+  return { markers, lines, characters };
+}
+
 /**
  * The first and last parts of a text, within `room` characters, with a header giving its
  * original size and a marker where the middle was, saying how much is missing and where it is.
  */
 export function headTail(text: string, room: number, tokens: number, where: string): string {
   if (text.length <= room) return text;
-  const header = `[${figure(lineCount(text))} lines, about ${figure(tokens)} tokens; its first and last parts follow.]\n`;
+  // The size the command printed, not what reached Jian: a marker of its own capture stands
+  // for the lines it dropped.
+  const lost = notKept(text);
+  const lines = lineCount(text) - lost.markers + lost.lines;
+  const printed = Math.round(tokens * (1 + lost.characters / Math.max(1, text.length)));
+  const header = `[${lines > 1 ? `${figure(lines)} lines` : `${figure(text.length + lost.characters)} characters`}, about ${figure(printed)} tokens; its first and last parts follow.${lost.markers ? ` ${figure(lost.lines)} lines of them were never kept, by the command's own capture.` : ''}]\n`;
   // The marker's own length, at most: its figures are at most as long as the text's.
   const keep = Math.max(0, room - header.length - where.length - 60);
-  let head = text.slice(0, Math.ceil(keep / 2));
-  let tail = keep ? text.slice(text.length - Math.floor(keep / 2)) : '';
+  let head = text.slice(0, whole(text, Math.ceil(keep / 2)));
+  let tail = keep ? text.slice(whole(text, text.length - Math.floor(keep / 2))) : '';
   // On line boundaries when one is near, so neither part breaks off mid-line.
   const headEnd = head.lastIndexOf('\n');
   if (headEnd >= head.length * 0.8) head = head.slice(0, headEnd + 1);
   const tailStart = tail.indexOf('\n');
   if (tailStart >= 0 && tailStart < tail.length * 0.2) tail = tail.slice(tailStart + 1);
   const middle = text.slice(head.length, text.length - tail.length);
-  return `${header}${head}${head.endsWith('\n') || !head ? '' : '\n'}[… ${figure(lineCount(middle))} lines (${figure(middle.length)} characters) left out here. ${where}]\n${tail}`;
+  return `${header}${head}${head.endsWith('\n') || !head ? '' : '\n'}[… ${size(lineCount(middle), middle.length)} left out here. ${where}]\n${tail}`;
 }
 
 /** What the agent is told of a result that was cut, and of where the whole of it is. */
@@ -337,15 +372,22 @@ export async function fitStep(
 ): Promise<Map<string, unknown>> {
   const { count } = resultTokens(run, scale);
   const room = STEP_RESULTS * (run.contextPolicy ?? run.profile.contextPolicy).toolResultTokens;
-  const sized = step
-    .map((entry) => ({ ...entry, tokens: count(JSON.stringify(entry.result) ?? 'null') }))
-    .sort((a, b) => a.tokens - b.tokens);
+  const all = step.map((entry) => ({
+    ...entry,
+    tokens: count(JSON.stringify(entry.result) ?? 'null'),
+  }));
   const fitted = new Map<string, unknown>();
-  if (sized.reduce((sum, entry) => sum + entry.tokens, 0) <= room) return fitted;
+  if (all.reduce((sum, entry) => sum + entry.tokens, 0) <= room) return fitted;
 
-  let left = room;
+  // A page of read_artifact is already one result's room, asked for at an offset: cut, the
+  // agent's next offset would skip what was left out. It takes its room before the rest.
+  const pages = all.filter((entry) => entry.toolName === 'read_artifact');
+  const sized = all
+    .filter((entry) => entry.toolName !== 'read_artifact')
+    .sort((a, b) => a.tokens - b.tokens);
+  let left = room - pages.reduce((sum, entry) => sum + entry.tokens, 0);
   for (const [position, entry] of sized.entries()) {
-    const share = Math.floor(left / (sized.length - position));
+    const share = Math.max(0, Math.floor(left / (sized.length - position)));
     if (entry.tokens <= share) {
       left -= entry.tokens;
       continue;

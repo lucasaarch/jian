@@ -40,7 +40,8 @@ Every size here is in the model's own tokens.
   whole and cut, with its artifact id. Text (a command's output, a file, a search, a page)
   keeps its first and last parts, under a line giving its full size in lines and tokens, with a
   marker saying how much of the middle was left out; anything else keeps the start of its JSON.
-  One step's results together get three times that room: past it, the largest are cut first.
+  One step's results together get three times that room (pages of \`read_artifact\` and images
+  aside): past it, the largest are cut first.
   \`read_artifact\` with the artifact id returns the whole, a page at a time. Every result rides
   in each later step of the turn, so ask for the part you need: a line range, a search, a
   filtered command.
