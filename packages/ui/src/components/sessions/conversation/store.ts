@@ -15,7 +15,7 @@ import type {
 } from '../../../lib/api';
 import type { HistorySnapshot } from '../kept-history';
 import { running } from '../status';
-import { answers, joinHistory, overTurns, turnOf } from './turns';
+import { answers, joinHistory, overTurns, sameMessage, turnOf } from './turns';
 
 /** What a turn asked the owner to decide or answer. */
 export type Asks = { approval?: RunApproval; question?: RunQuestion };
@@ -108,16 +108,36 @@ export type ConversationStore = StoreApi<ConversationState & ConversationActions
 type Live = ConversationState['live'];
 
 /**
- * The live line after a read of the run. The stream is fresher than any read: a read that began
- * before the latest progress event must not step the text back, so the later `updatedAt` wins.
+ * Whether progress told of a turn replaces what is known of it: only when strictly newer. A read
+ * that began before the latest event must not step the text back, and an event told again after
+ * a handover, with the `updatedAt` the cleared line kept, must not bring handed-over text back.
  */
+const newer = (known: Live, runId: string, progress: RunProgress) =>
+  known?.runId !== runId || progress.updatedAt > known.progress.updatedAt;
+
+/** The live line after a read of the run: none once it stopped working. */
 function liveAfter(known: Live, run: Run, progress: RunProgress | undefined): Live {
   if (!running(run)) return undefined;
   const mine = known?.runId === run.id ? known : undefined;
-  if (!progress) return mine;
-  if (mine && mine.progress.updatedAt >= progress.updatedAt) return mine;
+  if (!progress || !newer(mine, run.id, progress)) return mine;
 
   return { runId: run.id, progress };
+}
+
+/**
+ * The page joined to what is known, keeping every message object the read brought back unchanged,
+ * and the array itself when nothing changed: rows compare by identity, so only what moved redraws.
+ */
+function joined(known: Message[], page: Message[], fresh: boolean): Message[] {
+  const byId = new Map(known.map((message) => [message.id, message]));
+  const next = joinHistory(fresh ? [] : known, page).map((message) => {
+    const was = byId.get(message.id);
+    return was && sameMessage(was, message) ? was : message;
+  });
+
+  return next.length === known.length && next.every((message, at) => message === known[at])
+    ? known
+    : next;
 }
 
 /** A run without its progress, which only `live` carries. */
@@ -150,7 +170,7 @@ export function createConversationStore(kept?: HistorySnapshot): ConversationSto
 
     pageRead: (page, fresh) =>
       set((state) => {
-        const messages = joinHistory(fresh ? [] : state.messages, page);
+        const messages = joined(state.messages, page, fresh);
         // A read that brings something is a read that worked: what it shows is current.
         const read = { messages, loading: false, error: '', behind: false };
         const restart = fresh
@@ -194,11 +214,7 @@ export function createConversationStore(kept?: HistorySnapshot): ConversationSto
       ),
 
     progress: (runId, progress) =>
-      set((state) =>
-        state.live?.runId === runId && state.live.progress.updatedAt > progress.updatedAt
-          ? {}
-          : { live: { runId, progress } },
-      ),
+      set((state) => (newer(state.live, runId, progress) ? { live: { runId, progress } } : {})),
 
     subagentsRead: (list) => set({ subagents: list }),
 
@@ -222,7 +238,7 @@ export function createConversationStore(kept?: HistorySnapshot): ConversationSto
       })),
 
     snapshot: () => {
-      const { messages, tools, asks, callTools, subagents, people, run } = get();
+      const { messages, tools, asks, callTools, subagents, people, run, live } = get();
       const page = messages.slice(-MESSAGES_FIRST_PAGE);
       // The turn last under way may have said nothing on the page yet; its tools go too.
       const turns = new Set([
@@ -240,7 +256,8 @@ export function createConversationStore(kept?: HistorySnapshot): ConversationSto
         callTools: on(callTools, calls),
         subagents,
         people: [...people.values()],
-        ...(run ? { run } : {}),
+        // The text under way goes with its run, so a conversation reopened mid-answer shows it.
+        ...(run ? { run: live?.runId === run.id ? { ...run, progress: live.progress } : run } : {}),
       };
     },
   }));

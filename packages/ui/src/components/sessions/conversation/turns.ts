@@ -25,6 +25,28 @@ export function joinHistory<Item extends { id: string }>(known: Item[], latest: 
   return meets < 0 ? latest : [...known.slice(0, meets), ...latest];
 }
 
+/**
+ * Whether two reads of the same JSON say the same thing. Compares every field, nested ones too,
+ * so a reaction or a channel detail added to a message counts as a change. Key order is ignored:
+ * a kept snapshot and a fresh read need not list fields alike.
+ */
+function sameValue(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (typeof a !== 'object' || typeof b !== 'object' || !a || !b) return false;
+  if (Array.isArray(a) !== Array.isArray(b)) return false;
+  const keys = Object.keys(a);
+  if (keys.length !== Object.keys(b).length) return false;
+
+  return keys.every(
+    (key) =>
+      Object.hasOwn(b, key) &&
+      sameValue((a as Record<string, unknown>)[key], (b as Record<string, unknown>)[key]),
+  );
+}
+
+/** A message read again unchanged: the known object is kept, so its row is not drawn again. */
+export const sameMessage = (known: Message, read: Message) => sameValue(known, read);
+
 /** What a read says of each turn it asked about, over what was known of the others. */
 export function overTurns<Value>(
   known: Map<string, Value>,

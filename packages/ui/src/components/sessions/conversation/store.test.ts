@@ -100,6 +100,98 @@ describe('the conversation store', () => {
     expect(store.getState().live?.progress.text).toBe('Still going');
   });
 
+  it('hands the live key only to the last answer of the turn that lands', () => {
+    const store = createConversationStore();
+    store.getState().pageRead([said('1', { runId: 'run-1' })], false);
+    store.getState().runRead(turn('run-1'));
+    store.getState().progress('run-1', writing('Second part'));
+
+    store
+      .getState()
+      .pageRead([said('1', { runId: 'run-1' }), answer('2', 'run-1'), answer('3', 'run-1')], false);
+
+    const state = store.getState();
+    expect(state.keys.has('2')).toBe(false);
+    expect(state.keys.get('3')).toBe('live:0');
+    expect(state.liveSerial).toBe(1);
+  });
+
+  it('a progress event told again after a handover does not bring the text back', () => {
+    const store = createConversationStore();
+    store.getState().pageRead([said('1', { runId: 'run-1' })], false);
+    store.getState().runRead(turn('run-1'));
+    store.getState().progress('run-1', writing('Hello'));
+    store.getState().pageRead([said('1', { runId: 'run-1' }), answer('2', 'run-1')], false);
+
+    store.getState().progress('run-1', writing('Hello'));
+    store.getState().runRead(turn('run-1', 'running', writing('Hello')));
+
+    expect(store.getState().live?.progress.text).toBe('');
+    store.getState().progress('run-1', writing('Next', '2026-11-07T10:00:06.000Z'));
+    expect(store.getState().live?.progress.text).toBe('Next');
+  });
+
+  it('keeps the objects of messages a read brought back unchanged', () => {
+    const store = createConversationStore();
+    store.getState().pageRead([said('1'), said('2')], false);
+    const [first, second] = store.getState().messages;
+
+    store.getState().pageRead([said('1'), said('2', { content: 'Edited' }), said('3')], false);
+
+    const [one, two, three] = store.getState().messages;
+    expect(one).toBe(first);
+    expect(two).not.toBe(second);
+    expect(two?.content).toBe('Edited');
+    expect(three?.id).toBe('3');
+  });
+
+  it('a reaction brings the message read again as a new object', () => {
+    const store = createConversationStore();
+    store.getState().pageRead([said('1'), said('2')], false);
+    const [first] = store.getState().messages;
+
+    store
+      .getState()
+      .pageRead(
+        [
+          said('1', { reactions: [{ actor: 'owner', emoji: '👍' }] as Message['reactions'] }),
+          said('2'),
+        ],
+        false,
+      );
+
+    expect(store.getState().messages[0]).not.toBe(first);
+    expect(store.getState().messages[0]?.reactions).toHaveLength(1);
+  });
+
+  it('keeps the messages array when a read changed nothing', () => {
+    const store = createConversationStore();
+    store.getState().pageRead([said('1'), said('2')], false);
+    const { messages } = store.getState();
+
+    store.getState().pageRead([said('1'), said('2')], false);
+    expect(store.getState().messages).toBe(messages);
+
+    // Fields listed in another order, as a kept snapshot may have them, are still the same.
+    const reordered = Object.fromEntries(Object.entries(said('1')).reverse()) as Message;
+    store.getState().pageRead([reordered, said('2')], false);
+    expect(store.getState().messages).toBe(messages);
+  });
+
+  it('keeps the text under way in the snapshot, and opens with it again', () => {
+    const store = createConversationStore();
+    store.getState().pageRead([said('1', { runId: 'run-1' })], false);
+    store.getState().runRead(turn('run-1'));
+    store.getState().progress('run-1', writing('Half an answer'));
+
+    const kept = store.getState().snapshot();
+    expect(kept.run?.progress?.text).toBe('Half an answer');
+
+    const reopened = createConversationStore(kept).getState();
+    expect(reopened.run).not.toHaveProperty('progress');
+    expect(reopened.live).toEqual({ runId: 'run-1', progress: writing('Half an answer') });
+  });
+
   it('keeps the outbox key for a sent message', () => {
     const store = createConversationStore();
     store.getState().sent('message-1', 'outbox-7');
