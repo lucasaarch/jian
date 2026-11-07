@@ -36,17 +36,19 @@ import {
   needsCompaction,
   SEGMENT_TOKENS,
 } from '../context/compaction.js';
+import { CHECKPOINT } from '../context/markers.js';
 import type { ContextSource } from '../context/port.js';
 import { defaultScale, measuredScale } from '../context/scale.js';
 import {
   FILE_TOKENS,
   FILES_TOKENS,
   filesInProgress,
+  type Kept,
   peopleWords,
-  recordOf,
   SURVIVOR_SHARE,
   touchedFiles,
   WORDS_TOKENS,
+  withKept,
 } from '../context/survivors.js';
 import { nowIso } from '../core/clock.js';
 import { GatewayError } from '../core/errors.js';
@@ -65,7 +67,7 @@ import type { Providers } from '../providers/service.js';
 import { providerSecret } from '../providers/service.js';
 import { mergeProviderOptions, speedProviderOptions } from '../providers/speed.js';
 import { lastPromptScale, lastStepAt } from '../runs/context-usage.js';
-import { readRunAction, writeRunAction } from '../runs/repository.js';
+import { keptBeside, readRunAction, writeRunAction } from '../runs/repository.js';
 import { createSafeFetch } from '../security/outbound.js';
 import type { ObjectiveContinuation } from '../sessions/continuation.js';
 import { dropLoads, listLoads, type SessionLoad, useLoads } from '../sessions/loads.js';
@@ -85,6 +87,7 @@ import {
   type CacheTtl,
   cacheable,
   cacheableInstructions,
+  uncached,
   withConversationAffinity,
   withOpenAiPromptCache,
 } from './cache.js';
@@ -169,8 +172,9 @@ const COMPACTION_RETRY_GROWTH = 1.25;
 const SHED_TO = 0.6;
 
 /**
- * Past this size, in tokens, a request whose cache has expired is still summarised in place:
- * read in segments it would take more than two uncached calls (see `inPlace`).
+ * Past this size, in tokens, a request whose cache has expired is still summarised in place, as
+ * one request read uncached and sent without the messages' cache marks (see `inPlace`), rather
+ * than in more than two segments, each read uncached and folding in the record so far.
  */
 export const COLD_IN_PLACE_PAST = 2 * SEGMENT_TOKENS;
 
@@ -193,6 +197,28 @@ const boundedRead = <T>(read: Promise<T>) => {
     }),
   ]).finally(() => clearTimeout(timer));
 };
+
+/** What a compaction kept, with every secret this run holds masked, as its record is. */
+const redactKept = (kept: Kept, secrets: Parameters<typeof redactText>[1]): Kept => ({
+  ...(kept.words
+    ? {
+        words: kept.words.map((said) => ({
+          from: redactText(said.from, secrets),
+          text: redactText(said.text, secrets),
+        })),
+      }
+    : {}),
+  ...(kept.files
+    ? {
+        files: {
+          changed: kept.files.changed,
+          files: kept.files.files.map((file) =>
+            'content' in file ? { ...file, content: redactText(file.content, secrets) } : file,
+          ),
+        },
+      }
+    : {}),
+});
 
 /** How long Anthropic keeps a cached prefix for each tier (see agent/cache.ts), in ms. */
 const CACHE_LIFETIME_MS: Record<CacheTtl, number> = { '5m': 5 * 60_000, '1h': 60 * 60_000 };
@@ -1404,14 +1430,14 @@ export class AgentRuntime {
         : undefined;
       /**
        * What a compaction keeps word for word beside its record (context/survivors.ts), each at
-       * most a tenth of the point it compacts at, in the model's tokens. `previous` is the stored
-       * summary, whose words are carried on.
+       * most a tenth of the point it compacts at, in the model's tokens. `previous` is what the
+       * compaction before kept, as it stored it, whose words are carried on.
        */
       const survivorsOf = async (
         older: ModelMessage[],
         kept: ModelMessage[],
-        previous: string | undefined,
-      ) => {
+        previous: Kept | undefined,
+      ): Promise<Kept> => {
         const limit = policy.inputTokens - policy.outputTokens;
         const point = compactionThreshold(limit, policy.compactAt);
         const room = (most: number) => Math.min(most, Math.floor(point * SURVIVOR_SHARE));
@@ -1420,26 +1446,30 @@ export class AgentRuntime {
         // Read per compaction, as per call: this run or another of its conversation may have
         // changed the worktrees, and with them which sources are guarded.
         if (readNow && touched.paths.length) await worktrees?.scope.reload();
-        return {
-          words: peopleWords({
-            older,
-            kept,
-            said,
-            previous,
-            tokens,
-            budget: room(WORDS_TOKENS),
-          }),
-          files: readNow
-            ? await filesInProgress({
-                ...touched,
-                read: readNow,
-                tokens,
-                each: room(FILE_TOKENS),
-                total: room(FILES_TOKENS),
-              })
-            : undefined,
-        };
+        // Where nobody's words are kept (between agents, a worker's), none are carried either.
+        const words = speaker
+          ? peopleWords({
+              older,
+              kept,
+              said,
+              previous: previous?.words,
+              tokens,
+              budget: room(WORDS_TOKENS),
+            })
+          : undefined;
+        const files = readNow
+          ? await filesInProgress({
+              ...touched,
+              read: readNow,
+              tokens,
+              each: room(FILE_TOKENS),
+              total: room(FILES_TOKENS),
+            })
+          : undefined;
+        return { ...(words ? { words } : {}), ...(files ? { files } : {}) };
       };
+      /** The checkpoint this run's compaction left as its first message, as data (`truncatePrompt`). */
+      let checkpointKept: { record: string; kept: Kept } | undefined;
       // The gateway's unscaled count of the prompt the step sent, which its report is held to.
       let preparedEstimate = 0;
       const account = async (
@@ -1766,6 +1796,15 @@ export class AgentRuntime {
             let inPlaceRefused: string | undefined;
             try {
               const session = await this.services.sessions.session(profileId, run.sessionId);
+              // What the compaction before kept, read from where it stored it as data.
+              const previousKept = session.summary
+                ? await keptBeside(
+                    this.services.store.db,
+                    profileId,
+                    run.sessionId,
+                    session.summary,
+                  )
+                : undefined;
               /**
                * The summary as the request the conversation last sent, plus its instructions,
                * read back from the provider's cache. At a turn's first step, or once Anthropic
@@ -1790,10 +1829,12 @@ export class AgentRuntime {
                 Date.now() - wroteAt < lifetime - Math.max(30_000, lifetime * 0.1);
               const inPlace = (instructions: string) => {
                 if (before > limit) return undefined;
-                // Cold, a summary in place writes the whole prompt to the cache once and reads
-                // nothing back; in segments it reads the transcript uncached, a segment at a
-                // time, each folding in the record so far. Past two segments the one write
-                // costs less, and a single answer keeps more than a record folded eight times.
+                // Cold, both ways read the transcript uncached: in segments a part at a time,
+                // each folding in the record so far, in place once. Past two segments the one
+                // request costs about the same input and keeps more than a record folded eight
+                // times, provided it writes nothing: the messages go without their cache marks,
+                // since the checkpoint replaces them and nothing would ever read that write, at
+                // up to twice the price of the read. The tools and system keep theirs.
                 if (!cached && before <= COLD_IN_PLACE_PAST) return undefined;
                 const reused =
                   sent && sent.defers === defers && sent.carries === carries ? sent : undefined;
@@ -1825,6 +1866,7 @@ export class AgentRuntime {
                 }
                 const total = Math.ceil(tokens + estimate(instructions) * edge);
                 if (total > limit) return undefined;
+                if (!cached) request = { ...request, messages: uncached(request.messages) };
                 return summaryCall({
                   model,
                   tools: guarded,
@@ -1844,11 +1886,11 @@ export class AgentRuntime {
                 messages,
                 currentStartIndex,
                 includeCurrent: before > limit,
-                // The record alone: what survived beside it is added again below, not folded in.
-                ...(session.summary ? { previous: recordOf(session.summary) } : {}),
+                // The record alone: what was kept beside it is stored apart, and added again.
+                ...(session.summary ? { previous: session.summary } : {}),
                 inPlace,
                 survivors: (older, kept) =>
-                  survivorsOf(older, kept, session.summary).catch((error: unknown) => {
+                  survivorsOf(older, kept, previousKept).catch((error: unknown) => {
                     // What survives beside a record is worth less than the record: a failure
                     // here loses only that, never the summary already written.
                     console.warn(
@@ -1886,6 +1928,8 @@ export class AgentRuntime {
               });
               if (compacted) {
                 const summary = redactText(compacted.summary, secrets);
+                // Masked as data, so the checkpoint is rendered from exactly what is stored.
+                const kept = redactKept(compacted.kept, secrets);
                 // Save the tool work before replacing the request. A later turn can resume it.
                 const afterTokens = promptTokens({
                   ...config,
@@ -1903,6 +1947,9 @@ export class AgentRuntime {
                   via: compacted.via,
                   ...(inPlaceRefused ? { inPlaceRefused } : {}),
                   usage: spent,
+                  // What was kept beside the record, as data: the next turn renders it, and the
+                  // next compaction carries the words on from here, never from the text.
+                  ...(kept.words || kept.files ? { kept } : {}),
                 });
                 await this.services.sessions.summarize(
                   profileId,
@@ -1911,13 +1958,17 @@ export class AgentRuntime {
                   context.historyCursor?.createdAt,
                   context.historyCursor?.id,
                 );
-                messages = compacted.messages.map((message) => ({
-                  ...message,
-                  content:
-                    typeof message.content === 'string'
-                      ? redactText(message.content, secrets)
-                      : message.content,
-                })) as ModelMessage[];
+                checkpointKept = { record: summary, kept };
+                messages = [
+                  { role: 'user', content: `${CHECKPOINT}\n${withKept(summary, kept)}` },
+                  ...compacted.messages.slice(1).map((message) => ({
+                    ...message,
+                    content:
+                      typeof message.content === 'string'
+                        ? redactText(message.content, secrets)
+                        : message.content,
+                  })),
+                ] as ModelMessage[];
                 currentStartIndex = messages.findLastIndex((message) => message.role === 'user');
                 compactionFailures = 0;
               }
@@ -1967,6 +2018,7 @@ export class AgentRuntime {
                   ? { ...activeTools, read_artifact: reader }
                   : activeTools,
               currentStartIndex,
+              ...(checkpointKept ? { checkpoint: checkpointKept } : {}),
             });
             if (!truncated) return undefined;
             if (truncated.shedResults && reader && !activeNames.includes('read_artifact')) {

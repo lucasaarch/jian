@@ -44,7 +44,8 @@ export type Intake =
 /** The held text is released as one message, so it stays inside the run input limit. */
 const MAX_HELD_CHARACTERS = 8000;
 
-const names: Record<ChannelType, string> = {
+/** Each channel as the owner and the agent name it. */
+export const CHANNEL_NAMES: Record<ChannelType, string> = {
   whatsapp: 'WhatsApp',
   'whatsapp-business': 'WhatsApp Business (Meta)',
   telegram: 'Telegram',
@@ -65,7 +66,10 @@ export class Contacts {
   ) {}
 
   private title(contact: Pick<ContactRecord, 'type' | 'scope' | 'actorId' | 'displayName'>) {
-    return `${names[contact.type]} · ${contact.displayName ?? contact.actorId}`.slice(0, 160);
+    return `${CHANNEL_NAMES[contact.type]} · ${contact.displayName ?? contact.actorId}`.slice(
+      0,
+      160,
+    );
   }
 
   /** The owner-facing shape of a contact. */

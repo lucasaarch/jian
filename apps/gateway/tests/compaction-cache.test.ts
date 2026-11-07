@@ -287,6 +287,50 @@ it('summarises a turn whose cache has expired in segments', async () => {
   expect((await services.runs.run(profile.id, command.id)).status).toBe('completed');
 });
 
+it('summarises a large conversation whose cache expired in place, writing nothing to the cache', async () => {
+  // Some 290,000 tokens at the half a token a byte Claude starts from: more than two segments.
+  const { services, profile, session, ask } = await conversation(
+    { inputTokens: 1_000_000, outputTokens: 64_000 },
+    6,
+    12_000,
+  );
+  const claude = fakeClaude(MODEL, (request) =>
+    isSummary(request) ? { text: '## Open request\nNone' } : { text: 'Answered.' },
+  );
+  const first = await ask('What is left for the release?');
+  await new AgentRuntime(services, () => claude.model).execute(profile.id, first.id);
+  const sentAt = new Date(Date.now() - 2 * HOUR);
+  await services.store.db
+    .update(checkpoints)
+    .set({
+      createdAt: sentAt,
+      data: sql`jsonb_set(${checkpoints.data}, '{prompt,sentAt}', to_jsonb(${sentAt.toISOString()}::text))`,
+    })
+    .where(and(eq(checkpoints.runId, first.id), sql`${checkpoints.data} ? 'prompt'`));
+  const before = claude.requests.length;
+
+  const command = await services.runs.submit(
+    profile.id,
+    session.id,
+    { text: '/compact', requestKey: 'compact-cold' },
+    { ownerMessage: true },
+  );
+  await new AgentRuntime(services, () => claude.model).execute(profile.id, command.id);
+
+  const sent = summaries(claude.requests.slice(before));
+  expect(sent).toHaveLength(1);
+  const [summary] = sent;
+  // The conversation's own request, tools and system as cached before, its messages unmarked:
+  // the checkpoint replaces them, so a write of them would never be read.
+  expect(summary?.tools?.length).toBeGreaterThan(0);
+  expect(JSON.stringify(summary?.system)).toContain('cache_control');
+  expect(JSON.stringify(summary?.messages)).not.toContain('cache_control');
+  const compacted = (await phases(services, profile.id, command.id)).find(
+    (data) => data.phase === 'context-compacted',
+  );
+  expect(compacted?.via).toBe('request');
+});
+
 it('falls back to segments when the provider refuses the summary sent in place', async () => {
   const { services, profile, session, ask } = await conversation();
   const run = await ask('Carry on with the release.');

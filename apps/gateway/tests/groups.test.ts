@@ -527,14 +527,17 @@ describe('group conversations', () => {
       const words = context.words ?? [];
       expect(words).toEqual(
         expect.arrayContaining([
-          { from: 'Theo', text: 'Theo: Ada, draft the launch note' },
-          { from: 'Marina', text: 'Marina: The launch moved to Thursday.' },
+          { from: 'group member Theo on WhatsApp', text: 'Theo: Ada, draft the launch note' },
+          {
+            from: 'group member Marina on WhatsApp',
+            text: 'Marina: The launch moved to Thursday.',
+          },
         ]),
       );
       expect(
-        words.some((item) => item.from === 'Bia' || item.text.includes('dates are fine')),
+        words.some((item) => item.from.includes('Bia') || item.text.includes('dates are fine')),
       ).toBe(false);
-      expect(context.speaker).toBe('someone in the group');
+      expect(context.speaker).toBe('a group member on WhatsApp');
     } finally {
       await f.close();
     }

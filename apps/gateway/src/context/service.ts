@@ -9,12 +9,14 @@ import {
 } from '@jian/contracts';
 import { and, eq, inArray } from 'drizzle-orm';
 import { onOwnerComputer, projectCheckout, workspaceHome } from '../agent/workspace-home.js';
+import type { ContactRecord } from '../channels/contacts.js';
+import { CHANNEL_NAMES } from '../channels/contacts.js';
 import { listConversations, listLiveChannelsOfType } from '../channels/repository.js';
 import type { Judge } from '../decisions/service.js';
 import { findMemories, searchMemories, withLinks } from '../memories/repository.js';
 import { lastPromptScale } from '../runs/context-usage.js';
 import type { RunReader } from '../runs/port.js';
-import { listContextToolCheckpoints } from '../runs/repository.js';
+import { keptBeside, listContextToolCheckpoints } from '../runs/repository.js';
 import { listLoads } from '../sessions/loads.js';
 import type { SessionReader } from '../sessions/port.js';
 import { availableSkills } from '../skills/builtin/index.js';
@@ -127,6 +129,32 @@ function worktreeAdvice(worktrees?: { create: boolean; machine: boolean }): stri
     : " The conversation's worktrees are yours to use: list_worktrees shows them. Pass the path of the one your brief names as cwd when you run a command.";
 }
 
+/**
+ * Who wrote a message, as the gateway knows it. "The owner" only for the panel's conversation,
+ * which only the owner signs in to; anyone on a channel is named by their role and channel
+ * before the name they chose, so a contact who calls themself "the owner" still reads as a
+ * contact.
+ */
+export function speakerLabel(
+  where:
+    | 'owner'
+    | {
+        channel: string;
+        contact?: Pick<ContactRecord, 'type' | 'scope' | 'displayName' | 'actorId'> | undefined;
+      },
+  author?: { id: string; name?: string | undefined },
+): string {
+  if (where === 'owner') return 'the owner';
+  const { contact } = where;
+  if (!contact) return `someone writing in this ${where.channel} conversation`;
+  const on = CHANNEL_NAMES[contact.type] ?? contact.type;
+  if (contact.scope === 'group') {
+    const name = author?.name ?? author?.id;
+    return name ? `group member ${name} on ${on}` : `a group member on ${on}`;
+  }
+  return `contact ${contact.displayName ?? contact.actorId} on ${on}`;
+}
+
 export class Contexts {
   constructor(
     private readonly store: Store,
@@ -186,23 +214,15 @@ export class Contexts {
           ),
         )
       : new Set<string>();
-    const speaker =
-      session.channel === GATEWAY_SESSION_CHANNEL
-        ? 'the owner'
-        : group
-          ? 'someone in the group'
-          : (contact?.displayName ?? contact?.actorId ?? 'the person writing here');
+    const where =
+      session.channel === GATEWAY_SESSION_CHANNEL ? 'owner' : { channel: session.channel, contact };
+    const speaker = speakerLabel(where);
     const words = history.flatMap((message) =>
       message.role === 'user' &&
       (message.purpose === undefined || message.purpose === 'answer') &&
       !message.content.startsWith('[Scheduled:') &&
       !(message.author && agents.has(message.author.id))
-        ? [
-            {
-              text: message.content,
-              from: group ? (message.author?.name ?? message.author?.id ?? speaker) : speaker,
-            },
-          ]
+        ? [{ text: message.content, from: speakerLabel(where, message.author) }]
         : [],
     );
     return { words, speaker };
@@ -341,6 +361,9 @@ export class Contexts {
       Boolean(part),
     );
     const model = run.model ?? run.profile.model;
+    const kept = session.summary
+      ? await keptBeside(this.store.db, run.profileId, run.sessionId, session.summary)
+      : undefined;
     const scale =
       (await lastPromptScale(this.store.db, run.profileId, run.sessionId, model)) ??
       defaultScale(model.provider);
@@ -370,6 +393,7 @@ export class Contexts {
       ],
       history: await this.historyWithTools(run, history, session.summary),
       ...(session.summary ? { summary: session.summary } : {}),
+      ...(kept ? { kept } : {}),
       ...(session.objective ? { objective: session.objective } : {}),
       ...(guidance.length ? { guidance } : {}),
       ...(workspaces?.sections.length ? { project: workspaces.sections } : {}),

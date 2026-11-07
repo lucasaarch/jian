@@ -7,7 +7,7 @@ import {
 } from 'js-tiktoken';
 import { z } from 'zod';
 import { CHECKPOINT } from './markers.js';
-import { recordOf, withoutFiles } from './survivors.js';
+import { type Kept, withKept } from './survivors.js';
 
 type Counter = (text: string) => number;
 
@@ -238,6 +238,11 @@ export function truncatePrompt(input: {
   tools: ToolSet;
   currentStartIndex?: number;
   scale?: number;
+  /**
+   * The checkpoint this run's compaction left as the first message, as data: it is known by
+   * being exactly what these render to, and lightened from them, never by reading its text.
+   */
+  checkpoint?: { record: string; kept: Kept };
 }):
   | {
       instructions: string;
@@ -256,12 +261,14 @@ export function truncatePrompt(input: {
 
   // The checkpoint is the record of everything before it: never dropped as an old turn. What
   // was kept beside its record goes only once this turn's results have been put aside.
+  const rendered = (kept: Kept) =>
+    input.checkpoint ? `${CHECKPOINT}\n${withKept(input.checkpoint.record, kept)}` : undefined;
   const opening = blocks[0]?.[0];
   const checkpoint =
+    input.checkpoint &&
     blocks[0]?.length === 1 &&
     opening?.role === 'user' &&
-    typeof opening.content === 'string' &&
-    opening.content.startsWith(CHECKPOINT)
+    opening.content === rendered(input.checkpoint.kept)
       ? opening
       : undefined;
   const head = (content = checkpoint?.content): ModelMessage[] =>
@@ -315,16 +322,19 @@ export function truncatePrompt(input: {
 
   // Then what was kept beside the record: the files, which can be read again, then the words.
   // The record itself stays; when it alone does not fit, nothing here can help.
-  const content = checkpoint?.content;
-  if (typeof content !== 'string') return undefined;
-  const files = withoutFiles(content);
-  const record = recordOf(content);
+  const kept = input.checkpoint?.kept;
+  if (!checkpoint || !kept) return undefined;
   const lighter: { content: string; survivors: ('files' | 'words')[] }[] = [];
-  if (files !== content) lighter.push({ content: files, survivors: ['files'] });
-  if (record !== files) {
+  if (kept.files?.files.length) {
     lighter.push({
-      content: record,
-      survivors: [...(files !== content ? ['files' as const] : []), 'words'],
+      content: rendered(kept.words ? { words: kept.words } : {}) as string,
+      survivors: ['files'],
+    });
+  }
+  if (kept.words?.length) {
+    lighter.push({
+      content: rendered({}) as string,
+      survivors: [...(kept.files?.files.length ? ['files' as const] : []), 'words'],
     });
   }
   for (const { content: next, survivors } of lighter) {

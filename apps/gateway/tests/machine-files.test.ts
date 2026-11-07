@@ -617,9 +617,9 @@ it('tells a worker of a machine conversation it works on the gateway, even witho
 
 it('keeps the files a compaction summarised as the machine has them, or names them', async () => {
   const { services, profile, chat, worker, turn } = await setup();
-  const kept = '/home/ana/site/retry.ts';
+  const retry = '/home/ana/site/retry.ts';
   const gone = '/home/ana/site/old.ts';
-  worker.files.set(kept, { text: 'const backoff = 100;\n', mtimeMs: 50 });
+  worker.files.set(retry, { text: 'const backoff = 100;\n', mtimeMs: 50 });
   worker.files.set(gone, { text: 'old\n', mtimeMs: 50 });
   // Older turns worth summarising.
   for (let index = 0; index < 6; index++) {
@@ -634,10 +634,10 @@ it('keeps the files a compaction summarised as the machine has them, or names th
   }
   await turn([
     load,
-    () => call('read', 'read_file', { path: kept }),
+    () => call('read', 'read_file', { path: retry }),
     () =>
       call('edit', 'edit_file', {
-        path: kept,
+        path: retry,
         edits: [{ oldString: 'backoff = 100', newString: 'baseBackoff = 200' }],
       }),
     () => call('read-old', 'read_file', { path: gone }),
@@ -664,7 +664,15 @@ it('keeps the files a compaction summarised as the machine has them, or names th
     await worker.stop();
   }
 
-  const summary = (await services.sessions.session(profile.id, chat.id)).summary ?? '';
-  expect(summary).toContain(`### ${kept}\n\`\`\`\nconst baseBackoff = 200;\n\`\`\``);
-  expect(summary).toContain(`### ${gone}\nCould not be read`);
+  const kept = (await services.lifecycle.checkpoints(profile.id, id))
+    .map(
+      (checkpoint) =>
+        checkpoint.data as { phase?: string; kept?: { files?: { files: unknown[] } } },
+    )
+    .find((data) => data.phase === 'context-compacted')?.kept;
+  // The most recently changed first.
+  expect(kept?.files?.files).toEqual([
+    { path: gone, reason: 'unreadable' },
+    { path: retry, content: 'const baseBackoff = 200;\n' },
+  ]);
 });

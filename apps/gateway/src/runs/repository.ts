@@ -14,6 +14,7 @@ import {
   or,
   sql,
 } from 'drizzle-orm';
+import { type Kept, keptSchema } from '../context/survivors.js';
 import type { Queryable } from '../storage/database.js';
 import { checkpoints, profileRevisions, runs } from '../storage/schema.js';
 import type { RunAction } from './action.js';
@@ -545,4 +546,35 @@ export async function recordedToolResult(
   // Both drivers, node-postgres and PGlite, answer a raw query with its rows under `rows`.
   const { rows } = result as unknown as { rows: { result: unknown }[] };
   return rows.find((row) => row.result !== null && row.result !== undefined)?.result;
+}
+
+/**
+ * What the compaction that wrote this session's summary kept beside it, as it stored it on its
+ * checkpoint: the only place it is read back from, never the summary's text, which the model or
+ * a kept file could have written to look like it. Undefined when nothing was kept, or when the
+ * summary is not one a compaction of this session wrote.
+ */
+export async function keptBeside(
+  db: Queryable,
+  profileId: string,
+  sessionId: string,
+  summary: string,
+): Promise<Kept | undefined> {
+  const [row] = await db
+    .select({ kept: sql<unknown>`${checkpoints.data}->'kept'` })
+    .from(checkpoints)
+    .innerJoin(runs, eq(runs.id, checkpoints.runId))
+    .where(
+      and(
+        eq(checkpoints.profileId, profileId),
+        eq(runs.profileId, profileId),
+        eq(runs.sessionId, sessionId),
+        sql`${checkpoints.data}->>'phase' = 'context-compacted'`,
+        sql`${checkpoints.data}->>'summary' = ${summary}`,
+      ),
+    )
+    .orderBy(desc(checkpoints.createdAt))
+    .limit(1);
+  const parsed = keptSchema.safeParse(row?.kept);
+  return parsed.success ? parsed.data : undefined;
 }

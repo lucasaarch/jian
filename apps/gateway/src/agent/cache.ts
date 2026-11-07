@@ -145,3 +145,20 @@ export function cacheable(
     } as ModelMessage;
   });
 }
+
+/**
+ * The messages with no cache mark of their own: for a request whose cached messages nothing will
+ * ever read again, where a write to the cache, at up to twice the price of reading the input
+ * fresh, buys nothing. The system's and the tools' marks are elsewhere, and stay.
+ */
+export function uncached(messages: ModelMessage[]): ModelMessage[] {
+  return messages.map((message) => {
+    const anthropic = message.providerOptions?.anthropic;
+    if (!anthropic || !('cacheControl' in anthropic)) return message;
+    const { cacheControl: _, ...rest } = anthropic as Record<string, JSONValue>;
+    return {
+      ...message,
+      providerOptions: { ...message.providerOptions, anthropic: rest },
+    } as ModelMessage;
+  });
+}
