@@ -4,6 +4,22 @@ Every release of Jian, newest first.
 
 <!-- Generated from docs/releases by scripts/changelog.mjs. Edit the release note, then run `make changelog`. -->
 
+## 1.6.3 — 2026-11-07
+
+Long conversations on Claude cost less, with compaction read from the cache and tool results given the room they were meant to have.
+
+### Conversations
+
+* **Tool results, memories and skills get their full room:** On Claude these limits were counted a byte a token, about 2.4 times tighter than meant. The 12,000-token limit on a tool result held about 5,000 of Claude's tokens, so the agent read the rest a page at a time, and every page was another step that sent the whole conversation again. The limits on tool results, recalled memories and loaded skills are now counted in Claude's own tokens. Other providers count as before.
+* **The Context line shows how close compaction is:** Each turn tells the agent how far it is from the point where Jian summarises older turns, which is 80% of the budget or 200,000 tokens, whichever comes first. It used to give a share of the whole window, and on a 1M-token model compaction comes at a fifth of the window, so the line read about 20% when a summary was due. The agent's advice on when to compact by itself now uses the same point.
+* **Compaction reads the conversation from the cache:** A summary used to be a separate request that read up to 200,000 tokens of the conversation again at full price. Now Jian sends the request the conversation just sent, with one more message asking for the summary, and the provider reads everything before that message from its cache. On Claude a cached read costs a tenth of a fresh one. A conversation already past the model's window is still summarised in parts. The run's compaction checkpoint records how many input tokens came from the cache.
+* **The summary keeps your requests:** It now lists every request you made in the summarised turns, in your own words.
+
+### Upgrading
+
+* The desktop app updates itself to this release.
+* **Servers:** Recreate the gateway and web containers with the 1.6.3 images, or follow the `latest` tags. There is no migration.
+
 ## 1.6.2 — 2026-11-07
 
 Loading tools on Claude works again, and a refusal of the new form no longer fails a run.
