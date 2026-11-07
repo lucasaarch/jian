@@ -5,6 +5,7 @@ import type { AddressInfo } from 'node:net';
 import { type ModelMessage, tool } from 'ai';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
+import { refusedForm } from '../src/agent/deferred-fallback.js';
 import { AgentRuntime } from '../src/agent/runtime.js';
 import { TOOL_GROUPS } from '../src/agent/tools.js';
 import { truncatePrompt } from '../src/context/budget.js';
@@ -103,6 +104,10 @@ describe('tool loading on Claude', () => {
       expect(first?.tools?.some((item) => item.cache_control)).toBe(false);
       // The load answers with a reference to each tool it brought in, which Anthropic expands.
       expect(referencedIn(second).toSorted()).toEqual([...offered].toSorted());
+      // Only references: Anthropic refuses a tool_result that mixes them with text ("Tool
+      // definitions/code execution functions cannot be mixed with other content").
+      const load = resultOf(second, 'toolu_1')?.content as Array<{ type: string }> | undefined;
+      expect(load?.map((block) => block.type)).toEqual(offered.map(() => 'tool_reference'));
       // And the loaded tool runs.
       expect(resultOf(third, 'toolu_2')?.is_error).not.toBe(true);
     },
@@ -317,6 +322,42 @@ describe('tool loading on Claude', () => {
     }
   });
 
+  it('tries the old way on any refusal of a deferred request, and keeps it only if it works', async () => {
+    // A model of its own: a refusal is remembered for the model for the rest of the process.
+    const modelId = 'claude-opus-4-6';
+    const { services, profile, ask } = await conversation({ provider: 'anthropic', modelId });
+    const errors: string[] = [];
+    const spy = vi.spyOn(console, 'error').mockImplementation((line: unknown) => {
+      errors.push(String(line));
+    });
+    try {
+      const run = await ask('What else are we talking about?');
+      // Worded so no pattern knows it: Anthropic has refused this form in words of its own.
+      const plan: ClaudeReply[] = [
+        { refuse: 'Something about this request is not supported' },
+        { tool: 'load_tools', input: { groups: ['conversations'] } },
+        { tool: 'list_sessions' },
+        { text: 'Only this one.' },
+      ];
+      let step = 0;
+      const claude = fakeClaude(modelId, (request) =>
+        request.stream ? (plan[step++] ?? { text: 'Done.' }) : { text: 'Done.' },
+      );
+
+      await new AgentRuntime(services, () => claude.model).execute(profile.id, run.id);
+
+      expect((await services.runs.run(profile.id, run.id)).output).toBe('Only this one.');
+      const sent = steps(claude.requests);
+      expect(sentTools(sent[0]).some((item) => item.deferred)).toBe(true);
+      for (const request of sent.slice(1)) {
+        expect(sentTools(request).some((item) => item.deferred)).toBe(false);
+      }
+      expect(errors.filter((line) => line.includes('refused deferred tools'))).toHaveLength(1);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
   it('loads the old way when Claude refuses the deferred form', async () => {
     // A model of its own: a refusal is remembered for the model for the rest of the process.
     const modelId = 'claude-haiku-4-5';
@@ -382,7 +423,8 @@ describe('tool loading on Claude', () => {
     const { services, profile, ask } = await conversation({ provider: 'anthropic', modelId });
     const run = await ask('What else are we talking about?');
     const claude = fakeClaude(modelId, (request, index) =>
-      request.stream && index === 0
+      // Refused again the old way too, as a mistake of the request's own is.
+      request.stream && index < 2
         ? { refuse: 'max_tokens: 900000 > 128000, which is the maximum allowed' }
         : { text: 'Answered.' },
     );
@@ -392,7 +434,8 @@ describe('tool loading on Claude', () => {
     const finished = await services.runs.run(profile.id, run.id);
     expect(finished.status).toBe('failed');
     expect(finished.error).toContain('max_tokens');
-    expect(steps(claude.requests)).toHaveLength(1);
+    // Tried once the old way, which failed too: the first refusal is what the run reports.
+    expect(steps(claude.requests)).toHaveLength(2);
     // Nothing was remembered against the model.
     const later = await ask('Again.');
     const before = claude.requests.length;
@@ -639,5 +682,26 @@ describe('the context estimate on Claude', () => {
     expect(seen[1]?.prompt).not.toContain('tool-reference');
     expect(seen[1]?.deferred).toEqual(expect.arrayContaining(records));
     expect(seen[2]?.prompt).toContain('unavailable tool');
+  });
+});
+
+describe('which refusal is of the deferred form', () => {
+  const refusal = (message: string) => ({
+    statusCode: 400,
+    message,
+    responseBody: JSON.stringify({
+      type: 'error',
+      error: { type: 'invalid_request_error', message },
+    }),
+  });
+
+  it('takes Anthropic refusing references beside other content for the deferred form', () => {
+    // As Anthropic said it, on Sonnet 5.5, to a load answered with text and references.
+    const said = 'Tool definitions/code execution functions cannot be mixed with other content';
+    expect(refusedForm(refusal(said), false)).toBe('deferral');
+  });
+
+  it('leaves an unrelated refusal alone', () => {
+    expect(refusedForm(refusal('max_tokens: must be less than 128000'), false)).toBeUndefined();
   });
 });

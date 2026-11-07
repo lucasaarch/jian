@@ -202,9 +202,11 @@ const plainOutput = (output: unknown): Output => {
 };
 
 /**
- * A tool's `toModelOutput` that adds a reference to each tool its call brought in, after what
- * the result already says. Added here, after the result was bounded and stored, the references
- * survive the result's own truncation and never reach the stored record or the owner's timeline.
+ * A tool's `toModelOutput` that answers with a reference to each tool its call brought in, and
+ * nothing else: Anthropic refuses a `tool_result` that mixes references with text ("Tool
+ * definitions/code execution functions cannot be mixed with other content"). The loads say only
+ * which tools they made available, which the references already carry. Added here, after the
+ * result was bounded and stored, they never reach the stored record or the owner's timeline.
  */
 export function referencing(
   definition: Tool,
@@ -212,23 +214,9 @@ export function referencing(
 ): NonNullable<Tool['toModelOutput']> {
   const own = definition.toModelOutput;
   return async (options) => {
-    const output: Output = own ? await own(options) : plainOutput(options.output);
     const names = broughtIn(options.toolCallId);
-    if (!names?.length) return output;
-    const refs = names.map(reference);
-    switch (output.type) {
-      case 'content':
-        return { ...output, value: [...output.value, ...refs] };
-      case 'text':
-        return { type: 'content', value: [{ type: 'text', text: output.value }, ...refs] };
-      case 'json':
-        return {
-          type: 'content',
-          value: [{ type: 'text', text: JSON.stringify(output.value) }, ...refs],
-        };
-      default:
-        return output;
-    }
+    if (names?.length) return { type: 'content', value: names.map(reference) };
+    return own ? await own(options) : plainOutput(options.output);
   };
 }
 

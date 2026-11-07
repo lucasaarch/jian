@@ -4,6 +4,20 @@ Every release of Jian, newest first.
 
 <!-- Generated from docs/releases by scripts/changelog.mjs. Edit the release note, then run `make changelog`. -->
 
+## 1.6.2 — 2026-11-07
+
+Loading tools on Claude works again, and a refusal of the new form no longer fails a run.
+
+### Claude
+
+* **Loading tools works again:** Since 1.6.1, a run on Claude failed with "Tool definitions/code execution functions cannot be mixed with other content" as soon as the agent loaded a tool it hadn't loaded before. A load now answers with the loaded tools alone, the form Anthropic accepts, and the cache still holds.
+* **A refusal goes the old way instead of failing:** If Anthropic refuses the new form in any words, Jian sends that step again the old way, and keeps doing so for that model only if the old way works. Before, it fell back only for refusals it recognised, so this one failed the run.
+
+### Upgrading
+
+* The desktop app updates itself to this release.
+* **Servers:** Recreate the gateway and web containers with the 1.6.2 images, or follow the `latest` tags. There is no migration.
+
 ## 1.6.1 — 2026-11-07
 
 Loading tools on Claude no longer makes it read the whole conversation again, and the panel catches up after a gateway update and shows an agent's questions as written.

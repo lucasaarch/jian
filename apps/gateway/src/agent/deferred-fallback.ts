@@ -20,7 +20,13 @@ export function refusedForm(error: unknown, carried: boolean): Form | undefined 
     /tool_addition|tool[ _-]?changes?|toolChanges|mid[ _-]?conversation|system message/i.test(said)
   )
     return 'carry';
-  if (/tool_reference|tool[ _-]?references?|defer_loading|deferred[ _-]?tools?/i.test(said))
+  // "Tool definitions/code execution functions cannot be mixed with other content" is how it
+  // refused a result that held references beside text: the deferred form, though named neither.
+  if (
+    /tool_reference|tool[ _-]?references?|defer_loading|deferred[ _-]?tools?|tool definitions|cannot be mixed/i.test(
+      said,
+    )
+  )
     return 'deferral';
   return undefined;
 }
@@ -98,7 +104,12 @@ export function withDeferralFallback(
     send: (params: Params) => PromiseLike<T>,
   ): Promise<T> => {
     const carried = params.prompt.some((message) => additionsOf(message) !== undefined);
-    const form = options.active() ? refusedForm(error, carried) : undefined;
+    // A 400 in words no pattern knows is still tried the old way: Anthropic has refused this form
+    // in words of its own, and a run must not fail for it. Only a retry that works is believed.
+    const status = (error as { statusCode?: unknown } | undefined)?.statusCode;
+    const form = options.active()
+      ? (refusedForm(error, carried) ?? (status === 400 ? 'deferral' : undefined))
+      : undefined;
     if (!form) throw error;
     let answer: T;
     try {
