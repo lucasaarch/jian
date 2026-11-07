@@ -28,19 +28,6 @@ const callKey = (state: ConversationState) => {
 };
 
 /**
- * Whether a turn is this conversation's. The stream names the conversation of a turn only as it
- * is queued or started; its steps and its end carry the run alone.
- */
-function ours(state: ConversationState, runId: string) {
-  return (
-    state.run?.id === runId ||
-    state.live?.runId === runId ||
-    state.awaited.has(runId) ||
-    state.messages.some((message) => message.runId === runId)
-  );
-}
-
-/**
  * Turns what the gateway's stream says into what the conversation reads. Text under way is
  * written to the store as it is told; everything else is read, gathered over a burst, and only
  * the part that changed. Returns the way to stop following; the reader is stopped by its owner.
@@ -114,21 +101,24 @@ export function followConversation(options: {
       event.type !== 'conversation.subagent.spawned'
     )
       return;
+    // A durable event reaches the panel as `{ sessionId?, parentSessionId? }` and nothing more:
+    // the stream strips the rest, its run id included. A step or an end names no conversation,
+    // so one that names none may be this one's, and is taken as such.
     const about = (event.data ?? {}) as { sessionId?: string; parentSessionId?: string };
-    const runId = (event as { runId?: string }).runId;
-    const state = store.getState();
-    if (
-      about.parentSessionId === sessionId ||
-      (runId && state.subagents.some((child) => child.runId === runId))
-    ) {
+    const named = about.sessionId || about.parentSessionId;
+    if (named && about.sessionId !== sessionId && about.parentSessionId !== sessionId) return;
+    streamAt = Date.now();
+    if (event.type === 'conversation.subagent.spawned') {
       want((into) => {
         into.subagents = true;
       });
       return;
     }
-    if (about.sessionId ? about.sessionId !== sessionId : runId && !ours(state, runId)) return;
-    streamAt = Date.now();
-    if (event.type === 'run.step' && runId) want((into) => into.turns.add(runId));
+    // A step moves only the turn at work: its tools are read, not the conversation. With no turn
+    // known, the step may be of one this panel has not read yet, and the page tells which.
+    const { live, run } = store.getState();
+    const turn = live?.runId ?? run?.id;
+    if (event.type === 'run.step' && turn) want((into) => into.turns.add(turn));
     else
       want((into) => {
         into.latest = true;

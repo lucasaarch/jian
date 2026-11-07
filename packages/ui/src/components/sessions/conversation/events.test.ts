@@ -3,9 +3,7 @@ import { onlineManager } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Message, Run, Subagent } from '../../../lib/api';
 
-let hear:
-  | ((event: { id: number; type: string; data?: unknown; runId?: string }) => void)
-  | undefined;
+let hear: ((event: { id: number; type: string; data?: unknown }) => void) | undefined;
 vi.mock('../../../lib/events', () => ({
   subscribe: (listener: typeof hear) => {
     hear = listener;
@@ -156,10 +154,13 @@ describe('following a conversation', () => {
     unfollow();
   });
 
-  it('a step reads only the live turn’s tools', async () => {
-    const { reads, before, unfollow } = await following({ run: turn(RUN) });
+  it('a step event naming only the session reads the live turn’s tools', async () => {
+    const { store, reads, before, unfollow } = await following({ run: turn(RUN) });
+    store.getState().progress(RUN, writing('Hello'));
 
-    for (let heard = 0; heard < 3; heard++) hear?.({ id: heard, type: 'run.step', runId: RUN });
+    for (let heard = 0; heard < 3; heard++) {
+      hear?.({ id: heard, type: 'run.step', data: { sessionId: SESSION } });
+    }
     await vi.advanceTimersByTimeAsync(200);
 
     expect(reads.timeline).toEqual([...before.timeline, [RUN]]);
@@ -167,13 +168,69 @@ describe('following a conversation', () => {
     unfollow();
   });
 
-  it('a step of a turn that is not this conversation’s reads nothing', async () => {
+  it('a step with nothing under way reads the latest turn’s tools', async () => {
     const { reads, before, unfollow } = await following({ run: turn(RUN) });
 
-    hear?.({ id: 0, type: 'run.step', runId: 'run-elsewhere' });
+    hear?.({ id: 0, type: 'run.step', data: { sessionId: SESSION } });
+    await vi.advanceTimersByTimeAsync(200);
+
+    expect(reads.timeline).toEqual([...before.timeline, [RUN]]);
+    expect(reads.messages).toBe(before.messages);
+    unfollow();
+  });
+
+  it('a step with no turn known reads the conversation', async () => {
+    const { api, reads } = counted({ run: turn(RUN) });
+    const store = createConversationStore();
+    const reader = createReader({
+      api,
+      profileId: 'profile',
+      sessionId: SESSION,
+      group: false,
+      store,
+      reloads: () => 0,
+    });
+    const unfollow = followConversation({ store, reader, sessionId: SESSION });
+
+    hear?.({ id: 0, type: 'run.step', data: { sessionId: SESSION } });
+    await vi.advanceTimersByTimeAsync(200);
+
+    expect(reads.messages).toBe(1);
+    expect(store.getState().run?.id).toBe(RUN);
+    unfollow();
+  });
+
+  it('an event about another session reads nothing', async () => {
+    const { store, reads, before, unfollow } = await following({ run: turn(RUN) });
+    const elsewhere = { sessionId: '00000000-0000-4000-8000-0000000000e2' };
+
+    for (const type of ['run.step', 'run.started', 'run.completed', 'session.updated']) {
+      hear?.({ id: 0, type, data: elsewhere });
+    }
+    hear?.({
+      id: 0,
+      type: 'conversation.subagent.spawned',
+      data: { parentSessionId: elsewhere.sessionId },
+    });
     await vi.advanceTimersByTimeAsync(200);
 
     expect(reads).toEqual(before);
+    expect(store.getState().run?.status).toBe('running');
+    unfollow();
+  });
+
+  it('an event naming no session is taken as this one', async () => {
+    const state = { run: turn(RUN) };
+    const { reads, before, unfollow } = await following(state);
+
+    hear?.({ id: 0, type: 'run.step', data: {} });
+    await vi.advanceTimersByTimeAsync(200);
+    expect(reads.timeline).toEqual([...before.timeline, [RUN]]);
+    expect(reads.messages).toBe(before.messages);
+
+    hear?.({ id: 1, type: 'run.completed', data: {} });
+    await vi.advanceTimersByTimeAsync(200);
+    expect(reads.messages).toBe(before.messages + 1);
     unfollow();
   });
 
@@ -182,12 +239,13 @@ describe('following a conversation', () => {
     const { reads, before, unfollow } = await following(state);
 
     state.run = turn(RUN, 'completed');
-    hear?.({ id: 1, type: 'run.completed', runId: RUN });
+    hear?.({ id: 1, type: 'run.completed', data: { sessionId: SESSION } });
     await vi.advanceTimersByTimeAsync(200);
     expect(reads.messages).toBe(before.messages + 1);
     expect(reads.timeline).toEqual([...before.timeline, [RUN]]);
 
-    hear?.({ id: 2, type: 'run.step', runId: RUN });
+    hear?.({ id: 2, type: 'run.step', data: { sessionId: SESSION } });
+    await vi.advanceTimersByTimeAsync(200);
     hear?.({ id: 3, type: 'session.updated', data: { sessionId: SESSION } });
     await vi.advanceTimersByTimeAsync(200);
     expect(reads.messages).toBe(before.messages + 2);
@@ -305,7 +363,6 @@ describe('following a conversation', () => {
       id: 0,
       type: 'conversation.subagent.spawned',
       data: { parentSessionId: SESSION },
-      runId: 'child-1',
     });
     await vi.advanceTimersByTimeAsync(200);
 
