@@ -63,8 +63,9 @@ function keyed(items: string[], stable = false): Array<[string, string]> {
 
 /**
  * What a half-written text should show: an open code fence is closed so its lines already read
- * as code, and one unmatched marker at the very end is hidden until its closing mark arrives.
- * Only the end is touched, so text that has already settled never changes under the reader.
+ * as code, and one unfinished opening marker at the very end is hidden until its closing mark
+ * arrives. Only text after the last token `inline` recognises can hold one, so closed code,
+ * emphasis, links and URLs are never touched and settled text does not change under the reader.
  */
 export function streamable(text: string): string {
   const fences = text.match(/^```/gm)?.length ?? 0;
@@ -76,37 +77,34 @@ export function streamable(text: string): string {
 
   if (line.startsWith('```')) return text;
 
-  const unmatched = (marker: string, count: number) => {
-    if (count % 2 === 0) return -1;
-    const at = line.lastIndexOf(marker);
-    const before = line[at - 1];
-    // Inside a word (snake_case) or after a list bullet's own space it is not an opener.
-    if (before && /[\w]/.test(before)) return -1;
-    if (marker === '*' && at === line.search(/\S/) && /^\s/.test(line[at + 1] ?? '')) return -1;
+  let from = 0;
 
-    return at;
-  };
-  const single = line.replaceAll('**', '');
-  const found = [
-    ['**', unmatched('**', line.split('**').length - 1)],
-    ['`', unmatched('`', line.split('`').length - 1)],
-    ['_', unmatched('_', line.split('_').length - 1)],
-    ['*', unmatched('*', single.split('*').length - 1)],
-  ] as const;
-  const [marker, at] = found.reduce((best, item) => (item[1] > best[1] ? item : best));
+  for (const match of line.matchAll(inlinePattern)) from = (match.index ?? 0) + match[0].length;
 
-  if (at < 0) return text;
-  // A lone `*` can sit right after a `**` pair; only the last single one is the opener.
+  // An opener follows the start, a space or punctuation, and is followed by text or nothing yet.
+  const openers = [...line.slice(from).matchAll(/(?<![^\s\p{P}])(\*\*|\*|_|`)(?=\S|$)/gu)];
+  const opener = openers.at(-1);
+
+  if (!opener) return text;
+
+  const at = from + (opener.index ?? 0);
+  const marker = opener[1] ?? '';
+
+  // A later copy of the mark means it closes something; leave it to the renderer.
+  if (line.slice(at + marker.length).includes(marker)) return text;
+
   return text.slice(0, start + at) + text.slice(start + at + marker.length);
 }
 
+/** Every inline token the renderer knows; `streamable` reads the same one. */
+const inlinePattern =
+  /\*\*(.+?)\*\*|`([^`]+)`|\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)|(?<![\w*])[*_]([^*_\s](?:[^*_]*[^*_\s])?)[*_](?![\w*])|(https?:\/\/[^\s<>()]+[^\s<>().,;:!?'"])|!\[([^\]]*)\]\(([^)\s]+)\)/g;
+
 function inline(text: string): ReactNode[] {
   const parts: ReactNode[] = [];
-  const pattern =
-    /\*\*(.+?)\*\*|`([^`]+)`|\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)|(?<![\w*])[*_]([^*_\s](?:[^*_]*[^*_\s])?)[*_](?![\w*])|(https?:\/\/[^\s<>()]+[^\s<>().,;:!?'"])|!\[([^\]]*)\]\(([^)\s]+)\)/g;
   let last = 0;
 
-  for (const match of text.matchAll(pattern)) {
+  for (const match of text.matchAll(inlinePattern)) {
     const at = match.index ?? 0;
 
     if (at > last) parts.push(<Fragment key={`text-${last}`}>{text.slice(last, at)}</Fragment>);
