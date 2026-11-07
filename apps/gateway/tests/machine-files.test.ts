@@ -1,7 +1,9 @@
+import { randomUUID } from 'node:crypto';
 import type { RemoteFilesAnswer, RemoteFilesOp } from '@jian/contracts';
 import { eq } from 'drizzle-orm';
 import { expect, it } from 'vitest';
 import { AgentRuntime } from '../src/agent/runtime.js';
+import { insertMessage } from '../src/sessions/repository.js';
 import { sessions } from '../src/storage/schema.js';
 import { insertWorktree } from '../src/worktrees/repository.js';
 import { mockModel } from './helpers/model.js';
@@ -593,7 +595,9 @@ it('tells a machine run what it has, with files-v1 or without', async () => {
 });
 
 it('tells a worker of a machine conversation it works on the gateway, even without worktrees', async () => {
-  const { services, profile, chat } = await setup();
+  const { services, profile, chat, worker: machine } = await setup();
+  // No turn runs here to stop the machine's polling; left going, it fails a later test.
+  await machine.stop();
   const { Contexts } = await import('../src/context/service.js');
   const run = await services.runs.submit(profile.id, chat.id, {
     text: 'Go',
@@ -609,4 +613,58 @@ it('tells a worker of a machine conversation it works on the gateway, even witho
 
   expect(context.system).toContain('you work on the gateway');
   expect(context.system).toContain('run_remote_command');
+});
+
+it('keeps the files a compaction summarised as the machine has them, or names them', async () => {
+  const { services, profile, chat, worker, turn } = await setup();
+  const kept = '/home/ana/site/retry.ts';
+  const gone = '/home/ana/site/old.ts';
+  worker.files.set(kept, { text: 'const backoff = 100;\n', mtimeMs: 50 });
+  worker.files.set(gone, { text: 'old\n', mtimeMs: 50 });
+  // Older turns worth summarising.
+  for (let index = 0; index < 6; index++) {
+    await insertMessage(services.store.db, {
+      id: randomUUID(),
+      profileId: profile.id,
+      sessionId: chat.id,
+      role: index % 2 === 0 ? 'user' : 'assistant',
+      content: `turn-${index} ${'history '.repeat(300)}`,
+      createdAt: new Date(Date.parse('2026-11-02T09:00:00.000Z') + index * 1000).toISOString(),
+    });
+  }
+  await turn([
+    load,
+    () => call('read', 'read_file', { path: kept }),
+    () =>
+      call('edit', 'edit_file', {
+        path: kept,
+        edits: [{ oldString: 'backoff = 100', newString: 'baseBackoff = 200' }],
+      }),
+    () => call('read-old', 'read_file', { path: gone }),
+    () =>
+      call('edit-old', 'edit_file', {
+        path: gone,
+        edits: [{ oldString: 'old', newString: 'older' }],
+      }),
+  ]);
+  // Gone from the machine by the time the conversation is compacted.
+  worker.files.delete(gone);
+
+  worker.start();
+  const { id } = await services.runs.submit(
+    profile.id,
+    chat.id,
+    { text: '/compact', requestKey: 'compact' },
+    { ownerMessage: true },
+  );
+  const seen: Seen = { tools: [], descriptions: new Map(), results: new Map(), system: '' };
+  try {
+    await new AgentRuntime(services, () => scripted([], seen)).execute(profile.id, id);
+  } finally {
+    await worker.stop();
+  }
+
+  const summary = (await services.sessions.session(profile.id, chat.id)).summary ?? '';
+  expect(summary).toContain(`### ${kept}\n\`\`\`\nconst baseBackoff = 200;\n\`\`\``);
+  expect(summary).toContain(`### ${gone}\nCould not be read`);
 });

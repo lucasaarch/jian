@@ -36,6 +36,16 @@ import {
 } from '../context/compaction.js';
 import type { ContextSource } from '../context/port.js';
 import { defaultScale, measuredScale } from '../context/scale.js';
+import {
+  FILE_TOKENS,
+  FILES_TOKENS,
+  filesInProgress,
+  OWNER_WORDS_TOKENS,
+  ownerWords,
+  recordOf,
+  SURVIVOR_SHARE,
+  touchedFiles,
+} from '../context/survivors.js';
 import { nowIso } from '../core/clock.js';
 import { GatewayError } from '../core/errors.js';
 import type { Learning } from '../learning/service.js';
@@ -91,6 +101,7 @@ import {
   withoutDeferral,
 } from './deferred-tools.js';
 import { splitDiff } from './diff.js';
+import { localBackend } from './files.js';
 import { githubGitTools } from './github-git.js';
 import { localPlace, remotePlace } from './github-git-place.js';
 import {
@@ -164,6 +175,26 @@ const SHED_TO = 0.6;
  * above anything measured (a byte a token; a half for Claude, which measured 0.41).
  */
 const LIMIT_MARGIN = 1.15;
+
+/**
+ * How long a compaction waits to read back one file it keeps, in ms. A machine that went
+ * offline would otherwise hold the summary for the minute a file task may take, five times.
+ */
+const KEPT_FILE_READ_MS = 15_000;
+
+/** A read for a kept file, given up after `KEPT_FILE_READ_MS`: the file is then named instead. */
+const boundedRead = <T>(read: Promise<T>) => {
+  let timer: NodeJS.Timeout | undefined;
+  return Promise.race([
+    read,
+    new Promise<never>((_, reject) => {
+      timer = setTimeout(
+        () => reject(new Error('The file took too long to read')),
+        KEPT_FILE_READ_MS,
+      );
+    }),
+  ]).finally(() => clearTimeout(timer));
+};
 
 /** How long Anthropic keeps a cached prefix for each tier (see agent/cache.ts), in ms. */
 const CACHE_LIFETIME_MS: Record<CacheTtl, number> = { '5m': 5 * 60_000, '1h': 60 * 60_000 };
@@ -1347,6 +1378,64 @@ export class AgentRuntime {
       let lastMessages = context.messages as ModelMessage[];
       let currentStartIndex = context.currentStartIndex;
       const estimate = tokenCounter(config.provider, config.modelId);
+      // What the owner wrote, which a compaction keeps word for word: the history's, and what
+      // they say while the turn runs. Only the panel's conversation is the owner's own.
+      const ownerWrites = !run.subagent && session.channel === GATEWAY_SESSION_CHANNEL;
+      const ownerSaid = [...(context.ownerWords ?? [])];
+      // The file tools' own reach, for reading back the files a compaction keeps: none in a run
+      // without them, and on the machine for one that works there.
+      const fileReach =
+        'read_file' in tools
+          ? session.remoteMachineId
+            ? machineFiles
+            : localBackend()
+          : undefined;
+      const readNow = fileReach
+        ? (path: string) =>
+            boundedRead(
+              withFolders(
+                folders,
+                async () => {
+                  const file = await fileReach.confine(path, 'read');
+                  return (await fileReach.read(file, signal)).text;
+                },
+                worktrees?.scope.guarded,
+              ),
+            ).finally(alive)
+        : undefined;
+      /**
+       * What a compaction keeps word for word beside its record (context/survivors.ts), each at
+       * most a tenth of the point it compacts at, in the model's tokens. `previous` is the stored
+       * summary, whose owner's words are carried on.
+       */
+      const survivorsOf = async (
+        older: ModelMessage[],
+        kept: ModelMessage[],
+        previous: string | undefined,
+      ) => {
+        const limit = policy.inputTokens - policy.outputTokens;
+        const point = compactionThreshold(limit, policy.compactAt);
+        const room = (most: number) => Math.min(most, Math.floor(point * SURVIVOR_SHARE));
+        const tokens = (text: string) => Math.ceil(estimate(text) * scale);
+        return [
+          ownerWords({
+            older,
+            kept,
+            said: ownerSaid,
+            previous,
+            tokens,
+            budget: room(OWNER_WORDS_TOKENS),
+          }),
+          readNow &&
+            (await filesInProgress({
+              paths: touchedFiles(older),
+              read: readNow,
+              tokens,
+              each: room(FILE_TOKENS),
+              total: room(FILES_TOKENS),
+            })),
+        ].filter((part): part is string => Boolean(part));
+      };
       // The gateway's unscaled count of the prompt the step sent, which its report is held to.
       let preparedEstimate = 0;
       const account = async (
@@ -1522,6 +1611,7 @@ export class AgentRuntime {
           if (compact && !compactCommand) compactionRequested = true;
 
           if (steer) {
+            if (ownerWrites) ownerSaid.push(steer);
             // Before the carried tools' system message when it still ends the request: Anthropic
             // takes it only at the end or right before a reply.
             const last = messages.at(-1);
@@ -1734,8 +1824,18 @@ export class AgentRuntime {
                 messages,
                 currentStartIndex,
                 includeCurrent: before > limit,
-                previous: session.summary,
+                // The record alone: what survived beside it is added again below, not folded in.
+                ...(session.summary ? { previous: recordOf(session.summary) } : {}),
                 inPlace,
+                survivors: (older, kept) =>
+                  survivorsOf(older, kept, session.summary).catch((error: unknown) => {
+                    // What survives beside a record is worth less than the record: a failure
+                    // here loses only that, never the summary already written.
+                    console.warn(
+                      `jian: run ${runId} kept nothing beside its summary — ${reason(error, secrets)}`,
+                    );
+                    return [];
+                  }),
                 // Only its segments use these, each fitted to the model's window and sent on its
                 // own. Writing a record needs no deliberation, and thinking draws on the same
                 // allowance as the summary: at the owner's effort it ran out before the record.

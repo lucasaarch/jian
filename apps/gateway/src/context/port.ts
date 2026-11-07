@@ -29,5 +29,11 @@ export interface ContextSource {
     historyCursor?: { id: string; createdAt: string };
     /** The turn was judged plainly light, so it may be answered with less reasoning. */
     light?: true;
+    /**
+     * What the owner wrote in the history this context carries, oldest first, as stored: what
+     * a compaction keeps word for word (context/survivors.ts). Empty in a conversation the
+     * owner does not write in.
+     */
+    ownerWords?: string[];
   }>;
 }

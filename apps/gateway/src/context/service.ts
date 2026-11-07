@@ -328,9 +328,24 @@ export class Contexts {
     if (signals.turn.length) {
       withTurnNote(built, `Where you work now:\n${signals.turn.join('\n')}`);
     }
+    // Only the panel's own conversation is the owner writing; a channel's is whoever wrote in,
+    // and an agent conversation is another agent. A note the gateway wrote (`resume`), the
+    // `/compact` command and a schedule's turn were typed by nobody just then.
+    const ownerWords =
+      !worker && session.channel === GATEWAY_SESSION_CHANNEL
+        ? history
+            .filter(
+              (message) =>
+                message.role === 'user' &&
+                (message.purpose === undefined || message.purpose === 'answer') &&
+                !message.content.startsWith('[Scheduled:'),
+            )
+            .map((message) => message.content)
+        : [];
     const result = {
       ...built,
       ...(previous ? { historyCursor: { id: previous.id, createdAt: previous.createdAt } } : {}),
+      ...(ownerWords.length ? { ownerWords } : {}),
     };
     return judged.light ? { ...result, light: true as const } : result;
   }
