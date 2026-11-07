@@ -61,25 +61,46 @@ function keyed(items: string[], stable = false): Array<[string, string]> {
   });
 }
 
-/** Word nodes keep their offsets as tokens append; only new nodes animate, with a bounded stagger. */
-function words(text: string, streaming: boolean): ReactNode {
-  if (!streaming) return text;
-  return [...text.matchAll(/\s+|\S+/g)].map((match, index) =>
-    /^\s+$/.test(match[0]) ? (
-      match[0]
-    ) : (
-      <span
-        key={match.index}
-        className="stream-word"
-        style={{ animationDelay: `${(Math.floor(index / 2) % 6) * 24}ms` }}
-      >
-        {match[0]}
-      </span>
-    ),
-  );
+/**
+ * What a half-written text should show: an open code fence is closed so its lines already read
+ * as code, and one unmatched marker at the very end is hidden until its closing mark arrives.
+ * Only the end is touched, so text that has already settled never changes under the reader.
+ */
+export function streamable(text: string): string {
+  const fences = text.match(/^```/gm)?.length ?? 0;
+
+  if (fences % 2) return `${text.endsWith('\n') ? text : `${text}\n`}\`\`\``;
+
+  const start = text.lastIndexOf('\n') + 1;
+  const line = text.slice(start);
+
+  if (line.startsWith('```')) return text;
+
+  const unmatched = (marker: string, count: number) => {
+    if (count % 2 === 0) return -1;
+    const at = line.lastIndexOf(marker);
+    const before = line[at - 1];
+    // Inside a word (snake_case) or after a list bullet's own space it is not an opener.
+    if (before && /[\w]/.test(before)) return -1;
+    if (marker === '*' && at === line.search(/\S/) && /^\s/.test(line[at + 1] ?? '')) return -1;
+
+    return at;
+  };
+  const single = line.replaceAll('**', '');
+  const found = [
+    ['**', unmatched('**', line.split('**').length - 1)],
+    ['`', unmatched('`', line.split('`').length - 1)],
+    ['_', unmatched('_', line.split('_').length - 1)],
+    ['*', unmatched('*', single.split('*').length - 1)],
+  ] as const;
+  const [marker, at] = found.reduce((best, item) => (item[1] > best[1] ? item : best));
+
+  if (at < 0) return text;
+  // A lone `*` can sit right after a `**` pair; only the last single one is the opener.
+  return text.slice(0, start + at) + text.slice(start + at + marker.length);
 }
 
-function inline(text: string, streaming = false): ReactNode[] {
+function inline(text: string): ReactNode[] {
   const parts: ReactNode[] = [];
   const pattern =
     /\*\*(.+?)\*\*|`([^`]+)`|\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)|(?<![\w*])[*_]([^*_\s](?:[^*_]*[^*_\s])?)[*_](?![\w*])|(https?:\/\/[^\s<>()]+[^\s<>().,;:!?'"])|!\[([^\]]*)\]\(([^)\s]+)\)/g;
@@ -88,14 +109,11 @@ function inline(text: string, streaming = false): ReactNode[] {
   for (const match of text.matchAll(pattern)) {
     const at = match.index ?? 0;
 
-    if (at > last)
-      parts.push(
-        <Fragment key={`text-${last}`}>{words(text.slice(last, at), streaming)}</Fragment>,
-      );
+    if (at > last) parts.push(<Fragment key={`text-${last}`}>{text.slice(last, at)}</Fragment>);
 
-    if (match[1]) parts.push(<strong key={at}>{inline(match[1], streaming)}</strong>);
-    else if (match[2]) parts.push(<code key={at}>{words(match[2], streaming)}</code>);
-    else if (match[5]) parts.push(<em key={at}>{words(match[5], streaming)}</em>);
+    if (match[1]) parts.push(<strong key={at}>{inline(match[1])}</strong>);
+    else if (match[2]) parts.push(<code key={at}>{match[2]}</code>);
+    else if (match[5]) parts.push(<em key={at}>{match[5]}</em>);
     else if (match[8])
       parts.push(<MarkdownImage key={at} text={match[0]} alt={match[7] ?? ''} src={match[8]} />);
     else {
@@ -107,8 +125,7 @@ function inline(text: string, streaming = false): ReactNode[] {
     last = at + match[0].length;
   }
 
-  if (last < text.length)
-    parts.push(<Fragment key={`text-${last}`}>{words(text.slice(last), streaming)}</Fragment>);
+  if (last < text.length) parts.push(<Fragment key={`text-${last}`}>{text.slice(last)}</Fragment>);
 
   return parts;
 }
@@ -209,7 +226,7 @@ function separated(text: string) {
     .join('\n');
 }
 
-function Blocks({
+const Blocks = memo(function Blocks({
   text,
   breaks,
   streaming,
@@ -230,9 +247,9 @@ function Blocks({
 
         if (heading) {
           return heading[1] === '#' || heading[1] === '##' ? (
-            <h3 key={key}>{inline(heading[2] ?? '', streaming)}</h3>
+            <h3 key={key}>{inline(heading[2] ?? '')}</h3>
           ) : (
-            <h4 key={key}>{inline(heading[2] ?? '', streaming)}</h4>
+            <h4 key={key}>{inline(heading[2] ?? '')}</h4>
           );
         }
 
@@ -246,7 +263,7 @@ function Blocks({
                 <thead>
                   <tr>
                     {keyed(grid.head, streaming).map(([cellKey, cell]) => (
-                      <th key={cellKey}>{inline(cell, streaming)}</th>
+                      <th key={cellKey}>{inline(cell)}</th>
                     ))}
                   </tr>
                 </thead>
@@ -257,7 +274,7 @@ function Blocks({
                   ).map(([rowKey], index) => (
                     <tr key={rowKey}>
                       {keyed(grid.rows[index] ?? [], streaming).map(([cellKey, cell]) => (
-                        <td key={cellKey}>{inline(cell, streaming)}</td>
+                        <td key={cellKey}>{inline(cell)}</td>
                       ))}
                     </tr>
                   ))}
@@ -276,7 +293,7 @@ function Blocks({
           return (
             <ul key={key}>
               {keyed(list(lines, bullet), streaming).map(([itemKey, item]) => (
-                <li key={itemKey}>{inline(item, streaming)}</li>
+                <li key={itemKey}>{inline(item)}</li>
               ))}
             </ul>
           );
@@ -286,7 +303,7 @@ function Blocks({
           return (
             <ol key={key}>
               {keyed(list(lines, numbered), streaming).map(([itemKey, item]) => (
-                <li key={itemKey}>{inline(item, streaming)}</li>
+                <li key={itemKey}>{inline(item)}</li>
               ))}
             </ol>
           );
@@ -295,7 +312,7 @@ function Blocks({
         if (lines.every((line) => line.startsWith('>'))) {
           return (
             <blockquote key={key}>
-              {inline(lines.map((line) => line.replace(/^>\s?/, '')).join(' '), streaming)}
+              {inline(lines.map((line) => line.replace(/^>\s?/, '')).join(' '))}
             </blockquote>
           );
         }
@@ -305,7 +322,7 @@ function Blocks({
             {keyed(lines, streaming).map(([lineKey, line], position) => (
               <Fragment key={lineKey}>
                 {position > 0 && (breaks ? <br /> : ' ')}
-                {inline(line, streaming)}
+                {inline(line)}
               </Fragment>
             ))}
           </p>
@@ -313,7 +330,14 @@ function Blocks({
       })}
     </>
   );
-}
+});
+
+/** A code segment is highlighted again only when its own text changes, not when a sibling grows. */
+const CodeSegment = memo(function CodeSegment({ part }: { part: string }) {
+  const head = part.indexOf('\n');
+
+  return <CodeBlock text={part.slice(head + 1)} language={part.slice(3, head) || undefined} />;
+});
 
 /**
  * `breaks` keeps a single line break as one, the way a chat reads; documents join the lines of
@@ -330,26 +354,22 @@ export const Markdown = memo(function Markdown({
   breaks?: boolean;
   streaming?: boolean;
 }) {
+  const shown = streaming ? streamable(text) : text;
+
   return (
     <>
       {keyed(
-        segments(text).map((part) =>
+        segments(shown).map((part) =>
           part.code ? `\`\`\`${part.language ?? ''}\n${part.text}` : part.text,
         ),
         streaming,
-      ).map(([key, part]) => {
-        if (!part.startsWith('```'))
-          return <Blocks key={key} text={part} breaks={breaks} streaming={streaming} />;
-        const head = part.indexOf('\n');
-
-        return (
-          <CodeBlock
-            key={key}
-            text={part.slice(head + 1)}
-            language={part.slice(3, head) || undefined}
-          />
-        );
-      })}
+      ).map(([key, part]) =>
+        part.startsWith('```') ? (
+          <CodeSegment key={key} part={part} />
+        ) : (
+          <Blocks key={key} text={part} breaks={breaks} streaming={streaming} />
+        ),
+      )}
     </>
   );
 });

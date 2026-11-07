@@ -37,13 +37,11 @@ it('replaces waiting activity with the answer as the first text arrives', () => 
   expect(element.querySelector('.thought-line')).toBeNull();
   expect(element.querySelector('.streaming')?.textContent).toBe('The answer is arriving.');
   const paragraph = element.querySelector('.streaming p');
-  const firstWord = element.querySelector('.stream-word');
   act(() => root.render(<LiveTurn run={run('The answer is arriving. More text.')} steps={[]} />));
   expect(element.querySelector('.streaming')?.textContent).toBe(
     'The answer is arriving. More text.',
   );
   expect(element.querySelector('.streaming p')).toBe(paragraph);
-  expect(element.querySelector('.stream-word')).toBe(firstWord);
 });
 
 it('keeps completed tool history available without a working indicator over the answer', () => {
