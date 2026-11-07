@@ -33,7 +33,7 @@ export function gatewayApi() {
     ...profileCalls(client),
     ...providerCalls(client),
     ...releaseCalls(client),
-    ...sessionCalls(client),
+    ...sessionCalls(client, origin),
     ...channelCalls(client),
     ...integrationCalls(client),
     ...resourceCalls(client),

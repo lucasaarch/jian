@@ -12,6 +12,22 @@ export type GatewayEvent = { id: number; type: string; data?: unknown };
 const QUIET_MS = 60_000;
 
 /**
+ * Gateways, by origin, that refused to be asked for progress text: they predate it, and validate
+ * a stream's query strictly. Asked again on every reopen, each would cost a refused request.
+ */
+const textless = new Set<string>();
+
+/** The stream's address: from `after`, with the text of work under way when that is asked. */
+function streamUrl(origin: string, profileId: string, after: number | undefined, text: boolean) {
+  const query = new URLSearchParams();
+  if (after !== undefined) query.set('after', String(after));
+  if (text) query.set('progress', '1');
+  const search = query.toString();
+
+  return `${origin}/v1/profiles/${profileId}/events/stream${search ? `?${search}` : ''}`;
+}
+
+/**
  * The panel authenticates with a cookie plus a custom header, which EventSource cannot send, so
  * the stream is read from a plain response body. The call resolves when the stream ends.
  *
@@ -38,16 +54,20 @@ export async function readEvents(
   };
 
   heard();
+  const open = (text: boolean) =>
+    fetch(streamUrl(origin, profileId, after, text), {
+      headers,
+      credentials,
+      cache: 'no-store',
+      signal: AbortSignal.any([signal, quiet.signal]),
+    });
   try {
-    const response = await fetch(
-      `${origin}/v1/profiles/${profileId}/events/stream${after === undefined ? '' : `?after=${after}`}`,
-      {
-        headers,
-        credentials,
-        cache: 'no-store',
-        signal: AbortSignal.any([signal, quiet.signal]),
-      },
-    );
+    // The conversation draws what an agent is writing from the stream, so the panel asks for it.
+    let response = await open(!textless.has(origin));
+    if (response.status === 400 && !textless.has(origin)) {
+      textless.add(origin);
+      response = await open(false);
+    }
 
     if (!response.ok || !response.body) {
       throw new Error('The event stream is not available.');

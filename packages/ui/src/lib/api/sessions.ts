@@ -1,5 +1,5 @@
 import { type Client, profile } from './params';
-import { result } from './result';
+import { GatewayAnswer, result } from './result';
 import type {
   MediaUpload,
   ModelSelection,
@@ -10,10 +10,17 @@ import type {
 } from './types';
 
 /**
- * Sessions, messages and execution history. Gateway chats are owner-written; channel
- * conversations belong to the channel they came through.
+ * Gateways, by origin, that refused a page `limit` on messages: they predate it, validate the
+ * query strictly, and answer their latest 100 when asked for none. Asked once, then not again.
  */
-export const sessionCalls = (client: Client) => ({
+const unlimited = new Set<string>();
+
+/**
+ * Sessions, messages and execution history. Gateway chats are owner-written; channel
+ * conversations belong to the channel they came through. `origin` names the gateway, for what
+ * the panel learns about what it accepts.
+ */
+export const sessionCalls = (client: Client, origin = '') => ({
   media: (profileId: string, mediaId: string) =>
     result(
       client.GET('/v1/profiles/{profileId}/media/{mediaId}', {
@@ -54,17 +61,34 @@ export const sessionCalls = (client: Client) => ({
         body: { title },
       }),
     ),
-  /** The conversation's latest messages, or the page just before one of them. */
-  messages: (
+  /**
+   * The conversation's latest messages, or the page just before one of them. A gateway that
+   * refuses `limit` is asked again without it, and gives its usual page, which a reader takes as
+   * it would any other.
+   */
+  messages: async (
     profileId: string,
     sessionId: string,
     page: { before?: string; limit?: number } = {},
-  ) =>
-    result(
-      client.GET('/v1/profiles/{profileId}/sessions/{sessionId}/messages', {
-        params: { path: { profileId, sessionId }, query: page },
-      }),
-    ),
+  ) => {
+    const read = (query: { before?: string; limit?: number }) =>
+      result(
+        client.GET('/v1/profiles/{profileId}/sessions/{sessionId}/messages', {
+          params: { path: { profileId, sessionId }, query },
+        }),
+      );
+    const { limit, ...whole } = page;
+    if (limit === undefined || unlimited.has(origin)) return read(whole);
+    try {
+      return await read(page);
+    } catch (failure) {
+      if (!(failure instanceof GatewayAnswer) || failure.status !== 400) throw failure;
+      const answer = await read(whole);
+      // Only once the same read without it worked: the refusal was of the limit, not the page.
+      unlimited.add(origin);
+      return answer;
+    }
+  },
   deleteSession: (profileId: string, sessionId: string) =>
     result(
       client.DELETE('/v1/profiles/{profileId}/sessions/{sessionId}', {

@@ -1,8 +1,9 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import { readEvents } from './events';
 
+const connection = vi.hoisted(() => ({ origin: '' }));
 vi.mock('../../platform/gateway', () => ({
-  gatewayConnection: () => ({ origin: '', headers: {}, credentials: 'same-origin' }),
+  gatewayConnection: () => ({ origin: connection.origin, headers: {}, credentials: 'same-origin' }),
 }));
 
 afterEach(() => {
@@ -33,10 +34,46 @@ it('opens from now with no cursor, and resumes from the one it was given', async
   await readEvents('profile', undefined, () => {}, signal);
   await readEvents('profile', 7, () => {}, signal);
 
+  // The panel draws what an agent is writing, so it asks for the text with the progress.
   expect(fetched.mock.calls.map(([url]) => url)).toEqual([
-    '/v1/profiles/profile/events/stream',
-    '/v1/profiles/profile/events/stream?after=7',
+    '/v1/profiles/profile/events/stream?progress=1',
+    '/v1/profiles/profile/events/stream?after=7&progress=1',
   ]);
+});
+
+it('opens the stream of a gateway that does not know progress text without asking for it', async () => {
+  connection.origin = 'https://older.example';
+  try {
+    const fetched = vi.fn(async (url: string) =>
+      url.includes('progress=1')
+        ? Response.json({ error: 'Invalid request' }, { status: 400 })
+        : new Response(
+            new ReadableStream({
+              start(controller) {
+                controller.enqueue(
+                  new TextEncoder().encode('id: 1\nevent: run.started\ndata: {}\n\n'),
+                );
+                controller.close();
+              },
+            }),
+          ),
+    );
+    vi.stubGlobal('fetch', fetched);
+    const heard: string[] = [];
+    const { signal } = new AbortController();
+
+    await readEvents('profile', 0, (event) => heard.push(event.type), signal);
+    await readEvents('profile', 1, () => {}, signal);
+
+    expect(heard).toEqual(['run.started']);
+    expect(fetched.mock.calls.map(([url]) => url)).toEqual([
+      'https://older.example/v1/profiles/profile/events/stream?after=0&progress=1',
+      'https://older.example/v1/profiles/profile/events/stream?after=0',
+      'https://older.example/v1/profiles/profile/events/stream?after=1',
+    ]);
+  } finally {
+    connection.origin = '';
+  }
 });
 
 it("hands on a durable event's own data, as the gateway writes the whole event", async () => {
