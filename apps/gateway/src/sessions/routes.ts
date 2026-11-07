@@ -31,6 +31,7 @@ type SessionRouteServices = {
       | 'overview'
       | 'react'
       | 'timeline'
+      | 'toolStep'
       | 'pullRequests'
       | 'changes'
       | 'context'
@@ -206,13 +207,24 @@ export function registerSessionRoutes(app: FastifyInstance, deps: SessionRouteSe
       deps.sessions.pullRequests(request.params.profileId, request.params.sessionId),
   );
 
-  app.get<{ Params: SessionParams; Querystring: { runs?: string } }>(
+  app.get<{ Params: SessionParams; Querystring: { runs?: string; brief?: '1' } }>(
     '/v1/profiles/:profileId/sessions/:sessionId/timeline',
     async (request) =>
       deps.sessions.timeline(
         request.params.profileId,
         request.params.sessionId,
         request.query.runs?.split(',').filter((id) => z.uuid().safeParse(id).success),
+        { brief: request.query.brief === '1' },
+      ),
+  );
+
+  app.get<{ Params: SessionParams & { toolCallId: string } }>(
+    '/v1/profiles/:profileId/sessions/:sessionId/steps/:toolCallId',
+    async (request) =>
+      deps.sessions.toolStep(
+        request.params.profileId,
+        request.params.sessionId,
+        request.params.toolCallId,
       ),
   );
 

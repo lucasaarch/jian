@@ -667,6 +667,73 @@ describe('reading a long conversation', () => {
     expect(read.statusCode).toBe(200);
     expect(read.json()).toEqual([]);
   });
+
+  /** A turn whose one tool answered more than a list shows of it. */
+  const longRun = async (
+    services: Awaited<ReturnType<typeof setup>>['services'],
+    profileId: string,
+    sessionId: string,
+  ) => {
+    const run = await services.runs.submit(profileId, sessionId, {
+      text: 'Hi',
+      requestKey: 'long',
+    });
+    await services.lifecycle.claim(run.id, profileId, 'worker');
+    await services.lifecycle.checkpoint(profileId, run.id, 'worker', {
+      phase: 'tool-started',
+      toolName: 'read_file',
+      toolCallId: 'call_long-1',
+      input: { path: 'notes.md' },
+    });
+    await services.lifecycle.checkpoint(profileId, run.id, 'worker', {
+      phase: 'step-completed',
+      tools: [{ toolCallId: 'call_long-1', toolName: 'read_file', result: 'z'.repeat(3_000) }],
+    });
+    await services.lifecycle.finish(profileId, run.id, 'worker', 'completed', 'Done');
+    return run.id;
+  };
+
+  it('lists the tools of a turn briefly when asked, and reads one of them in full', async () => {
+    const { app, services } = await setup();
+    const profile = await services.profiles.createProfile(input);
+    const session = await services.sessions.createSession(profile.id, { channel: 'api' });
+    const runId = await longRun(services, profile.id, session.id);
+    const base = `/v1/profiles/${profile.id}/sessions/${session.id}`;
+
+    const brief = await app.inject({ url: `${base}/timeline?runs=${runId}&brief=1`, headers });
+    const step = await app.inject({ url: `${base}/steps/call_long-1`, headers });
+
+    expect(brief.statusCode).toBe(200);
+    expect(brief.json()[0].steps[0]).toMatchObject({ brief: true, outputTruncated: true });
+    expect(brief.json()[0].steps[0].output).toHaveLength(240);
+    expect(step.statusCode).toBe(200);
+    expect(step.json()).toMatchObject({
+      toolCallId: 'call_long-1',
+      toolName: 'read_file',
+      status: 'done',
+      output: 'z'.repeat(3_000),
+    });
+    expect(step.json()).not.toHaveProperty('brief');
+  });
+
+  it('reads no step of another conversation, nor one it does not know, nor for a stranger', async () => {
+    const { app, services } = await setup();
+    const profile = await services.profiles.createProfile(input);
+    const asked = await services.sessions.createSession(profile.id, { channel: 'api' });
+    const other = await services.sessions.createSession(profile.id, { channel: 'api' });
+    await longRun(services, profile.id, other.id);
+    const base = `/v1/profiles/${profile.id}/sessions/${asked.id}`;
+
+    const foreign = await app.inject({ url: `${base}/steps/call_long-1`, headers });
+    const unknown = await app.inject({ url: `${base}/steps/call_unknown`, headers });
+    const stranger = await app.inject({
+      url: `/v1/profiles/${profile.id}/sessions/${other.id}/steps/call_long-1`,
+    });
+
+    expect(foreign.statusCode).toBe(404);
+    expect(unknown.statusCode).toBe(404);
+    expect(stranger.statusCode).toBe(401);
+  });
 });
 
 it('tells a stream which conversation an event concerns, and leaves its weight to the feed', async () => {

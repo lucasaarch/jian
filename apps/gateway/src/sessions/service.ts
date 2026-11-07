@@ -30,7 +30,7 @@ import { assertFound, GatewayError } from '../core/errors.js';
 import { recordEvent } from '../core/events.js';
 import { watchersOfSession } from '../pulls/repository.js';
 import { sessionContext } from '../runs/context-usage.js';
-import { sessionTimeline } from '../runs/timeline.js';
+import { sessionTimeline, sessionToolStep } from '../runs/timeline.js';
 import type { Queryable, Store } from '../storage/database.js';
 import { messages, projects, remoteMachines, runs } from '../storage/schema.js';
 import { settledRuns } from '../worktrees/repository.js';
@@ -728,10 +728,24 @@ export class Sessions {
   }
 
   /** The tools the agent used in each recent turn here, for the owner's timeline. */
-  async timeline(profileId: string, sessionId: string, runIds?: string[]) {
+  async timeline(
+    profileId: string,
+    sessionId: string,
+    runIds?: string[],
+    options: { brief?: boolean } = {},
+  ) {
     await this.session(profileId, sessionId);
 
-    return sessionTimeline(this.store.db, profileId, sessionId, runIds);
+    return sessionTimeline(this.store.db, profileId, sessionId, runIds, options);
+  }
+
+  /** One tool of a turn here in full, for the timeline that listed it briefly. */
+  async toolStep(profileId: string, sessionId: string, toolCallId: string) {
+    await this.session(profileId, sessionId);
+    const step = await sessionToolStep(this.store.db, profileId, sessionId, toolCallId);
+    if (!step) throw new GatewayError(404, 'That tool call is not in this conversation');
+
+    return step;
   }
 
   /**

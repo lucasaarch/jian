@@ -124,6 +124,7 @@ import {
   sessionSummarySchema,
   statsQuerySchema,
   subscriptionUsageSchema,
+  toolStepSchema,
 } from './records.js';
 import { releaseMediaSchema, releasesSchema, repositorySchema } from './releases.js';
 import {
@@ -226,7 +227,22 @@ export const messagePageSchema = z.strictObject({
  * The turns to read the tools of, comma-separated, however old; absent, the latest turns. A list,
  * so a reader asks for exactly the turns it shows, and a page of messages never lacks its tools.
  */
-export const timelineQuerySchema = z.strictObject({ runs: z.string().max(8_000).optional() });
+export const timelineQuerySchema = z.strictObject({
+  runs: z.string().max(8_000).optional(),
+  /**
+   * `1` asks for a list's worth of each tool: input and output cut to a preview, and a diff's
+   * hunks without their lines. A step marked `brief` is read whole from its own route when it
+   * is opened. A gateway that predates it refuses the query, as any strict one does.
+   */
+  brief: z.literal('1').optional(),
+});
+
+/** A tool call of a conversation, by the id its model gave it, which is not a UUID. */
+export const toolStepParamsSchema = z.strictObject({
+  profileId: z.uuid(),
+  sessionId: z.uuid(),
+  toolCallId: z.string().min(1).max(512),
+});
 
 export const operations: Operation[] = [
   {
@@ -1367,6 +1383,15 @@ export const operations: Operation[] = [
     access: 'admin',
     query: timelineQuerySchema,
     response: z.array(runTimelineSchema),
+  },
+  {
+    // One tool of the conversation in full, as the timeline gives it unasked to be brief.
+    method: 'GET',
+    path: `${session}/steps/:toolCallId`,
+    operationId: 'getToolStep',
+    access: 'admin',
+    params: toolStepParamsSchema,
+    response: toolStepSchema,
   },
   {
     method: 'GET',
