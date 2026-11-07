@@ -230,8 +230,8 @@ export function History({
   /** A room: the other side is several people, each shown with their face and name. */
   group?: boolean;
   /**
-   * The channel a chat's approvals and questions are answered in, by name. Its cards show what
-   * is waiting and how it went, without buttons: there, only the chat decides.
+   * The channel of a chat, by name. Its approvals are decided in the chat, so their cards have no
+   * buttons; the agent's questions are the owner's, answered from their card here.
    */
   chat?: string;
   onAnswered?: () => void;

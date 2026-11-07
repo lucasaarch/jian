@@ -274,12 +274,12 @@ export class Runs {
         );
       }
 
-      // Only the owner, or the person the conversation is with, answers what the agent asked.
-      // Anything the gateway writes (a subagent's report, an objective's nudge, a schedule, a
-      // relayed reply, another agent's call) joins the waiting turn as data, read when it
-      // resumes, and the question stays theirs. Joining, not waiting: the message is kept, and a
-      // flow that delivers the run it was given still has one.
-      if (waiting?.question && !options.ownerMessage && !options.personReply) {
+      // `ask_user` asks the owner, so only the owner, or a chat the owner let decide for them,
+      // answers it. Anything else (a contact without that right, a subagent's report, an
+      // objective's nudge, a schedule, a relayed reply, another agent's call) joins the waiting
+      // turn as data, read when it resumes, and the question stays the owner's. Joining, not
+      // waiting: the message is kept, and a flow that delivers the run it was given still has one.
+      if (waiting?.question && !options.ownerMessage && !options.mayAnswer) {
         const stored = await insertKeyedMessage(
           tx,
           {
@@ -289,6 +289,8 @@ export class Runs {
             runId: waiting.id,
             role: 'user',
             content: data.text,
+            ...(options.channelMessage ? { channelMessage: options.channelMessage } : {}),
+            ...(author ? { author } : {}),
             ...purposeOf(options, data.text),
             createdAt: nowIso(this.clock),
           },
@@ -327,6 +329,7 @@ export class Runs {
           data.mediaIds,
           author,
           activity,
+          options.ownerMessage ? 'owner' : 'contact',
           data.text,
           options.channelMessage,
           data.requestKey,
@@ -618,6 +621,8 @@ export class Runs {
         session.channel === 'gateway' || session.channel === 'learning'
           ? 'conversation'
           : 'channel',
+        // This route is the owner's, in the panel, whichever conversation the run is in.
+        'owner',
       );
     });
 
@@ -719,6 +724,7 @@ export class Runs {
     mediaIds: string[] | undefined,
     author: Message['author'] | undefined,
     activity: 'conversation' | 'channel',
+    answeredBy: 'owner' | 'contact',
     // What the person wrote, when the answer it stands for differs: "2" for the second choice.
     said: string = answer,
     channelMessage?: Message['channelMessage'],
@@ -738,8 +744,7 @@ export class Runs {
         ...question,
         answer,
         answeredAt: nowIso(this.clock),
-        // Reached only by the owner's reply or that of the channel's person (see submit).
-        answeredBy: activity === 'channel' ? 'contact' : 'owner',
+        answeredBy,
       },
       // Keep the question text as the parked run's output; delivery already sent it.
       output: waiting.output,
@@ -771,7 +776,7 @@ export class Runs {
       throw new GatewayError(429, 'Profile run limit reached');
     }
 
-    const text = resumePrompt(question, answer);
+    const text = resumePrompt(question, answer, answeredBy);
     const run = this.continuation(waiting, requestKey, text, chosen, selection);
 
     const collided = await insertRun(tx, run);

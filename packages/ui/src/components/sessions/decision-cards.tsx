@@ -140,10 +140,11 @@ export function ApprovalCard({
 }
 
 /**
- * A question the agent asked, as a list of its choices, the one it recommends marked. Pending,
- * a choice answers it here, except in a channel's chat, where the person answers in the chat
- * and this card only shows what was asked. Answered, it stays: the chosen row is checked and
- * the rest step back, or the answer is quoted when it was written rather than picked.
+ * A question the agent asked the owner, as a list of its choices, the one it recommends marked.
+ * Pending, a choice answers it here, in a channel's chat too: the question is the owner's, not
+ * the contact's, and a chat has no composer to reply in, so the agent always gives choices
+ * there. Answered, it stays: the chosen row is checked and the rest step back, or the answer is
+ * quoted when it was written rather than picked.
  */
 export function QuestionCard({
   question,
@@ -159,7 +160,7 @@ export function QuestionCard({
   const choices = question.choices ?? [];
   const answered = question.answer !== undefined;
   const picked = answered ? choices.find((choice) => choice === question.answer) : undefined;
-  const answering = !answered && !chat && Boolean(onAnswer);
+  const answering = !answered && Boolean(onAnswer);
 
   return (
     <Card
@@ -216,10 +217,13 @@ export function QuestionCard({
         </ul>
       )}
       {answered && !picked && <p className="decision-answer">{question.answer}</p>}
-      {!answered && chat && <p className="decision-state">Waiting for an answer in {chat}.</p>}
-      {!answered && !chat && (
+      {!answered && (
         <p className="decision-state">
-          {choices.length ? 'Choose an option or reply below.' : 'Answer below to continue.'}
+          {chat
+            ? `Choose an option to answer. The agent carries on in ${chat}.`
+            : choices.length
+              ? 'Choose an option or reply below.'
+              : 'Answer below to continue.'}
         </p>
       )}
     </Card>

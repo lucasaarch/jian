@@ -1538,8 +1538,8 @@ export class Channels {
         },
         {
           activity: 'channel',
-          // What they wrote themselves: it may answer a question the agent asked them.
-          personReply: true,
+          // A question is the owner's: only a chat the owner let decide for them answers it.
+          mayAnswer: contact.canApprove,
           ...(channelMessage ? { channelMessage } : {}),
           ...(group ? { group } : {}),
           ...(author ? { author } : {}),
@@ -1585,7 +1585,8 @@ export class Channels {
    * What a message means to the run waiting in its conversation, read before the submission
    * lock because Jev may be asked. An approval is decided only by a conversation the owner let
    * approve — on a group, the room's flag covers whoever writes there — and anyone else's
-   * message is ordinary, leaving it pending. A reply to a question may name a choice.
+   * message is ordinary, leaving it pending. The same right answers the owner's question, and a
+   * reply to it may name a choice.
    */
   private async readReply(
     channel: ChannelRecord,
@@ -1620,7 +1621,7 @@ export class Channels {
       return { approval: { id: waiting.approval.id, ...read } };
     }
 
-    if (waiting?.question?.choices?.length) {
+    if (contact.canApprove && waiting?.question?.choices?.length) {
       const answer = await readQuestionReply(judge, waiting.question, said);
       return answer === said ? {} : { answer };
     }
@@ -1871,15 +1872,20 @@ export class Channels {
             text = asked.text;
             poll = { question: asked.text, options: asked.options };
           } else if (run.question) {
-            text = questionMessage(wording, run.question);
-            if (run.question.choices?.length) {
-              poll = { question: text, options: run.question.choices };
+            // The question is the owner's. A chat they let decide for them is asked it; anyone
+            // else would be answering in their place, so it stays in the panel, and this
+            // delivery closes with only what the agent said before asking.
+            if (await this.chatAnswers(delivery.profileId, run.sessionId)) {
+              text = questionMessage(wording, run.question);
+              if (run.question.choices?.length) {
+                poll = { question: text, options: run.question.choices };
+              }
             }
           } else {
             text = run.output ?? '';
+            if (!text) continue;
           }
           spoken = Boolean(text);
-          if (!text) continue;
         } else {
           // The reason the gateway stored is already redacted and one line: saying it here is what
           // lets someone on a phone understand what went wrong without the gateway's log.
@@ -2133,6 +2139,12 @@ export class Channels {
 
       return true;
     });
+  }
+
+  /** Whether the chat of a conversation may answer the owner's questions: see `readReply`. */
+  private async chatAnswers(profileId: string, sessionId: string) {
+    const contact = await findContactBySession(this.services.store.db, profileId, sessionId);
+    return Boolean(contact?.canApprove);
   }
 
   /** Also checked between chunks: pausing never replays an old reply after a resume. */

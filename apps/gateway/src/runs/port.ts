@@ -42,11 +42,12 @@ export type SubmitOptions = {
    */
   purpose?: Message['purpose'];
   /**
-   * The message is the reply of the person this channel conversation is with, as they wrote it.
-   * With `ownerMessage`, the only thing that answers a question the agent asked: the gateway's
-   * own messages (a schedule, a nudge, a report, a relay) never do.
+   * The message is the reply of a chat the owner let decide for them (a contact or room allowed
+   * to approve), as it was written. With `ownerMessage`, the only thing that answers a question
+   * the agent asked the owner: anyone else in a chat, and the gateway's own messages (a schedule,
+   * a nudge, a report, a relay), never do.
    */
-  personReply?: boolean;
+  mayAnswer?: boolean;
 };
 
 export interface RunReader {

@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { RunApproval } from '@jian/contracts';
 import { DEFAULT_CHANNEL_MESSAGES } from '@jian/contracts';
 import { describe, expect, it } from 'vitest';
+import { buildRunQuestion } from '../src/agent/ask-user.js';
 import { ApiChannel } from '../src/channels/api.js';
 import { ChannelRegistry } from '../src/channels/registry.js';
 import { readQuestionReply } from '../src/channels/replies.js';
@@ -13,8 +14,8 @@ import { testServices } from './helpers/services.js';
 
 type Sent = { path: string; body: Record<string, unknown> };
 
-/** A Telegram chat whose contact asked one thing, and a run parked on an approval for it. */
-async function parked(judge?: Judge) {
+/** A Telegram chat whose contact asked one thing, and the run that took it, not started yet. */
+async function chat(judge?: Judge) {
   const services = await testServices();
   const sent: Sent[] = [];
   const telegram: typeof fetch = async (url, options) => {
@@ -58,6 +59,14 @@ async function parked(judge?: Judge) {
   const [run] = await services.runs.activities(profile.id);
   if (!run) throw new Error('Run missing');
 
+  return { services, channels, profile, contact, run, sent, say };
+}
+
+/** The chat of {@link chat}, its run parked on an approval for what the contact asked. */
+async function parked(judge?: Judge) {
+  const f = await chat(judge);
+  const { services, channels, profile, run } = f;
+
   const approval: RunApproval = {
     id: randomUUID(),
     toolCallId: 'send-1',
@@ -81,7 +90,36 @@ async function parked(judge?: Judge) {
 
   const approvalOf = async () => (await services.runs.run(profile.id, run.id)).approval;
 
-  return { services, channels, profile, contact, run, sent, say, approvalOf };
+  return { ...f, approvalOf };
+}
+
+/** The chat of {@link chat}, its run parked on a question the agent asked with `ask_user`. */
+async function asking(canApprove: boolean) {
+  const f = await chat();
+  const { services, channels, profile, contact, run } = f;
+  if (canApprove) await channels.updateContact(profile.id, contact.id, { canApprove: true });
+
+  await services.lifecycle.claim(run.id, profile.id, 'worker');
+  await services.lifecycle.wait(
+    profile.id,
+    run.id,
+    'worker',
+    buildRunQuestion(
+      { prompt: 'Export the customer list for Ada?', choices: ['Approve', 'Do not approve'] },
+      new Date().toISOString(),
+    ),
+  );
+  await channels.dispatch();
+
+  const said = () =>
+    f.sent
+      .filter((item) => item.path === 'sendMessage')
+      .map((item) => String(item.body.text))
+      .join('\n');
+  const resumed = async () =>
+    (await services.runs.activities(profile.id)).find((item) => item.continuationOf === run.id);
+
+  return { ...f, said, resumed };
 }
 
 describe('an approval asked in a Telegram chat', () => {
@@ -167,6 +205,48 @@ describe('an approval asked in a Telegram chat', () => {
       decidedBy: 'contact',
       note: 'Use the March numbers instead',
     });
+  });
+});
+
+describe('a question the agent asks in a Telegram chat', () => {
+  it('is the owner’s: not sent to a contact who may not approve, nor answered by them', async () => {
+    const f = await asking(false);
+
+    expect(f.said()).not.toContain('Export the customer list');
+
+    // The contact saying yes is not the owner saying yes.
+    await f.say('Approve');
+    await f.channels.dispatch();
+
+    const still = await f.services.runs.run(f.profile.id, f.run.id);
+    expect(still.status).toBe('waiting');
+    expect(still.question?.answer).toBeUndefined();
+    expect(await f.resumed()).toBeUndefined();
+    // What they wrote is kept for the agent to read when it resumes.
+    const kept = await f.services.sessions.messages(f.profile.id, f.run.sessionId);
+    expect(kept.find((item) => item.content === 'Approve')?.runId).toBe(f.run.id);
+
+    // The owner answers from the panel, and the agent is told it was the owner.
+    await f.services.runs.answerRun(f.profile.id, f.run.id, { text: 'Approve' });
+    expect((await f.services.runs.run(f.profile.id, f.run.id)).question).toMatchObject({
+      answer: 'Approve',
+      answeredBy: 'owner',
+    });
+    expect((await f.resumed())?.input).toContain('The owner answered');
+  });
+
+  it('is asked of a chat the owner allowed to approve, which answers it', async () => {
+    const f = await asking(true);
+
+    expect(f.said()).toContain('Export the customer list');
+
+    await f.say('2');
+
+    expect((await f.services.runs.run(f.profile.id, f.run.id)).question).toMatchObject({
+      answer: 'Do not approve',
+      answeredBy: 'contact',
+    });
+    expect((await f.resumed())?.input).not.toContain('The owner answered');
   });
 });
 

@@ -350,7 +350,7 @@ export function profileTools(
       ? {
           ask_user: tool({
             description:
-              'Ask the owner a required question and pause this run until they answer. Prefer this over finishing the turn or block_session_objective when you need a concrete choice or fact to continue. Optional choices become a list in the panel and a reply keyboard on Telegram. When you have a view on which choice is best, set recommended to that choice, copied exactly; leave it out when you have none.',
+              'Ask the owner a required question and pause this run until they answer. Prefer this over finishing the turn or block_session_objective when you need a concrete choice or fact to continue. Optional choices become a list in the panel and a reply keyboard on Telegram. In a WhatsApp or Telegram conversation it still asks the owner, in the panel, not the person you are talking with (unless the owner allowed that chat to approve), and needs choices; to ask that person something, write it in your reply instead. When you have a view on which choice is best, set recommended to that choice, copied exactly; leave it out when you have none.',
             inputSchema: z.object({
               prompt: z.string().trim().min(1).max(2000),
               choices: z.array(z.string().trim().min(1).max(100)).min(2).max(12).optional(),
@@ -364,7 +364,18 @@ export function profileTools(
               prompt: string;
               choices?: string[];
               recommended?: string;
-            }): Promise<{ paused: true }> => {
+            }): Promise<{ paused: false; reason: string }> => {
+              // In a chat the owner answers from the card in the panel, which has no text field:
+              // a question without choices there could never be answered.
+              if (!choices?.length) {
+                const { channel } = await services.sessions.session(run.profileId, run.sessionId);
+                if (isChatChannel(channel)) {
+                  return {
+                    paused: false,
+                    reason: `This conversation is on ${channel}: the owner answers from the panel by picking a choice. Ask again with choices.`,
+                  };
+                }
+              }
               throw new AskUserPause({
                 prompt,
                 ...(choices?.length ? { choices } : {}),
