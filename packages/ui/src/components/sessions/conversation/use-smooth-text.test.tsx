@@ -44,12 +44,33 @@ const mount = (target: string, active = true) => {
 };
 const wait = (ms: number) => act(() => vi.advanceTimersByTime(ms));
 
-it('reveals at the base rate', () => {
-  const target = 'a'.repeat(400);
-  mount(target);
-  wait(1040); // 16 ms frames land just under 1 s
-  expect(shown.length).toBeGreaterThanOrEqual(80);
-  expect(shown.length).toBeLessThanOrEqual(200);
+it('reveals a small backlog at the base rate', () => {
+  mount('word '.repeat(6));
+  wait(100);
+  expect(shown.length).toBeGreaterThanOrEqual(4);
+  expect(shown.length).toBeLessThanOrEqual(14);
+  wait(150);
+  expect(shown.length).toBeLessThan(30);
+  wait(400);
+  expect(shown.length).toBe(30);
+});
+
+it('follows a stream without falling behind', () => {
+  const chunk = 'lorem ipsum dolor sit amet '.repeat(3).slice(0, 80);
+  let target = '';
+  const view = mount(target);
+  for (let at = 0; at < 3000; at += 250) {
+    target += chunk;
+    view.show(target);
+    for (let step = 0; step < 250; step += 50) {
+      wait(50);
+      expect(target.startsWith(shown)).toBe(true);
+      const recent = Math.min(target.length, 80 * 3);
+      expect(shown.length).toBeGreaterThanOrEqual(target.length - recent);
+    }
+  }
+  wait(600);
+  expect(shown).toBe(target);
 });
 
 it('catches up a large block in about half a second', () => {

@@ -4,11 +4,6 @@ import { useEffect, useRef, useState } from 'react';
 export const BASE_CHARS_PER_SECOND = 80;
 /** Whatever is waiting is shown within this long, so a big block never lags far behind. */
 export const CATCH_UP_SECONDS = 0.5;
-/**
- * A backlog above this is a block that arrived at once. Smaller ones drain at the base rate; a
- * proportional rate on them would show 400 characters almost instantly and defeat the pacing.
- */
-const BLOCK_CHARS = 600;
 /** A cut lands on the next whitespace when it is this close, so words do not appear half-typed. */
 const WORD_REACH = 12;
 
@@ -37,14 +32,13 @@ export function useSmoothText(target: string, active: boolean): string {
   const shownRef = useRef('');
   const lastFrame = useRef<number | null>(null);
   const carry = useRef(0);
-  const deadline = useRef<number | null>(null);
+  const deadline = useRef(0);
 
   useEffect(() => {
     if (!live) {
       shownRef.current = '';
       lastFrame.current = null;
       carry.current = 0;
-      deadline.current = null;
       return;
     }
     if (!target.startsWith(shownRef.current)) {
@@ -56,33 +50,30 @@ export function useSmoothText(target: string, active: boolean): string {
       lastFrame.current = null;
       return;
     }
+    deadline.current = performance.now() + CATCH_UP_SECONDS * 1000;
     let frame = 0;
     const tick = (now: number) => {
       const elapsed = lastFrame.current === null ? 16 : Math.max(0, now - lastFrame.current);
       lastFrame.current = now;
       const length = shownRef.current.length;
       const backlog = target.length - length;
-      if (deadline.current === null && backlog > BLOCK_CHARS)
-        deadline.current = now + CATCH_UP_SECONDS * 1000;
-      const left = deadline.current === null ? 0 : Math.max(deadline.current - now, elapsed);
-      const rate =
-        deadline.current === null
-          ? BASE_CHARS_PER_SECOND
-          : Math.max(BASE_CHARS_PER_SECOND, (backlog * 1000) / left);
+      const timeLeft = deadline.current - now;
+      const rate = Math.max(
+        BASE_CHARS_PER_SECOND,
+        backlog / Math.max(timeLeft / 1000, elapsed / 1000),
+      );
       carry.current += (rate * elapsed) / 1000;
-      const step = Math.floor(carry.current);
+      const step = now >= deadline.current ? backlog : Math.floor(carry.current);
       if (step > 0) {
-        carry.current -= step;
         const raw = Math.min(target.length, length + step);
         const next = raw < target.length ? Math.max(raw, cutAt(target, raw)) : raw;
+        // The word cut overshoots the step; owing it back keeps the average at the real rate.
+        carry.current -= next - length;
         shownRef.current = target.slice(0, next);
         setShown(shownRef.current);
       }
       if (shownRef.current.length < target.length) frame = requestAnimationFrame(tick);
-      else {
-        lastFrame.current = null;
-        deadline.current = null;
-      }
+      else lastFrame.current = null;
     };
     frame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frame);
