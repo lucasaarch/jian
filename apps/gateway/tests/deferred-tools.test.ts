@@ -2,11 +2,12 @@ import { randomUUID } from 'node:crypto';
 import { once } from 'node:events';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { tool } from 'ai';
-import { afterEach, describe, expect, it } from 'vitest';
+import { type ModelMessage, tool } from 'ai';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { AgentRuntime } from '../src/agent/runtime.js';
 import { TOOL_GROUPS } from '../src/agent/tools.js';
+import { truncatePrompt } from '../src/context/budget.js';
 import { createSafeFetch } from '../src/security/outbound.js';
 import {
   type ClaudeReply,
@@ -167,29 +168,197 @@ describe('tool loading on Claude', () => {
     expect(resultOf(sent[4], 'toolu_4')?.is_error).not.toBe(true);
   });
 
-  it('sends a tool loaded in an earlier turn loaded', async () => {
+  it('keeps the tools sent to Claude the same from one turn to the next', async () => {
     const modelId = 'claude-opus-5-5';
     const { services, profile, ask } = await conversation({ provider: 'anthropic', modelId });
     const first = await ask('Load what you need to see my conversations.');
-    const claude = fakeClaude(modelId, (request, index) =>
-      request.stream && index === 0
-        ? { tool: 'load_tools', input: { groups: ['conversations'] } }
-        : { text: 'Loaded.' },
+    let plan: ClaudeReply[] = [
+      { tool: 'load_tools', input: { groups: ['conversations'] } },
+      { text: 'Loaded.' },
+    ];
+    let step = 0;
+    const claude = fakeClaude(modelId, (request) =>
+      request.stream ? (plan[step++] ?? { text: 'Done.' }) : { text: 'Done.' },
     );
     await new AgentRuntime(services, () => claude.model).execute(profile.id, first.id);
+    const lastOfFirst = steps(claude.requests).at(-1);
     const second = await ask('Now list them.');
+    plan = [{ tool: 'list_sessions' }, { text: 'Only this one.' }];
+    step = 0;
     const before = claude.requests.length;
 
     await new AgentRuntime(services, () => claude.model).execute(profile.id, second.id);
 
-    const opening = steps(claude.requests.slice(before))[0];
-    // The next turn's history holds no reference: what the conversation keeps loaded is sent
-    // whole, as it is on every turn after.
-    expect(referencedIn(opening)).toEqual([]);
+    expect((await services.runs.run(profile.id, second.id)).output).toBe('Only this one.');
+    const [opening, next] = steps(claude.requests.slice(before));
+    // The tools are byte for byte what the last turn ended on, so the turn reads its start back.
+    expect(JSON.stringify(opening?.tools)).toBe(JSON.stringify(lastOfFirst?.tools));
     expect(sentTools(opening).find((item) => item.name === 'list_sessions')).toEqual({
       name: 'list_sessions',
-      deferred: false,
+      deferred: true,
     });
+    // What the conversation kept loaded is referenced again by a made-up load, placed after the
+    // history the cache marks.
+    const offered = CONVERSATIONS.filter((name) =>
+      sentTools(opening).some((item) => item.name === name),
+    );
+    expect(referencedIn(opening).toSorted()).toEqual([...offered].toSorted());
+    const blocks = (opening?.messages ?? []).flatMap((message) =>
+      typeof message.content === 'string' ? [] : message.content,
+    );
+    const carried = blocks.findIndex(
+      (block) => block.type === 'tool_use' && block.id?.startsWith('jian_carried_'),
+    );
+    expect(carried).toBeGreaterThan(0);
+    expect(blocks.slice(0, carried).some((block) => block.cache_control)).toBe(true);
+    expect(blocks.slice(carried).some((block) => block.cache_control)).toBe(true);
+    expect(JSON.stringify(blocks.slice(carried))).toContain('Now list them.');
+    // And the carried tool runs.
+    expect(resultOf(next, `toolu_${before + 1}`)?.is_error).not.toBe(true);
+  });
+
+  it('loads the old way when Claude refuses the deferred form', async () => {
+    // A model of its own: a refusal is remembered for the model for the rest of the process.
+    const modelId = 'claude-haiku-4-5';
+    const { services, profile, ask } = await conversation({ provider: 'anthropic', modelId });
+    const errors: string[] = [];
+    const spy = vi.spyOn(console, 'error').mockImplementation((line: unknown) => {
+      errors.push(String(line));
+    });
+    try {
+      const run = await ask('What else are we talking about?');
+      const plan: ClaudeReply[] = [
+        { refuse: 'tools.12.defer_loading: Extra inputs are not permitted' },
+        { tool: 'load_tools', input: { groups: ['conversations'] } },
+        { tool: 'list_sessions' },
+        { text: 'Only this one.' },
+      ];
+      let step = 0;
+      const claude = fakeClaude(modelId, (request) =>
+        request.stream ? (plan[step++] ?? { text: 'Done.' }) : { text: 'Done.' },
+      );
+
+      await new AgentRuntime(services, () => claude.model).execute(profile.id, run.id);
+
+      expect((await services.runs.run(profile.id, run.id)).output).toBe('Only this one.');
+      const sent = steps(claude.requests);
+      expect(sent).toHaveLength(4);
+      expect(sentTools(sent[0]).some((item) => item.deferred)).toBe(true);
+      // The refused step went again narrowed, and so did the rest of the run.
+      for (const request of sent.slice(1)) {
+        expect(sentTools(request).some((item) => item.deferred)).toBe(false);
+        expect(referencedIn(request)).toEqual([]);
+      }
+      expect(sentTools(sent[1]).some((item) => item.name === 'list_sessions')).toBe(false);
+      expect(sentTools(sent[2]).some((item) => item.name === 'list_sessions')).toBe(true);
+      expect(resultOf(sent[3], 'toolu_3')?.is_error).not.toBe(true);
+      const said = errors.filter((line) => line.includes('refused deferred tools'));
+      expect(said).toHaveLength(1);
+      expect(said[0]).toContain(modelId);
+      expect(said[0]).not.toContain('What else are we talking about?');
+
+      // A later run on that model goes narrowed from its start.
+      const later = await ask('And now?');
+      const before = claude.requests.length;
+      step = 3;
+      await new AgentRuntime(services, () => claude.model).execute(profile.id, later.id);
+      const opening = steps(claude.requests.slice(before))[0];
+      expect(opening).toBeDefined();
+      expect(sentTools(opening).some((item) => item.deferred)).toBe(false);
+      // What the conversation kept loaded is sent whole, with no made-up load to reference it.
+      expect(sentTools(opening).find((item) => item.name === 'list_sessions')).toEqual({
+        name: 'list_sessions',
+        deferred: false,
+      });
+      expect(referencedIn(opening)).toEqual([]);
+      expect(JSON.stringify(opening?.messages)).not.toContain('jian_carried_');
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('does not take another refusal for the deferred form', async () => {
+    const modelId = 'claude-sonnet-5';
+    const { services, profile, ask } = await conversation({ provider: 'anthropic', modelId });
+    const run = await ask('What else are we talking about?');
+    const claude = fakeClaude(modelId, (request, index) =>
+      request.stream && index === 0
+        ? { refuse: 'max_tokens: 900000 > 128000, which is the maximum allowed' }
+        : { text: 'Answered.' },
+    );
+
+    await new AgentRuntime(services, () => claude.model).execute(profile.id, run.id);
+
+    const finished = await services.runs.run(profile.id, run.id);
+    expect(finished.status).toBe('failed');
+    expect(finished.error).toContain('max_tokens');
+    expect(steps(claude.requests)).toHaveLength(1);
+    // Nothing was remembered against the model.
+    const later = await ask('Again.');
+    const before = claude.requests.length;
+    await new AgentRuntime(services, () => claude.model).execute(profile.id, later.id);
+    expect(sentTools(steps(claude.requests.slice(before))[0]).some((item) => item.deferred)).toBe(
+      true,
+    );
+  });
+});
+
+describe('shedding a result', () => {
+  it('keeps the tool references of a result it puts aside', () => {
+    const reference = {
+      type: 'custom' as const,
+      providerOptions: { anthropic: { type: 'tool-reference', toolName: 'list_sessions' } },
+    };
+    const messages: ModelMessage[] = [
+      { role: 'user', content: 'Look.' },
+      {
+        role: 'assistant',
+        content: [{ type: 'tool-call', toolCallId: 'load', toolName: 'load_tools', input: {} }],
+      },
+      {
+        role: 'tool',
+        content: [
+          {
+            type: 'tool-result',
+            toolCallId: 'load',
+            toolName: 'load_tools',
+            output: {
+              type: 'content',
+              value: [{ type: 'text', text: 'x'.repeat(40_000) }, reference],
+            },
+          },
+        ],
+      },
+      {
+        role: 'assistant',
+        content: [{ type: 'tool-call', toolCallId: 'read', toolName: 'read_file', input: {} }],
+      },
+      {
+        role: 'tool',
+        content: [
+          {
+            type: 'tool-result',
+            toolCallId: 'read',
+            toolName: 'read_file',
+            output: { type: 'text', value: 'y'.repeat(10_000) },
+          },
+        ],
+      },
+    ];
+    const truncated = truncatePrompt({
+      provider: 'anthropic',
+      modelId: 'claude-opus-5-5',
+      policy: { inputTokens: 16_000, outputTokens: 1_000 },
+      instructions: 'Help.',
+      messages,
+      tools: {},
+      currentStartIndex: 0,
+    });
+    expect(truncated?.shedResults).toBe(1);
+    const shed = truncated?.messages[2];
+    expect(JSON.stringify(shed)).not.toContain('x'.repeat(100));
+    expect(JSON.stringify(shed)).toContain('read_artifact');
+    expect(JSON.stringify(shed)).toContain('"toolName":"list_sessions"');
   });
 });
 

@@ -193,12 +193,27 @@ function shedResults(block: ModelMessage[]): { block: ModelMessage[]; shed: numb
       content: message.content.map((part) => {
         if (part.type !== 'tool-result') return part;
         shed++;
+        const note = `[Result removed to fit the context window; read_artifact with toolCallId "${part.toolCallId}" returns it.]`;
+        // A Claude tool reference stays: it is what keeps a loaded tool in the context, and
+        // losing it would change the tools sent, the front of the cached prompt (see
+        // agent/deferred-tools.ts). It costs a few bytes; no other provider has one.
+        const references =
+          part.output.type === 'content'
+            ? part.output.value.filter(
+                (item) =>
+                  item.type === 'custom' &&
+                  (item.providerOptions?.anthropic as { type?: unknown } | undefined)?.type ===
+                    'tool-reference',
+              )
+            : [];
         return {
           ...part,
-          output: {
-            type: 'text' as const,
-            value: `[Result removed to fit the context window; read_artifact with toolCallId "${part.toolCallId}" returns it.]`,
-          },
+          output: references.length
+            ? {
+                type: 'content' as const,
+                value: [{ type: 'text' as const, text: note }, ...references],
+              }
+            : { type: 'text' as const, value: note },
         };
       }),
     };

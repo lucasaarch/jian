@@ -951,6 +951,12 @@ const deferred = new Map<string, ToolGroup>(
   ),
 );
 
+/** The groups these tools belong to, in the order `load_tools` lists them. */
+export function groupsOf(names: Iterable<string>): ToolGroup[] {
+  const groups = new Set([...names].flatMap((name) => deferred.get(name) ?? []));
+  return (Object.keys(TOOL_GROUPS) as ToolGroup[]).filter((group) => groups.has(group));
+}
+
 /**
  * A tool's group mates this run has. Loaded tools last one run, and the turn that carries on after
  * an approval is a new one: without this, the group it was working from would go out of reach.

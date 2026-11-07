@@ -71,13 +71,15 @@ import {
   withOpenAiPromptCache,
 } from './cache.js';
 import { compactNote, isCompactCommand, withoutCompactCommands } from './compact-command.js';
+import { withDeferralFallback } from './deferred-fallback.js';
 import {
+  carriedLoads,
   defersTools,
   MAX_DEFERRED,
   markDeferred,
   referencedTools,
   referencing,
-  withoutReferences,
+  withoutDeferral,
 } from './deferred-tools.js';
 import { splitDiff } from './diff.js';
 import { githubGitTools } from './github-git.js';
@@ -112,6 +114,7 @@ import { reason, toolFailure } from './tool-failure.js';
 import {
   deferTools,
   groupMates,
+  groupsOf,
   MACHINE_FILES_SUMMARY,
   profileTools,
   skillFor,
@@ -961,7 +964,9 @@ export class AgentRuntime {
           : (!gated.has(name) && (!minimal || minimal.has(name))) || loadedTools.has(name);
       // On Claude a loaded tool joins the conversation instead of the tool list (see
       // deferred-tools.ts): what each call brought in, and what the step's messages reference.
-      const defers = defersTools(config.provider, config.modelId);
+      // `defers` turns false for the rest of the run if Anthropic refuses that form.
+      const deferring = defersTools(config.provider, config.modelId);
+      let defers = deferring;
       const loadable = new Set([...gated, ...mcpToolNames]);
       const broughtIn = new Map<string, string[]>();
       const builtOptions = new Map<string, Tool['providerOptions']>();
@@ -986,7 +991,9 @@ export class AgentRuntime {
 
         guarded[name] = {
           ...definition,
-          ...(defers ? { toModelOutput: referencing(definition, (id) => broughtIn.get(id)) } : {}),
+          ...(deferring
+            ? { toModelOutput: referencing(definition, (id) => broughtIn.get(id)) }
+            : {}),
           execute: async (input, options) => {
             const previous = toolQueue;
             let release: () => void = () => {};
@@ -1015,7 +1022,7 @@ export class AgentRuntime {
               // SDK refuses a tool it was not given. One whose reference is in the messages is
               // in the model's context, and runs. An approved call was checked when it was made.
               if (
-                defers &&
+                deferring &&
                 approvedCallId !== options.toolCallId &&
                 !offeredNow(name) &&
                 !referencedNow.has(name)
@@ -1243,10 +1250,13 @@ export class AgentRuntime {
        * On Claude, every tool the run has goes with every step, in one order, and only what the
        * messages do not already bring in is sent whole. A deferred definition stays out of the
        * cached prefix, so loading one leaves the prefix, and the thinking before it, as they
-       * were. A loaded tool whose reference is gone (cut, summarised, or carried from an earlier
-       * turn) is sent whole so it stays callable; whatever took its reference had rewritten the
-       * prompt already. Undefined when Anthropic would refuse the request (nothing sent whole,
-       * or more deferred than it takes): that step narrows the list as other providers do.
+       * were. A loaded tool whose reference is gone (summarised away, or let go of and loaded
+       * back by a call made outside a step) is sent whole so it stays callable. That flips its
+       * definition into the tools, which invalidates the cached system prompt and history behind
+       * them too; only a summary, which rewrote the history anyway, should take a reference (a
+       * shed result keeps its references, and carried loads get made-up ones each turn).
+       * Undefined when Anthropic would refuse the request (nothing sent whole, or more deferred
+       * than it takes): that step narrows the list as other providers do.
        */
       const deferral = (inContext: ReadonlySet<string>) => {
         const names = Object.keys(guarded).sort();
@@ -1272,6 +1282,21 @@ export class AgentRuntime {
       let preparedPrompt: unknown;
       let lastMessages = context.messages as ModelMessage[];
       let currentStartIndex = context.currentStartIndex;
+      // On Claude, what the conversation loaded in earlier turns is referenced again, after the
+      // history the cache marks and before this turn's context (see carriedLoads). The turn's
+      // start index points at it, so a summary keeps it with the turn.
+      if (defers && !compactCommand && !learning && currentStartIndex !== undefined) {
+        const carriedTools = [...loadedTools].filter((name) => gated.has(name)).sort();
+        lastMessages.splice(
+          currentStartIndex,
+          0,
+          ...carriedLoads({
+            tools: carriedTools,
+            groups: groupsOf(carriedTools),
+            mcp: [...selectedMcpTools].sort(),
+          }),
+        );
+      }
       const estimate = tokenCounter(config.provider, config.modelId);
       // Provider tokens per token of the gateway's estimate (context/scale.ts). Every size
       // decision of the run goes by the estimate times this, so compaction starts when the
@@ -1366,7 +1391,19 @@ export class AgentRuntime {
       );
 
       const agent = new ToolLoopAgent({
-        model,
+        model: deferring
+          ? withDeferralFallback(model, {
+              modelId: config.modelId,
+              active: () => defers,
+              offered: () => new Set(Object.keys(guarded).filter(offeredNow)),
+              refused: () => {
+                defers = false;
+                broughtIn.clear();
+                referencedNow = new Set();
+                markDeferred(guarded, new Set(), builtOptions);
+              },
+            })
+          : model,
         instructions: codingInstructions,
         tools: guarded,
         stopWhen: stepCountIs(
@@ -1383,6 +1420,8 @@ export class AgentRuntime {
 
           signal.throwIfAborted();
           await this.services.lifecycle.heartbeat(profileId, runId, owner);
+          // Anthropic refused the deferred form earlier in this run: nothing of it is sent again.
+          if (deferring && !defers) messages = withoutDeferral(messages);
 
           // What the person said after this run began. It arrives as their own turn, at the
           // point the loop reached, so the agent answers what they are asking now rather than
@@ -1472,7 +1511,7 @@ export class AgentRuntime {
             // Let go of, they leave the context too: a reference would keep them in it. Every
             // reference is to a tool loaded at some point, so none is left.
             if (defers) {
-              messages = withoutReferences(messages);
+              messages = withoutDeferral(messages);
               inContext = referenced();
             }
             ({ names: activeNames, tools: activeTools } = pick());
@@ -1972,7 +2011,7 @@ export class AgentRuntime {
             model,
             instructions,
             // Sent without tools: a reference to one would be refused.
-            defers ? withoutReferences(closing) : closing,
+            deferring ? withoutDeferral(closing) : closing,
             { ...config, scale: scale * margin },
             account,
             policy,

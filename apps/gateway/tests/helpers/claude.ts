@@ -1,7 +1,7 @@
 import { createAnthropic } from '@ai-sdk/anthropic';
 
-/** What the fake answers one request with: a tool call, or text that ends the turn. */
-export type ClaudeReply = { tool: string; input?: unknown } | { text: string };
+/** What the fake answers one request with: a tool call, text that ends the turn, or a refusal. */
+export type ClaudeReply = { tool: string; input?: unknown } | { text: string } | { refuse: string };
 
 /** The parts of a Messages API request these tests read. */
 export type ClaudeRequest = {
@@ -14,6 +14,8 @@ export type ClaudeRequest = {
       | Array<{
           type: string;
           tool_use_id?: string;
+          id?: string;
+          cache_control?: unknown;
           is_error?: boolean;
           content?: string | Array<{ type: string; tool_name?: string; text?: string }>;
         }>;
@@ -38,6 +40,12 @@ export function fakeClaude(
     const request = JSON.parse(String(init?.body)) as ClaudeRequest;
     requests.push(request);
     const answer = reply(request, requests.length - 1);
+    if ('refuse' in answer) {
+      return Response.json(
+        { type: 'error', error: { type: 'invalid_request_error', message: answer.refuse } },
+        { status: 400 },
+      );
+    }
     const usage = { input_tokens: 10, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 };
     const block =
       'tool' in answer
