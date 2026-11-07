@@ -7,11 +7,12 @@ import type { ChannelType, NewChannel } from '../../lib/api';
 import { MetaLimits } from './channel-meta';
 import { ChannelTitle } from './channel-title';
 
-/** The kinds' names where four must fit across a form. */
+/** The kinds' names where five must fit across a form. */
 const short: Record<ChannelType, string> = {
   whatsapp: 'WhatsApp',
   'whatsapp-business': 'WhatsApp Business',
   telegram: 'Telegram',
+  email: 'Email',
   api: 'API Server',
 };
 
@@ -21,12 +22,14 @@ const what: Record<ChannelType, string> = {
   'whatsapp-business':
     'Meta’s Cloud API, for inbound customer support. This creates a pending channel and its callback URL; credentials come next.',
   telegram: 'A bot from BotFather, connected with the token it gave you.',
+  email:
+    'An address on a domain verified in Resend, with receiving on and its MX record in place. Jian registers its webhook at JIAN_PUBLIC_URL, which the internet must reach.',
   api: 'An HTTP endpoint for your own systems. Its URL and token are shown once.',
 };
 
 /**
- * Connects one of the kinds this agent has none of yet. A token typed here goes to the gateway
- * and is never shown again; Meta's verify token lives only in its field, cleared as it is sent.
+ * Connects one of the kinds this agent has none of yet. A token or API key typed here goes to the
+ * gateway and is never shown again; Meta's verify token lives only in its field, cleared as it is sent.
  * The form is drawn again on each opening, so nothing typed outlives a cancel.
  */
 export function ChannelAddDialog({
@@ -77,6 +80,8 @@ function AddForm({
 }) {
   const [type, setType] = useState<ChannelType>(first);
   const [botToken, setBotToken] = useState('');
+  const [apiKey, setApiKey] = useState('');
+  const [address, setAddress] = useState('');
   const [error, setError] = useState('');
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
@@ -90,6 +95,13 @@ function AddForm({
       const read = verifyTokenOf(event.currentTarget);
       if ('error' in read) return setError(read.error);
       request = { type, whatsappBusiness: read };
+    } else if (type === 'email') {
+      if (!apiKey.trim() || !address.trim())
+        return setError('Enter the Resend API key and the address.');
+      request = {
+        type,
+        email: { provider: 'resend', apiKey: apiKey.trim(), address: address.trim() },
+      };
     }
     if (await connect(request)) close();
   };
@@ -124,6 +136,38 @@ function AddForm({
           value={botToken}
           onChange={(event) => setBotToken(event.target.value)}
         />
+      )}
+      {type === 'email' && (
+        <>
+          {/* The only provider for now, shown so it is clear whose key is asked for. */}
+          <Segmented
+            label="Provider"
+            value="resend"
+            options={[{ value: 'resend', label: 'Resend' }]}
+            onChange={() => {}}
+          />
+          <TextField
+            label="Resend API key"
+            hint="Full access, so Jian can check the domain and register the webhook. Encrypted on the gateway and never shown again."
+            type="password"
+            autoComplete="off"
+            spellCheck={false}
+            required
+            value={apiKey}
+            onChange={(event) => setApiKey(event.target.value)}
+          />
+          <TextField
+            label="Address"
+            hint="The agent sends from it and reads what arrives at it. Mail its sender’s domain does not authenticate is ignored."
+            type="email"
+            autoComplete="off"
+            spellCheck={false}
+            required
+            placeholder="mia@agents.example.com"
+            value={address}
+            onChange={(event) => setAddress(event.target.value)}
+          />
+        </>
       )}
       {type === 'whatsapp-business' && (
         <>

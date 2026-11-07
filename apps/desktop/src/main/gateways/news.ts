@@ -39,8 +39,8 @@ export type News = {
   asks: boolean;
 };
 
-/** The conversations of a messaging app, as the panel names their channels. */
-const MESSAGING = new Set(['whatsapp', 'whatsapp-business', 'telegram']);
+/** The conversations with a person on a channel, as the panel names their channels. */
+const MESSAGING = new Set(['whatsapp', 'whatsapp-business', 'telegram', 'email']);
 
 /** The panel's own rule: a chat of the panel the agent wrote in since the owner last read it. */
 function unread(session: ListedSession): boolean {

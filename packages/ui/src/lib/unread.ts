@@ -10,7 +10,7 @@ export const unread = (session: Session) =>
   session.lastMessage?.role === 'assistant' &&
   (!session.readAt || Date.parse(session.lastMessage.at) > Date.parse(session.readAt));
 
-const MESSAGING = ['whatsapp', 'whatsapp-business', 'telegram'];
+const MESSAGING = ['whatsapp', 'whatsapp-business', 'telegram', 'email'];
 
 /**
  * Whether a new last message is worth a notice. In a chat of the panel, the agent's reply the

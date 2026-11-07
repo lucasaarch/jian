@@ -5,6 +5,7 @@ import { type ToolSet, tool } from 'ai';
 import { eq } from 'drizzle-orm';
 import { z } from 'zod';
 import { GatewayError } from '../core/errors.js';
+import { pageText } from '../core/html-text.js';
 import { findMedia } from '../media/repository.js';
 import type { GatewayVault } from '../security/gateway-vault.js';
 import type { WebAccess } from '../skills/builtin/web-research.js';
@@ -25,52 +26,6 @@ const MAX_BODY_BYTES = 5 * 1024 * 1024;
 const PAGE_CHARS = 20_000;
 const MAX_RESULT_CHARS = 1_500;
 const MAX_REDIRECTS = 5;
-
-const ENTITIES: Record<string, string> = {
-  amp: '&',
-  lt: '<',
-  gt: '>',
-  quot: '"',
-  apos: "'",
-  nbsp: ' ',
-};
-
-/**
- * A page as the text a person reads: scripts, styles and markup gone, block elements kept as
- * line breaks. Not a browser — a page that builds itself in JavaScript reads as nearly empty.
- */
-function pageText(html: string): { title?: string; text: string } {
-  const title = /<title[^>]*>([\s\S]*?)<\/title>/i.exec(html)?.[1];
-  const decode = (value: string) =>
-    value.replace(/&(#x?[0-9a-f]+|[a-z]+);/gi, (entity, code: string) => {
-      if (code.startsWith('#')) {
-        const point =
-          code[1]?.toLowerCase() === 'x'
-            ? Number.parseInt(code.slice(2), 16)
-            : Number(code.slice(1));
-
-        return Number.isFinite(point) && point > 0 && point < 0x110000
-          ? String.fromCodePoint(point)
-          : entity;
-      }
-
-      return ENTITIES[code.toLowerCase()] ?? entity;
-    });
-
-  const text = decode(
-    html
-      .replace(/<head[\s>][\s\S]*?<\/head>/i, ' ')
-      .replace(/<(script|style|noscript|svg|template)[\s\S]*?<\/\1>/gi, ' ')
-      .replace(/<!--[\s\S]*?-->/g, ' ')
-      .replace(/<(br|\/p|\/div|\/li|\/h[1-6]|\/tr|\/section|\/article)[^>]*>/gi, '\n')
-      .replace(/<[^>]+>/g, ' '),
-  )
-    .replace(/[ \t\f\v\r]+/g, ' ')
-    .replace(/ *\n[ \n]*/g, '\n')
-    .trim();
-
-  return { ...(title ? { title: decode(title).trim() } : {}), text };
-}
 
 async function readCapped(response: Response): Promise<string> {
   const reader = response.body?.getReader();

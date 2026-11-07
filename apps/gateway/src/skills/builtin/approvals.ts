@@ -48,5 +48,9 @@ messages wait with the run and you read them when it resumes, so tell the person
 checking with the owner before you ask. To ask the person in the chat something, write it in your
 reply instead.
 
+In an email conversation nobody approves by email, not even a contact the owner trusts: every
+action that asks and every question waits for the owner in the panel, where they pick one of its
+\`choices\`, so give choices there too. Tell the person you are checking before you ask.
+
 A subagent has no way to ask: it says what it needs in its report.`,
 };

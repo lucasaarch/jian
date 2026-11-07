@@ -18,11 +18,11 @@ export function conversationName(
     const project = projects.find((item) => item.id === session.projectId);
     return session.title ?? (project ? `${project.name} · New chat` : 'New chat');
   }
-  const stored = session.title?.replace(/^(Agent|WhatsApp|Telegram)\s·\s/, '');
+  const stored = session.title?.replace(/^(Agent|WhatsApp|Telegram|Email)\s·\s/, '');
   if (session.channel === AGENT_SESSION_CHANNEL) {
     return profiles.find((item) => item.id === session.peerProfileId)?.name ?? stored ?? 'Agent';
   }
-  if (['whatsapp', 'whatsapp-business', 'telegram'].includes(session.channel)) {
+  if (['whatsapp', 'whatsapp-business', 'telegram', 'email'].includes(session.channel)) {
     const contact = contacts.find(
       (item) => item.sessionId === session.id && item.profileId === session.profileId,
     );

@@ -1,4 +1,4 @@
-import { Send, Smartphone, Terminal } from 'lucide-react';
+import { Mail, Send, Smartphone, Terminal } from 'lucide-react';
 
 /** The transports a profile can configure, and what each one asks of the owner. */
 export const kinds = [
@@ -20,6 +20,12 @@ export const kinds = [
     name: 'Telegram',
     icon: Send,
     description: 'A bot from BotFather. Connecting means giving it its token.',
+  },
+  {
+    type: 'email' as const,
+    name: 'Email',
+    icon: Mail,
+    description: 'An address on a domain you send and receive with through Resend.',
   },
   {
     type: 'api' as const,

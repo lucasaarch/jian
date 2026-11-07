@@ -19,6 +19,8 @@ const addressNote: Partial<Record<Channel['type'], string>> = {
   telegram:
     'Jian registers it with Telegram as it connects, at JIAN_PUBLIC_URL when that is set. To change the bot token, disconnect and connect again.',
   api: 'Your systems post here with the token given when it was connected, in X-Jian-Channel-Token.',
+  email:
+    'Jian registered it in Resend as it connected. Mail whose sender domain passes neither DMARC nor DKIM is ignored. To change the API key or the address, disconnect and connect again.',
   'whatsapp-business':
     'Register it in Meta with your verify token, subscribe the app to the account’s messages events, then send a test message. Meta signs each payload with your app secret.',
 };
@@ -98,7 +100,11 @@ function ChannelSettings({
           : 'Meta’s Cloud API, for inbound customer support.'
         : channel.type === 'telegram'
           ? 'A bot from BotFather.'
-          : 'An HTTP endpoint for your own systems.';
+          : channel.type === 'email'
+            ? 'Mail through Resend. Senders and actions are approved here, never by email.'
+            : 'An HTTP endpoint for your own systems.';
+  // Neither asks anything in its own words: approvals and questions are answered in the panel.
+  const worded = channel.type !== 'api' && channel.type !== 'email';
 
   return (
     // One column as wide as the dialog: left to its content, a long address widens it.
@@ -113,6 +119,7 @@ function ChannelSettings({
       {channel.type !== 'whatsapp' && (
         <div className="grid gap-2">
           <div className={listBox}>
+            {channel.emailAddress && <CopyLine label="Address" value={channel.emailAddress} />}
             <CopyLine label={meta ? 'Callback URL' : 'Webhook URL'} value={channelUrl(channel)} />
           </div>
           <p className="px-1 text-xs leading-relaxed text-muted">{addressNote[channel.type]}</p>
@@ -133,7 +140,7 @@ function ChannelSettings({
       <ChannelSwitches
         channel={channel}
         actions={actions}
-        {...(channel.type === 'api'
+        {...(!worded
           ? {}
           : {
               onEditMessages: () => {
@@ -167,7 +174,7 @@ function ChannelSettings({
           </Action>
         )}
       </OverlayActions>
-      {channel.type !== 'api' && (
+      {worded && (
         <ChannelMessagesDialog
           open={wording}
           onOpenChange={setWording}

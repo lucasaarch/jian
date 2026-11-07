@@ -6,7 +6,7 @@ export const media: Skill = {
     'Use when someone sends an image, voice note, audio, document or any file, asks you to look at one, or asks you to make or send a file, an image or a voice reply.',
   instructions: `# Files, images, audio and documents
 
-Files travel both ways on every channel: WhatsApp, Telegram, the panel and the API. Anyone
+Files travel both ways on every channel: WhatsApp, Telegram, email, the panel and the API. Anyone
 can send you a file, and you can send one back in any conversation.
 
 ## What arrives

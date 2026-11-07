@@ -1,12 +1,13 @@
 import type { Contact, Profile, Session } from '../../lib/api';
 
 /** Where a conversation happens, in the order the picker lists them. */
-export type Provider = 'chats' | 'whatsapp' | 'telegram' | 'api';
+export type Provider = 'chats' | 'whatsapp' | 'telegram' | 'email' | 'api';
 
 const providers: Array<{ provider: Provider; name: string }> = [
   { provider: 'chats', name: 'Chats' },
   { provider: 'whatsapp', name: 'WhatsApp' },
   { provider: 'telegram', name: 'Telegram' },
+  { provider: 'email', name: 'Email' },
   { provider: 'api', name: 'API Server' },
 ];
 
@@ -25,17 +26,19 @@ export function conversationName(
   const contact = contacts.find((item) => item.sessionId === session.id);
   const peer = profiles.find((item) => item.id === session.peerProfileId);
   const stored = session.title?.replace(
-    /^(Agent|WhatsApp(?: Business(?: \(Meta\))?)?|Telegram)\s·\s/,
+    /^(Agent|WhatsApp(?: Business(?: \(Meta\))?)?|Telegram|Email)\s·\s/,
     '',
   );
 
-  if (['whatsapp', 'whatsapp-business', 'telegram'].includes(session.channel)) {
+  if (['whatsapp', 'whatsapp-business', 'telegram', 'email'].includes(session.channel)) {
     const app =
       session.channel === 'whatsapp-business'
         ? 'WhatsApp Business (Meta)'
         : session.channel === 'whatsapp'
           ? 'WhatsApp (Baileys)'
-          : 'Telegram';
+          : session.channel === 'email'
+            ? 'Email'
+            : 'Telegram';
 
     return {
       name: contact?.displayName ?? stored ?? 'Unknown contact',
@@ -51,12 +54,13 @@ export function conversationName(
 
 /**
  * Where a schedule can run: a chat of the panel, a contact or a group on WhatsApp or Telegram,
- * or an API conversation. Another agent's conversation belongs to that pair of agents.
+ * an email correspondent, or an API conversation. Another agent's conversation belongs to that pair of agents.
  */
 function providerOf(session: Session): Provider | undefined {
   if (session.channel === 'gateway') return 'chats';
   if (session.channel === 'whatsapp' || session.channel === 'whatsapp-business') return 'whatsapp';
   if (session.channel === 'telegram') return 'telegram';
+  if (session.channel === 'email') return 'email';
   if (session.channel === 'api') return 'api';
   return undefined;
 }

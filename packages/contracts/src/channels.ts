@@ -6,7 +6,13 @@ import { reasoningEffortSchema } from './providers.js';
 import { secretSchema } from './security.js';
 
 /** One channel of each type per profile: the panel connects a type, it does not name a binding. */
-export const channelTypeSchema = z.enum(['whatsapp', 'whatsapp-business', 'telegram', 'api']);
+export const channelTypeSchema = z.enum([
+  'whatsapp',
+  'whatsapp-business',
+  'telegram',
+  'api',
+  'email',
+]);
 
 /**
  * How many replies the agents of this installation may write in a group before a person
@@ -38,12 +44,23 @@ export const whatsappBusinessCompletionSchema = whatsappBusinessInputSchema.omit
   verifyToken: true,
 });
 
+/**
+ * An email address the agent receives and sends at, through a provider the owner has an account
+ * with. Resend is the only provider today; its API key goes to the vault and is never read back.
+ */
+export const emailInputSchema = z.strictObject({
+  provider: z.literal('resend'),
+  apiKey: secretSchema,
+  address: z.email().max(254),
+});
+
 export const channelInputSchema = z
   .strictObject({
     type: channelTypeSchema,
     // The Telegram bot token. It goes to the vault under `channel:<id>` and is never read back.
     botToken: secretSchema.optional(),
     whatsappBusiness: whatsappBusinessSetupSchema.optional(),
+    email: emailInputSchema.optional(),
   })
   .refine((value) => (value.type === 'telegram') === (value.botToken !== undefined), {
     message: 'Telegram connects with a bot token; the other channels connect without one',
@@ -55,7 +72,11 @@ export const channelInputSchema = z
       message: 'WhatsApp Business requires its own Meta credentials',
       path: ['whatsappBusiness'],
     },
-  );
+  )
+  .refine((value) => (value.type === 'email') === (value.email !== undefined), {
+    message: 'Email connects with a provider, its API key and the address to use',
+    path: ['email'],
+  });
 
 /** A word a person replies with, as typed: matched without case or accents. */
 const replyWordSchema = z.string().trim().min(1).max(40);
@@ -103,6 +124,8 @@ export const channelSchema = z.strictObject({
   enabled: z.boolean().default(true),
   allowAllContacts: z.boolean().default(false),
   whatsappBusinessStatus: z.enum(['pending', 'configured']).optional(),
+  /** On email: the address the agent receives and sends at, lowercased. */
+  emailAddress: z.string().optional(),
   /** On WhatsApp and Telegram: how approvals and questions read there. */
   messages: channelMessagesSchema.optional(),
   createdAt: z.iso.datetime(),

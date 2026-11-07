@@ -33,8 +33,8 @@ There is no hosted Jian and no Jian account. One trusted owner runs each install
 - **The desktop app**, for macOS, Windows and Linux, starts a gateway of its own on that computer,
   with nothing else to set up. It can also connect to gateways on servers.
 - **A server gateway** keeps agents reachable while the computer is off. It adds channels
-  (WhatsApp, Telegram and API clients), connected machines, and a web panel that also works from a
-  phone.
+  (WhatsApp, Telegram, email and API clients), connected machines, and a web panel that also works
+  from a phone.
 
 Data leaves the installation only when a provider or service the owner configured needs it for a
 task.

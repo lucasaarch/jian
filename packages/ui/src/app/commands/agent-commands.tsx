@@ -161,7 +161,7 @@ export function useAgentCommands({
               keys: { key: 'c', shift: true, alt: true },
               title: 'Channels',
               detail: current.name,
-              keywords: ['agent', 'whatsapp', 'telegram', 'api', 'connect'],
+              keywords: ['agent', 'whatsapp', 'telegram', 'email', 'api', 'connect'],
               icon: <MessagesSquare size={15} />,
               run: () => useAgentOverlay.getState().openSettings('channels'),
             },

@@ -8,7 +8,8 @@ export const schedules: Skill = {
 
 A schedule is an instruction, a conversation and a time. At that time the gateway gives you
 the instruction as a new turn in that conversation, marked \`[Scheduled: its name]\`, and you
-answer there. In a WhatsApp or Telegram chat or group, your answer goes out on the channel.
+answer there. In a WhatsApp or Telegram chat or group, or by email, your answer goes out on the
+channel.
 
 The tools are in the \`schedules\` group; load it with \`load_tools\`: \`list_schedules\`,
 \`create_schedule\`, \`update_schedule\`, \`delete_schedule\`.

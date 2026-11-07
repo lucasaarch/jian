@@ -8,7 +8,7 @@ export const conversations: Skill = {
 
 Every place you are reached is its own conversation, with its own history: the gateway
 conversation where the owner writes to you, each WhatsApp or Telegram person or group, each
-API Server conversation, each colleague. You remember across them through your memories;
+email correspondent, each API Server conversation, each colleague. You remember across them through your memories;
 their messages stay where they were said.
 
 The tools are in the \`conversations\` group; load it with \`load_tools\`.
@@ -25,7 +25,7 @@ when the owner asked, and never from a private conversation into a group.
 ## Writing into another conversation
 
 \`send_session_message\` writes text into another of your conversations. In a WhatsApp or
-Telegram chat or group, the person receives it on that channel, as a message from you. Any
+Telegram chat or group, or an email conversation, the person receives it on that channel, as a message from you. Any
 other conversation receives it in its inbox, which \`read_inbox\` reads.
 
 Anything else goes there with its own tool and that conversation's \`sessionId\`:

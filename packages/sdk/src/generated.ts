@@ -1050,6 +1050,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/email/{channelId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Required permission: webhook. */
+        post: operations["emailIngress"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/telegram/{channelId}": {
         parameters: {
             query?: never;
@@ -9780,13 +9797,14 @@ export interface operations {
                         /** Format: uuid */
                         profileId: string;
                         /** @enum {string} */
-                        type: "whatsapp" | "whatsapp-business" | "telegram" | "api";
+                        type: "whatsapp" | "whatsapp-business" | "telegram" | "api" | "email";
                         /** @default true */
                         enabled: boolean;
                         /** @default false */
                         allowAllContacts: boolean;
                         /** @enum {string} */
                         whatsappBusinessStatus?: "pending" | "configured";
+                        emailAddress?: string;
                         messages?: {
                             approval: string;
                             question: string;
@@ -9896,7 +9914,7 @@ export interface operations {
             content: {
                 "application/json": {
                     /** @enum {string} */
-                    type: "whatsapp" | "whatsapp-business" | "telegram" | "api";
+                    type: "whatsapp" | "whatsapp-business" | "telegram" | "api" | "email";
                     botToken?: string;
                     whatsappBusiness?: {
                         verifyToken: string;
@@ -9906,6 +9924,13 @@ export interface operations {
                         verifyToken: string;
                         phoneNumberId: string;
                         businessAccountId: string;
+                    };
+                    email?: {
+                        /** @constant */
+                        provider: "resend";
+                        apiKey: string;
+                        /** Format: email */
+                        address: string;
                     };
                 };
             };
@@ -9923,13 +9948,14 @@ export interface operations {
                         /** Format: uuid */
                         profileId: string;
                         /** @enum {string} */
-                        type: "whatsapp" | "whatsapp-business" | "telegram" | "api";
+                        type: "whatsapp" | "whatsapp-business" | "telegram" | "api" | "email";
                         /** @default true */
                         enabled: boolean;
                         /** @default false */
                         allowAllContacts: boolean;
                         /** @enum {string} */
                         whatsappBusinessStatus?: "pending" | "configured";
+                        emailAddress?: string;
                         messages?: {
                             approval: string;
                             question: string;
@@ -10053,13 +10079,14 @@ export interface operations {
                         /** Format: uuid */
                         profileId: string;
                         /** @enum {string} */
-                        type: "whatsapp" | "whatsapp-business" | "telegram" | "api";
+                        type: "whatsapp" | "whatsapp-business" | "telegram" | "api" | "email";
                         /** @default true */
                         enabled: boolean;
                         /** @default false */
                         allowAllContacts: boolean;
                         /** @enum {string} */
                         whatsappBusinessStatus?: "pending" | "configured";
+                        emailAddress?: string;
                         messages?: {
                             approval: string;
                             question: string;
@@ -10202,13 +10229,14 @@ export interface operations {
                         /** Format: uuid */
                         profileId: string;
                         /** @enum {string} */
-                        type: "whatsapp" | "whatsapp-business" | "telegram" | "api";
+                        type: "whatsapp" | "whatsapp-business" | "telegram" | "api" | "email";
                         /** @default true */
                         enabled: boolean;
                         /** @default false */
                         allowAllContacts: boolean;
                         /** @enum {string} */
                         whatsappBusinessStatus?: "pending" | "configured";
+                        emailAddress?: string;
                         messages?: {
                             approval: string;
                             question: string;
@@ -10330,7 +10358,7 @@ export interface operations {
                         /** Format: uuid */
                         channelId: string;
                         /** @enum {string} */
-                        type: "whatsapp" | "whatsapp-business" | "telegram" | "api";
+                        type: "whatsapp" | "whatsapp-business" | "telegram" | "api" | "email";
                         /**
                          * @default direct
                          * @enum {string}
@@ -10474,7 +10502,7 @@ export interface operations {
                         /** Format: uuid */
                         channelId: string;
                         /** @enum {string} */
-                        type: "whatsapp" | "whatsapp-business" | "telegram" | "api";
+                        type: "whatsapp" | "whatsapp-business" | "telegram" | "api" | "email";
                         /**
                          * @default direct
                          * @enum {string}
@@ -10611,7 +10639,7 @@ export interface operations {
                         /** Format: uuid */
                         channelId: string;
                         /** @enum {string} */
-                        type: "whatsapp" | "whatsapp-business" | "telegram" | "api";
+                        type: "whatsapp" | "whatsapp-business" | "telegram" | "api" | "email";
                         /**
                          * @default direct
                          * @enum {string}
@@ -10748,7 +10776,7 @@ export interface operations {
                         /** Format: uuid */
                         channelId: string;
                         /** @enum {string} */
-                        type: "whatsapp" | "whatsapp-business" | "telegram" | "api";
+                        type: "whatsapp" | "whatsapp-business" | "telegram" | "api" | "email";
                         /**
                          * @default direct
                          * @enum {string}
@@ -10876,7 +10904,7 @@ export interface operations {
                 content: {
                     "application/json": {
                         /** @enum {string} */
-                        type: "whatsapp" | "whatsapp-business" | "telegram" | "api";
+                        type: "whatsapp" | "whatsapp-business" | "telegram" | "api" | "email";
                         chatId: string;
                         name?: string;
                         profiles: {
@@ -12249,6 +12277,127 @@ export interface operations {
                 content: {
                     "application/json": {
                         accepted: boolean;
+                    };
+                };
+            };
+            /** @description Error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    emailIngress: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                channelId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": unknown;
+            };
+        };
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        accepted: boolean;
+                        /** Format: uuid */
+                        runId?: string;
+                        /**
+                         * @description Absent when the payload carried no message to route.
+                         * @enum {string}
+                         */
+                        contact?: "approved" | "pending" | "blocked";
+                        /**
+                         * @description Why an approved message produced no run.
+                         * @enum {string}
+                         */
+                        silence?: "unaddressed" | "budget" | "reaction" | "no-model";
                     };
                 };
             };

@@ -16,7 +16,9 @@ const admitsDetail = (channel: Channel) =>
     ? 'New senders reach the agent without your approval. Rooms still ask.'
     : channel.type === 'whatsapp-business'
       ? 'New people chat without your approval. Blocked contacts stay blocked.'
-      : 'New people chat privately without your approval. Groups still ask.';
+      : channel.type === 'email'
+        ? 'Anyone whose domain authenticates their mail reaches the agent without your approval.'
+        : 'New people chat privately without your approval. Groups still ask.';
 
 /**
  * A channel's own settings: whether the agent answers there at all, whether strangers need the
@@ -30,7 +32,10 @@ export function ChannelSwitches({
 }: {
   channel: Channel;
   actions: SectionActions;
-  /** Absent where the channel has no wording of its own: an API server's callers are programs. */
+  /**
+   * Absent where the channel has no wording of its own: an API server's callers are programs,
+   * and email asks for decisions in the panel.
+   */
   onEditMessages?: () => void;
 }) {
   const profile = useAgent();

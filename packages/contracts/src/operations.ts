@@ -844,6 +844,18 @@ export const operations: Operation[] = [
   },
   {
     method: 'POST',
+    path: '/v1/email/:channelId',
+    operationId: 'emailIngress',
+    access: 'webhook',
+    body: z
+      .unknown()
+      .describe(
+        'A Resend webhook event, authenticated with its Svix signature over the original bytes. Maximum 256 KB.',
+      ),
+    response: ingressResultSchema,
+  },
+  {
+    method: 'POST',
     path: '/v1/telegram/:channelId',
     operationId: 'telegramIngress',
     access: 'webhook',
