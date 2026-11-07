@@ -195,6 +195,35 @@ describe('the conversation reader', () => {
     expect(asked.timeline.map((read) => read.runs)).toEqual([['run-1'], ['run-1'], ['run-1']]);
   });
 
+  it('asks for brief tools on every read it makes, its own turns and the other agent’s', async () => {
+    const briefs: (boolean | undefined)[] = [];
+    const call = { profileId: 'other', sessionId: 'there', runId: 'call-1' };
+    const { api } = fakeApi({
+      messages: async (_profile, _session, page = {}) =>
+        page.before
+          ? [said('m0', { runId: 'run-0' })]
+          : [
+              said('m1', { runId: 'run-1' }),
+              said('m2', { role: 'assistant', call } as Partial<Message>),
+            ],
+      activities: async () => [turn('run-1')],
+      run: async (_profile, runId) => turn(runId),
+      timeline: async (_profile, _session, runs = [], options) => {
+        briefs.push(options?.brief);
+        return runs.map((runId) => ({ runId, steps: [step(`${runId}-tool`)] }));
+      },
+    });
+    const { reader } = open(api);
+
+    await reader.latest();
+    await reader.turns(['run-1']);
+    await reader.call();
+    await reader.earlier();
+
+    // latest: its turns and the call; turns; the call; earlier.
+    expect(briefs).toEqual([true, true, true, true, true]);
+  });
+
   it('never asks the timeline for no turn', async () => {
     const { api, asked } = fakeApi();
     const { reader } = open(api);

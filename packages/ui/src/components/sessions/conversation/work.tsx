@@ -2,8 +2,8 @@
 
 import type { CodeDiff, ToolStep } from '../../../lib/api';
 import { FilePath } from '../code-change';
-import { traceOf } from '../progress';
 import { ThoughtLine } from '../thought-line';
+import { traceOf } from '../trace';
 
 /** When a stretch of tools ended: its last tool's end, so a settled line stops its clock there. */
 const endOf = (steps: ToolStep[]) =>

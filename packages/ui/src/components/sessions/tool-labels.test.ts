@@ -1,5 +1,6 @@
 import { expect, it } from 'vitest';
-import { statusOf, traceOf } from './progress';
+import { statusOf } from './progress';
+import { traceOf } from './trace';
 
 const step = (toolName: string, extra: object = {}) => ({
   toolCallId: toolName,

@@ -12,8 +12,9 @@ import { barButton, InspectorBar, InspectorBody, InspectorHeader } from './inspe
 import { InspectorContent } from './inspector-host';
 import { MessageMedia } from './media';
 import { ChatMessage } from './message';
-import { LiveTurn, placeSteps, statusOf, traceOf } from './progress';
+import { LiveTurn, placeSteps, statusOf } from './progress';
 import { ThoughtLine, WorkMark } from './thought-line';
+import { traceOf } from './trace';
 
 const chip =
   'inline-flex h-5 shrink-0 items-center rounded-full bg-ink/8 px-2 text-[11px] font-medium whitespace-nowrap text-muted';

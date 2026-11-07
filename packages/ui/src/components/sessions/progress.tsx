@@ -6,8 +6,9 @@ import { Markdown } from '../ui/markdown';
 import { RefineFrame } from '../ui/refine-frame';
 import { AgentLine } from './conversation/agent-line';
 import { drawnBox } from './media';
-import { ThoughtLine, type ThoughtStep } from './thought-line';
-import { isMcpName, toolLabel } from './tool-labels';
+import { ThoughtLine } from './thought-line';
+import { toolLabel } from './tool-labels';
+import { traceOf } from './trace';
 
 /** The orb's animation for each tool: looking things up, working with its hands, or asking. */
 const toolOrbs: Record<string, OrbState> = {
@@ -50,35 +51,6 @@ export function statusOf(run: Pick<Run, 'status' | 'progress'>): {
           : 'composing',
     tool: Boolean(tool),
   };
-}
-
-const failures: Partial<Record<ToolStep['status'], string>> = {
-  failed: 'Failed',
-  refused: 'Refused by the server',
-  uncertain: 'Outcome unknown',
-  stopped: 'Did not finish',
-};
-
-/** The tools of a turn as the Thought Line's trace, in the words the panel uses for them. */
-export function traceOf(steps: ToolStep[]): ThoughtStep[] {
-  return steps.map((step) => {
-    const failed = failures[step.status];
-
-    return {
-      key: step.toolCallId,
-      text: toolLabel(step.toolName, step.mcp),
-      status: step.status === 'running' ? 'running' : failed ? 'failed' : 'done',
-      ...(failed ? { note: failed, ...(step.error ? { detail: step.error } : {}) } : {}),
-      ...(step.input !== undefined
-        ? { input: { text: step.input, truncated: Boolean(step.inputTruncated) } }
-        : {}),
-      ...(step.output !== undefined
-        ? { output: { text: step.output, truncated: Boolean(step.outputTruncated) } }
-        : {}),
-      ...(step.mcp || isMcpName(step.toolName) ? { json: true } : {}),
-      ...(step.diff ? { diff: step.diff } : {}),
-    };
-  });
 }
 
 /** The working Thought Line of a run and the pictures it is drawing so far. */
