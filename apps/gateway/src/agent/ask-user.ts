@@ -45,9 +45,19 @@ export function buildRunQuestion(
   };
 }
 
-export function resumePrompt(question: RunQuestion, answer: string): string {
+export function resumePrompt(
+  question: RunQuestion,
+  answer: string,
+  answeredBy: 'owner' | 'contact',
+): string {
+  // The agent must know who decided: in a chat, a yes from the person it talks with is not the
+  // owner's unless the owner let that chat decide for them.
+  const who =
+    answeredBy === 'owner'
+      ? 'The owner answered'
+      : 'The person in this chat, whom the owner allowed to decide for them, answered';
   return [
-    'The owner answered the mid-run question. Continue the work with this answer — do not ask them to continue.',
+    `${who} the mid-run question. Continue the work with this answer — do not ask them to continue.`,
     '',
     `Question: ${question.prompt}`,
     ...(question.choices?.length ? [`Choices were: ${question.choices.join(' | ')}`] : []),

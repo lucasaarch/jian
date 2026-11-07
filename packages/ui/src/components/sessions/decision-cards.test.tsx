@@ -106,12 +106,14 @@ it('shows a decided approval without buttons, saying how it went', async () => {
   expect(button('Delete 12 projects')).toBeUndefined();
 });
 
-it('leaves a chat’s pending approval and question to the chat', async () => {
+it('leaves a chat’s pending approval to the chat', async () => {
   const pending = await show({ approval }, `Waiting for approval: ${approval.title}`, 'Telegram');
 
   expect(element.textContent).toContain('Waiting for an answer in Telegram.');
   expect(pending.button('Reject')).toBeUndefined();
+});
 
+it('lets the owner answer a question the agent asked them in a chat’s conversation', async () => {
   const question = {
     id: 'q',
     prompt: 'Which branch?',
@@ -121,8 +123,9 @@ it('leaves a chat’s pending approval and question to the chat', async () => {
   const asked = await show({ question }, 'Which branch?\n\n1. main\n2. dev', 'WhatsApp');
 
   expect(element.textContent).toContain('Question');
-  expect(element.textContent).toContain('Waiting for an answer in WhatsApp.');
-  expect(asked.button('main')).toBeUndefined();
+  expect(element.textContent).not.toContain('Waiting for an answer in WhatsApp.');
+  await act(async () => asked.button('dev')?.click());
+  expect(asked.answerRun).toHaveBeenCalledWith('profile', 'run', 'dev');
 });
 
 it('answers a question from its choices in the panel’s own chat', async () => {

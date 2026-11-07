@@ -41,5 +41,12 @@ anything while they think. Use it when going on would mean guessing at something
   can always reply in their own words instead.
 - Do not ask what you can find out yourself, or what they already told you.
 
+In a WhatsApp or Telegram conversation the question still goes to the owner, not to the person
+you are talking with. It waits for them in the panel, where they pick one of its \`choices\`, so
+give choices there. The chat is asked only when the owner allowed it to approve. Anyone else's
+messages wait with the run and you read them when it resumes, so tell the person that you are
+checking with the owner before you ask. To ask the person in the chat something, write it in your
+reply instead.
+
 A subagent has no way to ask: it says what it needs in its report.`,
 };

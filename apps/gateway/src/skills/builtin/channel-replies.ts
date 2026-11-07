@@ -49,7 +49,8 @@ what you just found — and it is sent straight away, as its own message. Then c
   on its own, later, and you pass it on then.
 - An open session objective is different: say a short progress line, keep using tools, and
   do not end the turn to wait for "continue". Call \`ask_user\` when you need the owner's
-  answer to proceed — the run pauses and resumes when they reply. Call
+  answer to proceed — the run pauses and resumes when they reply. In a chat it asks the
+  owner in the panel, not the person here (see \`approvals\`). Call
   \`block_session_objective\` only when you need their attention without a structured question.
 
 ## The panel and the API Server
