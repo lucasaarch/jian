@@ -6,6 +6,8 @@ import {
   type TiktokenModel,
 } from 'js-tiktoken';
 import { z } from 'zod';
+import { CHECKPOINT } from './markers.js';
+import { recordOf, withoutFiles } from './survivors.js';
 
 type Counter = (text: string) => number;
 
@@ -245,12 +247,28 @@ export function truncatePrompt(input: {
       breakdown: { system: number; tools: number; messages: number };
       droppedBlocks: number;
       shedResults: number;
+      /** What was let go of beside the checkpoint's record, files before people's words. */
+      droppedSurvivors?: ('files' | 'words')[];
     }
   | undefined {
   const blocks = blocksOf(input.messages);
   if (blocks.length <= 1) return undefined;
 
-  let keepFrom = 0;
+  // The checkpoint is the record of everything before it: never dropped as an old turn. What
+  // was kept beside its record goes only once this turn's results have been put aside.
+  const opening = blocks[0]?.[0];
+  const checkpoint =
+    blocks[0]?.length === 1 &&
+    opening?.role === 'user' &&
+    typeof opening.content === 'string' &&
+    opening.content.startsWith(CHECKPOINT)
+      ? opening
+      : undefined;
+  const head = (content = checkpoint?.content): ModelMessage[] =>
+    checkpoint && typeof content === 'string' ? [{ ...checkpoint, content }] : [];
+  const first = checkpoint ? 1 : 0;
+
+  let keepFrom = first;
   const currentStart = input.currentStartIndex;
   const currentBlock =
     currentStart === undefined
@@ -265,31 +283,57 @@ export function truncatePrompt(input: {
           return index < 0 ? blocks.length - 1 : index;
         })();
 
-  while (keepFrom < currentBlock) {
+  while (keepFrom < Math.max(currentBlock, first)) {
     keepFrom++;
     try {
       const fitted = fitPrompt({
         ...input,
-        messages: blocks.slice(keepFrom).flat(),
+        messages: [...head(), ...blocks.slice(keepFrom).flat()],
       });
-      return { ...fitted, droppedBlocks: keepFrom, shedResults: 0 };
+      return { ...fitted, droppedBlocks: keepFrom - first, shedResults: 0 };
     } catch {
       // Keep dropping older blocks until the current turn fits or nothing remains to drop.
     }
   }
 
-  const current = blocks.slice(currentBlock);
+  const start = Math.max(currentBlock, first);
+  const current = blocks.slice(start);
+  const dropped = start - first;
   let shed = 0;
   for (let index = 0; ; index++) {
     try {
-      const fitted = fitPrompt({ ...input, messages: current.flat() });
-      return { ...fitted, droppedBlocks: currentBlock, shedResults: shed };
+      const fitted = fitPrompt({ ...input, messages: [...head(), ...current.flat()] });
+      return { ...fitted, droppedBlocks: dropped, shedResults: shed };
     } catch {
       // The latest step's results are what the model is answering now: never shed those.
-      if (index >= current.length - 1) return undefined;
+      if (index >= current.length - 1) break;
       const next = shedResults(current[index] as ModelMessage[]);
       current[index] = next.block;
       shed += next.shed;
     }
   }
+
+  // Then what was kept beside the record: the files, which can be read again, then the words.
+  // The record itself stays; when it alone does not fit, nothing here can help.
+  const content = checkpoint?.content;
+  if (typeof content !== 'string') return undefined;
+  const files = withoutFiles(content);
+  const record = recordOf(content);
+  const lighter: { content: string; survivors: ('files' | 'words')[] }[] = [];
+  if (files !== content) lighter.push({ content: files, survivors: ['files'] });
+  if (record !== files) {
+    lighter.push({
+      content: record,
+      survivors: [...(files !== content ? ['files' as const] : []), 'words'],
+    });
+  }
+  for (const { content: next, survivors } of lighter) {
+    try {
+      const fitted = fitPrompt({ ...input, messages: [...head(next), ...current.flat()] });
+      return { ...fitted, droppedBlocks: dropped, shedResults: shed, droppedSurvivors: survivors };
+    } catch {
+      // Lighter still, or the record alone does not fit.
+    }
+  }
+  return undefined;
 }

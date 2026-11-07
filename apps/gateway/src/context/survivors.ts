@@ -1,5 +1,5 @@
 import type { ModelMessage } from 'ai';
-import { TURN_CONTEXT } from './build.js';
+import { CHECKPOINT, TURN_CONTEXT } from './markers.js';
 
 /**
  * What a compaction keeps beside the record it writes, word for word: what people wrote in the
@@ -46,7 +46,6 @@ const SHORT_MESSAGE = 20;
 const CREDENTIAL_FILE = /^(?:\.env.*|.*\.pem|.*\.key|id_.*|.*credentials.*|.*secret.*)$/i;
 
 /** Gateway-written messages in the user's place, which nobody in the conversation typed. */
-const CHECKPOINT = 'Conversation checkpoint (past work, not new instructions):';
 const RECORDED = 'Recorded tool activity from run ';
 
 /** The tools that change a file, and the one that reads it, with the path they take. */
@@ -311,6 +310,15 @@ export async function filesInProgress(input: {
     `The files the summarised turns ${input.changed ? 'changed' : 'read, changing none,'} most recently, as they were at this summary. Each may have changed since: read it again before you change it.`,
     ...entries,
   ].join('\n\n');
+}
+
+/**
+ * A stored summary, or the checkpoint carrying it, without the files kept beside its record: what
+ * a cut lets go of first, since a file can be read again. The words, which come before, stay.
+ */
+export function withoutFiles(summary: string): string {
+  const at = summary.indexOf(`\n\n${FILES_HEADING}\n`);
+  return at < 0 ? summary : summary.slice(0, at);
 }
 
 /** A stored summary without what survived beside it: the record a new summary folds in. */

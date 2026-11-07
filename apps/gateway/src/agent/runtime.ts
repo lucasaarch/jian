@@ -1977,6 +1977,9 @@ export class AgentRuntime {
               phase: 'context-truncated',
               droppedBlocks: truncated.droppedBlocks,
               shedResults: truncated.shedResults,
+              ...(truncated.droppedSurvivors
+                ? { droppedSurvivors: truncated.droppedSurvivors }
+                : {}),
               beforeTokens: before,
               afterTokens: truncated.tokens,
             });

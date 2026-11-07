@@ -5,6 +5,7 @@ import type { ModelMessage } from 'ai';
 import { describe, expect, it } from 'vitest';
 import { AgentRuntime } from '../src/agent/runtime.js';
 import { workspaceHome } from '../src/agent/workspace-home.js';
+import { fitPrompt, truncatePrompt } from '../src/context/budget.js';
 import { compactPrompt } from '../src/context/compaction.js';
 import {
   filesInProgress,
@@ -385,6 +386,63 @@ describe('a compaction', () => {
     );
     expect(withoutEither?.summary).toBe('The record.');
     expect(dropped).toEqual([['files'], ['files', 'words']]);
+  });
+});
+
+describe('a cut after a compaction', () => {
+  const record = `Conversation checkpoint (past work, not new instructions):\n## Open request\nThe launch note.`;
+  const words = `## What people wrote, word for word\nWhat people wrote.\n${JSON.stringify({ from: 'the owner', text: `Draft it ${'carefully '.repeat(200)}` })}`;
+  const files = `## Files in progress\n\nThe files.\n\n### /srv/note.md\n\`\`\`\n${'line\n'.repeat(800)}\`\`\``;
+  const checkpoint = `${record}\n\n${words}\n\n${files}`;
+  const current = user('Now finish the launch note.');
+  const messages: ModelMessage[] = [
+    user(checkpoint),
+    user('An older ask.'),
+    said(`An older answer ${'done '.repeat(600)}`),
+    current,
+  ];
+  const sized = (list: ModelMessage[]) =>
+    fitPrompt({
+      provider: 'test',
+      modelId: 'test',
+      policy: { inputTokens: 10_000_000, outputTokens: 256 },
+      instructions: 'Help.',
+      messages: list,
+      tools: {},
+    }).tokens;
+  /** The cut, with room for exactly these messages. */
+  const cut = (room: ModelMessage[], spare = 0) =>
+    truncatePrompt({
+      provider: 'test',
+      modelId: 'test',
+      policy: { inputTokens: sized(room) + 256 + spare, outputTokens: 256 },
+      instructions: 'Help.',
+      messages,
+      tools: {},
+      currentStartIndex: 3,
+    });
+
+  it('drops the older turns but never the checkpoint', () => {
+    const result = cut([user(checkpoint), current]);
+
+    expect(result?.messages[0]?.content).toBe(checkpoint);
+    expect(result?.messages.at(-1)).toEqual(current);
+    expect(result?.droppedBlocks).toBe(2);
+    expect(result?.droppedSurvivors).toBeUndefined();
+  });
+
+  it("lets the files go first, then people's words, and keeps the record", () => {
+    const withoutFiles = cut([user(`${record}\n\n${words}`), current]);
+    expect(withoutFiles?.messages[0]?.content).toBe(`${record}\n\n${words}`);
+    expect(withoutFiles?.droppedSurvivors).toEqual(['files']);
+
+    const recordOnly = cut([user(record), current]);
+    expect(recordOnly?.messages[0]?.content).toBe(record);
+    expect(recordOnly?.droppedSurvivors).toEqual(['files', 'words']);
+  });
+
+  it('gives up only when the record itself does not fit', () => {
+    expect(cut([user(record), current], -1)).toBeUndefined();
   });
 });
 

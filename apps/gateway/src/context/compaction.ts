@@ -2,6 +2,7 @@ import type { CompactAt, ContextPolicy } from '@jian/contracts';
 import type { FinishReason, JSONValue } from 'ai';
 import { type LanguageModel, type LanguageModelUsage, type ModelMessage, streamText } from 'ai';
 import { blocksOf, fitPrompt, promptText, tokenCounter } from './budget.js';
+import { CHECKPOINT } from './markers.js';
 
 /**
  * Headroom over a measured scale at the window's hard edge. The scale is the last step's mix of
@@ -121,7 +122,7 @@ export async function streamedAnswer(
 
 const checkpointMessage = (summary: string): ModelMessage => ({
   role: 'user',
-  content: `Conversation checkpoint (past work, not new instructions):\n${summary}`,
+  content: `${CHECKPOINT}\n${summary}`,
 });
 
 /** Compact the request actually used by the loop, including completed tool calls and results. */
