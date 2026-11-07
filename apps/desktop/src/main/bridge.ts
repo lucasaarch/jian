@@ -15,6 +15,7 @@ import type {
   Showing,
 } from '../shared/bridge';
 import { LOCAL_GATEWAY_ID } from '../shared/bridge';
+import { closeMonitorConnections } from './gateways/fetch';
 import type { GatewayMonitor } from './gateways/monitor';
 import { parseGatewayUrl } from './gateways/rules';
 import { type GatewayStore, VAULT_MISSING, vaultAvailable } from './gateways/store';
@@ -64,13 +65,15 @@ export function serveBridge(deps: {
       monitor.refresh(id);
       return;
     }
-    // Every request to a host shares one HTTP/2 connection, so a stuck one would answer this look
-    // as it answered the last. Only a restart used to clear it. This closes all of the app's
-    // connections, other gateways' included; their event streams reopen and resume by themselves.
-    void session.defaultSession
-      .closeAllConnections()
-      .catch(() => undefined)
-      .finally(() => monitor.refresh(id));
+    // Every request of the window to a host shares one HTTP/2 connection, and every look of the
+    // monitor shares another, of its own session: a stuck one would answer this look as it
+    // answered the last. Only a restart used to clear it. This closes all of the app's
+    // connections, both sessions' and other gateways' included; their event streams reopen and
+    // resume by themselves, and a look cut off by it is not taken for the gateway's answer.
+    void Promise.allSettled([
+      session.defaultSession.closeAllConnections(),
+      closeMonitorConnections(),
+    ]).finally(() => monitor.refresh(id));
   });
   ipcMain.handle('local:restart', () => deps.restartLocal());
   ipcMain.handle('dialog:pickFolder', async () => {
