@@ -330,11 +330,21 @@ const Blocks = memo(function Blocks({
   );
 });
 
-/** A code segment is highlighted again only when its own text changes, not when a sibling grows. */
-const CodeSegment = memo(function CodeSegment({ part }: { part: string }) {
+/**
+ * A code segment is highlighted again only when its own text changes, not when a sibling grows.
+ * One still being written is drawn plain: it changes at every step of the reveal, and colouring
+ * the whole block again each time costs more than the frame has.
+ */
+const CodeSegment = memo(function CodeSegment({ part, open }: { part: string; open: boolean }) {
   const head = part.indexOf('\n');
 
-  return <CodeBlock text={part.slice(head + 1)} language={part.slice(3, head) || undefined} />;
+  return (
+    <CodeBlock
+      text={part.slice(head + 1)}
+      language={part.slice(3, head) || undefined}
+      plain={open}
+    />
+  );
 });
 
 /**
@@ -353,17 +363,21 @@ export const Markdown = memo(function Markdown({
   streaming?: boolean;
 }) {
   const shown = streaming ? streamable(text) : text;
+  // An odd count of fences while streaming: the last one opened and has not closed yet.
+  const open = streaming && (text.match(/^```/gm)?.length ?? 0) % 2 === 1;
+  const parts = keyed(
+    segments(shown).map((part) =>
+      part.code ? `\`\`\`${part.language ?? ''}\n${part.text}` : part.text,
+    ),
+    streaming,
+  );
+  const lastCode = parts.findLastIndex(([, part]) => part.startsWith('```'));
 
   return (
     <>
-      {keyed(
-        segments(shown).map((part) =>
-          part.code ? `\`\`\`${part.language ?? ''}\n${part.text}` : part.text,
-        ),
-        streaming,
-      ).map(([key, part]) =>
+      {parts.map(([key, part], at) =>
         part.startsWith('```') ? (
-          <CodeSegment key={key} part={part} />
+          <CodeSegment key={key} part={part} open={open && at === lastCode} />
         ) : (
           <Blocks key={key} text={part} breaks={breaks} streaming={streaming} />
         ),

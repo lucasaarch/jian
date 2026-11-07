@@ -20,10 +20,10 @@ const cutAt = (text: string, from: number) => {
 
 /**
  * Reveals `target` at a steady pace so chunked streaming reads as flowing text. The pace is the
- * base rate; a block above BLOCK_CHARS is cleared within the catch-up window, counted from when
- * it was noticed, at a rate that rises as the deadline nears so the tail cannot stretch out. Inactive or reduced motion
- * returns `target` whole and never schedules a frame. Text that stops extending what was shown
- * (a rewrite) restarts from the beginning.
+ * base rate, or faster when that would not clear what is waiting within the catch-up window,
+ * counted from the target's last growth; the rate rises as that deadline nears, so the tail
+ * cannot stretch out. Inactive or reduced motion returns `target` whole and never schedules a
+ * frame. Text that stops extending what was shown (a rewrite) restarts from the beginning.
  */
 export function useSmoothText(target: string, active: boolean): string {
   const [shown, setShown] = useState('');

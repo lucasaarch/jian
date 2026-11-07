@@ -25,6 +25,14 @@ describe('streamed Markdown', () => {
     expect(element.querySelector('.code-block')?.textContent).toContain('const x');
   });
 
+  it('colours a fence only once it closes, not at every step while it is written', () => {
+    draw('a\n```ts\nconst x = 1;');
+    expect(element.querySelector('.code-block-line span')).toBeNull();
+
+    draw('a\n```ts\nconst x = 1;\n```\nDone.');
+    expect(element.querySelector('.code-block-line span')).not.toBeNull();
+  });
+
   it.each([
     ['say **bo', 'say bo'],
     ['say `co', 'say co'],

@@ -14,15 +14,18 @@ export function CodeBlock({
   text,
   language,
   wrapped = false,
+  plain = false,
 }: {
   text: string;
   language?: string;
   /** Whether lines start wrapped; the owner can still switch it. */
   wrapped?: boolean;
+  /** Drawn without colour, as a block still being written is. */
+  plain?: boolean;
 }) {
   const [copied, setCopied] = useState(false);
   const [wrap, setWrap] = useState(wrapped);
-  const lines = highlightLines(text, language);
+  const lines = highlightLines(text, plain ? undefined : language);
 
   return (
     <figure className="code-block" data-wrap={wrap || undefined}>
