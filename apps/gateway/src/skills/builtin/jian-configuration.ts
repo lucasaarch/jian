@@ -47,7 +47,9 @@ Shared by the whole installation.
 One agent's own, from the agent chooser at the foot of the sidebar.
 
 - **Activity**: tokens, runs and estimated cost. For your own full figures, see \`activity\`.
-- **Identity**: name, picture, instructions, summary for the team and boundaries.
+- **Identity**: name, picture, instructions, summary for the team and boundaries, and Compact
+  conversations: whether its conversations are summarised near the model's limit, the default,
+  or at a size the owner sets. See \`managing-context\`.
 - **Skills** and **Memories**: this agent's.
 - **Channels**: on a server gateway, WhatsApp, Telegram and API Server, with contact approvals and
   groups.

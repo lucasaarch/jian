@@ -337,15 +337,14 @@ describe('context', () => {
       scale: 0.5,
     }).messages.at(-2)?.content;
 
-    // On a 1M window Jian compacts at 200,000, a fifth of it: a share of the window would read
-    // 2% at a turn already a tenth of the way there.
+    // On a 1M window with a 64k reserve Jian compacts at 889,200 by default.
     const line =
-      /Context: this turn starts at about ([\d,]+) tokens, (\d+)% of the way to 200,000, where Jian summarises the older turns\./.exec(
+      /Context: this turn starts at about ([\d,]+) tokens, (\d+)% of the way to 889,200, where Jian summarises the older turns\./.exec(
         turn ?? '',
       );
     expect(line).not.toBeNull();
     const used = Number(line?.[1]?.replaceAll(',', ''));
-    expect(Number(line?.[2])).toBe(Math.round((used / 200_000) * 100));
+    expect(Number(line?.[2])).toBe(Math.round((used / 889_200) * 100));
   });
 
   it('refuses an oversized prompt instead of silently dropping tool-call/result blocks', () => {
@@ -742,8 +741,12 @@ describe('compaction', () => {
   });
 
   it('compacts only once the prompt is nearly full', () => {
-    expect(needsCompaction(8600, 10000)).toBe(true);
-    expect(needsCompaction(8000, 10000)).toBe(false);
+    expect(needsCompaction(9600, 10000)).toBe(true);
+    expect(needsCompaction(9400, 10000)).toBe(false);
+    // A point the owner set comes first, and never after the default.
+    expect(needsCompaction(9400, 100000, 60_000)).toBe(false);
+    expect(needsCompaction(60_001, 100000, 60_000)).toBe(true);
+    expect(needsCompaction(95_001, 100000, 500_000)).toBe(true);
   });
 });
 

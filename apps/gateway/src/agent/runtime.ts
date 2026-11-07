@@ -29,8 +29,7 @@ import { findContactBySession } from '../channels/repository.js';
 import { fitPrompt, promptTokens, tokenCounter, truncatePrompt } from '../context/budget.js';
 import { withTurnNote } from '../context/build.js';
 import {
-  COMPACT_AT,
-  COMPACT_CEILING,
+  compactionPoint,
   compactionThreshold,
   compactPrompt,
   needsCompaction,
@@ -787,6 +786,8 @@ export class AgentRuntime {
               !run.subagent && Boolean(conversation.folders?.length || conversation.cloneInto),
           }
         : undefined;
+      // Said in compact_context's description, as the Context line says it.
+      const point = compactionPoint(policy);
       const tools: ToolSet = {
         ...profileTools(
           this.services,
@@ -874,7 +875,7 @@ export class AgentRuntime {
           browser,
         ),
         compact_context: tool({
-          description: `Request a context checkpoint before continuing a long task. The gateway summarizes older turns with this conversation's own model after this tool returns, preserving recent work and the latest request. Without it, older turns are summarized automatically once the request passes ${COMPACT_AT * 100}% of the budget or ${COMPACT_CEILING.toLocaleString('en')} tokens, whichever comes first.`,
+          description: `Request a context checkpoint before continuing a long task. The gateway summarizes older turns with this conversation's own model after this tool returns, preserving recent work and the latest request. Without it, older turns are summarized automatically once the request passes ${point.tokens.toLocaleString('en')} tokens, ${point.set ? 'the point the owner set for this agent' : 'near the end of what this model can take in'}.`,
           inputSchema: z.object({}),
           execute: async () => {
             compactionRequested = true;
@@ -1651,7 +1652,7 @@ export class AgentRuntime {
           if (
             compactionRequested ||
             (!compactionHeld &&
-              needsCompaction(before, limit) &&
+              needsCompaction(before, limit, policy.compactAt) &&
               (stepNumber - lastCompactionAttempt >= 4 || before > limit))
           ) {
             compactionRequested = false;
@@ -1875,11 +1876,14 @@ export class AgentRuntime {
                 tools: activeTools,
               }),
               limit,
+              policy.compactAt,
             )
           ) {
             fitted = await shed(
               {
-                inputTokens: Math.round(compactionThreshold(limit) * SHED_TO) + policy.outputTokens,
+                inputTokens:
+                  Math.round(compactionThreshold(limit, policy.compactAt) * SHED_TO) +
+                  policy.outputTokens,
                 outputTokens: policy.outputTokens,
               },
               scale,

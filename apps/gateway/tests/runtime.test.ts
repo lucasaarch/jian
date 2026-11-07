@@ -235,7 +235,7 @@ it('leaves a named conversation alone', async () => {
   expect((await services.sessions.session(profile.id, session.id)).title).toBe('Mac');
 });
 
-async function fixture(contextPolicy?: Record<string, number>, subscription = false) {
+async function fixture(contextPolicy?: Record<string, number | 'auto'>, subscription = false) {
   const services = await testServices();
   const configured = subscription
     ? {
@@ -1899,13 +1899,19 @@ const callLarge = (step: number, usage: ReturnType<typeof reported>['usage']) =>
 });
 
 it('compacts by the size the provider reported, not the byte estimate', async () => {
-  const policy = { inputTokens: 100000, outputTokens: 4096, historyTokens: 100000 };
+  // A point the owner set, well inside the window: the steps reach it before they reach the end.
+  const policy = {
+    inputTokens: 100000,
+    outputTokens: 4096,
+    historyTokens: 100000,
+    compactAt: 76_000,
+  };
   const { services, profile, session, run } = await fixture({
     ...policy,
     toolResultTokens: 16000,
     maxSteps: 14,
   });
-  const threshold = compactionThreshold(policy.inputTokens - policy.outputTokens);
+  const threshold = compactionThreshold(policy.inputTokens - policy.outputTokens, policy.compactAt);
   // Older turns worth summarising: a summary of them shrinks the request by more than a fifth.
   for (let index = 0; index < 8; index++) {
     await insertMessage(services.store.db, {
@@ -1981,7 +1987,7 @@ it("seeds the next turn's scale from the session's last measured step", async ()
 it('skips a summary that could not shrink the prompt by a fifth', async () => {
   // A threshold of 64,000 tokens, reached on the fourth step with most of the request in the
   // last two results, which compaction keeps whole.
-  const policy = { inputTokens: 84096, outputTokens: 4096 };
+  const policy = { inputTokens: 84096, outputTokens: 4096, compactAt: 64_000 };
   const { services, profile, session, run } = await fixture({
     ...policy,
     toolResultTokens: 32000,

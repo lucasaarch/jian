@@ -100,6 +100,30 @@ it('replaces one provider key and refuses the model default left behind', async 
   ).toBeUndefined();
 });
 
+it("keeps the agent's compaction point over the policy its chosen model gives", async () => {
+  const { services, profile, session } = await setup();
+  const provider = await services.providers.createProvider({
+    name: 'Personal',
+    kind: 'openai',
+    secret: 'synthetic-api-key',
+  });
+  await services.profiles.updateProfile(profile.id, {
+    expectedVersion: profile.version,
+    contextPolicy: { ...profile.contextPolicy, compactAt: 100_000 },
+  });
+
+  const run = await services.runs.submit(profile.id, session.id, {
+    text: 'First',
+    requestKey: 'compact-at',
+    model: { providerId: provider.id, modelId: 'gpt-4.1-mini' },
+  });
+
+  // The window and its reserve are the model's; where it compacts is still the owner's choice.
+  expect(run.contextPolicy?.inputTokens).toBe(128_000);
+  expect(run.contextPolicy?.compactAt).toBe(100_000);
+  expect((await services.runs.run(profile.id, run.id)).contextPolicy?.compactAt).toBe(100_000);
+});
+
 it('freezes the chosen model and its context budget per run', async () => {
   const { services, profile, session } = await setup();
   const provider = await services.providers.createProvider({

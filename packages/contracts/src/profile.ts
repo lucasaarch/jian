@@ -223,6 +223,22 @@ export const identitySchema = z.strictObject({
   boundaries: z.array(z.string().max(500)).max(10).default([]),
 });
 
+/**
+ * The least a fixed compaction point may be, in tokens. Below it an agent with its tools and
+ * instructions loaded would summarise every few steps, and each summary costs a call.
+ */
+export const MIN_COMPACT_AT = 50_000;
+
+/**
+ * Where an agent's conversations are summarised. `auto` is near the end of the model's window;
+ * a number is a size in the model's tokens, held at run time to no later than `auto` for the
+ * model in use, since past that the next answer might not fit.
+ */
+export const compactAtSchema = z.union([
+  z.literal('auto'),
+  z.number().int().min(MIN_COMPACT_AT).max(20_000_000),
+]);
+
 export const contextPolicySchema = z
   .strictObject({
     // The ceilings follow the model's own window, so a million-token model is not run inside a
@@ -235,6 +251,9 @@ export const contextPolicySchema = z
     toolResultTokens: z.number().int().min(128).max(32000).default(1500),
     // A runaway-loop backstop, not a context or cumulative token limit.
     maxSteps: z.number().int().min(1).max(500).default(500),
+    // The owner's, per agent: a run keeps the profile's choice over the policy its model gives.
+    // A policy stored before there was a choice reads as `auto`.
+    compactAt: compactAtSchema.default('auto'),
     // Accepted for stored profiles and old clients; no longer stops a run. Remove only after
     // those records and clients have migrated.
     maxRunTokens: z.number().int().min(32000).max(20_000_000).optional(),
@@ -456,5 +475,6 @@ export type SessionObjective = z.infer<typeof sessionObjectiveSchema>;
 export type McpValue = z.infer<typeof mcpValueSchema>;
 export type Identity = z.infer<typeof identitySchema>;
 export type ContextPolicy = z.infer<typeof contextPolicySchema>;
+export type CompactAt = z.infer<typeof compactAtSchema>;
 
 export type ProtectionMode = z.infer<typeof protectionModeSchema>;

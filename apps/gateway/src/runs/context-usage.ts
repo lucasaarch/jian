@@ -73,7 +73,8 @@ export async function sessionContext(
         : null,
     limit,
     window: policy.inputTokens,
-    compactAt: compactionThreshold(limit),
+    // The agent's choice now, on the last run's model: what the next turn will compact at.
+    compactAt: compactionThreshold(limit, agent.policy.compactAt),
     measuredAt: (compactedLast ? compaction.at : step?.at)?.toISOString() ?? null,
     model: { provider: model.provider, modelId: model.modelId },
     totals: {

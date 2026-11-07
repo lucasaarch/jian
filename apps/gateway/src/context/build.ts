@@ -12,7 +12,7 @@ import { gatewayTimeZone } from '../core/time-zone.js';
 import { sanitizeObjectiveText } from '../sessions/objective.js';
 import { availableSkills } from '../skills/builtin/index.js';
 import { tokenCounter } from './budget.js';
-import { compactionThreshold } from './compaction.js';
+import { compactionPoint } from './compaction.js';
 import { defaultScale } from './scale.js';
 
 export interface ContextSources {
@@ -355,9 +355,10 @@ export function buildContext(
       messages.reduce((sum, message) => sum + count(message.content) + 8, 0)) *
       scale,
   );
-  // Measured against where the runtime compacts, not the window: on a 1M model that is 200k,
-  // and a share of the window read 20% at the very point the older turns were summarised.
-  const compactsAt = compactionThreshold(policy.inputTokens - policy.outputTokens);
+  // Measured against where the runtime compacts, not the window: a point the owner set for this
+  // agent can be a fraction of a 1M window, and a share of the window would read 20% at the very
+  // point the older turns were summarised.
+  const compactsAt = compactionPoint(policy).tokens;
   const share = Math.round((used / compactsAt) * 100);
 
   const tail = [

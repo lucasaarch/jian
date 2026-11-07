@@ -1,20 +1,16 @@
+import type { CompactAt, ContextPolicy } from '@jian/contracts';
 import type { FinishReason, JSONValue } from 'ai';
 import { type LanguageModel, type LanguageModelUsage, type ModelMessage, streamText } from 'ai';
 import { blocksOf, fitPrompt, promptText, tokenCounter } from './budget.js';
 
 /**
- * How full a request may get before the older turns are replaced by a record of them. Below
- * this the history is carried as it was written; a prompt that only just fits would otherwise
- * be compacted on every turn for nothing. 80% leaves room to summarise before the window is full.
+ * How full a request may get, as a share of what the model can take in after the room kept for
+ * its answer, before the older turns are replaced by a record of them. This is `auto`, the
+ * default, near the end of the window as Claude Code places it: the provider caches the
+ * conversation from one step to the next, so a long context costs mostly cached reads, and a
+ * summary loses detail the agent may need. The rest leaves room to write the summary in place.
  */
-export const COMPACT_AT = 0.8;
-
-/**
- * Past this many tokens a request is compacted whatever the window. Every step sends the whole
- * prompt again, so a 1M window let one turn carry 700k for dozens of steps; recent work and the
- * latest request stay whole either way.
- */
-export const COMPACT_CEILING = 200_000;
+export const COMPACT_AT = 0.95;
 
 /**
  * The least a summary read in segments may write, in tokens. One sent as the conversation's own
@@ -39,12 +35,29 @@ export const SEGMENT_SUMMARY_CEILING = 32_000;
  */
 export const SEGMENT_TOKENS = 120_000;
 
-/** The size past which the older turns are summarised, for a budget in tokens. */
-export const compactionThreshold = (budget: number) =>
-  Math.min(Math.round(budget * COMPACT_AT), COMPACT_CEILING);
+/**
+ * The size past which the older turns are summarised, in the model's tokens, for what the model
+ * can take in after its answer's room (`limit`). A point the owner set is held to `auto`'s:
+ * past it the request could outgrow the window before the summary is written.
+ */
+export const compactionThreshold = (limit: number, at: CompactAt = 'auto') => {
+  const auto = Math.round(limit * COMPACT_AT);
+  return at === 'auto' ? auto : Math.min(at, auto);
+};
 
-export const needsCompaction = (tokens: number, budget: number) =>
-  tokens > compactionThreshold(budget);
+export const needsCompaction = (tokens: number, limit: number, at?: CompactAt) =>
+  tokens > compactionThreshold(limit, at);
+
+/**
+ * Where a run on this policy compacts, in tokens, and whether that is the point the owner set:
+ * one set past `auto` for this model is held there, and is then not what the owner chose.
+ */
+export function compactionPoint(
+  policy: Pick<ContextPolicy, 'inputTokens' | 'outputTokens' | 'compactAt'>,
+) {
+  const tokens = compactionThreshold(policy.inputTokens - policy.outputTokens, policy.compactAt);
+  return { tokens, set: policy.compactAt !== 'auto' && tokens === policy.compactAt };
+}
 
 /**
  * How much smaller the messages must come out of a summary for it to be worth its call. Anything

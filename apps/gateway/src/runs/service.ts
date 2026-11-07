@@ -1,10 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import {
   activityQuerySchema,
+  type ContextPolicy,
   continuationSchema,
   GATEWAY_SESSION_CHANNEL,
   type Message,
   type ModelSelection,
+  type Profile,
   type Run,
   type RunApproval,
   runAnswerSchema,
@@ -84,6 +86,19 @@ const purposeOf = (options: SubmitOptions, text: string): Pick<Message, 'purpose
     : options.ownerMessage && isCompactCommand(text)
       ? { purpose: 'compact' }
       : {};
+
+/**
+ * The policy a run freezes: the window and budgets its model gives, with what the owner chose for
+ * the agent kept over them. The model's policy replaces the whole of the agent's, which would
+ * otherwise take the owner's compaction point with it.
+ */
+const withAgentChoices = (
+  chosen: { policy: ContextPolicy },
+  profile: Pick<Profile, 'contextPolicy'>,
+) => ({
+  ...chosen.policy,
+  compactAt: profile.contextPolicy.compactAt ?? 'auto',
+});
 
 export class Runs {
   private deliveries?: RunDeliveries;
@@ -419,7 +434,9 @@ export class Runs {
         requestKey: data.requestKey,
         input: data.text,
         profile,
-        ...(chosen ? { model: chosen.config, contextPolicy: chosen.policy } : {}),
+        ...(chosen
+          ? { model: chosen.config, contextPolicy: withAgentChoices(chosen, profile) }
+          : {}),
         ...(selection ? { modelSelection: selection } : {}),
         ...(call ? { call } : {}),
         ...(group ? { group } : {}),
@@ -889,7 +906,9 @@ export class Runs {
       requestKey,
       input: text,
       profile: waiting.profile,
-      ...(chosen ? { model: chosen.config, contextPolicy: chosen.policy } : {}),
+      ...(chosen
+        ? { model: chosen.config, contextPolicy: withAgentChoices(chosen, waiting.profile) }
+        : {}),
       ...(selection ? { modelSelection: selection } : {}),
       ...(waiting.call ? { call: waiting.call } : {}),
       ...(waiting.group ? { group: waiting.group } : {}),

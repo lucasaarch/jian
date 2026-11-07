@@ -3,9 +3,13 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { PINNED_CEILING, PINNED_SHARE } from '../src/agent/runtime.js';
-import { COMPACT_AT, COMPACT_CEILING } from '../src/context/compaction.js';
+import { COMPACT_AT, compactionThreshold } from '../src/context/compaction.js';
 import { X_TOOL_GROUPS } from '../src/integrations/x/catalog/index.js';
-import { TOOL_RESULT_CEILING, TOOL_RESULT_SHARE } from '../src/providers/service.js';
+import {
+  MAX_OUTPUT_RESERVE,
+  TOOL_RESULT_CEILING,
+  TOOL_RESULT_SHARE,
+} from '../src/providers/service.js';
 import { builtinSkillNames, builtinSkills } from '../src/skills/builtin/index.js';
 import { machineToolsFor } from '../src/skills/builtin/machine-tools.js';
 import { managingContext } from '../src/skills/builtin/managing-context.js';
@@ -125,8 +129,10 @@ describe('what the built-in skills say', () => {
     const tokens = (value: number) => value.toLocaleString('en');
 
     expect(said).toContain(
-      `Past ${COMPACT_AT * 100}% of the budget or ${tokens(COMPACT_CEILING)} tokens, whichever comes first`,
+      `By default that point is near the limit: ${COMPACT_AT * 100}% of what the model can take in after the room kept for its answer, about ${tokens(Math.round(compactionThreshold(1_000_000 - MAX_OUTPUT_RESERVE) / 1000) * 1000)} tokens on a model with a window of a million.`,
     );
+    // The owner's own point, where they set it, and what holds it.
+    expect(said).toContain('in its settings under Compact conversations');
     expect(said).toContain(
       `over ${TOOL_RESULT_SHARE * 100}% of the window, at most ${tokens(TOOL_RESULT_CEILING)} tokens`,
     );

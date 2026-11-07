@@ -34,7 +34,7 @@ import { takesFast } from './speed.js';
 
 /** Where a provider's key lives in the vault. Revoking the provider takes the key with it. */
 /** Most a turn keeps back for the answer and its thinking, in tokens. */
-const MAX_OUTPUT_RESERVE = 64_000;
+export const MAX_OUTPUT_RESERVE = 64_000;
 
 /**
  * The share of the window one tool result may take before it is stored and paged, and the most
@@ -363,6 +363,8 @@ export class Providers {
           Math.max(1500, Math.floor(model.contextWindow * TOOL_RESULT_SHARE)),
         ),
         maxSteps: 500,
+        // Where to compact is the agent's, not the model's: a run puts it back (runs/service.ts).
+        compactAt: 'auto',
       },
     };
   }

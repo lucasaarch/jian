@@ -12386,6 +12386,20 @@
                           "minimum": 1,
                           "maximum": 500
                         },
+                        "compactAt": {
+                          "default": "auto",
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "const": "auto"
+                            },
+                            {
+                              "type": "integer",
+                              "minimum": 50000,
+                              "maximum": 20000000
+                            }
+                          ]
+                        },
                         "maxRunTokens": {
                           "type": "integer",
                           "minimum": 32000,
@@ -12398,7 +12412,8 @@
                         "memoryTokens",
                         "historyTokens",
                         "toolResultTokens",
-                        "maxSteps"
+                        "maxSteps",
+                        "compactAt"
                       ],
                       "additionalProperties": false
                     },
@@ -13186,6 +13201,20 @@
                           "minimum": 1,
                           "maximum": 500
                         },
+                        "compactAt": {
+                          "default": "auto",
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "const": "auto"
+                            },
+                            {
+                              "type": "integer",
+                              "minimum": 50000,
+                              "maximum": 20000000
+                            }
+                          ]
+                        },
                         "maxRunTokens": {
                           "type": "integer",
                           "minimum": 32000,
@@ -13198,7 +13227,8 @@
                         "memoryTokens",
                         "historyTokens",
                         "toolResultTokens",
-                        "maxSteps"
+                        "maxSteps",
+                        "compactAt"
                       ],
                       "additionalProperties": false
                     },
@@ -13984,6 +14014,20 @@
                           "minimum": 1,
                           "maximum": 500
                         },
+                        "compactAt": {
+                          "default": "auto",
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "const": "auto"
+                            },
+                            {
+                              "type": "integer",
+                              "minimum": 50000,
+                              "maximum": 20000000
+                            }
+                          ]
+                        },
                         "maxRunTokens": {
                           "type": "integer",
                           "minimum": 32000,
@@ -13996,7 +14040,8 @@
                         "memoryTokens",
                         "historyTokens",
                         "toolResultTokens",
-                        "maxSteps"
+                        "maxSteps",
+                        "compactAt"
                       ],
                       "additionalProperties": false
                     },
@@ -25264,7 +25309,8 @@
                         "memoryTokens": 1500,
                         "historyTokens": 6000,
                         "toolResultTokens": 1500,
-                        "maxSteps": 500
+                        "maxSteps": 500,
+                        "compactAt": "auto"
                       },
                       "type": "object",
                       "properties": {
@@ -25304,6 +25350,20 @@
                           "minimum": 1,
                           "maximum": 500
                         },
+                        "compactAt": {
+                          "default": "auto",
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "const": "auto"
+                            },
+                            {
+                              "type": "integer",
+                              "minimum": 50000,
+                              "maximum": 20000000
+                            }
+                          ]
+                        },
                         "maxRunTokens": {
                           "type": "integer",
                           "minimum": 32000,
@@ -25316,7 +25376,8 @@
                         "memoryTokens",
                         "historyTokens",
                         "toolResultTokens",
-                        "maxSteps"
+                        "maxSteps",
+                        "compactAt"
                       ],
                       "additionalProperties": false
                     },
@@ -25699,7 +25760,8 @@
                           "memoryTokens": 1500,
                           "historyTokens": 6000,
                           "toolResultTokens": 1500,
-                          "maxSteps": 500
+                          "maxSteps": 500,
+                          "compactAt": "auto"
                         },
                         "type": "object",
                         "properties": {
@@ -25739,6 +25801,20 @@
                             "minimum": 1,
                             "maximum": 500
                           },
+                          "compactAt": {
+                            "default": "auto",
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "const": "auto"
+                              },
+                              {
+                                "type": "integer",
+                                "minimum": 50000,
+                                "maximum": 20000000
+                              }
+                            ]
+                          },
                           "maxRunTokens": {
                             "type": "integer",
                             "minimum": 32000,
@@ -25751,7 +25827,8 @@
                           "memoryTokens",
                           "historyTokens",
                           "toolResultTokens",
-                          "maxSteps"
+                          "maxSteps",
+                          "compactAt"
                         ],
                         "additionalProperties": false
                       },
@@ -26124,7 +26201,8 @@
                       "memoryTokens": 1500,
                       "historyTokens": 6000,
                       "toolResultTokens": 1500,
-                      "maxSteps": 500
+                      "maxSteps": 500,
+                      "compactAt": "auto"
                     },
                     "type": "object",
                     "properties": {
@@ -26163,6 +26241,20 @@
                         "type": "integer",
                         "minimum": 1,
                         "maximum": 500
+                      },
+                      "compactAt": {
+                        "default": "auto",
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "const": "auto"
+                          },
+                          {
+                            "type": "integer",
+                            "minimum": 50000,
+                            "maximum": 20000000
+                          }
+                        ]
                       },
                       "maxRunTokens": {
                         "type": "integer",
@@ -26414,7 +26506,8 @@
                         "memoryTokens": 1500,
                         "historyTokens": 6000,
                         "toolResultTokens": 1500,
-                        "maxSteps": 500
+                        "maxSteps": 500,
+                        "compactAt": "auto"
                       },
                       "type": "object",
                       "properties": {
@@ -26454,6 +26547,20 @@
                           "minimum": 1,
                           "maximum": 500
                         },
+                        "compactAt": {
+                          "default": "auto",
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "const": "auto"
+                            },
+                            {
+                              "type": "integer",
+                              "minimum": 50000,
+                              "maximum": 20000000
+                            }
+                          ]
+                        },
                         "maxRunTokens": {
                           "type": "integer",
                           "minimum": 32000,
@@ -26466,7 +26573,8 @@
                         "memoryTokens",
                         "historyTokens",
                         "toolResultTokens",
-                        "maxSteps"
+                        "maxSteps",
+                        "compactAt"
                       ],
                       "additionalProperties": false
                     },
@@ -26858,7 +26966,8 @@
                         "memoryTokens": 1500,
                         "historyTokens": 6000,
                         "toolResultTokens": 1500,
-                        "maxSteps": 500
+                        "maxSteps": 500,
+                        "compactAt": "auto"
                       },
                       "type": "object",
                       "properties": {
@@ -26898,6 +27007,20 @@
                           "minimum": 1,
                           "maximum": 500
                         },
+                        "compactAt": {
+                          "default": "auto",
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "const": "auto"
+                            },
+                            {
+                              "type": "integer",
+                              "minimum": 50000,
+                              "maximum": 20000000
+                            }
+                          ]
+                        },
                         "maxRunTokens": {
                           "type": "integer",
                           "minimum": 32000,
@@ -26910,7 +27033,8 @@
                         "memoryTokens",
                         "historyTokens",
                         "toolResultTokens",
-                        "maxSteps"
+                        "maxSteps",
+                        "compactAt"
                       ],
                       "additionalProperties": false
                     },
@@ -27313,6 +27437,20 @@
                         "minimum": 1,
                         "maximum": 500
                       },
+                      "compactAt": {
+                        "default": "auto",
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "const": "auto"
+                          },
+                          {
+                            "type": "integer",
+                            "minimum": 50000,
+                            "maximum": 20000000
+                          }
+                        ]
+                      },
                       "maxRunTokens": {
                         "type": "integer",
                         "minimum": 32000,
@@ -27562,7 +27700,8 @@
                         "memoryTokens": 1500,
                         "historyTokens": 6000,
                         "toolResultTokens": 1500,
-                        "maxSteps": 500
+                        "maxSteps": 500,
+                        "compactAt": "auto"
                       },
                       "type": "object",
                       "properties": {
@@ -27602,6 +27741,20 @@
                           "minimum": 1,
                           "maximum": 500
                         },
+                        "compactAt": {
+                          "default": "auto",
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "const": "auto"
+                            },
+                            {
+                              "type": "integer",
+                              "minimum": 50000,
+                              "maximum": 20000000
+                            }
+                          ]
+                        },
                         "maxRunTokens": {
                           "type": "integer",
                           "minimum": 32000,
@@ -27614,7 +27767,8 @@
                         "memoryTokens",
                         "historyTokens",
                         "toolResultTokens",
-                        "maxSteps"
+                        "maxSteps",
+                        "compactAt"
                       ],
                       "additionalProperties": false
                     },
@@ -28301,7 +28455,8 @@
                               "memoryTokens": 1500,
                               "historyTokens": 6000,
                               "toolResultTokens": 1500,
-                              "maxSteps": 500
+                              "maxSteps": 500,
+                              "compactAt": "auto"
                             },
                             "type": "object",
                             "properties": {
@@ -28341,6 +28496,20 @@
                                 "minimum": 1,
                                 "maximum": 500
                               },
+                              "compactAt": {
+                                "default": "auto",
+                                "anyOf": [
+                                  {
+                                    "type": "string",
+                                    "const": "auto"
+                                  },
+                                  {
+                                    "type": "integer",
+                                    "minimum": 50000,
+                                    "maximum": 20000000
+                                  }
+                                ]
+                              },
                               "maxRunTokens": {
                                 "type": "integer",
                                 "minimum": 32000,
@@ -28353,7 +28522,8 @@
                               "memoryTokens",
                               "historyTokens",
                               "toolResultTokens",
-                              "maxSteps"
+                              "maxSteps",
+                              "compactAt"
                             ],
                             "additionalProperties": false
                           },
@@ -33437,6 +33607,20 @@
                           "minimum": 1,
                           "maximum": 500
                         },
+                        "compactAt": {
+                          "default": "auto",
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "const": "auto"
+                            },
+                            {
+                              "type": "integer",
+                              "minimum": 50000,
+                              "maximum": 20000000
+                            }
+                          ]
+                        },
                         "maxRunTokens": {
                           "type": "integer",
                           "minimum": 32000,
@@ -33449,7 +33633,8 @@
                         "memoryTokens",
                         "historyTokens",
                         "toolResultTokens",
-                        "maxSteps"
+                        "maxSteps",
+                        "compactAt"
                       ],
                       "additionalProperties": false
                     },
@@ -34429,6 +34614,20 @@
                           "minimum": 1,
                           "maximum": 500
                         },
+                        "compactAt": {
+                          "default": "auto",
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "const": "auto"
+                            },
+                            {
+                              "type": "integer",
+                              "minimum": 50000,
+                              "maximum": 20000000
+                            }
+                          ]
+                        },
                         "maxRunTokens": {
                           "type": "integer",
                           "minimum": 32000,
@@ -34441,7 +34640,8 @@
                         "memoryTokens",
                         "historyTokens",
                         "toolResultTokens",
-                        "maxSteps"
+                        "maxSteps",
+                        "compactAt"
                       ],
                       "additionalProperties": false
                     },
@@ -35232,6 +35432,20 @@
                           "minimum": 1,
                           "maximum": 500
                         },
+                        "compactAt": {
+                          "default": "auto",
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "const": "auto"
+                            },
+                            {
+                              "type": "integer",
+                              "minimum": 50000,
+                              "maximum": 20000000
+                            }
+                          ]
+                        },
                         "maxRunTokens": {
                           "type": "integer",
                           "minimum": 32000,
@@ -35244,7 +35458,8 @@
                         "memoryTokens",
                         "historyTokens",
                         "toolResultTokens",
-                        "maxSteps"
+                        "maxSteps",
+                        "compactAt"
                       ],
                       "additionalProperties": false
                     },
@@ -36014,6 +36229,20 @@
                           "minimum": 1,
                           "maximum": 500
                         },
+                        "compactAt": {
+                          "default": "auto",
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "const": "auto"
+                            },
+                            {
+                              "type": "integer",
+                              "minimum": 50000,
+                              "maximum": 20000000
+                            }
+                          ]
+                        },
                         "maxRunTokens": {
                           "type": "integer",
                           "minimum": 32000,
@@ -36026,7 +36255,8 @@
                         "memoryTokens",
                         "historyTokens",
                         "toolResultTokens",
-                        "maxSteps"
+                        "maxSteps",
+                        "compactAt"
                       ],
                       "additionalProperties": false
                     },
@@ -37863,6 +38093,20 @@
                           "minimum": 1,
                           "maximum": 500
                         },
+                        "compactAt": {
+                          "default": "auto",
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "const": "auto"
+                            },
+                            {
+                              "type": "integer",
+                              "minimum": 50000,
+                              "maximum": 20000000
+                            }
+                          ]
+                        },
                         "maxRunTokens": {
                           "type": "integer",
                           "minimum": 32000,
@@ -37875,7 +38119,8 @@
                         "memoryTokens",
                         "historyTokens",
                         "toolResultTokens",
-                        "maxSteps"
+                        "maxSteps",
+                        "compactAt"
                       ],
                       "additionalProperties": false
                     },
@@ -42162,6 +42407,20 @@
                           "minimum": 1,
                           "maximum": 500
                         },
+                        "compactAt": {
+                          "default": "auto",
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "const": "auto"
+                            },
+                            {
+                              "type": "integer",
+                              "minimum": 50000,
+                              "maximum": 20000000
+                            }
+                          ]
+                        },
                         "maxRunTokens": {
                           "type": "integer",
                           "minimum": 32000,
@@ -42174,7 +42433,8 @@
                         "memoryTokens",
                         "historyTokens",
                         "toolResultTokens",
-                        "maxSteps"
+                        "maxSteps",
+                        "compactAt"
                       ],
                       "additionalProperties": false
                     },
@@ -44545,6 +44805,20 @@
                             "minimum": 1,
                             "maximum": 500
                           },
+                          "compactAt": {
+                            "default": "auto",
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "const": "auto"
+                              },
+                              {
+                                "type": "integer",
+                                "minimum": 50000,
+                                "maximum": 20000000
+                              }
+                            ]
+                          },
                           "maxRunTokens": {
                             "type": "integer",
                             "minimum": 32000,
@@ -44557,7 +44831,8 @@
                           "memoryTokens",
                           "historyTokens",
                           "toolResultTokens",
-                          "maxSteps"
+                          "maxSteps",
+                          "compactAt"
                         ],
                         "additionalProperties": false
                       },
@@ -45318,6 +45593,20 @@
                           "minimum": 1,
                           "maximum": 500
                         },
+                        "compactAt": {
+                          "default": "auto",
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "const": "auto"
+                            },
+                            {
+                              "type": "integer",
+                              "minimum": 50000,
+                              "maximum": 20000000
+                            }
+                          ]
+                        },
                         "maxRunTokens": {
                           "type": "integer",
                           "minimum": 32000,
@@ -45330,7 +45619,8 @@
                         "memoryTokens",
                         "historyTokens",
                         "toolResultTokens",
-                        "maxSteps"
+                        "maxSteps",
+                        "compactAt"
                       ],
                       "additionalProperties": false
                     },
@@ -46090,6 +46380,20 @@
                           "minimum": 1,
                           "maximum": 500
                         },
+                        "compactAt": {
+                          "default": "auto",
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "const": "auto"
+                            },
+                            {
+                              "type": "integer",
+                              "minimum": 50000,
+                              "maximum": 20000000
+                            }
+                          ]
+                        },
                         "maxRunTokens": {
                           "type": "integer",
                           "minimum": 32000,
@@ -46102,7 +46406,8 @@
                         "memoryTokens",
                         "historyTokens",
                         "toolResultTokens",
-                        "maxSteps"
+                        "maxSteps",
+                        "compactAt"
                       ],
                       "additionalProperties": false
                     },

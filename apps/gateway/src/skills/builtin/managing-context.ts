@@ -16,10 +16,13 @@ Every size here is in the model's own tokens.
 
 ## What the gateway does on its own
 
-- Past 80% of the budget or 200,000 tokens, whichever comes first, and at the start of a turn
-  already past it, older turns are summarised by this conversation's own model, and the
-  summary stays in the conversation. On a model with a window of a million tokens that point
-  is a fifth of it, so the Context line measures against it, not the window. Recent work and
+- Past the point where Jian compacts, and at the start of a turn already past it, older turns
+  are summarised by this conversation's own model, and the summary stays in the conversation.
+  By default that point is near the limit: 95% of what the model can take in after the room
+  kept for its answer, about 889,000 tokens on a model with a window of a million. The owner
+  can set an earlier point for this agent, in its settings under Compact conversations; a point
+  past the default of the model in use is held to that default. The Context line always names
+  the point in use, so measure against it, not the window. Recent work and
   the latest request are kept whole; when they are most of the request, no summary is
   attempted, since it could not shrink it. A summary that fails or is skipped is reported
   with its cause, such as the provider's quota, and is not retried on every step: the oldest
