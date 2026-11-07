@@ -124,6 +124,36 @@ it("keeps the agent's compaction point over the policy its chosen model gives", 
   expect((await services.runs.run(profile.id, run.id)).contextPolicy?.compactAt).toBe(100_000);
 });
 
+it("keeps the agent's compaction point on the turn that carries a parked run on", async () => {
+  const { services, profile, session } = await setup();
+  const provider = await services.providers.createProvider({
+    name: 'Personal',
+    kind: 'openai',
+    secret: 'synthetic-api-key',
+  });
+  await services.profiles.updateProfile(profile.id, {
+    expectedVersion: profile.version,
+    contextPolicy: { ...profile.contextPolicy, compactAt: 120_000 },
+  });
+  const run = await services.runs.submit(profile.id, session.id, {
+    text: 'Ask me first',
+    requestKey: 'parked',
+    model: { providerId: provider.id, modelId: 'gpt-4.1-mini' },
+  });
+  // Parked on a question, as ask_user leaves it.
+  await updateRun(services.store.db, {
+    ...run,
+    status: 'waiting',
+    question: { id: randomUUID(), prompt: 'Ship now?', askedAt: new Date().toISOString() },
+  });
+
+  const resumed = await services.runs.answerRun(profile.id, run.id, { text: 'Yes' });
+
+  // Its policy comes from the model again, with the agent's choice kept over it.
+  expect(resumed.contextPolicy?.inputTokens).toBe(128_000);
+  expect(resumed.contextPolicy?.compactAt).toBe(120_000);
+});
+
 it('freezes the chosen model and its context budget per run', async () => {
   const { services, profile, session } = await setup();
   const provider = await services.providers.createProvider({

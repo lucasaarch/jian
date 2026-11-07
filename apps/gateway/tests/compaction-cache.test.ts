@@ -169,7 +169,10 @@ it.each([
   );
   const after = claude.requests.at(-1);
   expect(JSON.stringify(after?.messages)).toContain('Conversation checkpoint');
-  expect(JSON.stringify(after?.messages)).not.toContain('turn-0 ');
+  // The older turns are gone as turns: what people wrote in them stays only beside the record,
+  // and what the agent answered is not kept at all.
+  expect(JSON.stringify(after?.messages.slice(1))).not.toContain('turn-0 ');
+  expect(JSON.stringify(after?.messages)).not.toContain('turn-1 ');
 });
 
 it('a summary that calls a tool fails without running it', async () => {

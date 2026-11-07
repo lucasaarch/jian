@@ -2056,6 +2056,9 @@ it('cuts a prompt that fits the window only by the exact scale', async () => {
       sessionId: session.id,
       role: index % 2 === 0 ? 'user' : 'assistant',
       content: `turn-${index} ${'history '.repeat(300)}`,
+      // Notes the gateway wrote, not anyone's words: nothing of them is kept beside the record,
+      // which leaves the cut this turn's results to take.
+      ...(index % 2 === 0 ? { purpose: 'resume' as const } : {}),
       createdAt: new Date(Date.parse('2026-09-29T09:00:00.000Z') + index * 1000).toISOString(),
     });
   }

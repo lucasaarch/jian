@@ -1,4 +1,5 @@
 import type { McpServer, Run, Skill } from '@jian/contracts';
+import type { Said } from './survivors.js';
 
 export interface ContextSource {
   /** `servers` are the MCP servers the run reaches; the skills it is offered follow them. */
@@ -30,10 +31,12 @@ export interface ContextSource {
     /** The turn was judged plainly light, so it may be answered with less reasoning. */
     light?: true;
     /**
-     * What the owner wrote in the history this context carries, oldest first, as stored: what
-     * a compaction keeps word for word (context/survivors.ts). Empty in a conversation the
-     * owner does not write in.
+     * What people wrote in the history this context carries, oldest first, as stored, with who
+     * wrote each: what a compaction keeps word for word (context/survivors.ts). Empty where only
+     * agents write.
      */
-    ownerWords?: string[];
+    words?: Said[];
+    /** Who writes what arrives while the turn runs, when people write here. */
+    speaker?: string;
   }>;
 }

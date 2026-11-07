@@ -1,13 +1,15 @@
 import type { Session } from '@jian/contracts';
 import {
+  AGENT_SESSION_CHANNEL,
   GATEWAY_SESSION_CHANNEL,
   LEARNING_SESSION_CHANNEL,
   type McpServer,
   type Run,
+  TASK_SESSION_CHANNEL,
 } from '@jian/contracts';
 import { and, eq, inArray } from 'drizzle-orm';
 import { onOwnerComputer, projectCheckout, workspaceHome } from '../agent/workspace-home.js';
-import { listConversations } from '../channels/repository.js';
+import { listConversations, listLiveChannelsOfType } from '../channels/repository.js';
 import type { Judge } from '../decisions/service.js';
 import { findMemories, searchMemories, withLinks } from '../memories/repository.js';
 import { lastPromptScale } from '../runs/context-usage.js';
@@ -23,6 +25,7 @@ import { buildContext, rankMemories, withTurnNote } from './build.js';
 import { judgeTurn } from './judgments.js';
 import type { ContextSource } from './port.js';
 import { defaultScale } from './scale.js';
+import type { Said } from './survivors.js';
 import { toolRecordsByRun, withToolHistory } from './tool-history.js';
 
 /** What a chat works on beyond one project: told to the agent, since it is why it is here. */
@@ -150,6 +153,59 @@ export class Contexts {
     ];
     const checkpoints = await listContextToolCheckpoints(this.store.db, run.profileId, runIds);
     return withToolHistory(history, toolRecordsByRun(checkpoints, summary), run.id);
+  }
+
+  /**
+   * What people wrote in this history, with who wrote it, and who writes here while a turn
+   * runs: what a compaction keeps word for word. The panel's conversation is the owner's; a
+   * channel's is the contact's, or in a group each author's, leaving out another agent of this
+   * installation, known by the address its channel speaks as. A conversation between agents, a
+   * task's, a look back's and a worker's have nobody's words. A note the gateway wrote
+   * (`resume`), `/compact` and a schedule's turn were typed by nobody just then.
+   */
+  private async people(
+    run: Run,
+    session: Session,
+    history: Awaited<ReturnType<SessionReader['messages']>>,
+    conversations: Awaited<ReturnType<typeof listConversations>>,
+  ): Promise<{ words: Said[]; speaker?: string }> {
+    if (
+      run.subagent ||
+      [AGENT_SESSION_CHANNEL, TASK_SESSION_CHANNEL, LEARNING_SESSION_CHANNEL].includes(
+        session.channel,
+      )
+    ) {
+      return { words: [] };
+    }
+    const contact = conversations.find((item) => item.sessionId === session.id);
+    const group = contact?.scope === 'group';
+    const agents = group
+      ? new Set(
+          (await listLiveChannelsOfType(this.store.db, contact.type)).flatMap((channel) =>
+            channel.address ? [channel.address] : [],
+          ),
+        )
+      : new Set<string>();
+    const speaker =
+      session.channel === GATEWAY_SESSION_CHANNEL
+        ? 'the owner'
+        : group
+          ? 'someone in the group'
+          : (contact?.displayName ?? contact?.actorId ?? 'the person writing here');
+    const words = history.flatMap((message) =>
+      message.role === 'user' &&
+      (message.purpose === undefined || message.purpose === 'answer') &&
+      !message.content.startsWith('[Scheduled:') &&
+      !(message.author && agents.has(message.author.id))
+        ? [
+            {
+              text: message.content,
+              from: group ? (message.author?.name ?? message.author?.id ?? speaker) : speaker,
+            },
+          ]
+        : [],
+    );
+    return { words, speaker };
   }
 
   async context(
@@ -328,24 +384,12 @@ export class Contexts {
     if (signals.turn.length) {
       withTurnNote(built, `Where you work now:\n${signals.turn.join('\n')}`);
     }
-    // Only the panel's own conversation is the owner writing; a channel's is whoever wrote in,
-    // and an agent conversation is another agent. A note the gateway wrote (`resume`), the
-    // `/compact` command and a schedule's turn were typed by nobody just then.
-    const ownerWords =
-      !worker && session.channel === GATEWAY_SESSION_CHANNEL
-        ? history
-            .filter(
-              (message) =>
-                message.role === 'user' &&
-                (message.purpose === undefined || message.purpose === 'answer') &&
-                !message.content.startsWith('[Scheduled:'),
-            )
-            .map((message) => message.content)
-        : [];
+    const people = await this.people(run, session, history, conversations);
     const result = {
       ...built,
       ...(previous ? { historyCursor: { id: previous.id, createdAt: previous.createdAt } } : {}),
-      ...(ownerWords.length ? { ownerWords } : {}),
+      ...(people.words.length ? { words: people.words } : {}),
+      ...(people.speaker ? { speaker: people.speaker } : {}),
     };
     return judged.light ? { ...result, light: true as const } : result;
   }

@@ -32,7 +32,9 @@ import {
   compactionPoint,
   compactionThreshold,
   compactPrompt,
+  LIMIT_MARGIN,
   needsCompaction,
+  SEGMENT_TOKENS,
 } from '../context/compaction.js';
 import type { ContextSource } from '../context/port.js';
 import { defaultScale, measuredScale } from '../context/scale.js';
@@ -40,11 +42,11 @@ import {
   FILE_TOKENS,
   FILES_TOKENS,
   filesInProgress,
-  OWNER_WORDS_TOKENS,
-  ownerWords,
+  peopleWords,
   recordOf,
   SURVIVOR_SHARE,
   touchedFiles,
+  WORDS_TOKENS,
 } from '../context/survivors.js';
 import { nowIso } from '../core/clock.js';
 import { GatewayError } from '../core/errors.js';
@@ -167,14 +169,10 @@ const COMPACTION_RETRY_GROWTH = 1.25;
 const SHED_TO = 0.6;
 
 /**
- * Headroom over a measured scale at the window's hard edge. The scale is the last step's mix of
- * text, code and pictures, and one step can change it (a pasted log, a screenshot); a provider
- * that refuses a request for its size fails the run, with no cut and second try. The compaction
- * threshold and the agent's Context line keep the exact scale: starting a summary a little late
- * costs nothing, while a refused request costs the turn. A default scale gets none: it is set
- * above anything measured (a byte a token; a half for Claude, which measured 0.41).
+ * Past this size, in tokens, a request whose cache has expired is still summarised in place:
+ * read in segments it would take more than two uncached calls (see `inPlace`).
  */
-const LIMIT_MARGIN = 1.15;
+export const COLD_IN_PLACE_PAST = 2 * SEGMENT_TOKENS;
 
 /**
  * How long a compaction waits to read back one file it keeps, in ms. A machine that went
@@ -1378,10 +1376,11 @@ export class AgentRuntime {
       let lastMessages = context.messages as ModelMessage[];
       let currentStartIndex = context.currentStartIndex;
       const estimate = tokenCounter(config.provider, config.modelId);
-      // What the owner wrote, which a compaction keeps word for word: the history's, and what
-      // they say while the turn runs. Only the panel's conversation is the owner's own.
-      const ownerWrites = !run.subagent && session.channel === GATEWAY_SESSION_CHANNEL;
-      const ownerSaid = [...(context.ownerWords ?? [])];
+      // What people wrote, which a compaction keeps word for word: the history's, and what they
+      // say while the turn runs, by whoever writes in this conversation. None in one between
+      // agents or a worker's, where nobody but agents writes.
+      const said = [...(context.words ?? [])];
+      const speaker = context.speaker;
       // The file tools' own reach, for reading back the files a compaction keeps: none in a run
       // without them, and on the machine for one that works there.
       const fileReach =
@@ -1406,7 +1405,7 @@ export class AgentRuntime {
       /**
        * What a compaction keeps word for word beside its record (context/survivors.ts), each at
        * most a tenth of the point it compacts at, in the model's tokens. `previous` is the stored
-       * summary, whose owner's words are carried on.
+       * summary, whose words are carried on.
        */
       const survivorsOf = async (
         older: ModelMessage[],
@@ -1417,24 +1416,29 @@ export class AgentRuntime {
         const point = compactionThreshold(limit, policy.compactAt);
         const room = (most: number) => Math.min(most, Math.floor(point * SURVIVOR_SHARE));
         const tokens = (text: string) => Math.ceil(estimate(text) * scale);
-        return [
-          ownerWords({
+        const touched = touchedFiles(older);
+        // Read per compaction, as per call: this run or another of its conversation may have
+        // changed the worktrees, and with them which sources are guarded.
+        if (readNow && touched.paths.length) await worktrees?.scope.reload();
+        return {
+          words: peopleWords({
             older,
             kept,
-            said: ownerSaid,
+            said,
             previous,
             tokens,
-            budget: room(OWNER_WORDS_TOKENS),
+            budget: room(WORDS_TOKENS),
           }),
-          readNow &&
-            (await filesInProgress({
-              paths: touchedFiles(older),
-              read: readNow,
-              tokens,
-              each: room(FILE_TOKENS),
-              total: room(FILES_TOKENS),
-            })),
-        ].filter((part): part is string => Boolean(part));
+          files: readNow
+            ? await filesInProgress({
+                ...touched,
+                read: readNow,
+                tokens,
+                each: room(FILE_TOKENS),
+                total: room(FILES_TOKENS),
+              })
+            : undefined,
+        };
       };
       // The gateway's unscaled count of the prompt the step sent, which its report is held to.
       let preparedEstimate = 0;
@@ -1500,7 +1504,15 @@ export class AgentRuntime {
        * deferred form and carried tool additions: a refusal since changes what may be sent.
        */
       let sent:
-        | { request: StepRequest; tokens: number; defers: boolean; carries: boolean; at: number }
+        | {
+            request: StepRequest;
+            tokens: number;
+            defers: boolean;
+            carries: boolean;
+            at: number;
+            /** The input the provider reported reading for it, once it has answered. */
+            accepted?: number;
+          }
         | undefined;
       /**
        * The effort the summary is asked for, on the models that take one for a single reply:
@@ -1611,7 +1623,7 @@ export class AgentRuntime {
           if (compact && !compactCommand) compactionRequested = true;
 
           if (steer) {
-            if (ownerWrites) ownerSaid.push(steer);
+            if (speaker) said.push({ text: steer, from: speaker });
             // Before the carried tools' system message when it still ends the request: Anthropic
             // takes it only at the end or right before a reply.
             const last = messages.at(-1);
@@ -1777,11 +1789,19 @@ export class AgentRuntime {
                 wroteAt !== undefined &&
                 Date.now() - wroteAt < lifetime - Math.max(30_000, lifetime * 0.1);
               const inPlace = (instructions: string) => {
-                if (before > limit || !cached) return undefined;
+                if (before > limit) return undefined;
+                // Cold, a summary in place writes the whole prompt to the cache once and reads
+                // nothing back; in segments it reads the transcript uncached, a segment at a
+                // time, each folding in the record so far. Past two segments the one write
+                // costs less, and a single answer keeps more than a record folded eight times.
+                if (!cached && before <= COLD_IN_PLACE_PAST) return undefined;
                 const reused =
                   sent && sent.defers === defers && sent.carries === carries ? sent : undefined;
                 let request = reused?.request;
-                let tokens = reused?.tokens ?? 0;
+                // A request the provider already took fits by its own report: only the ask is
+                // added, at the edge's scale, within the room left beside the answer's reserve.
+                // Held to the edge whole, a request just under it could never be summarised.
+                let tokens = reused ? (reused.accepted ?? reused.tokens) : 0;
                 if (!request) {
                   // /compact sends its own answer without the tools earlier turns loaded, but the
                   // last turn's cached prefix has them deferred, brought in by its references.
@@ -1834,8 +1854,12 @@ export class AgentRuntime {
                     console.warn(
                       `jian: run ${runId} kept nothing beside its summary — ${reason(error, secrets)}`,
                     );
-                    return [];
+                    return {};
                   }),
+                onSurvivorsDropped: (dropped) =>
+                  console.warn(
+                    `jian: run ${runId} summary kept without its ${dropped.join(' and ')}, which would not let it shrink the conversation`,
+                  ),
                 // Only its segments use these, each fitted to the model's window and sent on its
                 // own. Writing a record needs no deliberation, and thinking draws on the same
                 // allowance as the summary: at the owner's effort it ran out before the record.
@@ -2068,6 +2092,7 @@ export class AgentRuntime {
           const measuredNow = measured.estimated
             ? undefined
             : measuredScale(measured.inputTokens, preparedEstimate);
+          if (sent && !measured.estimated) sent.accepted = measured.inputTokens;
           if (measuredNow !== undefined) {
             scale = measuredNow;
             margin = LIMIT_MARGIN;

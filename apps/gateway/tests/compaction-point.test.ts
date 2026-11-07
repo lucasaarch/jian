@@ -1,7 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import type { CompactAt } from '@jian/contracts';
+import { tool } from 'ai';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, describe, expect, it } from 'vitest';
+import { z } from 'zod';
 import { AgentRuntime } from '../src/agent/runtime.js';
 import { createApp } from '../src/app.js';
 import { buildContext } from '../src/context/build.js';
@@ -27,12 +29,12 @@ afterEach(async () => {
 describe('where a conversation is compacted', () => {
   it('is near the end of the window by default, and a set point never passes that', () => {
     // A 1M window with a 64k reserve, and a 128k one with 32k.
-    expect(compactionThreshold(936_000)).toBe(889_200);
-    expect(compactionThreshold(96_000)).toBe(91_200);
-    expect(compactionThreshold(936_000, 'auto')).toBe(889_200);
+    expect(compactionThreshold(936_000)).toBe(773_217);
+    expect(compactionThreshold(96_000)).toBe(79_304);
+    expect(compactionThreshold(936_000, 'auto')).toBe(773_217);
     expect(compactionThreshold(936_000, 400_000)).toBe(400_000);
     // Past what the model can take, the next answer would not fit.
-    expect(compactionThreshold(96_000, 500_000)).toBe(91_200);
+    expect(compactionThreshold(96_000, 500_000)).toBe(79_304);
   });
 });
 
@@ -169,10 +171,10 @@ async function longConversation(compactAt: CompactAt) {
   });
   await new AgentRuntime(services, () => model).execute(profile.id, run.id);
   expect((await services.runs.run(profile.id, run.id)).status).toBe('completed');
-  const compactions = (await services.lifecycle.checkpoints(profile.id, run.id)).filter(
-    (checkpoint) => (checkpoint.data as { phase?: string }).phase === 'context-compacted',
-  ).length;
-  return { summaries, sizes, compactions };
+  const compacted = (await services.lifecycle.checkpoints(profile.id, run.id))
+    .map((checkpoint) => checkpoint.data as { phase?: string; via?: string })
+    .filter((data) => data.phase === 'context-compacted');
+  return { summaries, sizes, compactions: compacted.length, via: compacted[0]?.via };
 }
 
 describe('a run', () => {
@@ -216,6 +218,116 @@ describe('a run', () => {
       expectedVersion: profile.version,
       contextPolicy: { ...profile.contextPolicy, compactAt: 'auto' },
     });
-    expect((await services.sessions.context(profile.id, session.id)).compactAt).toBe(889_200);
+    expect((await services.sessions.context(profile.id, session.id)).compactAt).toBe(773_217);
+  });
+});
+
+describe('a cold conversation', () => {
+  it('past two segments is summarised in place, in one call', async () => {
+    // Its first step, with nothing cached: some 560,000 tokens counted a byte each.
+    const { summaries, compactions, via } = await longConversation(250_000);
+    expect(compactions).toBe(1);
+    expect(via).toBe('request');
+    expect(summaries).toBe(1);
+  });
+});
+
+describe('a conversation growing past the hard edge', () => {
+  it('is summarised in place before any request has to be cut', async () => {
+    const services = await testServices();
+    const profile = await services.profiles.createProfile({
+      ...input,
+      // Counted a byte a token, so the provider's report sets a measured scale of 0.6.
+      model: { provider: 'google', modelId: 'test', apiKeyEnv: 'JIAN_PROVIDER_TEST' },
+      contextPolicy: {
+        inputTokens: 100_000,
+        outputTokens: 10_000,
+        historyTokens: 100_000,
+        toolResultTokens: 16_000,
+        maxSteps: 24,
+      },
+    });
+    const session = await services.sessions.createSession(profile.id, { title: 'Growing' });
+    for (let index = 0; index < 8; index++) {
+      await insertMessage(services.store.db, {
+        id: randomUUID(),
+        profileId: profile.id,
+        sessionId: session.id,
+        role: index % 2 === 0 ? 'user' : 'assistant',
+        content: `turn-${index} ${'history '.repeat(690)}`,
+        createdAt: new Date(Date.parse('2026-11-03T09:00:00.000Z') + index * 1000).toISOString(),
+      });
+    }
+    if (!services.web) throw new Error('Web tools unavailable');
+    services.web.tools = () => ({
+      large_result: tool({
+        description: 'Return a synthetic result.',
+        inputSchema: z.object({}),
+        execute: async () => 'x'.repeat(next),
+      }),
+    });
+    const run = await services.runs.submit(profile.id, session.id, {
+      text: 'Carry on',
+      requestKey: 'growing',
+    });
+    const sizes: number[] = [];
+    let step = 0;
+    // Results of 2,400 tokens, then one of 9,000 that takes the request from under where it
+    // compacts to past the hard edge in a single step.
+    let next = 4_000;
+    const model = mockModel({
+      doGenerate: async (options) => {
+        const total = Math.round(
+          Buffer.byteLength(JSON.stringify(options.prompt) + JSON.stringify(options.tools ?? [])) *
+            0.6,
+        );
+        const usage = {
+          inputTokens: { total, noCache: total, cacheRead: 0, cacheWrite: 0 },
+          outputTokens: { total: 10, text: 10, reasoning: 0 },
+        };
+        if (isSummary(options) || !options.tools?.length) {
+          return {
+            content: [{ type: 'text' as const, text: 'Checkpoint: the older turns were read.' }],
+            finishReason: { unified: 'stop' as const, raw: 'stop' },
+            usage,
+            warnings: [],
+          };
+        }
+        sizes.push(total);
+        next = total > 70_000 && next < 15_000 ? 15_000 : 4_000;
+        return step++ < 22
+          ? {
+              content: [
+                {
+                  type: 'tool-call' as const,
+                  toolCallId: `large-${step}`,
+                  toolName: 'large_result',
+                  input: '{}',
+                },
+              ],
+              finishReason: { unified: 'tool-calls' as const, raw: 'tool-calls' },
+              usage,
+              warnings: [],
+            }
+          : {
+              content: [{ type: 'text' as const, text: 'Done.' }],
+              finishReason: { unified: 'stop' as const, raw: 'stop' },
+              usage,
+              warnings: [],
+            };
+      },
+    });
+    await new AgentRuntime(services, () => model).execute(profile.id, run.id);
+
+    const phases = (await services.lifecycle.checkpoints(profile.id, run.id)).map(
+      (checkpoint) => checkpoint.data as { phase?: string; via?: string },
+    );
+    const compacted = phases.find((data) => data.phase === 'context-compacted') as
+      | { via?: string; beforeTokens?: number }
+      | undefined;
+    // The request it compacted had grown past what fits at the hard edge, 90,000 / 1.15.
+    expect(compacted?.beforeTokens).toBeGreaterThan(90_000 / 1.15);
+    expect(phases.filter((data) => data.phase === 'context-truncated')).toEqual([]);
+    expect(compacted?.via).toBe('request');
   });
 });

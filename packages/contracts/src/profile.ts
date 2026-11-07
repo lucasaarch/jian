@@ -228,6 +228,8 @@ export const identitySchema = z.strictObject({
  * instructions loaded would summarise every few steps, and each summary costs a call.
  */
 export const MIN_COMPACT_AT = 50_000;
+/** The most a fixed compaction point may be, in tokens: past any model's window. */
+export const MAX_COMPACT_AT = 20_000_000;
 
 /**
  * Where an agent's conversations are summarised. `auto` is near the end of the model's window;
@@ -236,7 +238,7 @@ export const MIN_COMPACT_AT = 50_000;
  */
 export const compactAtSchema = z.union([
   z.literal('auto'),
-  z.number().int().min(MIN_COMPACT_AT).max(20_000_000),
+  z.number().int().min(MIN_COMPACT_AT).max(MAX_COMPACT_AT),
 ]);
 
 export const contextPolicySchema = z
@@ -320,6 +322,8 @@ export const profilePatchSchema = profileSchema.partial().extend({
   avatar: avatarSchema.nullable().optional(),
   model: modelSchema.optional(),
   identity: identitySchema.optional(),
+  // Replaced whole, not merged: a client changing one field (`compactAt`) sends the rest as it
+  // read it, or what it left out goes back to its default.
   contextPolicy: contextPolicySchema.optional(),
   skills: z.array(skillSchema).max(20).optional(),
   disabledSkills: z.array(skillNameSchema).max(20).optional(),

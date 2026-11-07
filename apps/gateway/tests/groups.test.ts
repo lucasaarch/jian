@@ -503,6 +503,43 @@ describe('group conversations', () => {
     }
   });
 
+  it("keeps each person's words for a summary, by name, and never another agent's", async () => {
+    const f = await setup();
+
+    try {
+      const ada = await f.join('Ada', '5511800000001@c.us');
+      const bia = await f.join('Bia', '5511800000002@c.us');
+
+      await f.say(owner, 'hi');
+      await f.approve(ada.profileId);
+      await f.approve(bia.profileId);
+      await f.say(owner, 'Ada, draft the launch note', { mentions: [ada.address] });
+      await f.reply(ada.profileId, 'Bia, can you check the dates?');
+      await f.say(guest, 'The launch moved to Thursday.');
+      await f.say(bia, 'Ada, the dates are fine.');
+
+      const [run] = await f.services.runs.activities(ada.profileId);
+      if (!run) throw new Error('Run missing');
+      const context = await f.services.contexts.context(run, []);
+
+      // Bia's message is in the conversation Ada reads, as something an agent said.
+      expect(JSON.stringify(context.messages)).toContain('the dates are fine');
+      const words = context.words ?? [];
+      expect(words).toEqual(
+        expect.arrayContaining([
+          { from: 'Theo', text: 'Theo: Ada, draft the launch note' },
+          { from: 'Marina', text: 'Marina: The launch moved to Thursday.' },
+        ]),
+      );
+      expect(
+        words.some((item) => item.from === 'Bia' || item.text.includes('dates are fine')),
+      ).toBe(false);
+      expect(context.speaker).toBe('someone in the group');
+    } finally {
+      await f.close();
+    }
+  });
+
   it('treats a redelivered room message as the same turn and the same answer', async () => {
     const f = await setup();
 
