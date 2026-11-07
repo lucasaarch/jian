@@ -34,6 +34,7 @@ import type { SessionNamer, SessionReader, SessionSummarizer } from '../sessions
 import type { Sessions } from '../sessions/service.js';
 import { findSkill } from '../skills/builtin/index.js';
 import { longRunningWork, longRunningWorkFor } from '../skills/builtin/long-running-work.js';
+import { managingContext, managingContextFor } from '../skills/builtin/managing-context.js';
 import { remoteControl, remoteControlFor } from '../skills/builtin/remote-control.js';
 import { type WebAccess, webResearch, webResearchFor } from '../skills/builtin/web-research.js';
 import { worktreesFor, worktrees as worktreesSkill } from '../skills/builtin/worktrees.js';
@@ -146,6 +147,7 @@ export function skillFor(
   if (skill === worktreesSkill && can.worktrees) {
     return worktreesFor({ ...can.worktrees, subagent: Boolean(run.subagent) });
   }
+  if (skill === managingContext) return managingContextFor({ subagent: Boolean(run.subagent) });
   if (skill === longRunningWork) {
     return longRunningWorkFor({
       create: Boolean(can.worktrees?.create),
@@ -939,9 +941,8 @@ export const TOOL_GROUPS = {
   },
   tasks: {
     summary:
-      "stop a subagent, show a subagent, pull request or issue in the owner's Inspector, inspect checkpoints and stored output, manage resource leases, or compact context",
+      "show a subagent, pull request or issue in the owner's Inspector, inspect checkpoints and stored output, manage resource leases, or compact context",
     tools: [
-      'cancel_subagent',
       'open_in_inspector',
       'read_run_checkpoints',
       'read_artifact',

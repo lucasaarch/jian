@@ -221,3 +221,69 @@ it('keeps a recommendation only when it is one of the choices', () => {
   expect(asked('C').recommended).toBeUndefined();
   expect(formatQuestionText(asked('B'))).toContain('2. B (recommended)');
 });
+
+it('keeps the question for the owner when a subagent report arrives while it waits', async () => {
+  const services = await testServices();
+  const profile = await services.profiles.createProfile(input);
+  const session = await services.sessions.createSession(profile.id, {
+    channel: 'api',
+    title: 'Questions',
+  });
+  const run = await services.runs.submit(profile.id, session.id, {
+    text: 'Which provider first?',
+    requestKey: 'ask',
+  });
+  let step = 0;
+  let resumed = '';
+  const model = mockModel({
+    doGenerate: async (options) => {
+      step++;
+      if (step === 2) resumed = JSON.stringify(options.prompt);
+      return step === 1
+        ? {
+            content: [
+              {
+                type: 'tool-call',
+                toolCallId: 'ask',
+                toolName: 'ask_user',
+                input: JSON.stringify({ prompt: 'Which provider should I wire first?' }),
+              },
+            ],
+            finishReason: { unified: 'tool-calls', raw: 'tool-calls' },
+            usage,
+            warnings: [],
+          }
+        : answer('Wiring Gemini Live.');
+    },
+  });
+  await new AgentRuntime(services, () => model).execute(profile.id, run.id);
+  expect((await services.runs.run(profile.id, run.id)).status).toBe('waiting');
+
+  // As a subagent's handoff arrives: the gateway's words, not the owner's.
+  const report = 'Subagent "Pricing" finished.\nReport: Gemini Live costs less per minute.';
+  const joined = await services.runs.submit(
+    profile.id,
+    session.id,
+    { text: report, requestKey: 'task-worker-finished:pricing' },
+    { purpose: 'resume' },
+  );
+  expect(joined.id).toBe(run.id);
+  const still = await services.runs.run(profile.id, run.id);
+  expect(still.status).toBe('waiting');
+  expect(still.question?.answer).toBeUndefined();
+  expect(still.question?.answeredBy).toBeUndefined();
+
+  const resume = await services.runs.submit(
+    profile.id,
+    session.id,
+    { text: 'Gemini Live', requestKey: 'reply' },
+    { ownerMessage: true },
+  );
+  expect((await services.runs.run(profile.id, run.id)).question).toMatchObject({
+    answer: 'Gemini Live',
+    answeredBy: 'owner',
+  });
+  // The report is in what the resumed turn reads, as data beside the answer.
+  await new AgentRuntime(services, () => model).execute(profile.id, resume.id);
+  expect(resumed).toContain('Gemini Live costs less per minute.');
+});

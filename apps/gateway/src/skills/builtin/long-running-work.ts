@@ -74,10 +74,11 @@ the role) and \`role\` (\`execute\` unless you ask for \`review\`) are optional.
 By default the call waits and returns the worker's report as its result. A report past the tool
 result budget is cut like any long result, and \`read_artifact\` returns the whole. After 15
 minutes, or after a minute in which the worker has not started, the call returns that it is
-still going, and its report arrives later in this conversation as a new turn. With \`wait: false\` the call returns as soon as the worker is
-queued, and the report arrives the same way; a report delivered so carries its first 6,000
-characters, and an artifact id for the rest. \`cancel_subagent\` stops one that is no longer
-needed.
+still going. Its report then comes into this conversation when it finishes: into the turn you
+are in if it is still going, read between its steps, or else as a new turn. With
+\`wait: false\` the call returns as soon as the worker is queued, and the report comes the same
+way; a report delivered so carries its first 6,000 characters, and an artifact id for the rest.
+Do not busy-poll for it. \`cancel_subagent\` stops one that is no longer needed.
 
 A subagent always runs on Auto, whatever this conversation's protection is, and it has no browser
 and no X tools. Keep anything the owner should approve for yourself.

@@ -44,8 +44,8 @@ Every size here is in the model's own tokens.
   \`read_artifact\` with the artifact id returns the whole, a page at a time. Every result rides
   in each later step of the turn, so ask for the part you need: a line range, a search, a
   filtered command.
-- When you have \`spawn_subagent\`, work whose output you need only the outcome of (a wide
-  search, long logs, a test run) can go to a subagent: only its report comes back here.
+- Work whose output you need only the outcome of (a wide search, long logs, a test run) can go
+  to a subagent with \`spawn_subagent\`: only its report comes back here.
 - A skill you load is dropped, least recently used first, once loaded skills pass a tenth of
   the window, at most 16,000 tokens.
 - The tool results of your two latest turns stay whole in the conversation. Older ones are cut
@@ -90,3 +90,13 @@ If the conversation refers to something you no longer see, it was summarised. Ch
 summary at the top of the conversation, then \`search_history\` (the \`conversations\`
 group) for the exact words, before asking the person to repeat themselves.`,
 };
+
+/** The line about subagents, which a subagent, unable to start one, is not told. */
+const DELEGATING = /^- Work whose output you need only the outcome of[\s\S]*?comes back here\.\n/m;
+
+/** As the run may read it: a subagent's copy says nothing of spawning one. */
+export function managingContextFor({ subagent }: { subagent: boolean }): Skill {
+  return subagent
+    ? { ...managingContext, instructions: managingContext.instructions.replace(DELEGATING, '') }
+    : managingContext;
+}

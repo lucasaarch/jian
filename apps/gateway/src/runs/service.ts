@@ -250,6 +250,31 @@ export class Runs {
 
       const waiting = await findWaitingSessionRun(tx, profileId, sessionId);
 
+      // The gateway's own words (a subagent's report, an objective's nudge) never answer what
+      // the agent asked the owner: they join the waiting turn as data, read when it resumes, and
+      // the question stays theirs to answer.
+      if (waiting?.question && options.purpose === 'resume') {
+        const stored = await insertKeyedMessage(
+          tx,
+          {
+            id: randomUUID(),
+            profileId,
+            sessionId,
+            runId: waiting.id,
+            role: 'user',
+            content: data.text,
+            ...purposeOf(options, data.text),
+            createdAt: nowIso(this.clock),
+          },
+          data.requestKey,
+        );
+        if (!stored) {
+          const existing = await findMessageByKey(tx, sessionId, data.requestKey);
+          if (existing?.runId) return this.sameMessage(existing, data.text, tx, profileId);
+        }
+        return waiting;
+      }
+
       // Answering a mid-run question resumes work; it is not a steer and not a bare "continue".
       if (waiting?.question) {
         const resumeKey = `ask-answer:${waiting.id}`;

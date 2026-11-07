@@ -418,6 +418,46 @@ describe('PostgreSQL durability', () => {
     ).toHaveLength(1);
   });
 
+  it('hands a waited subagent report over once when the queue reaches it at the same time', async () => {
+    const profile = await services.profiles.createProfile(input);
+    const session = await services.sessions.createSession(profile.id, { title: 'Race' });
+    const parent = await services.runs.submit(profile.id, session.id, {
+      text: 'Check the release.',
+      requestKey: 'race-parent',
+    });
+    // A hold that has already lapsed: the queue may take the report while the call claims it.
+    services.work.useWaiting({ limitMs: 1, pollMs: 1 });
+    try {
+      for (const attempt of [1, 2, 3, 4, 5]) {
+        const child = await services.work.spawnInConversation(
+          parent,
+          { brief: `Check part ${attempt}.` },
+          `race-${attempt}`,
+          true,
+        );
+        await services.lifecycle.claim(child.runId, profile.id, `race-${attempt}`);
+        await services.lifecycle.finish(
+          profile.id,
+          child.runId,
+          `race-${attempt}`,
+          'completed',
+          `Part ${attempt} is fine.`,
+        );
+        const [waited] = await Promise.all([
+          services.work.awaitReport(parent, child.runId),
+          services.work.reportWorker(profile.id, child.runId),
+          services.work.reportWorker(profile.id, child.runId),
+        ]);
+        const delivered = (await services.sessions.messages(profile.id, session.id)).filter(
+          (message) => message.content.includes(`Part ${attempt} is fine.`),
+        ).length;
+        expect(delivered + ('report' in waited ? 1 : 0)).toBe(1);
+      }
+    } finally {
+      services.work.useWaiting({ limitMs: 15 * 60_000, pollMs: 1000 });
+    }
+  });
+
   it('serializes concurrent submissions and persists state across connections', async () => {
     const profile = await services.profiles.createProfile(input);
     const session = await services.sessions.createSession(profile.id, { title: 'One' });
@@ -576,12 +616,8 @@ describe('PostgreSQL durability', () => {
     });
 
     const runtime = new AgentRuntime(services, () => model);
-    const queue = new RunQueue(
-      new BossExecutor(new PgBoss(connectionString), () => {}),
-      services,
-      runtime,
-      () => {},
-    );
+    const boss = new PgBoss(connectionString);
+    const queue = new RunQueue(new BossExecutor(boss, () => {}), services, runtime, () => {});
     const profile = await services.profiles.createProfile(input);
     const session = await services.sessions.createSession(profile.id, { title: 'Queue' });
 
@@ -603,6 +639,11 @@ describe('PostgreSQL durability', () => {
       expect((await services.sessions.messages(profile.id, session.id)).at(-1)?.content).toBe(
         'Hello from the worker',
       );
+      // A turn is not bounded by the job: pg-boss would fail one past its expiry.
+      expect(await boss.getQueue('jian-agent-runs')).toMatchObject({
+        expireInSeconds: 6 * 60 * 60,
+        heartbeatSeconds: 60,
+      });
     } finally {
       await queue.stop();
     }
@@ -622,12 +663,8 @@ describe('PostgreSQL durability', () => {
     });
 
     const runtime = new AgentRuntime(services, () => model);
-    const queue = new RunQueue(
-      new BossExecutor(new PgBoss(connectionString), () => {}),
-      services,
-      runtime,
-      () => {},
-    );
+    const boss = new PgBoss(connectionString);
+    const queue = new RunQueue(new BossExecutor(boss, () => {}), services, runtime, () => {});
     const caller = await services.profiles.createProfile({ ...input, name: 'Caller' });
     const callee = await services.profiles.createProfile({ ...input, name: 'Callee' });
     const session = await services.sessions.createSession(caller.id, { title: 'Owner' });

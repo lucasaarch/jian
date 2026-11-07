@@ -983,7 +983,8 @@ export class AgentRuntime {
       const context = await this.services.contexts.context(run, skillServers, {
         ...project,
         toolTokens,
-        ...('spawn_subagent' in tools ? { delegates: true } : {}),
+        // What the run offers from its first step, not only what it has.
+        ...('spawn_subagent' in tools && offeredNow('spawn_subagent') ? { delegates: true } : {}),
         ...(worktreeCan ? { worktrees: worktreeCan } : {}),
         ...(conversation.remoteMachineId ? { machine: { files: Boolean(machineFiles) } } : {}),
       });
@@ -1092,6 +1093,7 @@ export class AgentRuntime {
           execute: async (input, options) => {
             // An approved action runs before any step: its result is no step's to fit.
             const inStep = approvedCallId !== options.toolCallId;
+            let feeding: ReturnType<typeof setInterval> | undefined;
             const previous = toolQueue;
             let release: () => void = () => {};
 
@@ -1201,19 +1203,22 @@ export class AgentRuntime {
 
               // A call that waits on work outside this run lets the step's next call start: the
               // checks above ran in turn, and what it waits for touches nothing of this run's.
-              // The watchdog is fed meanwhile, as the wait has a limit of its own.
+              // The watchdog is fed meanwhile, so it cannot tell this call stalled; that is
+              // accepted, as the wait has a limit of its own (`awaitReport`) and the owner's
+              // Cancel still ends it.
               const waits = WAITS_OUTSIDE.has(name);
               if (waits) release();
-              const feeding = waits
-                ? setInterval(alive, Math.min(30_000, stalledAfter / 4))
-                : undefined;
+              feeding = waits ? setInterval(alive, Math.min(30_000, stalledAfter / 4)) : undefined;
 
               try {
                 // Read per call: this run or another of its conversation may have changed them.
                 await worktrees?.scope.reload();
-                const raw = await Promise.resolve(
-                  withFolders(folders, () => execute(input, options), worktrees?.scope.guarded),
-                ).finally(() => clearInterval(feeding));
+                const raw = await withFolders(
+                  folders,
+                  () => execute(input, options),
+                  worktrees?.scope.guarded,
+                );
+                clearInterval(feeding);
                 // A file write's diff is for the owner, not the agent: it goes to its own
                 // checkpoint, read by the timeline alone, and leaves the result before the
                 // result is bounded, so it can neither cost context nor push the result into an
@@ -1282,10 +1287,6 @@ export class AgentRuntime {
                 if (name === 'inspect_page' || name === 'browser_control') {
                   loadedTools.add('analyze_media');
                   loadedTools.add('save_attachment');
-                }
-                // A worker that is still going may need stopping; nothing else of tasks is asked.
-                if (name === 'spawn_subagent' && 'cancel_subagent' in tools) {
-                  loadedTools.add('cancel_subagent');
                 }
                 if (result && typeof result === 'object' && 'artifactId' in result) {
                   loadedTools.add('read_artifact');
@@ -1367,6 +1368,7 @@ export class AgentRuntime {
                 throw new Error(`Tool ${name} failed: ${failure}`);
               }
             } finally {
+              clearInterval(feeding);
               release();
             }
           },
