@@ -259,9 +259,12 @@ export class Runs {
         );
       }
 
-      // A subagent's report never answers what the agent asked the owner: it joins the waiting
-      // turn as data, read when it resumes, and the question stays theirs to answer.
-      if (waiting?.question && options.subagentReport) {
+      // Only the owner, or the person the conversation is with, answers what the agent asked.
+      // Anything the gateway writes (a subagent's report, an objective's nudge, a schedule, a
+      // relayed reply, another agent's call) joins the waiting turn as data, read when it
+      // resumes, and the question stays theirs. Joining, not waiting: the message is kept, and a
+      // flow that delivers the run it was given still has one.
+      if (waiting?.question && !options.ownerMessage && !options.personReply) {
         const stored = await insertKeyedMessage(
           tx,
           {
@@ -718,6 +721,7 @@ export class Runs {
         ...question,
         answer,
         answeredAt: nowIso(this.clock),
+        // Reached only by the owner's reply or that of the channel's person (see submit).
         answeredBy: activity === 'channel' ? 'contact' : 'owner',
       },
       // Keep the question text as the parked run's output; delivery already sent it.

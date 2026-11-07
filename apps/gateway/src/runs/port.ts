@@ -42,10 +42,11 @@ export type SubmitOptions = {
    */
   purpose?: Message['purpose'];
   /**
-   * A subagent's report to its parent conversation: the agent's own worker speaking, which never
-   * answers a question the agent asked the owner.
+   * The message is the reply of the person this channel conversation is with, as they wrote it.
+   * With `ownerMessage`, the only thing that answers a question the agent asked: the gateway's
+   * own messages (a schedule, a nudge, a report, a relay) never do.
    */
-  subagentReport?: boolean;
+  personReply?: boolean;
 };
 
 export interface RunReader {
