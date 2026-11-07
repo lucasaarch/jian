@@ -4,7 +4,7 @@ Every release of Jian, newest first.
 
 <!-- Generated from docs/releases by scripts/changelog.mjs. Edit the release note, then run `make changelog`. -->
 
-## 1.6.1 — 2026-11-06
+## 1.6.1 — 2026-11-07
 
 Loading tools on Claude no longer makes it read the whole conversation again, and the panel catches up after a gateway update and shows an agent's questions as written.
 
