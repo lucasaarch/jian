@@ -1945,7 +1945,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/profiles/{profileId}/sessions/{sessionId}/steps/{toolCallId}": {
+    "/v1/profiles/{profileId}/sessions/{sessionId}/runs/{runId}/steps/{toolCallId}": {
         parameters: {
             query?: never;
             header?: never;
@@ -22035,6 +22035,7 @@ export interface operations {
             path: {
                 profileId: string;
                 sessionId: string;
+                runId: string;
                 toolCallId: string;
             };
             cookie?: never;

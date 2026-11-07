@@ -237,11 +237,22 @@ export const timelineQuerySchema = z.strictObject({
   brief: z.literal('1').optional(),
 });
 
-/** A tool call of a conversation, by the id its model gave it, which is not a UUID. */
+/**
+ * The longest path parameter the gateway's router takes, in characters as sent: Fastify's
+ * `maxParamLength`, raised from its 100 so the call ids models send, which are not UUIDs, fit.
+ */
+export const MAX_PATH_PARAM = 200;
+
+/**
+ * A tool call of a conversation: the turn that made it, and the id its model gave it. The id is
+ * read within that turn alone, since a model or local server may number its calls afresh in
+ * every turn.
+ */
 export const toolStepParamsSchema = z.strictObject({
   profileId: z.uuid(),
   sessionId: z.uuid(),
-  toolCallId: z.string().min(1).max(512),
+  runId: z.uuid(),
+  toolCallId: z.string().min(1).max(MAX_PATH_PARAM),
 });
 
 export const operations: Operation[] = [
@@ -1387,7 +1398,7 @@ export const operations: Operation[] = [
   {
     // One tool of the conversation in full, as the timeline gives it unasked to be brief.
     method: 'GET',
-    path: `${session}/steps/:toolCallId`,
+    path: `${session}/runs/:runId/steps/:toolCallId`,
     operationId: 'getToolStep',
     access: 'admin',
     params: toolStepParamsSchema,

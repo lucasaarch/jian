@@ -30,8 +30,10 @@ export const BRIEF_CHARS = 240;
 
 /**
  * How much a value is shown, and how much of its JSON the database sends to show it, in
- * characters. A brief read takes a few times the preview, so the layout, which only adds
- * characters, and a string's escapes, which take two for one, still fill it.
+ * characters. A brief read takes four times the preview: the layout only adds characters, and a
+ * string's escapes take two for one (`\n`, `\"`), so the preview is still filled. A control
+ * character written `\u0001` takes six for one; a value made mostly of those previews shorter,
+ * and is still marked cut.
  */
 type Bound = { show: number; read: number };
 const FULL: Bound = { show: TOOL_DISPLAY_CHARS, read: TOOL_DISPLAY_CHARS };
@@ -76,8 +78,8 @@ function briefDiff(diff: SQL) {
     diff: sql<unknown>`case when jsonb_typeof(${diff}->'hunks') = 'array'
       then jsonb_set(${diff}, '{hunks}', coalesce((
         select jsonb_agg(case when jsonb_typeof(hunk) = 'object'
-          then hunk || '{"lines": []}'::jsonb else hunk end)
-        from jsonb_array_elements(${diff}->'hunks') as hunk
+          then hunk || '{"lines": []}'::jsonb else hunk end order by n)
+        from jsonb_array_elements(${diff}->'hunks') with ordinality as h(hunk, n)
       ), '[]'::jsonb))
       else ${diff} end`,
     diffLines: sql<boolean | null>`(
@@ -99,14 +101,18 @@ export async function sessionTimeline(
   sessionId: string,
   /** The turns to read, however old; only those of this conversation are ever read. */
   runIds?: string[],
-  /** `brief`: each tool as a list shows it, marked `brief` when it was cut. */
-  options: { brief?: boolean } = {},
+  /**
+   * `brief`: each tool as a list shows it, marked `brief` when it was cut. `toolCallId`: only
+   * that call's checkpoints, and only its own result among a step's, for a step read alone.
+   */
+  options: { brief?: boolean; toolCallId?: string } = {},
 ): Promise<RunTimeline[]> {
   if (runIds && !runIds.length) return [];
   const bound = options.brief ? BRIEF : FULL;
   // One more than is read, so a value the database cut is told from one that just fits.
   const read = bound.read + 1;
   const diff = sql`${checkpoints.data}->'diff'`;
+  const call = options.toolCallId;
 
   const recent = await db
     .select({
@@ -149,6 +155,7 @@ export async function sessionTimeline(
           case when jsonb_typeof(${checkpoints.data}->'tools') = 'array'
           then ${checkpoints.data}->'tools' else '[]'::jsonb end
         ) as item
+        ${call === undefined ? sql`` : sql`where item->>'toolCallId' = ${call}`}
       )`,
       reason: sql<
         string | null
@@ -169,6 +176,13 @@ export async function sessionTimeline(
           recent.map((run) => run.id),
         ),
         inArray(sql`${checkpoints.data}->>'phase'`, phases),
+        // A step's result arrives in its turn's step checkpoint, among the others' results.
+        call === undefined
+          ? undefined
+          : sql`(${checkpoints.data}->>'toolCallId' = ${call}
+              or (${checkpoints.data}->>'phase' = 'step-completed'
+                and ${checkpoints.data}->'tools' @> jsonb_build_array(
+                  jsonb_build_object('toolCallId', ${call}::text))))`,
       ),
     )
     .orderBy(asc(checkpoints.createdAt), asc(checkpoints.id));
@@ -282,32 +296,17 @@ export async function sessionTimeline(
 }
 
 /**
- * One tool of a conversation in full, by the id its model gave the call: the turn that started
- * it is found among this conversation's turns alone, then read as a timeline reads it.
+ * One tool of a conversation in full: the call its model named, in the turn that made it, read
+ * as a timeline reads it. Only that turn of this conversation is read, and only that call's
+ * checkpoints in it: a call id is the model's own, and another turn may have used it too.
  */
 export async function sessionToolStep(
   db: Queryable,
   profileId: string,
   sessionId: string,
+  runId: string,
   toolCallId: string,
 ): Promise<ToolStep | undefined> {
-  const [started] = await db
-    .select({ runId: checkpoints.runId })
-    .from(checkpoints)
-    .innerJoin(runs, eq(runs.id, checkpoints.runId))
-    .where(
-      and(
-        eq(runs.profileId, profileId),
-        eq(runs.sessionId, sessionId),
-        eq(checkpoints.profileId, profileId),
-        sql`${checkpoints.data}->>'phase' = 'tool-started'`,
-        sql`${checkpoints.data}->>'toolCallId' = ${toolCallId}`,
-      ),
-    )
-    .orderBy(desc(checkpoints.createdAt))
-    .limit(1);
-  if (!started) return undefined;
-
-  const [timeline] = await sessionTimeline(db, profileId, sessionId, [started.runId]);
+  const [timeline] = await sessionTimeline(db, profileId, sessionId, [runId], { toolCallId });
   return timeline?.steps.find((step) => step.toolCallId === toolCallId);
 }

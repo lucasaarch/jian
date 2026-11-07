@@ -218,12 +218,13 @@ export function registerSessionRoutes(app: FastifyInstance, deps: SessionRouteSe
       ),
   );
 
-  app.get<{ Params: SessionParams & { toolCallId: string } }>(
-    '/v1/profiles/:profileId/sessions/:sessionId/steps/:toolCallId',
+  app.get<{ Params: SessionParams & { runId: string; toolCallId: string } }>(
+    '/v1/profiles/:profileId/sessions/:sessionId/runs/:runId/steps/:toolCallId',
     async (request) =>
       deps.sessions.toolStep(
         request.params.profileId,
         request.params.sessionId,
+        request.params.runId,
         request.params.toolCallId,
       ),
   );

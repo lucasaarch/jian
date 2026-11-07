@@ -673,11 +673,10 @@ describe('reading a long conversation', () => {
     services: Awaited<ReturnType<typeof setup>>['services'],
     profileId: string,
     sessionId: string,
+    key = 'long',
+    result = 'z'.repeat(3_000),
   ) => {
-    const run = await services.runs.submit(profileId, sessionId, {
-      text: 'Hi',
-      requestKey: 'long',
-    });
+    const run = await services.runs.submit(profileId, sessionId, { text: 'Hi', requestKey: key });
     await services.lifecycle.claim(run.id, profileId, 'worker');
     await services.lifecycle.checkpoint(profileId, run.id, 'worker', {
       phase: 'tool-started',
@@ -687,7 +686,7 @@ describe('reading a long conversation', () => {
     });
     await services.lifecycle.checkpoint(profileId, run.id, 'worker', {
       phase: 'step-completed',
-      tools: [{ toolCallId: 'call_long-1', toolName: 'read_file', result: 'z'.repeat(3_000) }],
+      tools: [{ toolCallId: 'call_long-1', toolName: 'read_file', result }],
     });
     await services.lifecycle.finish(profileId, run.id, 'worker', 'completed', 'Done');
     return run.id;
@@ -701,7 +700,7 @@ describe('reading a long conversation', () => {
     const base = `/v1/profiles/${profile.id}/sessions/${session.id}`;
 
     const brief = await app.inject({ url: `${base}/timeline?runs=${runId}&brief=1`, headers });
-    const step = await app.inject({ url: `${base}/steps/call_long-1`, headers });
+    const step = await app.inject({ url: `${base}/runs/${runId}/steps/call_long-1`, headers });
 
     expect(brief.statusCode).toBe(200);
     expect(brief.json()[0].steps[0]).toMatchObject({ brief: true, outputTruncated: true });
@@ -716,23 +715,65 @@ describe('reading a long conversation', () => {
     expect(step.json()).not.toHaveProperty('brief');
   });
 
+  it('reads the step of the turn it names when another turn reused the call id', async () => {
+    const { app, services } = await setup();
+    const profile = await services.profiles.createProfile(input);
+    const session = await services.sessions.createSession(profile.id, { channel: 'api' });
+    // A local server numbers its calls afresh each turn: both turns have a call_long-1.
+    const first = await longRun(services, profile.id, session.id, 'first', 'a'.repeat(500));
+    const second = await longRun(services, profile.id, session.id, 'second', 'b'.repeat(500));
+    const base = `/v1/profiles/${profile.id}/sessions/${session.id}`;
+
+    const read = (runId: string) =>
+      app.inject({ url: `${base}/runs/${runId}/steps/call_long-1`, headers });
+
+    expect((await read(first)).json().output).toBe('a'.repeat(500));
+    expect((await read(second)).json().output).toBe('b'.repeat(500));
+  });
+
   it('reads no step of another conversation, nor one it does not know, nor for a stranger', async () => {
     const { app, services } = await setup();
     const profile = await services.profiles.createProfile(input);
     const asked = await services.sessions.createSession(profile.id, { channel: 'api' });
     const other = await services.sessions.createSession(profile.id, { channel: 'api' });
-    await longRun(services, profile.id, other.id);
+    const own = await longRun(services, profile.id, asked.id, 'own');
+    const foreign = await longRun(services, profile.id, other.id, 'foreign');
     const base = `/v1/profiles/${profile.id}/sessions/${asked.id}`;
 
-    const foreign = await app.inject({ url: `${base}/steps/call_long-1`, headers });
-    const unknown = await app.inject({ url: `${base}/steps/call_unknown`, headers });
+    const elsewhere = await app.inject({
+      url: `${base}/runs/${foreign}/steps/call_long-1`,
+      headers,
+    });
+    const unknown = await app.inject({ url: `${base}/runs/${own}/steps/call_unknown`, headers });
+    const noRun = await app.inject({
+      url: `${base}/runs/${randomUUID()}/steps/call_long-1`,
+      headers,
+    });
     const stranger = await app.inject({
-      url: `/v1/profiles/${profile.id}/sessions/${other.id}/steps/call_long-1`,
+      url: `/v1/profiles/${profile.id}/sessions/${other.id}/runs/${foreign}/steps/call_long-1`,
     });
 
-    expect(foreign.statusCode).toBe(404);
+    expect(elsewhere.statusCode).toBe(404);
     expect(unknown.statusCode).toBe(404);
+    expect(noRun.statusCode).toBe(404);
     expect(stranger.statusCode).toBe(401);
+  });
+
+  it('takes a call id up to the length the contract allows, and refuses a longer one', async () => {
+    const { app, services } = await setup();
+    const profile = await services.profiles.createProfile(input);
+    const session = await services.sessions.createSession(profile.id, { channel: 'api' });
+    const runId = await longRun(services, profile.id, session.id);
+    const base = `/v1/profiles/${profile.id}/sessions/${session.id}/runs/${runId}/steps`;
+
+    const longest = await app.inject({ url: `${base}/${'c'.repeat(200)}`, headers });
+    const longer = await app.inject({ url: `${base}/${'c'.repeat(201)}`, headers });
+
+    // Unknown, but read: the router took it.
+    expect(longest.statusCode).toBe(404);
+    expect(longest.json().error).toContain('not in this conversation');
+    expect(longer.statusCode).toBeGreaterThanOrEqual(400);
+    expect(longer.statusCode).toBeLessThan(500);
   });
 });
 

@@ -740,9 +740,9 @@ export class Sessions {
   }
 
   /** One tool of a turn here in full, for the timeline that listed it briefly. */
-  async toolStep(profileId: string, sessionId: string, toolCallId: string) {
+  async toolStep(profileId: string, sessionId: string, runId: string, toolCallId: string) {
     await this.session(profileId, sessionId);
-    const step = await sessionToolStep(this.store.db, profileId, sessionId, toolCallId);
+    const step = await sessionToolStep(this.store.db, profileId, sessionId, runId, toolCallId);
     if (!step) throw new GatewayError(404, 'That tool call is not in this conversation');
 
     return step;

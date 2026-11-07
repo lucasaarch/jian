@@ -1,6 +1,6 @@
 import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
-import { operationSchema, operations } from '@jian/contracts';
+import { MAX_PATH_PARAM, operationSchema, operations } from '@jian/contracts';
 import Fastify, { LogController } from 'fastify';
 import { registerOpenAiRoutes } from './channels/openai/routes.js';
 import { registerChannelRoutes } from './channels/routes.js';
@@ -101,6 +101,8 @@ export function createApp(
     requestTimeout: 30000,
     connectionTimeout: 30000,
     bodyLimit: 256 * 1024,
+    // A tool call's id is a path parameter, and a model's may be longer than Fastify's 100.
+    maxParamLength: MAX_PATH_PARAM,
     trustProxy: options.trustedProxies?.length ? options.trustedProxies : false,
     logController: new LogController({ disableRequestLogging: true }),
   });

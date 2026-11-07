@@ -39376,7 +39376,7 @@
         }
       }
     },
-    "/v1/profiles/{profileId}/sessions/{sessionId}/steps/{toolCallId}": {
+    "/v1/profiles/{profileId}/sessions/{sessionId}/runs/{runId}/steps/{toolCallId}": {
       "get": {
         "operationId": "getToolStep",
         "security": [
@@ -39407,13 +39407,23 @@
             }
           },
           {
+            "name": "runId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
             "name": "toolCallId",
             "in": "path",
             "required": true,
             "schema": {
               "type": "string",
               "minLength": 1,
-              "maxLength": 512
+              "maxLength": 200
             }
           }
         ],
