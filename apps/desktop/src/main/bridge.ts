@@ -70,6 +70,8 @@ export function serveBridge(deps: {
     // answered the last. Only a restart used to clear it. This closes all of the app's
     // connections, both sessions' and other gateways' included; their event streams reopen and
     // resume by themselves, and a look cut off by it is not taken for the gateway's answer.
+    // The monitor's session also carries the machine registry's and a new gateway's checks:
+    // one of those under way is cut too, and fails as a request whose connection dropped.
     void Promise.allSettled([
       session.defaultSession.closeAllConnections(),
       closeMonitorConnections(),

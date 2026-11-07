@@ -14,20 +14,31 @@ const monitor = () => {
   return monitorSession;
 };
 
+/** Answers that carry no body, which a Response refuses to be made with one. */
+const BODILESS = new Set([101, 204, 205, 304]);
+
 /**
  * fetch through Chromium's network stack, so the system's proxy settings and certificates apply
  * as they do in the window, with a time limit: a gateway that hangs reads as one that is down.
- * Chromium ends a request aborted for any reason with an AbortError; one that ran out of time
- * fails with the limit's own TimeoutError, so it is said as a gateway that did not answer.
+ * The limit covers the body too, which is read here: every caller reads a small JSON answer, and
+ * a body that stalls after its headers is as much a gateway not answering as one that never
+ * starts. Chromium ends a request aborted for any reason with an AbortError; one that ran out
+ * of time fails with the limit's own TimeoutError, so it is said as a gateway that did not answer.
  */
 export function timedFetch(ms: number): typeof fetch {
   return async (input, init) => {
     const limit = AbortSignal.timeout(ms);
     const signal = init?.signal ? AbortSignal.any([init.signal, limit]) : limit;
     try {
-      return await monitor().fetch(input instanceof Request ? input : String(input), {
+      const response = await monitor().fetch(input instanceof Request ? input : String(input), {
         ...init,
         signal,
+      });
+      const body = BODILESS.has(response.status) ? null : await response.arrayBuffer();
+      return new Response(body, {
+        status: response.status,
+        statusText: response.statusText,
+        headers: response.headers,
       });
     } catch (error) {
       if (limit.aborted && limit.reason instanceof Error && limit.reason.name === 'TimeoutError') {
