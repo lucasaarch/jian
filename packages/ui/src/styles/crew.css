@@ -168,6 +168,15 @@
   --inspector-inset: 0.5rem;
 }
 
+/* A conversation read in the Inspector, a subagent's, laid out as the conversation lays its own:
+   the text a chat gutter in from where its bubbles and cards would reach, here the Inspector's
+   edge. The edge alone suits bars, tabs and diffs that run flush, but leaves prose against the
+   pane's side. The conversation's gutter belongs to its pane, so the same width is named here. */
+.inspector-conversation {
+  --chat-gutter: 0.75rem;
+  padding-inline: calc(var(--inspector-inset) + var(--chat-gutter));
+}
+
 /* The width arrives as a variable, not an inline width, so the phone layout below can replace it
    without !important. */
 .inspector-host {

@@ -154,7 +154,7 @@ export function CrewDrawer({
               <Elapsed agent={agent} className="font-mono text-xs tabular-nums" />
             </p>
           </InspectorHeader>
-          <InspectorBody className="grid content-start gap-3 px-(--inspector-inset) pt-4 [&_.chat-line]:mb-0">
+          <InspectorBody className="inspector-conversation grid content-start gap-3 pt-4 [&_.chat-line]:mb-0">
             {error && <p className="text-[13px] text-bad">{error}</p>}
             {!read && !shown.length && (
               <SkeletonRegion label="Loading this agent…" className="grid gap-2">
