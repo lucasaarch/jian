@@ -11,26 +11,21 @@ export const admitsAll = (type: ChannelType) =>
 export const kindName = (type: ChannelType) => kinds.find((kind) => kind.type === type)?.name ?? '';
 
 /**
- * Where the outside world posts to a channel: Telegram, Meta and the email provider at their own
+ * Where the outside world posts to a channel: Telegram and the email provider at their own
  * paths, an API server at the ingress. The gateway's public origin, since that is what they must reach.
  */
 export const channelUrl = (channel: Pick<Channel, 'id' | 'type'>) =>
   channel.type === 'telegram'
     ? `${gatewayOrigin()}/v1/telegram/${channel.id}`
-    : channel.type === 'whatsapp-business'
-      ? `${gatewayOrigin()}/v1/whatsapp-business/${channel.id}`
-      : channel.type === 'email'
-        ? `${gatewayOrigin()}/v1/email/${channel.id}`
-        : `${gatewayOrigin()}/v1/ingress/${channel.id}`;
+    : channel.type === 'email'
+      ? `${gatewayOrigin()}/v1/email/${channel.id}`
+      : `${gatewayOrigin()}/v1/ingress/${channel.id}`;
 
 /** What an API server's callers send to: its address and its token, shown only once. */
 export type IngressSecret = { url: string; token: string };
 
-/** Said once a channel is created: Meta's is a callback waiting for its credentials. */
-export const connectedMessage = (type: ChannelType) =>
-  type === 'whatsapp-business'
-    ? 'Meta callback created. Setup pending: register the webhook in Meta, then complete credentials here.'
-    : `${kindName(type)} connected.`;
+/** Said once a channel is created. */
+export const connectedMessage = (type: ChannelType) => `${kindName(type)} connected.`;
 
 /**
  * Creates a channel and does what connecting means for its kind: WhatsApp starts pairing at

@@ -1,16 +1,13 @@
 'use client';
 
 import { type FormEvent, useState } from 'react';
-import { verifyTokenOf } from '../../components/channels/meta-credentials';
 import { Action, Overlay, OverlayActions, Segmented, TextField } from '../../kit';
 import type { ChannelType, NewChannel } from '../../lib/api';
-import { MetaLimits } from './channel-meta';
 import { ChannelTitle } from './channel-title';
 
-/** The kinds' names where five must fit across a form. */
+/** The kinds' names where four must fit across a form. */
 const short: Record<ChannelType, string> = {
   whatsapp: 'WhatsApp',
-  'whatsapp-business': 'WhatsApp Business',
   telegram: 'Telegram',
   email: 'Email',
   api: 'API Server',
@@ -19,8 +16,6 @@ const short: Record<ChannelType, string> = {
 /** What connecting each kind does, in a line. */
 const what: Record<ChannelType, string> = {
   whatsapp: 'A device paired to your WhatsApp: connecting opens the QR code to scan on your phone.',
-  'whatsapp-business':
-    'Meta’s Cloud API, for inbound customer support. This creates a pending channel and its callback URL; credentials come next.',
   telegram: 'A bot from BotFather, connected with the token it gave you.',
   email:
     'An address on a domain verified in Resend, with receiving on and its MX record in place. Jian registers its webhook at JIAN_PUBLIC_URL, which the internet must reach.',
@@ -29,8 +24,7 @@ const what: Record<ChannelType, string> = {
 
 /**
  * Connects one of the kinds this agent has none of yet. A token or API key typed here goes to the
- * gateway and is never shown again; Meta's verify token lives only in its field, cleared as it is sent.
- * The form is drawn again on each opening, so nothing typed outlives a cancel.
+ * gateway and is never shown again. The form is drawn again on each opening, so nothing typed outlives a cancel.
  */
 export function ChannelAddDialog({
   open,
@@ -91,10 +85,6 @@ function AddForm({
     if (type === 'telegram') {
       if (!botToken.trim()) return setError('Enter the Telegram bot token.');
       request = { type, botToken: botToken.trim() };
-    } else if (type === 'whatsapp-business') {
-      const read = verifyTokenOf(event.currentTarget);
-      if ('error' in read) return setError(read.error);
-      request = { type, whatsappBusiness: read };
     } else if (type === 'email') {
       if (!apiKey.trim() || !address.trim())
         return setError('Enter the Resend API key and the address.');
@@ -169,20 +159,6 @@ function AddForm({
           />
         </>
       )}
-      {type === 'whatsapp-business' && (
-        <>
-          <TextField
-            label="Verify token"
-            name="verifyToken"
-            hint="Choose an unpredictable secret, and enter the same value in Meta’s webhook setup. It cannot be read back here."
-            type="password"
-            autoComplete="off"
-            spellCheck={false}
-            required
-          />
-          <MetaLimits />
-        </>
-      )}
       {error && (
         <p role="alert" className="text-[13px] text-bad">
           {error}
@@ -194,7 +170,7 @@ function AddForm({
           Cancel
         </Action>
         <Action tone="primary" type="submit" busy={busy}>
-          {type === 'whatsapp-business' ? 'Create callback URL' : 'Connect'}
+          Connect
         </Action>
       </OverlayActions>
     </form>

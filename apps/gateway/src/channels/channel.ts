@@ -44,8 +44,6 @@ export interface DeliveryContext {
   signal: AbortSignal;
   /** The delivery being sent, which a protocol with idempotent sends uses as the key. */
   deliveryId?: string;
-  /** Rechecked before each Meta message write, including notices and audio. */
-  canReply?: (chatId: string) => Promise<boolean>;
 }
 
 export interface DeliveryOutcome {

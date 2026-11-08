@@ -1,11 +1,10 @@
 import { randomBytes, randomUUID } from 'node:crypto';
-import { and, eq, sql } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { readMigrationFiles } from 'drizzle-orm/migrator';
 import { PgBoss } from 'pg-boss';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { AgentRuntime } from '../src/agent/runtime.js';
 import { Channels } from '../src/channels/service.js';
-import { MetaInbox } from '../src/channels/whatsapp-business-inbox.js';
 import { recordEvent } from '../src/core/events.js';
 import { Peers } from '../src/peers/service.js';
 import { updateProfileRow } from '../src/profiles/repository.js';
@@ -20,7 +19,7 @@ import { isPullCreation } from '../src/sessions/created-pulls.js';
 import { pageMessages } from '../src/sessions/repository.js';
 import { migrationsFolder } from '../src/storage/database.js';
 import { PostgresStore } from '../src/storage/postgres.js';
-import { channels, metaInbox, sessionWorktrees } from '../src/storage/schema.js';
+import { channels, sessionWorktrees } from '../src/storage/schema.js';
 import { mockModel } from './helpers/model.js';
 import { events, runRows } from './helpers/rows.js';
 
@@ -283,84 +282,26 @@ describe('PostgreSQL durability', () => {
     }
   }, 30_000);
 
-  it('keeps Meta FIFO across workers, retry leases and a crashed head', async () => {
+  it('reads around a channel of a type the gateway no longer speaks', async () => {
     const profile = await services.profiles.createProfile(input);
-    const channelId = randomUUID();
-    await store.db.insert(channels).values({
-      id: channelId,
-      profileId: profile.id,
-      type: 'whatsapp-business',
-      webhookTokenHash: `synthetic-${channelId}`,
-    });
-    const now = String(Math.floor(Date.now() / 1000));
-    for (const id of ['first', 'second', 'third']) {
-      await store.db.insert(metaInbox).values({
-        channelId,
-        eventId: id,
-        payload: {
-          kind: 'message',
-          message: { id, from: '15550000001', type: 'text', timestamp: now, text: { body: id } },
-        },
-      });
-    }
     const fetcher = (() => {
       throw new Error('No network allowed');
     }) as typeof fetch;
-    const signal = new AbortController().signal;
-    // Separate stores/pools reproduce independent workers, not a single test transaction.
-    const other = new PostgresStore(connectionString);
-    const a = new MetaInbox(store, services.vault, fetcher, signal);
-    const b = new MetaInbox(other, services.vault, fetcher, signal);
-    let release!: () => void;
-    let entered!: () => void;
-    const gate = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    const started = new Promise<void>((resolve) => {
-      entered = resolve;
-    });
-    const seen: string[] = [];
-    try {
-      const draining = a.drain(async (_channel, data) => {
-        seen.push(data.text);
-        entered();
-        await gate;
-        throw new Error('Simulated crash after accept');
-      });
-      await started;
-      await b.drain(async (_channel, data) => {
-        seen.push(data.text);
-      });
-      expect(seen).toEqual(['first']);
-      release();
-      await draining;
-      // A failed head remains leased; neither a later tick nor another worker skips it.
-      await b.drain(async (_channel, data) => {
-        seen.push(data.text);
-      });
-      expect(seen).toEqual(['first']);
-      await store.db
-        .update(metaInbox)
-        .set({ availableAt: new Date(0) })
-        .where(and(eq(metaInbox.channelId, channelId), eq(metaInbox.eventId, 'first')));
-      await Promise.all([
-        a.drain(async (_channel, data) => {
-          seen.push(data.text);
-        }),
-        b.drain(async (_channel, data) => {
-          seen.push(data.text);
-        }),
-      ]);
-      expect(seen).toEqual(['first', 'first', 'second', 'third']);
-      const rows = await store.db
-        .select()
-        .from(metaInbox)
-        .where(eq(metaInbox.channelId, channelId));
-      expect(rows.every((row) => row.processedAt)).toBe(true);
-    } finally {
-      release();
-      await other.close();
-    }
+    const reader = new Channels(services, fetcher);
+    const live = await reader.connect(profile.id, { type: 'api' });
+    const retired = randomUUID();
+    // WhatsApp Business rows outlive its code: 0098 revokes them and the enum keeps the value.
+    await store.db.execute(sql`
+      insert into channels (id, profile_id, type, webhook_token_hash, enabled, revoked_at)
+      values (${retired}, ${profile.id}, 'whatsapp-business', ${`synthetic-${retired}`}, false, now())
+    `);
+    await store.db.execute(sql`
+      insert into contacts (id, profile_id, channel_id, scope, chat_id, actor_id, status)
+      values (${randomUUID()}, ${profile.id}, ${retired}, 'direct', '15550000001', '15550000001', 'approved')
+    `);
+
+    expect((await reader.list(profile.id)).map((channel) => channel.id)).toEqual([live.id]);
+    expect(await reader.contacts(profile.id)).toEqual([]);
   });
 
   it('keeps conversation subagents scoped and delivers one handoff after concurrent spawn retries', async () => {

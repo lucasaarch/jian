@@ -4,11 +4,11 @@ import { createApp } from './app.js';
 import { ApiChannel } from './channels/api.js';
 import { ApiModels } from './channels/api-models.js';
 import type { Channel } from './channels/channel.js';
+import { EmailChannel } from './channels/email/channel.js';
 import { ChannelRegistry } from './channels/registry.js';
 import { Channels } from './channels/service.js';
 import { TelegramChannel } from './channels/telegram.js';
 import type { WhatsAppConnections } from './channels/whatsapp/connections.js';
-import { WhatsAppBusinessChannel } from './channels/whatsapp-business.js';
 import { Coordination } from './coordination/service.js';
 import { gatewayRelease } from './core/release.js';
 import { GitHubIntegrations } from './integrations/github.js';
@@ -172,12 +172,13 @@ export async function createGateway(options: GatewayOptions): Promise<Gateway> {
 
   const coordination = new Coordination(services);
   const whatsapp = options.channels === 'all' ? await linkedWhatsApp(store, box) : undefined;
+  // Every type the panel offers must be here: a type left out is refused as not configured.
   const adapters: Channel[] =
     options.channels === 'all' && whatsapp
       ? [
           new ApiChannel(),
           new TelegramChannel(),
-          new WhatsAppBusinessChannel(),
+          new EmailChannel(),
           await whatsAppChannel(whatsapp),
         ]
       : [];

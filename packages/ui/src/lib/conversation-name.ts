@@ -22,7 +22,7 @@ export function conversationName(
   if (session.channel === AGENT_SESSION_CHANNEL) {
     return profiles.find((item) => item.id === session.peerProfileId)?.name ?? stored ?? 'Agent';
   }
-  if (['whatsapp', 'whatsapp-business', 'telegram', 'email'].includes(session.channel)) {
+  if (['whatsapp', 'telegram', 'email'].includes(session.channel)) {
     const contact = contacts.find(
       (item) => item.sessionId === session.id && item.profileId === session.profileId,
     );

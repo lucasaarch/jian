@@ -86,6 +86,8 @@ const GONE = [
   /listening for GitHub/,
   // Settings → Integrations became Apps and MCP servers.
   /\bIntegrations\b/,
+  // Only the linked-device WhatsApp channel remains.
+  /WhatsApp Business/,
 ];
 
 describe('what the built-in skills say', () => {

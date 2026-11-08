@@ -19,14 +19,7 @@ import {
   sql,
 } from 'drizzle-orm';
 import type { Queryable } from '../storage/database.js';
-import {
-  channels,
-  contacts,
-  deliveries,
-  metaBindings,
-  metaReceipts,
-  profiles,
-} from '../storage/schema.js';
+import { channels, channelType, contacts, deliveries, profiles } from '../storage/schema.js';
 import type { ChannelType } from './channel.js';
 import type { ContactRecord } from './contacts.js';
 import type { ChannelRecord, DeliveryRecord } from './service.js';
@@ -40,7 +33,7 @@ type DeliveryRow = typeof deliveries.$inferSelect;
  * unset field out entirely; the parse is the boundary. What the owner never sees — the webhook
  * token hash and the address this connection speaks as — rides beside the parsed document.
  */
-function toChannel(row: ChannelRow & { metaConfigured?: boolean }): ChannelRecord {
+function toChannel(row: ChannelRow): ChannelRecord {
   return {
     ...channelSchema.parse({
       id: row.id,
@@ -51,9 +44,6 @@ function toChannel(row: ChannelRow & { metaConfigured?: boolean }): ChannelRecor
       // A chat channel always answers with its full wording: what the owner left alone is the
       // default, so a field added later reaches channels saved before it.
       ...(row.type === 'api' ? {} : { messages: { ...DEFAULT_CHANNEL_MESSAGES, ...row.messages } }),
-      ...(row.type === 'whatsapp-business' && row.metaConfigured !== undefined
-        ? { whatsappBusinessStatus: row.metaConfigured ? 'configured' : 'pending' }
-        : {}),
       createdAt: row.createdAt.toISOString(),
       ...(row.revokedAt ? { revokedAt: row.revokedAt.toISOString() } : {}),
     }),
@@ -64,13 +54,20 @@ function toChannel(row: ChannelRow & { metaConfigured?: boolean }): ChannelRecor
   };
 }
 
-const channelColumns = {
-  ...getTableColumns(channels),
-  metaConfigured: sql<boolean>`exists (select 1 from ${metaBindings} where ${metaBindings.channelId} = ${channels.id})`,
-};
+const channelColumns = getTableColumns(channels);
+
+/**
+ * A channel of a type this gateway no longer speaks: its row stays, revoked, for the history its
+ * contacts carry, but it is no channel to read, list or deliver through. See `channelType`.
+ */
+export const spokenChannel = inArray(channels.type, channelType.enumValues);
 
 export async function findChannel(db: Queryable, id: string): Promise<ChannelRecord | null> {
-  const [row] = await db.select(channelColumns).from(channels).where(eq(channels.id, id)).limit(1);
+  const [row] = await db
+    .select(channelColumns)
+    .from(channels)
+    .where(and(eq(channels.id, id), spokenChannel))
+    .limit(1);
 
   return row ? toChannel(row) : null;
 }
@@ -96,7 +93,7 @@ export async function listChannels(db: Queryable, profileId: string): Promise<Ch
   const rows = await db
     .select(channelColumns)
     .from(channels)
-    .where(eq(channels.profileId, profileId))
+    .where(and(eq(channels.profileId, profileId), spokenChannel))
     .orderBy(asc(channels.createdAt))
     .limit(100);
 
@@ -272,7 +269,7 @@ function contactQuery(db: Queryable) {
   return db
     .select({ contact: contacts, type: channels.type })
     .from(contacts)
-    .innerJoin(channels, eq(contacts.channelId, channels.id));
+    .innerJoin(channels, and(eq(contacts.channelId, channels.id), spokenChannel));
 }
 
 /** The conversation on a channel that a session belongs to, if it belongs to one at all. */
@@ -284,7 +281,7 @@ export async function findContactBySession(
   const [row] = await db
     .select({ contact: contacts, type: channels.type })
     .from(contacts)
-    .innerJoin(channels, eq(channels.id, contacts.channelId))
+    .innerJoin(channels, and(eq(channels.id, contacts.channelId), spokenChannel))
     .where(
       and(
         eq(contacts.profileId, profileId),
@@ -426,7 +423,6 @@ function toDelivery(row: DeliveryRow): DeliveryRecord {
       remoteMessageIds: row.remoteMessageIds,
       saidCount: row.saidCount,
     }),
-    ...(row.inboundEventId ? { inboundEventId: row.inboundEventId } : {}),
     ...(row.sourceRunId ? { sourceRunId: row.sourceRunId } : {}),
     ...(row.connectionGeneration === null
       ? {}
@@ -444,7 +440,6 @@ function toDeliveryRow(delivery: DeliveryRecord): typeof deliveries.$inferInsert
     notice: delivery.notice ?? null,
     reaction: delivery.reaction ?? null,
     mediaId: delivery.mediaId ?? null,
-    inboundEventId: delivery.inboundEventId ?? null,
     sourceRunId: delivery.sourceRunId ?? null,
     status: delivery.status,
     error: delivery.error ?? null,
@@ -499,31 +494,7 @@ export async function listDeliveries(db: Queryable, profileId: string): Promise<
     .orderBy(desc(deliveries.createdAt))
     .limit(100);
 
-  const result = rows.map(toDelivery);
-  const channelIds = [...new Set(rows.map((row) => row.channelId))];
-  const remoteIds = [...new Set(rows.flatMap((row) => row.remoteMessageIds.map(String)))];
-  if (!channelIds.length || !remoteIds.length) return result;
-  const receipts = await db
-    .select()
-    .from(metaReceipts)
-    .where(
-      and(inArray(metaReceipts.channelId, channelIds), inArray(metaReceipts.remoteId, remoteIds)),
-    );
-  for (const delivery of result) {
-    const matching = receipts.filter(
-      (receipt) =>
-        receipt.channelId === delivery.channelId &&
-        receipt.chatId === delivery.chatId &&
-        delivery.remoteMessageIds.includes(receipt.remoteId),
-    );
-    if (matching.length)
-      delivery.remoteReceipts = matching.map((receipt) => ({
-        messageId: receipt.remoteId,
-        status: receipt.status as 'sent' | 'delivered' | 'read' | 'failed',
-        at: receipt.at.toISOString(),
-      }));
-  }
-  return result;
+  return rows.map(toDelivery);
 }
 
 /**

@@ -37,9 +37,9 @@ const channelSections: { channel: ChannelKind; name: string }[] = [
   { channel: 'agents', name: 'Agents' },
 ];
 
-/** Both WhatsApp connections read as one; a channel the app does not know is the API's. */
+/** A channel the app does not know is the API's. */
 export function channelKind(channel: string): ChannelKind {
-  if (channel === 'whatsapp' || channel === 'whatsapp-business') return 'whatsapp';
+  if (channel === 'whatsapp') return 'whatsapp';
   if (channel === 'telegram') return 'telegram';
   if (channel === 'email') return 'email';
   if (channel === AGENT_SESSION_CHANNEL) return 'agents';
