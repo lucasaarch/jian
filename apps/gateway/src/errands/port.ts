@@ -1,4 +1,5 @@
-import type { EmailRequest } from './service.js';
+import type { EmailSearch } from '../channels/email/log.js';
+import type { EmailRequest, Errands } from './service.js';
 
 /**
  * What the agent may do with the people its owner approved. The one way to a stranger is
@@ -33,4 +34,11 @@ export interface Outreach {
     request: EmailRequest,
     requestKey: string,
   ): Promise<{ to: string; contact: 'approved' | 'pending'; waitingUntil?: string }>;
+  expect(
+    profileId: string,
+    sessionId: string,
+    domain: string,
+    reason: string,
+  ): Promise<{ address: string; domain: string; waitingUntil: string }>;
+  searchEmail(profileId: string, search: EmailSearch): ReturnType<Errands['searchEmail']>;
 }
