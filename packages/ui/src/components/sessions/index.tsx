@@ -56,7 +56,7 @@ const chatName = (session: Session) =>
       ? 'Telegram'
       : 'WhatsApp';
 const isMessaging = (session: Session) =>
-  ['whatsapp', 'whatsapp-business', 'telegram', 'email'].includes(session.channel);
+  ['whatsapp', 'telegram', 'email'].includes(session.channel);
 const isAgent = (session: Session) => session.channel === AGENT_SESSION_CHANNEL;
 /** A conversation with a bar under it: a chat's composer, or a channel's settings. */
 const docked = (session: Session) => isGateway(session) || isMessaging(session) || isAgent(session);

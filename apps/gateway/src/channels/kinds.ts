@@ -3,7 +3,7 @@
  * in the chat itself, and only there. The API channel and the panel's own conversations are
  * answered from the panel.
  */
-const CHAT_CHANNELS = new Set(['whatsapp', 'whatsapp-business', 'telegram']);
+const CHAT_CHANNELS = new Set(['whatsapp', 'telegram']);
 
 export function isChatChannel(channel: string): boolean {
   return CHAT_CHANNELS.has(channel);

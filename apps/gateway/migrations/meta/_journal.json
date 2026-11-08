@@ -687,6 +687,13 @@
       "when": 1794000000000,
       "tag": "0097_email-channel",
       "breakpoints": true
+    },
+    {
+      "idx": 98,
+      "version": "7",
+      "when": 1794100000000,
+      "tag": "0098_remove-whatsapp-business",
+      "breakpoints": true
     }
   ]
 }

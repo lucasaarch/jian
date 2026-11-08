@@ -3,18 +3,12 @@ import { ApiChannel } from './api.js';
 import type { Channel, ChannelType } from './channel.js';
 import { EmailChannel } from './email/channel.js';
 import { TelegramChannel } from './telegram.js';
-import { WhatsAppBusinessChannel } from './whatsapp-business.js';
 
 export class ChannelRegistry {
   private readonly adapters = new Map<ChannelType, Channel>();
 
   constructor(
-    channels: readonly Channel[] = [
-      new ApiChannel(),
-      new TelegramChannel(),
-      new WhatsAppBusinessChannel(),
-      new EmailChannel(),
-    ],
+    channels: readonly Channel[] = [new ApiChannel(), new TelegramChannel(), new EmailChannel()],
   ) {
     for (const channel of channels) {
       if (this.adapters.has(channel.type)) {

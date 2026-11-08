@@ -34,15 +34,6 @@ const telegram: Channel = {
   allowAllContacts: false,
   createdAt: '2026-10-01T00:00:00Z',
 };
-const pendingMeta: Channel = {
-  id: '9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d',
-  profileId: profile.id,
-  type: 'whatsapp-business',
-  enabled: true,
-  allowAllContacts: false,
-  whatsappBusinessStatus: 'pending',
-  createdAt: '2026-10-01T00:00:00Z',
-};
 const guest: Contact = {
   id: '6a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d',
   profileId: profile.id,
@@ -58,13 +49,6 @@ const guest: Contact = {
   createdAt: '2026-10-02T00:00:00Z',
   updatedAt: '2026-10-02T00:00:00Z',
 };
-const credentials = {
-  accessToken: 'synthetic-access-token',
-  appSecret: 'synthetic-app-secret',
-  phoneNumberId: '123456',
-  businessAccountId: '987654',
-};
-
 const roots: (() => void)[] = [];
 afterEach(() => {
   for (const unmount of roots.splice(0)) act(unmount);
@@ -132,8 +116,6 @@ const type = (input: HTMLInputElement | HTMLTextAreaElement | null, value: strin
     );
     input?.dispatchEvent(new Event('input', { bubbles: true }));
   });
-const submit = (form: HTMLFormElement | null | undefined) =>
-  act(async () => form?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
 
 async function add(kind: string) {
   await press('Add');
@@ -164,50 +146,6 @@ it('starts pairing a WhatsApp device as soon as its channel exists', async () =>
   expect(api.connect).toHaveBeenCalledWith(profile.id, 'created-channel');
   expect(document.body.textContent).toContain('QR pairing opened');
 });
-
-it('creates Meta’s callback with the verify token alone, and keeps no secret anywhere', async () => {
-  const storage = vi.spyOn(Storage.prototype, 'setItem');
-  const { api } = await render();
-  await add('WhatsApp Business');
-
-  const token = field('Verify token');
-  if (token) token.value = 'synthetic-verify-secret';
-  await submit(token?.form);
-
-  expect(api.createChannel).toHaveBeenCalledWith(profile.id, {
-    type: 'whatsapp-business',
-    whatsappBusiness: { verifyToken: 'synthetic-verify-secret' },
-  });
-  expect(api.connect).not.toHaveBeenCalled();
-  expect(storage).not.toHaveBeenCalled();
-});
-
-for (const fail of [false, true]) {
-  it(`completes Meta’s setup with its four credentials alone, cleared ${fail ? 'after a refusal' : 'once saved'}`, async () => {
-    const storage = vi.spyOn(Storage.prototype, 'setItem');
-    const { api } = await render([pendingMeta], [], fail);
-    await press('Configure WhatsApp Business (Meta)');
-
-    // Where Meta must post, with the channel's own id.
-    expect(dialog()?.textContent).toContain(`/v1/whatsapp-business/${pendingMeta.id}`);
-    expect(dialog()?.textContent).toContain('Messaging is unavailable');
-    for (const [name, value] of Object.entries(credentials)) {
-      const input = dialog()?.querySelector<HTMLInputElement>(`[name="${name}"]`);
-      if (!input) throw new Error(`No ${name} field`);
-      input.value = value;
-    }
-    await submit(dialog()?.querySelector('form'));
-
-    expect(api.updateChannel).toHaveBeenCalledWith(profile.id, pendingMeta.id, {
-      whatsappBusiness: credentials,
-    });
-    expect(api.createChannel).not.toHaveBeenCalled();
-    expect(storage).not.toHaveBeenCalled();
-    for (const name of Object.keys(credentials)) {
-      expect(dialog()?.querySelector<HTMLInputElement>(`[name="${name}"]`)?.value).toBe('');
-    }
-  });
-}
 
 it('patches only what each of a channel’s switches changes', async () => {
   const { api } = await render([telegram]);

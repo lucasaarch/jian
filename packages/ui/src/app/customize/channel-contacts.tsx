@@ -19,7 +19,7 @@ type Answers = ReturnType<typeof contactActions>;
 
 /**
  * Who this channel reaches: its groups and its people, a line each, those waiting on the owner
- * first. Nobody has written yet, nothing is shown. Meta's channel has no groups.
+ * first. Nobody has written yet, nothing is shown.
  */
 export function ChannelContacts({
   channel,
@@ -36,8 +36,7 @@ export function ChannelContacts({
   // What was pressed on a contact's switch and not yet answered, over what the gateway holds.
   const [pressed, setPressed] = useState<Record<string, boolean>>({});
   const mine = channelContacts(contacts, channel);
-  const groups =
-    channel.type === 'whatsapp-business' ? [] : mine.filter((item) => item.scope === 'group');
+  const groups = mine.filter((item) => item.scope === 'group');
   const people = mine.filter((item) => item.scope !== 'group');
 
   const trust = async (contact: Contact, canApprove: boolean) => {

@@ -311,7 +311,6 @@ const apiServer = { label: 'API Server', icon: <Terminal size={16} /> };
 
 const channels: Record<string, { label: string; icon: ReactNode }> = {
   whatsapp: { label: 'WhatsApp (Baileys)', icon: <WhatsAppLogo size={16} /> },
-  'whatsapp-business': { label: 'WhatsApp Business (Meta)', icon: <WhatsAppLogo size={16} /> },
   telegram: { label: 'Telegram', icon: <TelegramLogo size={16} /> },
   email: { label: 'Email', icon: <Mail size={16} /> },
   gateway: { label: 'Gateway', icon: <MessageCircle size={16} /> },

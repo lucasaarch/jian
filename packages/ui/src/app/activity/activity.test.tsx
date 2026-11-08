@@ -79,17 +79,13 @@ it('reads the usage again over the period chosen', async () => {
   expect(stats).toHaveBeenLastCalledWith(profile.id, 7);
 });
 
-it('names Meta’s WhatsApp apart from Baileys and from the API server', async () => {
+it('names WhatsApp by its library, apart from the API server', async () => {
   const stats = {
     ...statsFor(30),
-    channels: [
-      { channel: 'whatsapp-business', turns: 1, conversations: 1, tokens: 100 },
-      { channel: 'whatsapp', turns: 1, conversations: 1, tokens: 100 },
-    ],
+    channels: [{ channel: 'whatsapp', turns: 1, conversations: 1, tokens: 100 }],
   } as ProfileStats;
   const host = await render(<ChannelCards stats={stats} />);
 
-  expect(host.textContent).toContain('WhatsApp Business (Meta)');
   expect(host.textContent).toContain('WhatsApp (Baileys)');
   expect(host.textContent).not.toContain('API Server');
 });

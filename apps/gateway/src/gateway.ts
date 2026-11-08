@@ -8,7 +8,6 @@ import { ChannelRegistry } from './channels/registry.js';
 import { Channels } from './channels/service.js';
 import { TelegramChannel } from './channels/telegram.js';
 import type { WhatsAppConnections } from './channels/whatsapp/connections.js';
-import { WhatsAppBusinessChannel } from './channels/whatsapp-business.js';
 import { Coordination } from './coordination/service.js';
 import { gatewayRelease } from './core/release.js';
 import { GitHubIntegrations } from './integrations/github.js';
@@ -174,12 +173,7 @@ export async function createGateway(options: GatewayOptions): Promise<Gateway> {
   const whatsapp = options.channels === 'all' ? await linkedWhatsApp(store, box) : undefined;
   const adapters: Channel[] =
     options.channels === 'all' && whatsapp
-      ? [
-          new ApiChannel(),
-          new TelegramChannel(),
-          new WhatsAppBusinessChannel(),
-          await whatsAppChannel(whatsapp),
-        ]
+      ? [new ApiChannel(), new TelegramChannel(), await whatsAppChannel(whatsapp)]
       : [];
   const channels = new Channels(services, outbound.fetch, new ChannelRegistry(adapters));
 

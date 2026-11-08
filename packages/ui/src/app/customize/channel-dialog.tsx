@@ -1,6 +1,6 @@
 'use client';
 
-import { useId, useState } from 'react';
+import { useState } from 'react';
 import { channelUrl, kindName } from '../../components/channels/connect';
 import { waitingOn } from '../../components/channels/contacts';
 import type { SectionActions } from '../../components/props';
@@ -10,7 +10,6 @@ import { useAgent, useContacts } from '../../lib/query/agent';
 import { ChannelContacts } from './channel-contacts';
 import { CopyLine, listBox } from './channel-copy-line';
 import { ChannelMessagesDialog } from './channel-messages-dialog';
-import { MetaCredentialsForm, MetaLimits } from './channel-meta';
 import { ChannelSwitches } from './channel-switches';
 import { ChannelPills, ChannelTitle, useDevice } from './channel-title';
 
@@ -21,14 +20,11 @@ const addressNote: Partial<Record<Channel['type'], string>> = {
   api: 'Your systems post here with the token given when it was connected, in X-Jian-Channel-Token.',
   email:
     'Jian registered it in Resend as it connected. Mail whose sender domain passes neither DMARC nor DKIM is ignored. To change the API key or the address, disconnect and connect again.',
-  'whatsapp-business':
-    'Register it in Meta with your verify token, subscribe the app to the account’s messages events, then send a test message. Meta signs each payload with your app secret.',
 };
 
 /**
  * Everything about one channel: how it stands, its address, its switches and wording, who it
- * reaches and their approval, pairing a WhatsApp device again, completing Meta's setup, and
- * disconnecting it, which the page asks to confirm by name.
+ * reaches and their approval, pairing a WhatsApp device again, and disconnecting it, which the page asks to confirm by name.
  */
 export function ChannelDialog({
   open,
@@ -79,30 +75,23 @@ function ChannelSettings({
   onDisconnect: (channel: Channel) => void;
   onPair: (channel: Channel) => void;
 }) {
-  const { api, mutate, busy } = actions;
+  const { api, busy } = actions;
   const profile = useAgent();
   const contacts = useContacts();
   const device = useDevice(api, profile.id, channel);
-  const credentials = useId();
   const [wording, setWording] = useState(false);
   const [round, setRound] = useState(0);
-  const pending = channel.whatsappBusinessStatus === 'pending';
-  const meta = channel.type === 'whatsapp-business';
 
   const summary =
     channel.type === 'whatsapp'
       ? device?.accountId
         ? `Linked to ${device.accountId}.`
         : 'A device paired to your WhatsApp.'
-      : meta
-        ? pending
-          ? 'Messaging is unavailable until the credentials are complete.'
-          : 'Meta’s Cloud API, for inbound customer support.'
-        : channel.type === 'telegram'
-          ? 'A bot from BotFather.'
-          : channel.type === 'email'
-            ? 'Mail through Resend. Senders and actions are approved here, never by email.'
-            : 'An HTTP endpoint for your own systems.';
+      : channel.type === 'telegram'
+        ? 'A bot from BotFather.'
+        : channel.type === 'email'
+          ? 'Mail through Resend. Senders and actions are approved here, never by email.'
+          : 'An HTTP endpoint for your own systems.';
   // Neither asks anything in its own words: approvals and questions are answered in the panel.
   const worded = channel.type !== 'api' && channel.type !== 'email';
 
@@ -120,22 +109,10 @@ function ChannelSettings({
         <div className="grid gap-2">
           <div className={listBox}>
             {channel.emailAddress && <CopyLine label="Address" value={channel.emailAddress} />}
-            <CopyLine label={meta ? 'Callback URL' : 'Webhook URL'} value={channelUrl(channel)} />
+            <CopyLine label="Webhook URL" value={channelUrl(channel)} />
           </div>
           <p className="px-1 text-xs leading-relaxed text-muted">{addressNote[channel.type]}</p>
         </div>
-      )}
-      {meta && <MetaLimits />}
-      {pending && (
-        <MetaCredentialsForm
-          id={credentials}
-          save={(whatsappBusiness) =>
-            void mutate(
-              () => api.updateChannel(profile.id, channel.id, { whatsappBusiness }),
-              'Meta credentials saved. Complete manual subscriptions in Meta before testing delivery.',
-            )
-          }
-        />
       )}
       <ChannelSwitches
         channel={channel}
@@ -149,7 +126,7 @@ function ChannelSettings({
               },
             })}
       />
-      {!pending && <ChannelContacts channel={channel} actions={actions} />}
+      <ChannelContacts channel={channel} actions={actions} />
       <OverlayActions>
         <Action
           tone="danger"
@@ -168,11 +145,6 @@ function ChannelSettings({
         <Action tone="quiet" onClick={close}>
           Close
         </Action>
-        {pending && (
-          <Action tone="primary" type="submit" form={credentials} busy={busy}>
-            Complete setup
-          </Action>
-        )}
       </OverlayActions>
       {worded && (
         <ChannelMessagesDialog

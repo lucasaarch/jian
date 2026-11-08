@@ -22,7 +22,9 @@ const model = (id: string, reasoningEfforts: ProviderModel['reasoningEfforts']):
 
 async function setup({ allowAll = true } = {}) {
   const services = await testServices();
-  const channels = new Channels(services, async () => {
+  // Only Telegram's check of a bot token is answered: no other request leaves the test.
+  const channels = new Channels(services, async (url) => {
+    if (String(url).endsWith('/getMe')) return Response.json({ ok: true, result: { id: 700 } });
     throw new Error('Network forbidden in test');
   });
   const app = createApp({ ...services, channels, token, logger: false });
@@ -178,21 +180,18 @@ describe('the OpenAI-compatible door of an API channel', () => {
       });
       expect(header.statusCode).toBe(200);
 
-      const meta = (
+      const telegram = (
         await f.app.inject({
           method: 'POST',
           url: `/v1/profiles/${f.profile.id}/channels`,
           headers: admin,
-          payload: {
-            type: 'whatsapp-business',
-            whatsappBusiness: { verifyToken: 'synthetic-verify-token' },
-          },
+          payload: { type: 'telegram', botToken: '123456:synthetic-bot-token' },
         })
       ).json() as { id: string; webhookToken: string };
       const notApi = await f.app.inject({
         method: 'GET',
-        url: `/v1/channels/${meta.id}/openai/models`,
-        headers: { authorization: `Bearer ${meta.webhookToken}` },
+        url: `/v1/channels/${telegram.id}/openai/models`,
+        headers: { authorization: `Bearer ${telegram.webhookToken}` },
       });
       expect(notApi.statusCode).toBe(404);
       expect(notApi.json().error.code).toBe('not_found');

@@ -11,7 +11,6 @@ import {
   type ingressResultSchema,
   type Message,
   type Session,
-  whatsappBusinessSetupSchema,
 } from '@jian/contracts';
 import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 import type { z } from 'zod';
@@ -38,8 +37,6 @@ import {
   deliveries as deliveryRows,
   emailBindings,
   mediaAssets,
-  metaBindings,
-  metaInbox,
   runs,
 } from '../storage/schema.js';
 import { ApiConversations } from './api-conversation.js';
@@ -103,8 +100,6 @@ import {
   updateDelivery,
 } from './repository.js';
 import { findConnection, writeAuthChunks, writeConnection } from './whatsapp/repository.js';
-import { verifyMetaNumber } from './whatsapp-business.js';
-import { MetaInbox, metaCanSend, metaCausalInbound } from './whatsapp-business-inbox.js';
 
 /**
  * `address` is what this connection speaks as on its protocol — the linked WhatsApp account or
@@ -124,8 +119,6 @@ export const channelSecret = (channelId: string) => `channel:${channelId}`;
 
 export type DeliveryRecord = z.infer<typeof deliverySchema> & {
   connectionGeneration?: number;
-  /** Internal authority, never accepted from an outbound tool or public API. */
-  inboundEventId?: string;
   /** The producer of media/notices, whose text must not replace their caption. */
   sourceRunId?: string;
 };
@@ -225,10 +218,7 @@ export class Channels {
   private timer?: ReturnType<typeof setTimeout>;
   private stopped = false;
   private pending: Promise<void> = Promise.resolve();
-  private metaTimer?: ReturnType<typeof setTimeout>;
-  private metaPending: Promise<void> = Promise.resolve();
   private readonly abort = new AbortController();
-  private readonly meta: MetaInbox;
   private readonly mail: EmailInbox;
   private readonly conversations: ApiConversations;
 
@@ -240,7 +230,6 @@ export class Channels {
     private readonly people = new Contacts(services),
     private readonly rooms = new Groups(services.profiles, services.decisions?.ask),
   ) {
-    this.meta = new MetaInbox(services.store, services.vault, fetcher, this.abort.signal);
     this.mail = new EmailInbox(services.store, services.vault, fetcher, this.abort.signal);
     this.conversations = new ApiConversations(services);
   }
@@ -248,14 +237,6 @@ export class Channels {
   /** How an API channel's callers name models. Absent, they can name none. */
   useModels(models: ApiModels) {
     this.conversations.useModels(models);
-  }
-
-  metaChallenge(id: string, query: unknown) {
-    return this.meta.challenge(id, query);
-  }
-
-  receiveMeta(id: string, raw: Buffer, signature: unknown) {
-    return this.meta.receive(id, raw, signature);
   }
 
   /** A provider's signed webhook for an email channel, over the bytes as they arrived. */
@@ -288,30 +269,14 @@ export class Channels {
       }
     };
 
-    // Media intake may wait on a remote download. It must not hold the shared outbox
-    // clock: even deliveries queued after a download started still need their next tick.
-    const intake = async () => {
-      if (this.stopped) return;
-      this.metaPending = this.meta
-        .drain((channel, data) => this.accept(channel, data))
-        .catch((error) => channelLog('dispatch.failed', {}, error));
-      await this.metaPending;
-      if (!this.stopped) {
-        this.metaTimer = setTimeout(intake, DISPATCH_INTERVAL_MS);
-        this.metaTimer.unref();
-      }
-    };
-
     void tick();
-    void intake();
   }
 
   async stop() {
     this.stopped = true;
     this.abort.abort();
     clearTimeout(this.timer);
-    clearTimeout(this.metaTimer);
-    await Promise.all([this.pending, this.metaPending]);
+    await this.pending;
   }
 
   private metadata({
@@ -391,7 +356,7 @@ export class Channels {
    * told where to deliver, and the owner registers the webhook by hand.
    */
   async connect(profileId: string, input: unknown, origin?: string) {
-    const { botToken, whatsappBusiness, email, ...data } = channelInputSchema.parse(input);
+    const { botToken, email, ...data } = channelInputSchema.parse(input);
 
     const profile = await this.services.profiles.profile(profileId);
     this.registry.get(data.type);
@@ -404,10 +369,6 @@ export class Channels {
     if (email && (await this.emailTaken(email.address))) {
       throw new GatewayError(409, 'This email address is already connected to an agent');
     }
-
-    const configured =
-      whatsappBusiness && 'accessToken' in whatsappBusiness ? whatsappBusiness : undefined;
-    if (configured) await verifyMetaNumber(configured, this.fetcher, this.abort.signal);
 
     const issued = issueToken();
     const identity = botToken ? await this.identify(data.type, botToken) : undefined;
@@ -427,9 +388,6 @@ export class Channels {
       type: data.type,
       allowAllContacts: false,
       enabled: true,
-      ...(whatsappBusiness
-        ? { whatsappBusinessStatus: configured ? ('configured' as const) : ('pending' as const) }
-        : {}),
       tokenHash: issued.hash,
       ...(identity?.address ? { address: identity.address } : {}),
       ...(mail ? { address: mail.address } : {}),
@@ -444,23 +402,17 @@ export class Channels {
           await this.services.vault.put(profileId, channelSecret(record.id), botToken, tx);
         }
 
-        if (whatsappBusiness || mail) {
+        if (mail) {
           await this.services.vault.put(
             profileId,
             channelSecret(record.id),
-            JSON.stringify(whatsappBusiness ?? mail),
+            JSON.stringify(mail),
             tx,
           );
         }
 
         try {
           await insertChannel(tx, record);
-          if (configured)
-            await tx.insert(metaBindings).values({
-              channelId: record.id,
-              phoneNumberId: configured.phoneNumberId,
-              businessAccountId: configured.businessAccountId,
-            });
           if (mail) await tx.insert(emailBindings).values({ channelId: id, address: mail.address });
         } catch (error) {
           // The partial unique index has the last word on one live channel per type. Reaching it
@@ -471,7 +423,7 @@ export class Channels {
               409,
               mail
                 ? 'This channel type or email address is already connected, here or on another agent'
-                : 'This channel type or Meta phone number is already connected',
+                : 'This channel type is already connected',
             );
           }
 
@@ -545,31 +497,7 @@ export class Channels {
       }
 
       let updated: ChannelRecord;
-      if ('whatsappBusiness' in data) {
-        if (channel.type !== 'whatsapp-business')
-          throw new GatewayError(400, 'Only WhatsApp Business supports Meta credentials');
-        if (channel.whatsappBusinessStatus === 'configured')
-          throw new GatewayError(409, 'This Meta channel is already configured');
-        const stored = await this.services.vault.read(profileId, channelSecret(id), tx);
-        if (!stored) throw new GatewayError(409, 'Meta setup is unavailable');
-        const { verifyToken } = whatsappBusinessSetupSchema.parse(JSON.parse(stored));
-        const credential = { ...data.whatsappBusiness, verifyToken };
-        // The profile lock serializes completion and revoke, including Graph validation.
-        await verifyMetaNumber(credential, this.fetcher, this.abort.signal);
-        try {
-          await tx.insert(metaBindings).values({
-            channelId: id,
-            phoneNumberId: credential.phoneNumberId,
-            businessAccountId: credential.businessAccountId,
-          });
-        } catch (error) {
-          if (isUniqueViolation(error))
-            throw new GatewayError(409, 'This Meta phone number is already connected');
-          throw error;
-        }
-        await this.services.vault.put(profileId, channelSecret(id), JSON.stringify(credential), tx);
-        updated = { ...channel, whatsappBusinessStatus: 'configured' };
-      } else if ('enabled' in data) {
+      if ('enabled' in data) {
         await setChannelEnabled(tx, id, data.enabled);
         updated = assertFound(await findChannel(tx, id), 'Channel');
         if (!data.enabled || !channel.enabled) {
@@ -618,17 +546,6 @@ export class Channels {
           eq(channelInbox.channelId, channelId),
           eq(channelInbox.status, 'pending'),
           ...(chatId ? [sql`${channelInbox.message}->>'chatId' = ${chatId}`] : []),
-        ),
-      );
-    await tx
-      .update(metaInbox)
-      .set({ processedAt: new Date() })
-      .where(
-        and(
-          eq(metaInbox.channelId, channelId),
-          isNull(metaInbox.processedAt),
-          sql`${metaInbox.payload}->>'kind' = 'message'`,
-          ...(chatId ? [sql`${metaInbox.payload}->'message'->>'from' = ${chatId}`] : []),
         ),
       );
   }
@@ -689,7 +606,6 @@ export class Channels {
         : undefined;
 
     await markChannelRevoked(tx, id, new Date(record.revokedAt));
-    await tx.delete(metaBindings).where(eq(metaBindings.channelId, id));
     await tx.delete(emailBindings).where(eq(emailBindings.channelId, id));
     await this.services.vault.discard(profileId, channelSecret(id), tx);
 
@@ -1193,18 +1109,10 @@ export class Channels {
             .limit(1);
           if (event?.status !== 'pending') return null;
         }
-        if (channel.type === 'whatsapp-business') {
-          const [event] = await tx
-            .select({ processedAt: metaInbox.processedAt })
-            .from(metaInbox)
-            .where(and(eq(metaInbox.channelId, channel.id), eq(metaInbox.eventId, data.requestKey)))
-            .limit(1);
-          if (!event || event.processedAt) return null;
-        }
         const outcome = await this.people.intake(tx, current, data);
         if (outcome.status === 'approved' && outcome.duplicate) return outcome;
         if (outcome.status === 'pending' && outcome.announce)
-          await this.notify(tx, channel, data.chatId, connectionGeneration, data.requestKey);
+          await this.notify(tx, channel, data.chatId, connectionGeneration);
         let decision: GroupDecision | undefined;
         if (outcome.status === 'approved' && data.scope === 'group') {
           await rememberPerson(tx, {
@@ -1423,15 +1331,11 @@ export class Channels {
       // forged senders alike.
       if (tell && isChatChannel(channel.type) && this.registry.get(channel.type).send) {
         await insertDelivery(tx, {
-          id:
-            channel.type === 'whatsapp-business'
-              ? stableUuid(`meta-no-model:${channel.id}:${requestKey}`)
-              : randomUUID(),
+          id: randomUUID(),
           profileId: channel.profileId,
           channelId: channel.id,
           chatId: contact.chatId,
           notice: NO_MODEL_NOTICE,
-          ...(channel.type === 'whatsapp-business' ? { inboundEventId: requestKey } : {}),
           status: 'pending',
           createdAt: new Date(now).toISOString(),
           updatedAt: new Date(now).toISOString(),
@@ -1638,7 +1542,6 @@ export class Channels {
         await insertDelivery(tx, {
           id: run.id,
           runId: run.id,
-          ...(channel.type === 'whatsapp-business' ? { inboundEventId: requestKey } : {}),
           profileId: channel.profileId,
           channelId: channel.id,
           chatId: contact.chatId,
@@ -1711,7 +1614,6 @@ export class Channels {
     channel: ChannelRecord,
     chatId: string,
     connectionGeneration?: number,
-    inboundEventId?: string,
   ) {
     // A stranger's email is not answered: the reply would go to whatever address it claimed.
     if (!isChatChannel(channel.type) || !this.registry.get(channel.type).send) {
@@ -1726,7 +1628,6 @@ export class Channels {
       channelId: channel.id,
       chatId,
       notice: APPROVAL_NOTICE,
-      ...(channel.type === 'whatsapp-business' ? { inboundEventId } : {}),
       status: 'pending',
       createdAt: now,
       updatedAt: now,
@@ -1879,13 +1780,8 @@ export class Channels {
     });
   }
 
-  /** A complete manual tick; the running worker uses independent intake/outbox clocks. */
+  /** One outbox tick on demand, as the running worker's clock takes it. */
   async dispatch() {
-    await Promise.all([
-      this.meta.drain((channel, data) => this.accept(channel, data)),
-      this.dispatchOutbound(),
-    ]);
-    // Include notices/runs created by this intake in a manual tick as well.
     await this.dispatchOutbound();
   }
 
@@ -2165,12 +2061,7 @@ export class Channels {
   private async showProgress(delivery: DeliveryRecord): Promise<void> {
     const channel = await findChannel(this.services.store.db, delivery.channelId);
 
-    if (
-      !channel ||
-      channel.revokedAt ||
-      (await this.automationDeliveryError(channel, delivery)) ||
-      (await this.metaDeliveryError(channel, delivery))
-    ) {
+    if (!channel || channel.revokedAt || (await this.automationDeliveryError(channel, delivery))) {
       return;
     }
 
@@ -2256,28 +2147,6 @@ export class Channels {
     return undefined;
   }
 
-  /** Common send-time window and approval policy for every Meta delivery path. */
-  private async metaDeliveryError(channel: ChannelRecord, delivery: DeliveryRecord) {
-    if (channel.type !== 'whatsapp-business') return undefined;
-    if (!(await metaCanSend(this.services.store.db, channel.id, delivery.chatId)))
-      return 'WhatsApp replies require an inbound message within 24 hours';
-    const contact = await findContactByChat(this.services.store.db, channel.id, delivery.chatId);
-    if (contact?.status === 'approved') return undefined;
-    // Pending contacts may only receive the gateway's approval notice for their own inbound.
-    if (
-      delivery.runId ||
-      delivery.sourceRunId ||
-      !(await metaCausalInbound(
-        this.services.store.db,
-        channel.id,
-        delivery.chatId,
-        delivery.inboundEventId,
-      ))
-    )
-      return 'WhatsApp Business requires an approved contact for agent messages';
-    return undefined;
-  }
-
   private async deliver(
     delivery: DeliveryRecord,
     text: string,
@@ -2292,9 +2161,7 @@ export class Channels {
         throw new Error('Channel unavailable');
       }
 
-      const denied =
-        (await this.automationDeliveryError(channel, delivery)) ??
-        (await this.metaDeliveryError(channel, delivery));
+      const denied = await this.automationDeliveryError(channel, delivery);
       if (denied) return { status: 'failed', remoteMessageIds: [], error: denied };
 
       if (delivery.connectionGeneration !== undefined) {
@@ -2325,10 +2192,6 @@ export class Channels {
         fetch: this.fetcher,
         signal: this.abort.signal,
         deliveryId: delivery.id,
-        canReply: async (chatId: string) =>
-          chatId === delivery.chatId &&
-          !(await this.automationDeliveryError(channel, delivery)) &&
-          !(await this.metaDeliveryError(channel, delivery)),
       };
       const people = await this.groupPeople(delivery);
       const emailThread =

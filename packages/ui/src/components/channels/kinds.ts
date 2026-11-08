@@ -9,13 +9,6 @@ export const kinds = [
     description: 'A device paired to your WhatsApp. Connecting means scanning the QR code.',
   },
   {
-    type: 'whatsapp-business' as const,
-    name: 'WhatsApp Business (Meta)',
-    icon: Smartphone,
-    description:
-      'Official Cloud API. A manual setup for inbound customer support, not a linked device.',
-  },
-  {
     type: 'telegram' as const,
     name: 'Telegram',
     icon: Send,
