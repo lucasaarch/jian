@@ -2,8 +2,8 @@
 
 import type { CodeDiff, ToolStep } from '../../../lib/api';
 import { FilePath } from '../code-change';
-import { traceOf } from '../progress';
 import { ThoughtLine } from '../thought-line';
+import { traceOf } from '../trace';
 
 /** When a stretch of tools ended: its last tool's end, so a settled line stops its clock there. */
 const endOf = (steps: ToolStep[]) =>
@@ -15,17 +15,20 @@ const endOf = (steps: ToolStep[]) =>
 /** Tools a turn used between two things it said, settled. */
 export function Worked({
   steps,
+  runId,
   startedAt,
   finishedAt = endOf(steps),
 }: {
   steps: ToolStep[];
+  /** The turn that used them, by which an opened tool reads its whole step. */
+  runId?: string;
   startedAt?: string;
   finishedAt?: string;
 }) {
   return (
     <ThoughtLine
       working={false}
-      steps={traceOf(steps)}
+      steps={traceOf(steps, runId)}
       startedAt={startedAt}
       finishedAt={finishedAt}
     />

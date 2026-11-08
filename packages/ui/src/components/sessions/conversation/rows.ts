@@ -61,7 +61,15 @@ export type Row =
       crewBefore: Subagent[];
       fresh: boolean;
     }
-  | { kind: 'work'; key: string; steps: ToolStep[]; startedAt?: string; finishedAt?: string }
+  | {
+      kind: 'work';
+      key: string;
+      /** The turn the tools belong to: here, or the other agent's. */
+      runId?: string;
+      steps: ToolStep[];
+      startedAt?: string;
+      finishedAt?: string;
+    }
   | { kind: 'changes'; key: string; runId: string; steps: ToolStep[] }
   | { kind: 'crew'; key: string; agents: Subagent[] }
   | { kind: 'outgoing'; key: string; item: Outgoing }
@@ -327,7 +335,13 @@ export function buildRows(input: RowsInput): Row[] {
 
     if (hidden) {
       if (steered && head)
-        rows.push({ kind: 'work', key: `head:${message.id}`, steps: head, ...headSpan });
+        rows.push({
+          kind: 'work',
+          key: `head:${message.id}`,
+          runId: answering,
+          steps: head,
+          ...headSpan,
+        });
     } else if (asking && asked?.approval && message.runId) {
       const key = `approval:${message.id}`;
       rows.push({
@@ -382,6 +396,7 @@ export function buildRows(input: RowsInput): Row[] {
       rows.push({
         kind: 'work',
         key: `after:${lastMessage.id}`,
+        runId: answering,
         steps: later,
         startedAt: lastMessage.createdAt,
       });
@@ -403,6 +418,7 @@ export function buildRows(input: RowsInput): Row[] {
       rows.push({
         kind: 'work',
         key: `unanswered:${runId}`,
+        runId,
         steps: unanswered,
         ...facts.spans.get(runId),
       });

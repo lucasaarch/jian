@@ -1944,6 +1944,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/profiles/{profileId}/sessions/{sessionId}/runs/{runId}/steps/{toolCallId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Required permission: admin. */
+        get: operations["getToolStep"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/profiles/{profileId}/sessions/{sessionId}/changes": {
         parameters: {
             query?: never;
@@ -6114,6 +6131,12 @@ export interface operations {
                             text: string;
                             /** @default 0 */
                             steps: number;
+                            reconnecting?: {
+                                attempts: number;
+                                /** Format: date-time */
+                                nextAt: string;
+                                reason: string;
+                            };
                             /** Format: date-time */
                             updatedAt: string;
                         };
@@ -9084,6 +9107,12 @@ export interface operations {
                             text: string;
                             /** @default 0 */
                             steps: number;
+                            reconnecting?: {
+                                attempts: number;
+                                /** Format: date-time */
+                                nextAt: string;
+                                reason: string;
+                            };
                             /** Format: date-time */
                             updatedAt: string;
                         };
@@ -9357,6 +9386,12 @@ export interface operations {
                             text: string;
                             /** @default 0 */
                             steps: number;
+                            reconnecting?: {
+                                attempts: number;
+                                /** Format: date-time */
+                                nextAt: string;
+                                reason: string;
+                            };
                             /** Format: date-time */
                             updatedAt: string;
                         };
@@ -9629,6 +9664,12 @@ export interface operations {
                             text: string;
                             /** @default 0 */
                             steps: number;
+                            reconnecting?: {
+                                attempts: number;
+                                /** Format: date-time */
+                                nextAt: string;
+                                reason: string;
+                            };
                             /** Format: date-time */
                             updatedAt: string;
                         };
@@ -19715,6 +19756,12 @@ export interface operations {
                             text: string;
                             /** @default 0 */
                             steps: number;
+                            reconnecting?: {
+                                attempts: number;
+                                /** Format: date-time */
+                                nextAt: string;
+                                reason: string;
+                            };
                             /** Format: date-time */
                             updatedAt: string;
                         };
@@ -20096,6 +20143,12 @@ export interface operations {
                             text: string;
                             /** @default 0 */
                             steps: number;
+                            reconnecting?: {
+                                attempts: number;
+                                /** Format: date-time */
+                                nextAt: string;
+                                reason: string;
+                            };
                             /** Format: date-time */
                             updatedAt: string;
                         };
@@ -20372,6 +20425,12 @@ export interface operations {
                             text: string;
                             /** @default 0 */
                             steps: number;
+                            reconnecting?: {
+                                attempts: number;
+                                /** Format: date-time */
+                                nextAt: string;
+                                reason: string;
+                            };
                             /** Format: date-time */
                             updatedAt: string;
                         };
@@ -20638,6 +20697,12 @@ export interface operations {
                             text: string;
                             /** @default 0 */
                             steps: number;
+                            reconnecting?: {
+                                attempts: number;
+                                /** Format: date-time */
+                                nextAt: string;
+                                reason: string;
+                            };
                             /** Format: date-time */
                             updatedAt: string;
                         };
@@ -21453,6 +21518,12 @@ export interface operations {
                             text: string;
                             /** @default 0 */
                             steps: number;
+                            reconnecting?: {
+                                attempts: number;
+                                /** Format: date-time */
+                                nextAt: string;
+                                reason: string;
+                            };
                             /** Format: date-time */
                             updatedAt: string;
                         };
@@ -21709,6 +21780,7 @@ export interface operations {
         parameters: {
             query?: {
                 runs?: string;
+                brief?: "1";
             };
             header?: never;
             path: {
@@ -21770,6 +21842,7 @@ export interface operations {
                             };
                             /** @enum {string} */
                             aspectRatio?: "1:1" | "16:9" | "9:16" | "4:3" | "3:4" | "3:2" | "2:3";
+                            brief?: boolean;
                         }[];
                         approval?: {
                             /** Format: uuid */
@@ -21807,6 +21880,155 @@ export interface operations {
                             answeredBy?: "owner" | "contact";
                         };
                     }[];
+                };
+            };
+            /** @description Error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getToolStep: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                profileId: string;
+                sessionId: string;
+                runId: string;
+                toolCallId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        toolCallId: string;
+                        toolName: string;
+                        mcp?: {
+                            server: string;
+                            tool: string;
+                        };
+                        /** @enum {string} */
+                        status: "running" | "done" | "failed" | "refused" | "uncertain" | "stopped";
+                        /** Format: date-time */
+                        startedAt: string;
+                        /** Format: date-time */
+                        finishedAt?: string;
+                        error?: string;
+                        input?: string;
+                        output?: string;
+                        inputTruncated?: boolean;
+                        outputTruncated?: boolean;
+                        diff?: {
+                            path: string;
+                            language?: string;
+                            additions: number;
+                            deletions: number;
+                            created?: boolean;
+                            hunks: {
+                                oldStart: number;
+                                oldLines: number;
+                                newStart: number;
+                                newLines: number;
+                                header?: string;
+                                lines: {
+                                    /** @enum {string} */
+                                    kind: "context" | "add" | "del";
+                                    old?: number;
+                                    new?: number;
+                                    text: string;
+                                }[];
+                            }[];
+                            truncated?: boolean;
+                        };
+                        /** @enum {string} */
+                        aspectRatio?: "1:1" | "16:9" | "9:16" | "4:3" | "3:4" | "3:2" | "2:3";
+                        brief?: boolean;
+                    };
                 };
             };
             /** @description Error */
@@ -23485,6 +23707,12 @@ export interface operations {
                             text: string;
                             /** @default 0 */
                             steps: number;
+                            reconnecting?: {
+                                attempts: number;
+                                /** Format: date-time */
+                                nextAt: string;
+                                reason: string;
+                            };
                             /** Format: date-time */
                             updatedAt: string;
                         };
@@ -24626,6 +24854,12 @@ export interface operations {
                             text: string;
                             /** @default 0 */
                             steps: number;
+                            reconnecting?: {
+                                attempts: number;
+                                /** Format: date-time */
+                                nextAt: string;
+                                reason: string;
+                            };
                             /** Format: date-time */
                             updatedAt: string;
                         };
@@ -24891,6 +25125,12 @@ export interface operations {
                             text: string;
                             /** @default 0 */
                             steps: number;
+                            reconnecting?: {
+                                attempts: number;
+                                /** Format: date-time */
+                                nextAt: string;
+                                reason: string;
+                            };
                             /** Format: date-time */
                             updatedAt: string;
                         };
@@ -25156,6 +25396,12 @@ export interface operations {
                             text: string;
                             /** @default 0 */
                             steps: number;
+                            reconnecting?: {
+                                attempts: number;
+                                /** Format: date-time */
+                                nextAt: string;
+                                reason: string;
+                            };
                             /** Format: date-time */
                             updatedAt: string;
                         };

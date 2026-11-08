@@ -18,6 +18,7 @@ export class ProgressReporter {
   private mcp: RunProgress['mcp'];
   private text = '';
   private steps = 0;
+  private waiting: RunProgress['reconnecting'];
   /** The newest token snapshot not yet written; a slower writer skips the ones in between. */
   private pending?: RunProgress;
   /**
@@ -102,6 +103,23 @@ export class ProgressReporter {
     this.mark(true);
   }
 
+  /** A model call failed and is tried again at `nextAt`: the watcher sees why nothing moves. */
+  reconnecting(state: { attempts: number; nextAt: Date; reason: string }): void {
+    this.waiting = {
+      attempts: state.attempts,
+      nextAt: state.nextAt.toISOString(),
+      reason: state.reason.slice(0, 200),
+    };
+    this.mark(true);
+  }
+
+  /** A call got through: whatever the run does next is what the watcher should see. */
+  reconnected(): void {
+    if (!this.waiting) return;
+    this.waiting = undefined;
+    this.mark(true);
+  }
+
   stepEnded(): void {
     this.steps += 1;
     this.mark(false);
@@ -132,6 +150,7 @@ export class ProgressReporter {
       // The tail is what a reader is looking at; the head is already on their screen.
       text: this.text.length > 8000 ? this.text.slice(-8000) : this.text,
       steps: this.steps,
+      ...(this.waiting ? { reconnecting: this.waiting } : {}),
       updatedAt: new Date(this.stamped).toISOString(),
     };
   }

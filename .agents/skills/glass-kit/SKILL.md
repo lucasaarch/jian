@@ -19,11 +19,12 @@ from the rest is a bug.
 
 | Need | Use |
 |---|---|
-| Button | `Action`, tones `primary`, `glass`, `quiet`, `outline`, `danger` |
+| Button | `Action`, tones `primary`, `glass`, `quiet`, `outline`, `danger`; `size="icon"` for a round one holding only an icon, named by `aria-label` |
 | Field | `TextField`, `TextArea`, `SelectField`, `DateTimeField`, `RowInput` |
 | Search and filter a list | `SearchField`, with a `FilterSelect` beside it |
 | On and off, or one of a few | `SwitchControl`, `Toggle`, `Segmented` |
 | List that opens | `Picker`, `MenuEntry`, `MenuDivider`, `menuPopup` |
+| Row of tabs that can outgrow its bar | `ScrollStrip`: no scrollbar, wheel and fades |
 | Anything over the page | `Overlay`, `OverlayActions`, `ConfirmDialog` |
 | Room of pages with a list | `Overlay` with `SettingsLayout`, `SettingsGroup`, `SettingsRow` |
 | Things to connect, side by side | `SettingsCards` holding a `SettingsCard` each |

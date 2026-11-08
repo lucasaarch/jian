@@ -6,8 +6,10 @@ import { Markdown } from '../ui/markdown';
 import { RefineFrame } from '../ui/refine-frame';
 import { AgentLine } from './conversation/agent-line';
 import { drawnBox } from './media';
-import { ThoughtLine, type ThoughtStep } from './thought-line';
-import { isMcpName, toolLabel } from './tool-labels';
+import { attemptsText, RetryCountdown } from './retry-countdown';
+import { ThoughtLine } from './thought-line';
+import { toolLabel } from './tool-labels';
+import { traceOf } from './trace';
 
 /** The orb's animation for each tool: looking things up, working with its hands, or asking. */
 const toolOrbs: Record<string, OrbState> = {
@@ -32,6 +34,9 @@ export function statusOf(run: Pick<Run, 'status' | 'progress'>): {
   tool: boolean;
 } {
   const progress = run.progress;
+  // Waiting to try the model again outranks the tool it last used: that tool is over.
+  if (run.status !== 'queued' && progress?.reconnecting)
+    return { label: 'Reconnecting to the model', state: 'connecting', tool: false };
   const tool =
     progress?.phase === 'tool'
       ? progress.tool
@@ -52,47 +57,23 @@ export function statusOf(run: Pick<Run, 'status' | 'progress'>): {
   };
 }
 
-const failures: Partial<Record<ToolStep['status'], string>> = {
-  failed: 'Failed',
-  refused: 'Refused by the server',
-  uncertain: 'Outcome unknown',
-  stopped: 'Did not finish',
-};
-
-/** The tools of a turn as the Thought Line's trace, in the words the panel uses for them. */
-export function traceOf(steps: ToolStep[]): ThoughtStep[] {
-  return steps.map((step) => {
-    const failed = failures[step.status];
-
-    return {
-      key: step.toolCallId,
-      text: toolLabel(step.toolName, step.mcp),
-      status: step.status === 'running' ? 'running' : failed ? 'failed' : 'done',
-      ...(failed ? { note: failed, ...(step.error ? { detail: step.error } : {}) } : {}),
-      ...(step.input !== undefined
-        ? { input: { text: step.input, truncated: Boolean(step.inputTruncated) } }
-        : {}),
-      ...(step.output !== undefined
-        ? { output: { text: step.output, truncated: Boolean(step.outputTruncated) } }
-        : {}),
-      ...(step.mcp || isMcpName(step.toolName) ? { json: true } : {}),
-      ...(step.diff ? { diff: step.diff } : {}),
-    };
-  });
-}
-
 /** The working Thought Line of a run and the pictures it is drawing so far. */
 export function LiveThought({
   run,
+  runId,
   steps,
   startedAt,
 }: {
   run: Pick<Run, 'status' | 'progress' | 'createdAt'>;
+  /** The turn at work, by which an opened tool reads its whole step. */
+  runId?: string;
   steps: ToolStep[];
   startedAt: string;
 }) {
   const { label, state, tool } = statusOf(run);
-  const writing = !tool && Boolean(run.progress?.text);
+  const reconnecting = run.progress?.reconnecting;
+  // Words written before the call failed stay where they are; the line says why nothing follows.
+  const writing = !tool && !reconnecting && Boolean(run.progress?.text);
 
   return (
     <>
@@ -101,9 +82,21 @@ export function LiveThought({
           working={!writing}
           label={label}
           orb={state}
-          steps={traceOf(steps)}
+          steps={traceOf(steps, runId)}
           startedAt={startedAt}
           finishedAt={writing ? (steps.at(-1)?.finishedAt ?? run.progress?.updatedAt) : undefined}
+          {...(reconnecting
+            ? { spoken: `${reconnecting.reason}, ${attemptsText(reconnecting.attempts)}` }
+            : {})}
+          after={
+            reconnecting && (
+              <RetryCountdown
+                attempts={reconnecting.attempts}
+                nextAt={reconnecting.nextAt}
+                reason={reconnecting.reason}
+              />
+            )
+          }
         />
       )}
       <ImageDrafts steps={steps} />
@@ -159,12 +152,15 @@ export function placeSteps(steps: ToolStep[], said: Pick<Message, 'id' | 'create
  */
 export function LiveTurn({
   run,
+  runId,
   agent,
   steps,
   startedAt = run.createdAt,
   children,
 }: {
   run: Pick<Run, 'status' | 'progress' | 'createdAt'>;
+  /** The turn at work, by which an opened tool reads its whole step. */
+  runId?: string;
   agent?: Pick<Profile, 'name' | 'avatar'>;
   /**
    * Only the tools since the last thing the turn said: the earlier ones already sit under the
@@ -188,7 +184,7 @@ export function LiveTurn({
       pending
       before={
         <>
-          <LiveThought run={run} steps={steps} startedAt={startedAt} />
+          <LiveThought run={run} runId={runId} steps={steps} startedAt={startedAt} />
           {children}
         </>
       }

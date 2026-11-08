@@ -23,6 +23,32 @@ function reporter(every = 1000) {
 }
 
 describe('what a run reports while it runs', () => {
+  it('says the model is being reconnected to while it waits, and stops once a call gets through', async () => {
+    const { subject, written } = reporter(250);
+    const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+    subject.usingTool('read_file');
+    subject.reconnecting({
+      attempts: 3,
+      nextAt: new Date('2026-11-07T12:00:04Z'),
+      reason: 'connection timed out',
+    });
+    await settle();
+    // At once, though a token write would still be held: it is a change of what the run does.
+    expect(written.at(-1)).toMatchObject({
+      reconnecting: {
+        attempts: 3,
+        nextAt: '2026-11-07T12:00:04.000Z',
+        reason: 'connection timed out',
+      },
+    });
+
+    subject.reconnected();
+    await settle();
+    expect(written.at(-1)).not.toHaveProperty('reconnecting');
+    expect(written.at(-1)).toMatchObject({ phase: 'tool', tool: 'read_file' });
+  });
+
   it('writes tokens at most every 250 ms by default', async () => {
     const written: RunProgress[] = [];
     let now = 0;

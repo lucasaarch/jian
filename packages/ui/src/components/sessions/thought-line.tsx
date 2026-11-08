@@ -4,10 +4,12 @@ import { Check, ChevronDown, ListChecks, X } from 'lucide-react';
 import { type ReactNode, useEffect, useId, useRef, useState } from 'react';
 import type { OrbState } from 'thinking-orbs';
 import { Overlay } from '../../kit/overlay';
+import { SkeletonLine, SkeletonRegion } from '../../kit/skeleton';
 import type { CodeDiff } from '../../lib/api';
 import { CodeBlock } from '../ui/code-block';
 import { Markdown } from '../ui/markdown';
 import { FileDiff } from './code-change';
+import { type FullStep, useFullStep } from './step-details';
 import { hasDetails, ToolDetails, type ToolValue } from './tool-details';
 
 /** One line of the trace. A step that went wrong stays in it, marked, with what went wrong. */
@@ -24,6 +26,10 @@ export type ThoughtStep = {
   /** A tool server's call: its input and output are shown as JSON. */
   json?: boolean;
   diff?: CodeDiff;
+  /** The list cut this tool: what it shows is a preview, and opening it reads the whole step. */
+  brief?: boolean;
+  /** The turn that called it, by which its whole step is read: a call id is only its model's. */
+  run?: string;
 };
 
 /** The mark, the name and how it ended: the same line whether it opens or not. */
@@ -86,15 +92,34 @@ const spoken = (seconds: number) =>
 const at = (moment?: string | number) =>
   moment === undefined ? undefined : typeof moment === 'number' ? moment : Date.parse(moment);
 
+/** How the whole of a tool cut for the list is coming along, under its preview. */
+function Reading({ state }: { state: FullStep['state'] }) {
+  if (state === 'failed') {
+    return (
+      <p role="status" className="thought-truncated">
+        The full details could not be read.
+      </p>
+    );
+  }
+  if (state !== 'reading') return null;
+  return (
+    <SkeletonRegion label="Reading the full details…" className="grid">
+      <SkeletonLine className="w-40" />
+    </SkeletonRegion>
+  );
+}
+
 /** Its body is built only while the tool is open: a long trace holds only the lines in view. */
 function ToolStepItem({
-  step,
+  step: line,
   onFailure,
 }: {
   step: ThoughtStep;
   onFailure: (step: ThoughtStep) => void;
 }) {
   const [shown, setShown] = useState(false);
+  // A tool the list cut reads its whole step the first time it opens.
+  const { step, state } = useFullStep(line, shown);
 
   return (
     <li data-status={step.status}>
@@ -112,7 +137,16 @@ function ToolStepItem({
                 {...(step.output ? { output: step.output } : {})}
                 json={step.json === true}
               />
-              {step.diff && <FileDiff diff={step.diff} open={false} />}
+              <Reading state={state} />
+              {step.diff &&
+                // A brief diff has its hunks but none of their lines: never drawn empty.
+                (!step.brief ? (
+                  <FileDiff diff={step.diff} open={false} />
+                ) : (
+                  state !== 'reading' && (
+                    <p className="thought-truncated">{step.diff.path}: lines not loaded.</p>
+                  )
+                ))}
               {step.note && step.detail && (
                 <button
                   type="button"
@@ -181,6 +215,8 @@ export function ThoughtLine({
   startedAt,
   finishedAt,
   failed = false,
+  after,
+  spoken: said,
 }: {
   working: boolean;
   /** It ended without finishing: the settled mark is a cross, not a check. */
@@ -192,6 +228,10 @@ export function ThoughtLine({
   startedAt?: string | number;
   /** When the work ended; a settled line without it ends at its last known moment. */
   finishedAt?: string | number;
+  /** What follows the clock in the head, such as the countdown to a retry. */
+  after?: ReactNode;
+  /** What a screen reader hears after the label while it works: what `after` shows, in words. */
+  spoken?: string;
 }) {
   // Nothing opens itself, not even an in-progress run; each tool's details are independently folded.
   const [open, setOpen] = useState(false);
@@ -247,9 +287,14 @@ export function ThoughtLine({
             {lasted(working ? seconds(Date.now()) : (settled ?? 0))}
           </span>
         )}
+        {after}
         {foldable && <ChevronDown size={14} className="thought-chevron" aria-hidden="true" />}
         <span className="sr-only" role="status">
-          {working || settled === undefined ? current : `${summary} · ${spoken(settled)}`}
+          {working || settled === undefined
+            ? working && said
+              ? `${current} · ${said}`
+              : current
+            : `${summary} · ${spoken(settled)}`}
         </span>
       </button>
       {foldable && open && (

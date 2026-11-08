@@ -76,6 +76,35 @@ it('opens the stream of a gateway that does not know progress text without askin
   }
 });
 
+it('lets go of a refusal of progress text, so it does not hold the shared connection', async () => {
+  connection.origin = 'https://oldest.example';
+  try {
+    const cancelled = vi.fn();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) =>
+        url.includes('progress=1')
+          ? new Response(
+              new ReadableStream({
+                start(controller) {
+                  controller.enqueue(new TextEncoder().encode('{"error":"Invalid request"}'));
+                },
+                cancel: cancelled,
+              }),
+              { status: 400 },
+            )
+          : new Response(new ReadableStream({ start: (controller) => controller.close() })),
+      ),
+    );
+
+    await readEvents('profile', 0, () => {}, new AbortController().signal);
+
+    expect(cancelled).toHaveBeenCalled();
+  } finally {
+    connection.origin = '';
+  }
+});
+
 it("hands on a durable event's own data, as the gateway writes the whole event", async () => {
   const heard: unknown[] = [];
   const focus = { sessionId: 'atlas', kind: 'pull_request', url: 'https://github.com/o/r/pull/1' };

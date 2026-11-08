@@ -36,6 +36,7 @@ import { InspectorLayout } from './inspector-host';
 import { SessionModel } from './model-picker';
 import { SessionObjective } from './objective';
 import { SessionProtection } from './protection-menu';
+import { SessionAgents } from './session-agents';
 import { SessionPulls } from './session-pulls';
 import { SessionWorktrees, useChangesFlag } from './session-worktrees';
 
@@ -178,9 +179,11 @@ export function Sessions({ api, mutate, busy }: SectionActions) {
   const contact = contacts.find(
     (item) => item.sessionId === active.id && item.profileId === profile.id,
   );
-  // The pull requests the agent created and where the objective stands, beside where it runs.
+  // The subagents at work, the pull requests the agent created and where the objective stands,
+  // beside where it runs.
   const badges = () => (
     <span className="session-badges">
+      <SessionAgents sessionId={active.id} />
       {/* Discard waits for the turn to end; the rest steer into it, as the composer does. */}
       <SessionWorktrees
         api={api}

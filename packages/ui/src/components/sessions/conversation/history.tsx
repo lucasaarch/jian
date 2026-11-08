@@ -12,12 +12,15 @@ import { ConversationMap } from '../conversation-map';
 import { useFollowBottom } from '../follow-bottom';
 import { HistorySkeleton } from '../history-skeleton';
 import { running } from '../status';
+import { StepDetailsContext } from '../step-details';
 import { Earlier, useEarlier } from './earlier';
 import { mapEntries } from './map-entries';
 import { DecidingContext, RowContext, type RowEnv, RowView } from './row';
 import { ConversationContext } from './store';
+import { ToLatest } from './to-latest';
 import { Tray } from './tray';
 import { useConversationStore, useLanding, useReader, useRows } from './use-history';
+import { useStepDetails } from './use-step-details';
 
 /** No other agents to name: one list for every render, so the rows are not drawn again. */
 const NO_AGENTS: Pick<Profile, 'id' | 'name' | 'avatar'>[] = [];
@@ -35,6 +38,7 @@ export type HistoryProps = {
         | 'answerRun'
         | 'decideApproval'
         | 'react'
+        | 'toolStep'
       >
     >;
   profileId: string;
@@ -107,7 +111,7 @@ export function History({
     store,
     useShallow(({ error, behind, toolsUnread }) => ({ error, behind, toolsUnread })),
   );
-  const { scroller, follow, onScroll, hold } = useFollowBottom();
+  const { scroller, follow, toEnd, onScroll, hold } = useFollowBottom();
   const { more, earlier, read, near } = useEarlier(store, reader, scroller);
 
   // Sending is a return to the end, wherever the reader had scrolled.
@@ -181,66 +185,73 @@ export function History({
   );
 
   const entries = useMemo(() => mapEntries(messages, asks), [messages, asks]);
+  // The reader asks for brief tools; one the owner opens is read whole from here.
+  const details = useStepDetails(api, profileId, sessionId, store);
 
   return (
     <ConversationContext.Provider value={store}>
-      <RowContext.Provider value={env}>
-        <DecidingContext.Provider value={deciding}>
-          <div className="session-history">
-            <p role="status" className="sr-only">
-              {loading ? 'Loading conversation…' : ''}
-            </p>
-            <section
-              ref={scroller}
-              className="message-history"
-              aria-label="Session history"
-              aria-busy={loading}
-              onScroll={(event) => {
-                onScroll(event.currentTarget);
-                near(event.currentTarget);
-              }}
-            >
-              <div className="message-list">
-                {!loading && more && <Earlier earlier={earlier} onRead={read} />}
-                {loading ? (
-                  <HistorySkeleton />
-                ) : (
-                  <>
-                    {!messages.length && !error && (
-                      <div className="grid justify-items-center gap-1 py-16 text-center">
-                        <h3 className="text-sm font-semibold text-ink">
-                          No messages in this session
-                        </h3>
-                        <p className="text-sm">{empty}</p>
-                      </div>
-                    )}
-                    {rows.map((row) => (
-                      <RowView key={row.key} row={row} />
-                    ))}
-                  </>
-                )}
-              </div>
-            </section>
-            <ConversationMap scroller={scroller} entries={entries} />
-            {/* A chat on WhatsApp or Telegram has no screen there to throw it on. */}
-            <Confetti runs={tools} off={Boolean(chat)} />
-            <Tray
-              loading={loading}
-              error={error}
-              behind={behind}
-              toolsUnread={toolsUnread}
-              run={run}
-              deciding={deciding}
-              retryRun={retryRun}
-              onReload={(cover) => {
-                if (cover) store.getState().patch({ loading: true });
-                setRetry((count) => count + 1);
-              }}
-              onRetry={(failed) => settle(retryRun?.(failed))}
-            />
-          </div>
-        </DecidingContext.Provider>
-      </RowContext.Provider>
+      <StepDetailsContext.Provider value={details}>
+        <RowContext.Provider value={env}>
+          <DecidingContext.Provider value={deciding}>
+            <div className="session-history">
+              <p role="status" className="sr-only">
+                {loading ? 'Loading conversation…' : ''}
+              </p>
+              <section
+                ref={scroller}
+                // Reachable by script alone, to take the focus of the way back to the end.
+                tabIndex={-1}
+                className="message-history"
+                aria-label="Session history"
+                aria-busy={loading}
+                onScroll={(event) => {
+                  onScroll(event.currentTarget);
+                  near(event.currentTarget);
+                }}
+              >
+                <div className="message-list">
+                  {!loading && more && <Earlier earlier={earlier} onRead={read} />}
+                  {loading ? (
+                    <HistorySkeleton />
+                  ) : (
+                    <>
+                      {!messages.length && !error && (
+                        <div className="grid justify-items-center gap-1 py-16 text-center">
+                          <h3 className="text-sm font-semibold text-ink">
+                            No messages in this session
+                          </h3>
+                          <p className="text-sm">{empty}</p>
+                        </div>
+                      )}
+                      {rows.map((row) => (
+                        <RowView key={row.key} row={row} />
+                      ))}
+                    </>
+                  )}
+                </div>
+              </section>
+              <ConversationMap scroller={scroller} entries={entries} />
+              <ToLatest scroller={scroller} toEnd={toEnd} />
+              {/* A chat on WhatsApp or Telegram has no screen there to throw it on. */}
+              <Confetti runs={tools} off={Boolean(chat)} />
+              <Tray
+                loading={loading}
+                error={error}
+                behind={behind}
+                toolsUnread={toolsUnread}
+                run={run}
+                deciding={deciding}
+                retryRun={retryRun}
+                onReload={(cover) => {
+                  if (cover) store.getState().patch({ loading: true });
+                  setRetry((count) => count + 1);
+                }}
+                onRetry={(failed) => settle(retryRun?.(failed))}
+              />
+            </div>
+          </DecidingContext.Provider>
+        </RowContext.Provider>
+      </StepDetailsContext.Provider>
     </ConversationContext.Provider>
   );
 }

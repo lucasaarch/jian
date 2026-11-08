@@ -6,7 +6,9 @@ export type ClaudeReply =
   | { tool: string; input?: unknown }
   /** `cacheRead`: the input tokens the fake reports as read from the cache. */
   | { text: string; cacheRead?: number }
-  | { refuse: string };
+  | { refuse: string }
+  /** Anthropic overloaded, as it answers with 529: a failure that is waited out. */
+  | { overloaded: true };
 
 /** The parts of a Messages API request these tests read. */
 export type ClaudeRequest = {
@@ -55,6 +57,12 @@ export function fakeClaude(
     request.beta = new Headers(init?.headers).get('anthropic-beta') ?? undefined;
     requests.push(request);
     const answer = reply(request, requests.length - 1);
+    if ('overloaded' in answer) {
+      return Response.json(
+        { type: 'error', error: { type: 'overloaded_error', message: 'Overloaded' } },
+        { status: 529 },
+      );
+    }
     if ('refuse' in answer) {
       return Response.json(
         { type: 'error', error: { type: 'invalid_request_error', message: answer.refuse } },

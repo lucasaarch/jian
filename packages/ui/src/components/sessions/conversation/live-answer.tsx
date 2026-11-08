@@ -81,6 +81,9 @@ export function LiveWork({
         server: progress?.mcp?.server,
         serverTool: progress?.mcp?.tool,
         writing: Boolean(progress?.text),
+        retries: progress?.reconnecting?.attempts,
+        retryAt: progress?.reconnecting?.nextAt,
+        retryReason: progress?.reconnecting?.reason,
         // A settled line stops its clock at the last word only when no tool ended after it.
         updatedAt: progress?.text && unfinished ? progress.updatedAt : undefined,
       };
@@ -93,8 +96,24 @@ export function LiveWork({
     // Whether text is under way is all the line needs of it: the words are LiveAnswer's.
     text: now.writing ? '…' : '',
     steps: 0,
+    ...(now.retries && now.retryAt
+      ? {
+          reconnecting: {
+            attempts: now.retries,
+            nextAt: now.retryAt,
+            reason: now.retryReason ?? '',
+          },
+        }
+      : {}),
     updatedAt: now.updatedAt ?? createdAt,
   };
 
-  return <LiveThought run={{ status, createdAt, progress }} steps={steps} startedAt={startedAt} />;
+  return (
+    <LiveThought
+      run={{ status, createdAt, progress }}
+      runId={runId}
+      steps={steps}
+      startedAt={startedAt}
+    />
+  );
 }

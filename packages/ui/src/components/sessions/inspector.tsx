@@ -54,10 +54,13 @@ export function InspectorBar({
   );
 }
 
-/** What the Inspector follows, by name, and what is said of it: it stays while its parts scroll. */
+/**
+ * What the Inspector follows, by name, and what is said of it: it stays while its parts scroll.
+ * It lines up with what it heads, at `--inspector-content-inset` where a view reads further in.
+ */
 export function InspectorHeader({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <header className="grid shrink-0 gap-3 border-b border-glass-edge px-(--inspector-inset) pt-1 pb-5">
+    <header className="grid shrink-0 gap-3 border-b border-glass-edge px-[var(--inspector-content-inset,var(--inspector-inset))] pt-1 pb-5">
       <h2 className="text-[17px] leading-snug font-semibold tracking-tight text-balance text-ink">
         {title}
       </h2>

@@ -16,6 +16,12 @@ import type {
 const unlimited = new Set<string>();
 
 /**
+ * Gateways, by origin, that refused a brief timeline: they predate it and validate the query
+ * strictly. Asked once, then given what they always gave, every tool whole.
+ */
+const unbriefed = new Set<string>();
+
+/**
  * Sessions, messages and execution history. Gateway chats are owner-written; channel
  * conversations belong to the channel they came through. `origin` names the gateway, for what
  * the panel learns about what it accepts.
@@ -210,14 +216,48 @@ export const sessionCalls = (client: Client, origin = '') => ({
         params: { path: { profileId, sessionId, name } },
       }),
     ),
-  /** The tools of the turns named, however old; with none named, of the latest turns. */
-  timeline: (profileId: string, sessionId: string, runs?: string[]) =>
+  /**
+   * The tools of the turns named, however old; with none named, of the latest turns. `brief`
+   * asks for each tool as a list shows it, cut where it is long and marked so: `toolStep` reads
+   * one whole. A gateway that refuses it is asked again without, and gives every tool whole.
+   */
+  timeline: async (
+    profileId: string,
+    sessionId: string,
+    runs?: string[],
+    options: { brief?: boolean } = {},
+  ) => {
+    const read = (brief: boolean) =>
+      result(
+        client.GET('/v1/profiles/{profileId}/sessions/{sessionId}/timeline', {
+          params: {
+            path: { profileId, sessionId },
+            query: {
+              ...(runs?.length ? { runs: runs.join(',') } : {}),
+              ...(brief ? { brief: '1' as const } : {}),
+            },
+          },
+        }),
+      );
+    if (!options.brief || unbriefed.has(origin)) return read(false);
+    try {
+      return await read(true);
+    } catch (failure) {
+      if (!(failure instanceof GatewayAnswer) || failure.status !== 400) throw failure;
+      const answer = await read(false);
+      // Only once the same read without it worked: the refusal was of `brief`, not the turns.
+      unbriefed.add(origin);
+      return answer;
+    }
+  },
+  /**
+   * One tool of the conversation whole, for a step a brief timeline cut: by its turn and the id
+   * its model gave the call, which another turn may have used too.
+   */
+  toolStep: (profileId: string, sessionId: string, runId: string, toolCallId: string) =>
     result(
-      client.GET('/v1/profiles/{profileId}/sessions/{sessionId}/timeline', {
-        params: {
-          path: { profileId, sessionId },
-          query: runs?.length ? { runs: runs.join(',') } : {},
-        },
+      client.GET('/v1/profiles/{profileId}/sessions/{sessionId}/runs/{runId}/steps/{toolCallId}', {
+        params: { path: { profileId, sessionId, runId, toolCallId } },
       }),
     ),
   /**
