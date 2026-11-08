@@ -19,7 +19,7 @@ const addressNote: Partial<Record<Channel['type'], string>> = {
     'Jian registers it with Telegram as it connects, at JIAN_PUBLIC_URL when that is set. To change the bot token, disconnect and connect again.',
   api: 'Your systems post here with the token given when it was connected, in X-Jian-Channel-Token.',
   email:
-    'Jian registered it in Resend as it connected. Mail whose sender domain passes neither DMARC nor DKIM is ignored. To change the API key or the address, disconnect and connect again.',
+    'Jian set up its delivery with the provider as it connected: a webhook in Resend, or a Worker and routing rule in Cloudflare. Mail whose sender domain passes neither DMARC nor DKIM is ignored. To change the key or the address, disconnect and connect again.',
 };
 
 /**
@@ -90,7 +90,7 @@ function ChannelSettings({
       : channel.type === 'telegram'
         ? 'A bot from BotFather.'
         : channel.type === 'email'
-          ? 'Mail through Resend. Senders and actions are approved here, never by email.'
+          ? 'Mail through your provider. Senders and actions are approved here, never by email.'
           : 'An HTTP endpoint for your own systems.';
   // Neither asks anything in its own words: approvals and questions are answered in the panel.
   const worded = channel.type !== 'api' && channel.type !== 'email';

@@ -18,8 +18,26 @@ const what: Record<ChannelType, string> = {
   whatsapp: 'A device paired to your WhatsApp: connecting opens the QR code to scan on your phone.',
   telegram: 'A bot from BotFather, connected with the token it gave you.',
   email:
-    'An address on a domain verified in Resend, with receiving on and its MX record in place. Jian registers its webhook at JIAN_PUBLIC_URL, which the internet must reach.',
+    'An address on your own domain, through Resend or Cloudflare. Jian sets up how mail reaches it at JIAN_PUBLIC_URL, which the internet must reach.',
   api: 'An HTTP endpoint for your own systems. Its URL and token are shown once.',
+};
+
+type EmailProvider = 'resend' | 'cloudflare';
+
+/** What each email provider needs in place before connecting, and what its key must allow. */
+const providers: Record<EmailProvider, { label: string; before: string; key: string }> = {
+  resend: {
+    label: 'Resend',
+    before:
+      'The domain must be verified in Resend, with receiving on and its MX record in place. Jian registers its webhook as it connects.',
+    key: 'Full access, so Jian can check the domain and register the webhook. Encrypted on the gateway and never shown again.',
+  },
+  cloudflare: {
+    label: 'Cloudflare',
+    before:
+      'The domain must be a zone in this account with Email Routing enabled, and onboarded in Email Sending. Jian uploads a Worker that forwards the address’s mail and adds its routing rule as it connects.',
+    key: 'A token with Account › Email Sending: Edit, Account › Workers Scripts: Edit, Zone › Email Routing Rules: Edit, Zone › Zone Settings: Read and Zone › Zone: Read. Encrypted on the gateway and never shown again.',
+  },
 };
 
 /**
@@ -74,7 +92,9 @@ function AddForm({
 }) {
   const [type, setType] = useState<ChannelType>(first);
   const [botToken, setBotToken] = useState('');
+  const [provider, setProvider] = useState<EmailProvider>('resend');
   const [apiKey, setApiKey] = useState('');
+  const [accountId, setAccountId] = useState('');
   const [address, setAddress] = useState('');
   const [error, setError] = useState('');
 
@@ -86,12 +106,19 @@ function AddForm({
       if (!botToken.trim()) return setError('Enter the Telegram bot token.');
       request = { type, botToken: botToken.trim() };
     } else if (type === 'email') {
-      if (!apiKey.trim() || !address.trim())
-        return setError('Enter the Resend API key and the address.');
-      request = {
-        type,
-        email: { provider: 'resend', apiKey: apiKey.trim(), address: address.trim() },
-      };
+      const key = apiKey.trim();
+      const mail = address.trim();
+      if (provider === 'resend') {
+        if (!key || !mail) return setError('Enter the Resend API key and the address.');
+        request = { type, email: { provider, apiKey: key, address: mail } };
+      } else {
+        const account = accountId.trim();
+        if (!key || !account || !mail)
+          return setError('Enter the Cloudflare API token, the account ID and the address.');
+        if (!/^[0-9a-f]{32}$/i.test(account))
+          return setError('The account ID is the 32 characters shown on the account’s overview.');
+        request = { type, email: { provider, apiKey: key, accountId: account, address: mail } };
+      }
     }
     if (await connect(request)) close();
   };
@@ -129,16 +156,22 @@ function AddForm({
       )}
       {type === 'email' && (
         <>
-          {/* The only provider for now, shown so it is clear whose key is asked for. */}
           <Segmented
             label="Provider"
-            value="resend"
-            options={[{ value: 'resend', label: 'Resend' }]}
-            onChange={() => {}}
+            value={provider}
+            options={(['resend', 'cloudflare'] as const).map((value) => ({
+              value,
+              label: providers[value].label,
+            }))}
+            onChange={(next) => {
+              setProvider(next);
+              setError('');
+            }}
           />
+          <p className="text-[13px] leading-relaxed text-muted">{providers[provider].before}</p>
           <TextField
-            label="Resend API key"
-            hint="Full access, so Jian can check the domain and register the webhook. Encrypted on the gateway and never shown again."
+            label={provider === 'resend' ? 'Resend API key' : 'Cloudflare API token'}
+            hint={providers[provider].key}
             type="password"
             autoComplete="off"
             spellCheck={false}
@@ -146,6 +179,17 @@ function AddForm({
             value={apiKey}
             onChange={(event) => setApiKey(event.target.value)}
           />
+          {provider === 'cloudflare' && (
+            <TextField
+              label="Account ID"
+              hint="On the account’s overview in the Cloudflare dashboard."
+              autoComplete="off"
+              spellCheck={false}
+              required
+              value={accountId}
+              onChange={(event) => setAccountId(event.target.value)}
+            />
+          )}
           <TextField
             label="Address"
             hint="The agent sends from it and reads what arrives at it. Mail its sender’s domain does not authenticate is ignored."

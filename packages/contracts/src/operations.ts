@@ -852,7 +852,7 @@ export const operations: Operation[] = [
     body: z
       .unknown()
       .describe(
-        'A Resend webhook event, authenticated with its Svix signature over the original bytes. Maximum 256 KB.',
+        'A Resend webhook event (JSON, authenticated with its Svix signature over the original bytes, at most 256 KB), or the raw message the Email Worker Jian deploys on Cloudflare forwards (message/rfc822, signed with the channel secret in X-Jian-Signature, at most 26 MiB).',
       ),
     response: ingressResultSchema,
   },

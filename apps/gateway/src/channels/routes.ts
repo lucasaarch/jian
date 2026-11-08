@@ -129,19 +129,26 @@ export function registerChannelRoutes(app: FastifyInstance, deps: ChannelRouteSe
   // Encapsulation keeps the raw parser and its ceilings off every other API route. Signatures
   // are checked over these bytes, never over JSON parsed and written again.
   void app.register(async (raw) => {
+    const asIs = (_request: unknown, body: Buffer | string, done: (e: null, b: unknown) => void) =>
+      done(null, body);
     raw.removeContentTypeParser('application/json');
-    raw.addContentTypeParser('application/json', { parseAs: 'buffer' }, (_request, body, done) =>
-      done(null, body),
+    // Resend's event is a notice that mail arrived, not the mail: it stays small. Cloudflare's
+    // Worker posts the message itself, which Email Routing caps at 25 MiB. Each limit sits on its
+    // parser, because a route's own `bodyLimit` would override both.
+    raw.addContentTypeParser(
+      'application/json',
+      { parseAs: 'buffer', bodyLimit: 256 * 1024 },
+      asIs,
     );
-    // An email event is a notice that mail arrived, not the mail: it stays small.
-    raw.post<{ Params: { channelId: string } }>(
-      '/v1/email/:channelId',
-      { bodyLimit: 256 * 1024 },
-      async (request) => {
-        if (!Buffer.isBuffer(request.body)) throw new GatewayError(400, 'Expected a JSON body');
-        return channels().receiveEmail(request.params.channelId, request.body, request.headers);
-      },
+    raw.addContentTypeParser(
+      'message/rfc822',
+      { parseAs: 'buffer', bodyLimit: 26 * 1024 * 1024 },
+      asIs,
     );
+    raw.post<{ Params: { channelId: string } }>('/v1/email/:channelId', async (request) => {
+      if (!Buffer.isBuffer(request.body)) throw new GatewayError(400, 'Expected a body');
+      return channels().receiveEmail(request.params.channelId, request.body, request.headers);
+    });
   });
 
   app.post<{ Params: { channelId: string } }>('/v1/ingress/:channelId', async (request, reply) =>
