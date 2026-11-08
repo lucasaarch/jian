@@ -775,11 +775,11 @@ export function profileTools(
         services.errands.ask(run.profileId, contactId, run.sessionId, run.id, text, expectReply),
     }),
 
-    // The owner reads an email to anyone but an approved contact before it leaves, whatever
-    // this conversation's protection short of Full access: see `asksOwner` below.
+    // The owner reads the first email to anyone but an approved contact before it leaves,
+    // whatever this conversation's protection short of Full access: see `asksOwner` below.
     send_email: tool({
       description:
-        'Send an email from this agent’s own address to any address, such as a company’s support. An address that is not an approved contact waits for the owner to approve this very email first. Without a subject it continues your latest thread with that address. With expectReply, every reply in the next 7 days comes back to this conversation, an automatic acknowledgement included, not in this turn: say so to whoever asked.',
+        'Send an email from this agent’s own address to any address, such as a company’s support. The first email to an address that is not an approved contact waits for the owner to approve it; later emails to it from this conversation go without asking while its replies still come back here. Without a subject it continues your latest thread with that address. With expectReply, every reply in the next 7 days comes back to this conversation, an automatic acknowledgement included, not in this turn: say so to whoever asked.',
       inputSchema: z.object({
         to: z.string().trim().min(3).max(100),
         subject: z
@@ -838,6 +838,7 @@ export function profileTools(
       asksOwner: (input: unknown) =>
         services.errands.needsOwner(
           run.profileId,
+          run.sessionId,
           String((input as { to?: unknown } | null)?.to ?? ''),
         ),
     } satisfies OwnerGate);

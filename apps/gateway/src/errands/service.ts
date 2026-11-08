@@ -362,15 +362,21 @@ export class Errands {
 
   /**
    * Whether an email to this address waits for the owner whatever the conversation's
-   * protection: anyone but a contact they approved. Writing to someone new is how an agent is
-   * turned against its owner, so the owner reads that very email before it leaves.
+   * protection. Writing to someone new is how an agent is turned against its owner, so the owner
+   * reads the first email before it leaves. After that the agent carries the exchange alone, as
+   * the owner chose: an approved contact, or an address this same conversation is still waiting
+   * on (`openFor`, 7 days from its latest email), takes no approval. Another conversation, a
+   * subagent's included, or a wait that ran out asks again.
    */
-  async needsOwner(profileId: string, to: string): Promise<boolean> {
+  async needsOwner(profileId: string, sessionId: string, to: string): Promise<boolean> {
     const address = bareAddress(to);
     const mailbox = await this.mailbox(profileId);
     if (!address || !mailbox) return true;
     const contact = await findContactByIdentity(this.store.db, mailbox.channelId, address, address);
-    return contact?.status !== 'approved';
+    if (!contact || contact.status === 'blocked') return true;
+    if (contact.status === 'approved') return false;
+    const open = await this.openFor(this.store.db, contact.id);
+    return open?.fromSessionId !== sessionId;
   }
 
   /**

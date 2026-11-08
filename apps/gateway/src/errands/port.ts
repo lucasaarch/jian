@@ -2,7 +2,7 @@ import type { EmailRequest } from './service.js';
 
 /**
  * What the agent may do with the people its owner approved. The one way to a stranger is
- * `email`, and only after the owner read that very email (`needsOwner`).
+ * `email`, and only after the owner read the first email of the exchange (`needsOwner`).
  */
 export interface Outreach {
   reachable(
@@ -25,7 +25,7 @@ export interface Outreach {
     requestKey: string,
   ): Promise<{ to: string; channel: string; sessionId: string } | undefined>;
   mailbox(profileId: string): Promise<{ channelId: string; address: string } | undefined>;
-  needsOwner(profileId: string, to: string): Promise<boolean>;
+  needsOwner(profileId: string, sessionId: string, to: string): Promise<boolean>;
   email(
     profileId: string,
     fromSessionId: string,

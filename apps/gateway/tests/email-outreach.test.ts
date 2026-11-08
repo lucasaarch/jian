@@ -305,6 +305,38 @@ describe('emailing an address that is no contact', () => {
     }
   });
 
+  it('after the first email, the conversation that wrote carries on alone while it waits', async () => {
+    const f = await setup();
+    try {
+      // The owner approved the first email: it went, and this conversation waits on the desk.
+      await f.outreach();
+      const followUp = { to: support, text: 'The VPS id is vps-1.' };
+
+      const { run } = await f.ask(followUp);
+      expect(run.status).toBe('completed');
+      expect(run.approval).toBeUndefined();
+      await f.channels.dispatch();
+      expect(f.resend.sent.map((mail) => mail.text)).toContain('The VPS id is vps-1.');
+      const sent = f.resend.sent.length;
+
+      // Another conversation never wrote to them: the owner reads its email first.
+      const other = await f.services.sessions.createSession(f.profile.id, { title: 'Other' });
+      await f.services.sessions.setProtection(f.profile.id, other.id, { protection: 'auto' });
+      expect((await f.ask(followUp, other.id)).run.status).toBe('waiting');
+
+      // Past the 7 days the exchange is over: writing again asks the owner again.
+      await f.services.store.db
+        .update(errands)
+        .set({ expiresAt: new Date(Date.now() - 1000) })
+        .where(eq(errands.profileId, f.profile.id));
+      expect((await f.ask(followUp)).run.status).toBe('waiting');
+      await f.channels.dispatch();
+      expect(f.resend.sent).toHaveLength(sent);
+    } finally {
+      await f.app.close();
+    }
+  });
+
   it('sends once for a repeated call, and never to its own address', async () => {
     const f = await setup();
     try {
