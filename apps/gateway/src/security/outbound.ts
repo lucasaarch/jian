@@ -220,6 +220,45 @@ async function asUndiciRequest(
   };
 }
 
+/**
+ * A request that failed before any response. `codes` are the system and undici codes of the
+ * chain it was raised from (`ECONNRESET`, `UND_ERR_CONNECT_TIMEOUT`, …), the part that says
+ * whether the host refused, resolved or timed out. They take the place of a `cause`: the original
+ * error carries the address and can carry a credential, and a cause travels wherever the error is
+ * logged or inspected.
+ */
+export class OutboundError extends Error {
+  constructor(
+    message: string,
+    readonly codes: readonly string[],
+  ) {
+    super(message);
+    this.name = 'OutboundError';
+  }
+}
+
+/** The string codes of an error and of whatever it was raised from, outermost first. */
+function codesOf(error: unknown): string[] {
+  const codes: string[] = [];
+  let cursor = error;
+
+  for (let depth = 0; cursor instanceof Error && depth < 8; depth++) {
+    const code = (cursor as { code?: unknown }).code;
+
+    if (typeof code === 'string' && !codes.includes(code)) codes.push(code);
+    // Undici reports a connection to several addresses that all failed as one AggregateError.
+    if (cursor instanceof AggregateError) {
+      for (const inner of cursor.errors) {
+        for (const nested of codesOf(inner)) if (!codes.includes(nested)) codes.push(nested);
+      }
+    }
+
+    cursor = cursor.cause;
+  }
+
+  return codes;
+}
+
 /** The failure code of an error or of whatever it was raised from, and nothing else of it. */
 function reason(error: unknown): string {
   const codes: string[] = [];
@@ -334,9 +373,9 @@ export function createSafeFetch(options: SafeFetchOptions = {}): {
         dispatcher: agent,
       })) as unknown as Response;
     } catch (error) {
-      // The cause carries the address and can carry a credential, so only its code travels —
+      // The cause carries the address and can carry a credential, so only its codes travel —
       // which is the part that says whether the host refused, resolved or timed out.
-      throw new Error(`Outbound request failed${reason(error)}`);
+      throw new OutboundError(`Outbound request failed${reason(error)}`, codesOf(error));
     }
   };
 

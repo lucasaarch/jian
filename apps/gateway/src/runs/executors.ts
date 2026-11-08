@@ -19,9 +19,18 @@ const queueName = 'jian-agent-runs';
  * How a run's job is held in pg-boss. A turn has no clock of its own (a waiting
  * `spawn_subagent` call alone may hold one for 15 minutes), and pg-boss fails a job whose
  * handler outlives `expireInSeconds`: the run would go on under its own lease, but the job
- * would leave `localConcurrency` and another would take its slot. Six hours is above any turn;
- * what ends a turn is its lease, its budgets and the stall watchdog. The heartbeat, which
- * pg-boss refreshes on its own while the handler runs, is what notices a worker that died.
+ * would leave `localConcurrency` and another would take its slot. Six hours is above any turn
+ * that is working; what ends a turn is its lease, its budgets and the stall watchdog. The
+ * heartbeat, which pg-boss refreshes on its own while the handler runs, is what notices a worker
+ * that died.
+ *
+ * A turn waiting out a model it cannot reach may pass six hours, since those calls are retried
+ * without end (`agent/model-retry.ts`), and pg-boss caps `expireInSeconds` at 24 hours.
+ * Expiry does not end it: pg-boss fails the job and stops waiting for the handler, but never stops
+ * the handler, which ignores `job.signal`. The turn keeps its lease, renewed by the runtime's own
+ * pulse, so recovery leaves it alone and it finishes as any other; only its concurrency slot is
+ * freed early. A run's truth is its row and its lease, never its job (`retryLimit: 0` already
+ * keeps pg-boss from replaying one), so nothing re-queues it either.
  */
 export const RUN_QUEUE_OPTIONS = {
   policy: 'exclusive',

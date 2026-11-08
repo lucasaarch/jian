@@ -31,6 +31,23 @@ By the HTTP status:
 - **500, 502, 503, 504** — the provider is failing or overloaded. The gateway already tried
   again; trying later usually works. Another model for that activity avoids the wait.
 
+The conversation's own model is different. A call to it that cannot connect (a timeout, a
+refused or reset connection, a failed DNS lookup) or is answered 408, 409, 425, 429, 500, 502,
+503, 504 or 529 before any of its answer arrived does not fail the turn. The gateway tries it
+again ten times a second apart, then after 30 seconds, 1, 2 and 4 minutes, then every 5
+minutes, for as long as it takes, and never sooner than the provider asks to be left alone
+(its \`retry-after\`, or Gemini's retry delay). The
+panel says **Reconnecting to the model** meanwhile, with the attempts and when the next one
+goes. The turn goes on where it was once a call gets through; the owner's Cancel stops it.
+
+- A 429 is waited out only when it is a rate limit: its body names one (Gemini's
+  \`RESOURCE_EXHAUSTED\` among them), or, when the body names no refusal, it says when to come
+  back or carries the provider's rate-limit headers. A subscription's usage limit waits until it
+  resets. Any other 429, such as a spent quota, a billing error or a refused subscription
+  request, fails at once with the provider's own words.
+- A look back in your Learning conversation gets one round, ten attempts, then fails as before.
+- Any other status, such as 400 for a request too large or 401, fails at once.
+
 Other messages you may see:
 
 - "Provider key is not configured" — no provider is set for that activity: **Providers**,

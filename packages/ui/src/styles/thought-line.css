@@ -46,9 +46,15 @@
     @apply font-normal tabular-nums;
     color: var(--muted);
   }
-  .thought-timer::before {
+  .thought-timer::before,
+  .thought-retry::before {
     content: "·";
     margin-right: 0.5rem;
+  }
+  /* The countdown to the next attempt at the model: the clock's voice, after it. */
+  .thought-retry {
+    @apply min-w-0 truncate font-normal tabular-nums;
+    color: var(--muted);
   }
   .thought-chevron {
     @apply shrink-0 opacity-55;

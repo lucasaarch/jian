@@ -53,6 +53,11 @@ export interface RuntimeOptions {
   outbound?: ReturnType<typeof createSafeFetch>;
   /** How long a model call or a tool may send nothing before the turn is stopped, in ms. */
   stalledAfterMs?: number;
+  /**
+   * The wait after a number of failed model calls in a row, in ms. Unset, the owner's schedule
+   * in `agent/model-retry.ts`; set only where a test cannot wait seconds for each attempt.
+   */
+  modelRetryDelay?: (failures: number) => number;
   storeArtifact?: (
     run: Run,
     toolName: string,

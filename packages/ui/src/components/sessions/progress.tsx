@@ -6,6 +6,7 @@ import { Markdown } from '../ui/markdown';
 import { RefineFrame } from '../ui/refine-frame';
 import { AgentLine } from './conversation/agent-line';
 import { drawnBox } from './media';
+import { attemptsText, RetryCountdown } from './retry-countdown';
 import { ThoughtLine } from './thought-line';
 import { toolLabel } from './tool-labels';
 import { traceOf } from './trace';
@@ -33,6 +34,9 @@ export function statusOf(run: Pick<Run, 'status' | 'progress'>): {
   tool: boolean;
 } {
   const progress = run.progress;
+  // Waiting to try the model again outranks the tool it last used: that tool is over.
+  if (run.status !== 'queued' && progress?.reconnecting)
+    return { label: 'Reconnecting to the model', state: 'connecting', tool: false };
   const tool =
     progress?.phase === 'tool'
       ? progress.tool
@@ -67,7 +71,9 @@ export function LiveThought({
   startedAt: string;
 }) {
   const { label, state, tool } = statusOf(run);
-  const writing = !tool && Boolean(run.progress?.text);
+  const reconnecting = run.progress?.reconnecting;
+  // Words written before the call failed stay where they are; the line says why nothing follows.
+  const writing = !tool && !reconnecting && Boolean(run.progress?.text);
 
   return (
     <>
@@ -79,6 +85,18 @@ export function LiveThought({
           steps={traceOf(steps, runId)}
           startedAt={startedAt}
           finishedAt={writing ? (steps.at(-1)?.finishedAt ?? run.progress?.updatedAt) : undefined}
+          {...(reconnecting
+            ? { spoken: `${reconnecting.reason}, ${attemptsText(reconnecting.attempts)}` }
+            : {})}
+          after={
+            reconnecting && (
+              <RetryCountdown
+                attempts={reconnecting.attempts}
+                nextAt={reconnecting.nextAt}
+                reason={reconnecting.reason}
+              />
+            )
+          }
         />
       )}
       <ImageDrafts steps={steps} />
