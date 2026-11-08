@@ -74,12 +74,13 @@ export function incoming(email: ReceivedEmail, own: string) {
   if (!authenticated(email.authentication)) return undefined;
 
   const subject = oneLine(email.subject).slice(0, SUBJECT_CHARS);
-  const body = mailBody(email.text, email.html);
+  const replied = messageIds(email.headers['in-reply-to']);
+  const body = mailBody(email.text, email.html, replied.length > 0);
   const text =
     (subject ? `Subject: ${subject}\n\n${body}` : body).trim().slice(0, TEXT_CHARS) ||
     '[An empty email]';
   const messageId = messageIds(email.messageId).find((id) => id.length <= ID_CHARS);
-  const answered = messageIds(email.headers['in-reply-to']).find((id) => id.length <= ID_CHARS);
+  const answered = replied.find((id) => id.length <= ID_CHARS);
   const name = displayNameOf(email.headers.from);
 
   const message: IncomingMessage = {
