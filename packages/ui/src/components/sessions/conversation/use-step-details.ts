@@ -23,13 +23,14 @@ export function stepPlace(
 
 /**
  * The whole steps of this conversation's tools, read once each, for the Thought Line's tools a
- * brief timeline cut. None without `toolStep`: each tool then shows what its step has.
+ * brief timeline cut. None without `toolStep`: each tool then shows what its step has. Without a
+ * store, as for a subagent's session in the Inspector, every turn's tools were called here.
  */
 export function useStepDetails(
   api: Partial<Pick<GatewayApi, 'toolStep'>>,
   profileId: string,
   sessionId: string,
-  store: ConversationStore,
+  store?: ConversationStore,
 ): StepDetails | undefined {
   // The client may be built again on any render; what was read stays with the conversation.
   const read = useRef(api.toolStep);
@@ -41,7 +42,8 @@ export function useStepDetails(
   return useMemo(() => {
     if (!readable) return undefined;
     return readOnce((runId, toolCallId) => {
-      const place = stepPlace(store.getState(), runId, { profileId, sessionId });
+      const here = { profileId, sessionId };
+      const place = store ? stepPlace(store.getState(), runId, here) : here;
       const toolStep = read.current;
       if (!toolStep) return Promise.reject(new Error('Tool steps cannot be read here.'));
       return toolStep(place.profileId, place.sessionId, runId, toolCallId);

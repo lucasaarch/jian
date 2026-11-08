@@ -152,12 +152,15 @@ export function placeSteps(steps: ToolStep[], said: Pick<Message, 'id' | 'create
  */
 export function LiveTurn({
   run,
+  runId,
   agent,
   steps,
   startedAt = run.createdAt,
   children,
 }: {
   run: Pick<Run, 'status' | 'progress' | 'createdAt'>;
+  /** The turn at work, by which an opened tool reads its whole step. */
+  runId?: string;
   agent?: Pick<Profile, 'name' | 'avatar'>;
   /**
    * Only the tools since the last thing the turn said: the earlier ones already sit under the
@@ -181,7 +184,7 @@ export function LiveTurn({
       pending
       before={
         <>
-          <LiveThought run={run} steps={steps} startedAt={startedAt} />
+          <LiveThought run={run} runId={runId} steps={steps} startedAt={startedAt} />
           {children}
         </>
       }
