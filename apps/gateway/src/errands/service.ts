@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { and, asc, eq, gt, isNull, lte } from 'drizzle-orm';
 import type { ContactRecord } from '../channels/contacts.js';
+import { type EmailSearch, searchEmail } from '../channels/email/log.js';
+import { openSignupWindow, signupDomain } from '../channels/email/signups.js';
 import { bareAddress, oneLine } from '../channels/email/text.js';
 import { findEmailThread } from '../channels/email/threads.js';
 import {
@@ -430,6 +432,41 @@ export class Errands {
         ...(errand ? { waitingUntil: errand.expiresAt.toISOString() } : {}),
       };
     });
+  }
+
+  /**
+   * Opens this conversation's wait for a service's mail (`expect_email`): for 30 minutes, mail
+   * signed by that domain or a subdomain reaches here as text from outside, a contact or not.
+   * No owner approval: it sends nothing, and what it lets in only this conversation reads.
+   */
+  async expect(profileId: string, sessionId: string, domain: string, reason: string) {
+    const mailbox = await this.mailbox(profileId);
+    if (!mailbox) throw new GatewayError(409, 'This agent has no email channel');
+    const named = signupDomain(domain);
+    if (!named) throw new GatewayError(400, 'That is not a domain, such as example.com');
+    const window = await this.store.transaction(profileId, (tx) =>
+      openSignupWindow(
+        tx,
+        {
+          profileId,
+          channelId: mailbox.channelId,
+          sessionId,
+          domain: named,
+          reason: oneLine(reason),
+        },
+        this.clock(),
+      ),
+    );
+    return {
+      address: mailbox.address,
+      domain: named,
+      waitingUntil: assertFound(window ?? null, 'Window').expiresAt.toISOString(),
+    };
+  }
+
+  /** The mail this profile received and sent, newest first (`search_email`). */
+  async searchEmail(profileId: string, search: EmailSearch) {
+    return searchEmail(this.store.db, profileId, search);
   }
 
   /** The contact an address is, or a new pending one: the owner approved an email, not them. */

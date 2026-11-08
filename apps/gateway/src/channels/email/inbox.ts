@@ -8,7 +8,9 @@ import { channelLog } from '../logging.js';
 import { findChannel, findContactByChat, findDeliveryByRemoteId } from '../repository.js';
 import { type ChannelRecord, channelSecret } from '../service.js';
 import { EMAIL_PROVIDERS, emailCredential } from './channel.js';
+import { logEmail } from './log.js';
 import type { MailAuthentication, ReceivedEmail } from './provider.js';
+import { awaitedSignup } from './signups.js';
 import {
   bareAddress,
   displayNameOf,
@@ -95,7 +97,7 @@ export function incoming(email: ReceivedEmail, own: string) {
       }
     : undefined;
 
-  return { message, thread };
+  return { message, thread, subject, body };
 }
 
 const domainOf = (address: string) => address.slice(address.lastIndexOf('@') + 1);
@@ -174,7 +176,9 @@ export class EmailInbox {
       return { accepted: false };
     }
 
-    const { message, thread } = read;
+    const { message, thread, subject, body } = read;
+    const sender = message.chatId;
+    const known = await findContactByChat(this.store.db, channelId, sender);
     const answered = await answeredAddress(this.store.db, channelId, email);
     // A support desk answers from another address of its domain than the one written to. In
     // the agent's own thread, signed by that domain, and from no contact of its own, it is the
@@ -183,18 +187,21 @@ export class EmailInbox {
       answered &&
       answered !== message.chatId &&
       domainOf(answered) === domainOf(message.chatId) &&
-      !(await findContactByChat(this.store.db, channelId, message.chatId))
+      !known
     ) {
       message.text = `From: ${message.chatId}\n${message.text}`.slice(0, TEXT_CHARS);
       message.actorId = answered;
       message.chatId = answered;
     }
     // A machine's mail matters only as an answer to the agent's own email, which the service
-    // knows by the wait it keeps on a contact; from anyone else it is noise, dropped unread.
+    // knows by the wait it keeps on a contact, or as the confirmation of a signup the agent is
+    // waiting on (`expect_email`): no-reply senders write those. From anyone else it is noise,
+    // dropped unread. Kept, it is still never answered.
     if (
       message.automatic &&
       answered !== message.chatId &&
-      !(await findContactByChat(this.store.db, channelId, message.chatId))
+      !(await findContactByChat(this.store.db, channelId, message.chatId)) &&
+      !(await awaitedSignup(this.store.db, channelId, message.chatId, Date.now()))
     )
       return { accepted: false };
 
@@ -204,11 +211,20 @@ export class EmailInbox {
       if (files.note) message.text = `${message.text}\n${files.note}`;
     }
 
-    if (thread) {
-      await this.store.transaction(channel.profileId, (tx) =>
-        saveEmailThread(tx, channelId, message.chatId, thread),
-      );
-    }
+    await this.store.transaction(channel.profileId, async (tx) => {
+      if (thread) await saveEmailThread(tx, channelId, message.chatId, thread);
+      // What the owner blocked is not kept for the agent to read back either.
+      if (known?.status !== 'blocked')
+        await logEmail(tx, {
+          profileId: channel.profileId,
+          channelId,
+          direction: 'received',
+          address: sender,
+          subject,
+          text: body || '[An empty email]',
+          key: email.id,
+        });
+    });
 
     return accept(channel, message);
   }
