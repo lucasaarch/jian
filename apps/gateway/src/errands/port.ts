@@ -26,19 +26,18 @@ export interface Outreach {
     requestKey: string,
   ): Promise<{ to: string; channel: string; sessionId: string } | undefined>;
   mailbox(profileId: string): Promise<{ channelId: string; address: string } | undefined>;
-  needsOwner(profileId: string, sessionId: string, to: string): Promise<boolean>;
+  needsOwner(profileId: string, to: string): Promise<boolean>;
   email(
     profileId: string,
     fromSessionId: string,
     runId: string,
     request: EmailRequest,
     requestKey: string,
-  ): Promise<{ to: string; contact: 'approved' | 'pending'; waitingUntil?: string }>;
+  ): Promise<{ to: string; sessionId: string; note: string }>;
   expect(
     profileId: string,
-    sessionId: string,
     domain: string,
     reason: string,
-  ): Promise<{ address: string; domain: string; waitingUntil: string }>;
+  ): Promise<{ address: string; domain: string; expectedUntil: string; note: string }>;
   searchEmail(profileId: string, search: EmailSearch): ReturnType<Errands['searchEmail']>;
 }

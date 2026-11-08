@@ -5,8 +5,10 @@ import type { z } from 'zod';
 import { type Clock, nowIso } from '../core/clock.js';
 import { assertFound, GatewayError } from '../core/errors.js';
 import { recordEvent } from '../core/events.js';
+import { stableUuid } from '../core/ids.js';
 import type { ProfileReader } from '../profiles/port.js';
 import type { SessionWriter } from '../sessions/port.js';
+import { insertMessage } from '../sessions/repository.js';
 import type { Queryable, Store } from '../storage/database.js';
 import { mediaAssets } from '../storage/schema.js';
 import { API_SESSION_START } from './api-conversation.js';
@@ -290,6 +292,82 @@ export class Contacts {
     };
     await updateContact(tx, contact);
     await recordEvent(tx, this.clock, profileId, 'contact.updated', this.view(contact));
+    return contact;
+  }
+
+  /**
+   * Makes an email address the agent has its own business with — one it wrote to, or a person
+   * at a service whose mail it expects — an approved contact with a conversation of its own,
+   * inside the caller's transaction. A blocked address stays blocked: only the owner lifts that.
+   * What a waiting stranger wrote before moves into the new conversation as its history, read
+   * there and never answered on its own.
+   */
+  async correspondent(
+    tx: Queryable,
+    profileId: string,
+    channelId: string,
+    address: string,
+  ): Promise<ContactRecord> {
+    const now = nowIso(this.clock);
+    let current = await findContactByIdentity(tx, channelId, address, address);
+    if (!current) {
+      const contact: ContactRecord = {
+        id: randomUUID(),
+        profileId,
+        channelId,
+        type: 'email',
+        scope: 'direct',
+        actorId: address,
+        chatId: address,
+        status: 'pending',
+        aiEnabled: true,
+        canApprove: false,
+        createdAt: now,
+        updatedAt: now,
+      };
+      current =
+        (await insertContact(tx, contact)) ??
+        assertFound(await findContactByIdentity(tx, channelId, address, address), 'Contact');
+    }
+    if (current.status === 'blocked' || (current.status === 'approved' && current.sessionId))
+      return current;
+
+    const sessionId = current.sessionId ?? (await this.openSession(tx, current));
+    if (current.message) {
+      await insertMessage(
+        tx,
+        {
+          id: stableUuid(`held:${current.id}:${current.requestKey ?? ''}`),
+          profileId,
+          sessionId,
+          role: 'user',
+          content: current.message,
+          createdAt: now,
+        },
+        true,
+      );
+      await tx
+        .update(mediaAssets)
+        .set({ sessionId, held: false })
+        .where(
+          and(
+            eq(mediaAssets.profileId, profileId),
+            eq(mediaAssets.contactId, current.id),
+            eq(mediaAssets.held, true),
+          ),
+        );
+    }
+    const contact: ContactRecord = {
+      ...current,
+      status: 'approved',
+      sessionId,
+      message: undefined,
+      channelMessage: undefined,
+      requestKey: undefined,
+      updatedAt: now,
+    };
+    await updateContact(tx, contact);
+    await recordEvent(tx, this.clock, profileId, 'contact.approved', this.view(contact));
     return contact;
   }
 

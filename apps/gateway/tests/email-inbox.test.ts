@@ -2,8 +2,8 @@ import { mkdtempSync, realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { eq } from 'drizzle-orm';
-import { afterAll, describe, expect, it } from 'vitest';
-import { emailWindows } from '../src/storage/schema.js';
+import { afterAll, afterEach, describe, expect, it, vi } from 'vitest';
+import { emailDomains } from '../src/storage/schema.js';
 import { emailSetup as setup, support } from './helpers/email.js';
 
 const root = realpathSync(mkdtempSync(join(tmpdir(), 'jian-email-inbox-')));
@@ -15,6 +15,12 @@ afterAll(() => {
   else process.env.JIAN_WORKSPACES = previousRoot;
 });
 
+afterEach(() => {
+  vi.useRealTimers();
+});
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
 const confirmation = {
   from: 'noreply@mail.contabo.test',
   subject: 'Confirm your account',
@@ -22,8 +28,8 @@ const confirmation = {
   automatic: true,
 };
 
-describe('waiting for a signup confirmation', () => {
-  it('is the agent’s own call, asks nobody, and names the address to sign up with', async () => {
+describe('expecting mail from a service', () => {
+  it('is the agent’s own call, asks nobody, lasts 30 days and names the address', async () => {
     const f = await setup();
     try {
       const { run } = await f.askTool('expect_email', {
@@ -32,43 +38,75 @@ describe('waiting for a signup confirmation', () => {
       });
       expect(run.status).toBe('completed');
       expect(run.approval).toBeUndefined();
-      const [window] = await f.services.store.db.select().from(emailWindows);
-      expect(window).toMatchObject({ sessionId: f.owner.id, domain: 'contabo.test' });
-      // 30 minutes, give or take the turn.
-      const left = (window?.expiresAt.getTime() ?? 0) - Date.now();
-      expect(left).toBeGreaterThan(25 * 60 * 1000);
-      expect(left).toBeLessThanOrEqual(30 * 60 * 1000);
+      const [expected] = await f.services.store.db.select().from(emailDomains);
+      expect(expected).toMatchObject({ domain: 'contabo.test', sessionId: null });
+      const left = (expected?.expiresAt.getTime() ?? 0) - Date.now();
+      expect(left).toBeGreaterThan(29 * DAY_MS);
+      expect(left).toBeLessThanOrEqual(30 * DAY_MS);
 
-      expect(
-        await f.services.errands.expect(f.profile.id, f.owner.id, 'contabo.test', 'Again'),
-      ).toMatchObject({ address: 'mia@agents.test', domain: 'contabo.test' });
+      // Asked again when a day is left, it counts 30 days from then, in the one row.
+      await f.services.store.db
+        .update(emailDomains)
+        .set({ expiresAt: new Date(Date.now() + DAY_MS) })
+        .where(eq(emailDomains.profileId, f.profile.id));
+      expect(await f.services.errands.expect(f.profile.id, 'contabo.test', 'Again')).toMatchObject({
+        address: 'mia@agents.test',
+        domain: 'contabo.test',
+      });
+      const rows = await f.services.store.db.select().from(emailDomains);
+      expect(rows).toHaveLength(1);
+      expect((rows[0]?.expiresAt.getTime() ?? 0) - Date.now()).toBeGreaterThan(29 * DAY_MS);
+
       await expect(
-        f.services.errands.expect(f.profile.id, f.owner.id, 'not a domain', 'x'),
+        f.services.errands.expect(f.profile.id, 'not a domain', 'x'),
       ).rejects.toMatchObject({ statusCode: 400 });
     } finally {
       await f.app.close();
     }
   });
 
-  it('brings the service’s mail in the window to the conversation that waits, and nothing else', async () => {
+  it('refuses a mailbox provider, where anyone has an address', async () => {
+    const f = await setup();
+    try {
+      for (const domain of ['gmail.com', 'Gmail.com', 'yahoo.com.br', 'gmx.de', 'outlook.com'])
+        await expect(f.services.errands.expect(f.profile.id, domain, 'x')).rejects.toMatchObject({
+          statusCode: 400,
+        });
+      expect(await f.services.store.db.select().from(emailDomains)).toEqual([]);
+    } finally {
+      await f.app.close();
+    }
+  });
+
+  it('keeps its automatic code days later, logged and with no turn, and nothing else', async () => {
     const f = await setup();
     try {
       const leo = await f.another('Leo', 'leo@agents.test');
-      await f.services.errands.expect(f.profile.id, f.owner.id, 'contabo.test', 'VPS account');
+      await f.services.errands.expect(f.profile.id, 'contabo.test', 'VPS account');
+      const runs = (await f.services.runs.activities(f.profile.id)).length;
 
-      // An automatic confirmation from a subdomain's no-reply address: a turn where it waits.
-      const code = await f.arrive(confirmation);
-      expect(code).toMatchObject({ accepted: true });
-      expect((await f.services.runs.run(f.profile.id, code.runId)).sessionId).toBe(f.owner.id);
-      const said = (await f.ownerMessages()).join('\n');
-      expect(said).toContain('Your code is 482913.');
-      expect(said).toContain('written outside this conversation');
-      // It made nobody a contact, and nothing answers it.
-      expect(await f.contactOf(confirmation.from)).toBeUndefined();
-      await f.settle();
+      // Two days later, a subdomain's no-reply address sends the code.
+      vi.useFakeTimers({ toFake: ['Date'], shouldAdvanceTime: true });
+      vi.setSystemTime(Date.now() + 2 * DAY_MS);
+      expect(await f.arrive(confirmation)).toEqual({ accepted: false });
+
+      // The run that signed up finds it, and it is kept in the domain's conversation.
+      expect(
+        await f.services.errands.searchEmail(f.profile.id, { address: 'contabo.test' }),
+      ).toMatchObject([
+        { direction: 'received', from: confirmation.from, text: 'Your code is 482913.' },
+      ]);
+      const [expected] = await f.services.store.db.select().from(emailDomains);
+      if (!expected?.sessionId) throw new Error('Domain conversation missing');
+      expect(expected.sessionId).not.toBe(f.owner.id);
+      const kept = (await f.messagesOf(expected.sessionId)).join('\n');
+      expect(kept).toContain('Your code is 482913.');
+      expect(kept).toContain('An automatic email');
+      // No turn, no answer, no contact.
+      expect(await f.services.runs.activities(f.profile.id)).toHaveLength(runs);
       await f.channels.dispatch();
       expect(f.resend.sent).toHaveLength(0);
-      const runs = (await f.services.runs.activities(f.profile.id)).length;
+      expect(await f.contactOf(confirmation.from)).toBeUndefined();
 
       const others = [
         // Another domain, and one that only ends like it.
@@ -77,17 +115,18 @@ describe('waiting for a signup confirmation', () => {
         // Unsigned by the domain it claims.
         { ...confirmation, text: 'Forged code 333333.', dmarc: 'fail', dkim: 'fail' },
       ];
-      for (const mail of others) expect(await f.arrive(mail)).toMatchObject({ accepted: false });
-      // Another agent's mail from that domain is not this conversation's wait.
-      expect(await leo.arrive({ ...confirmation, text: 'Leo code 444444.' })).toMatchObject({
+      for (const mail of others) expect(await f.arrive(mail)).toEqual({ accepted: false });
+      // Another agent's mail from that domain is not this one's to expect.
+      expect(await leo.arrive({ ...confirmation, text: 'Leo code 444444.' })).toEqual({
         accepted: false,
       });
+      expect(await f.services.errands.searchEmail(leo.profile.id, {})).toEqual([]);
 
-      // Past the 30 minutes, it is as before: a machine's mail is dropped, a person's is held.
+      // Past the 30 days, it is as before: a machine's mail is dropped, a person's is held.
       await f.services.store.db
-        .update(emailWindows)
+        .update(emailDomains)
         .set({ expiresAt: new Date(Date.now() - 1000) })
-        .where(eq(emailWindows.profileId, f.profile.id));
+        .where(eq(emailDomains.profileId, f.profile.id));
       expect(await f.arrive({ ...confirmation, text: 'Late code 555555.' })).toEqual({
         accepted: false,
       });
@@ -96,26 +135,35 @@ describe('waiting for a signup confirmation', () => {
       ).toEqual({ accepted: false, contact: 'pending' });
 
       expect(await f.services.runs.activities(f.profile.id)).toHaveLength(runs);
-      const now = (await f.ownerMessages()).join('\n');
-      for (const text of ['111111', '222222', '333333', '444444', '555555', 'Late offer.'])
-        expect(now).not.toContain(text);
-      expect(await f.contactOf(confirmation.from)).toBeUndefined();
+      const found = await f.services.errands.searchEmail(f.profile.id, {});
+      const everywhere = [
+        ...found.map((mail) => mail.text),
+        ...(await f.messagesOf(expected.sessionId)),
+        ...(await f.ownerMessages()),
+      ].join('\n');
+      for (const text of ['111111', '222222', '333333', '444444', '555555'])
+        expect(everywhere).not.toContain(text);
     } finally {
       await f.app.close();
     }
   });
 
-  it('stops after a few emails, so a sender cannot fill the conversation', async () => {
+  it('makes a person writing from that domain a correspondent, in a conversation of their own', async () => {
     const f = await setup();
     try {
-      await f.services.errands.expect(f.profile.id, f.owner.id, 'contabo.test', 'VPS account');
-      const results = [];
-      for (let index = 0; index < 6; index++) {
-        results.push(await f.arrive({ ...confirmation, text: `Mail number ${index}.` }));
-        await f.settle();
-      }
-      expect(results.filter((result) => result.accepted)).toHaveLength(5);
-      expect(results[5]).toEqual({ accepted: false });
+      await f.services.errands.expect(f.profile.id, 'contabo.test', 'VPS account');
+      const welcome = await f.arrive({
+        from: 'sales@contabo.test',
+        subject: 'Welcome',
+        text: 'Can I help you choose a plan?',
+      });
+      expect(welcome).toMatchObject({ accepted: true });
+      const person = await f.contactOf('sales@contabo.test');
+      expect(person).toMatchObject({ status: 'approved' });
+      const started = await f.services.runs.run(f.profile.id, welcome.runId);
+      expect(started.sessionId).toBe(person?.sessionId);
+      expect(started.sessionId).not.toBe(f.owner.id);
+      expect((await f.ownerMessages()).join('\n')).not.toContain('choose a plan');
     } finally {
       await f.app.close();
     }

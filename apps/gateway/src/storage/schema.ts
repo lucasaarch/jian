@@ -966,12 +966,13 @@ export const emailLog = pgTable(
 );
 
 /**
- * A short wait a conversation opened for mail from a service it signed up to (`expect_email`):
- * mail signed by that domain reaches that conversation as text from outside, though the sender
- * is no contact. One per conversation and domain; asking again extends it.
+ * A service domain the agent expects mail from (`expect_email`), for a while after it signed up:
+ * signed mail from it or a subdomain is taken in though its sender is no contact. Automatic mail
+ * is kept in the domain's own email conversation, opened at its first email, and starts nothing.
+ * One per channel and domain; asking again extends it.
  */
-export const emailWindows = pgTable(
-  'email_windows',
+export const emailDomains = pgTable(
+  'email_domains',
   {
     id: uuid('id').primaryKey(),
     profileId: uuid('profile_id')
@@ -980,20 +981,14 @@ export const emailWindows = pgTable(
     channelId: uuid('channel_id')
       .notNull()
       .references(() => channels.id, { onDelete: 'cascade' }),
-    sessionId: uuid('session_id')
-      .notNull()
-      .references(() => sessions.id, { onDelete: 'cascade' }),
     domain: text('domain').notNull(),
     reason: text('reason').notNull(),
-    // How many emails it brought in; past a few it stops, so a sender cannot fill the turn.
-    received: integer('received').notNull().default(0),
+    // A conversation removed by the owner is opened again at the next email.
+    sessionId: uuid('session_id').references(() => sessions.id, { onDelete: 'set null' }),
     expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
     createdAt,
   },
-  (table) => [
-    uniqueIndex('email_windows_per_session').on(table.sessionId, table.domain),
-    index('email_windows_open').on(table.channelId, table.domain, table.expiresAt),
-  ],
+  (table) => [uniqueIndex('email_domains_per_channel').on(table.channelId, table.domain)],
 );
 
 export const contactScope = pgEnum('contact_scope', ['direct', 'group']);
