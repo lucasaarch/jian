@@ -326,7 +326,7 @@
     opacity: 1;
   }
   .to-latest > button {
-    @apply relative shadow-md;
+    @apply relative;
   }
   /* Something arrived below while the reader was away. */
   .to-latest-dot {

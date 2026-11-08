@@ -193,6 +193,8 @@ export function History({
             </p>
             <section
               ref={scroller}
+              // Reachable by script alone, to take the focus of the way back to the end.
+              tabIndex={-1}
               className="message-history"
               aria-label="Session history"
               aria-busy={loading}

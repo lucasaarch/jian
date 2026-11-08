@@ -1,8 +1,17 @@
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import type { Message } from '../../lib/api';
 
-vi.mock('../../lib/events', () => ({ subscribe: () => () => {} }));
+let hear: ((event: { type: string; data?: unknown }) => void) | undefined;
+vi.mock('../../lib/events', () => ({
+  subscribe: (listener: typeof hear) => {
+    hear = listener;
+    return () => {
+      hear = undefined;
+    };
+  },
+}));
 
 import { History } from './history';
 
@@ -21,7 +30,8 @@ class Observer {
 
 /** The view's geometry in px, as a browser would report it, with a reader who can scroll it. */
 type Glide = { behavior?: ScrollBehavior; finish: () => void };
-const geometry = (view: HTMLElement, client: number, height: number) => {
+const geometry = (view: HTMLElement, height: number) => {
+  let client = 500;
   let top = height - client;
   let total = height;
   const glides: Glide[] = [];
@@ -60,25 +70,42 @@ const geometry = (view: HTMLElement, client: number, height: number) => {
       }),
     /** Content grows by `below` px under the reader and `above` px over them, kept in place. */
     grow: (below: number, above = 0) =>
-      act(async () => {
+      resize(() => {
         total += below + above;
         top += above;
-        for (const callback of observers) callback([], {} as ResizeObserver);
-        await new Promise((resolve) => setTimeout(resolve, 40));
+      }),
+    /** The view itself gets shorter or taller, as the composer grows or the window changes. */
+    view: (height: number) =>
+      resize(() => {
+        client = height;
       }),
   };
 };
 
-const said = {
+/** Sizes change: every observer hears it, and what waits a frame for it is let through. */
+const resize = (change: () => void) =>
+  act(async () => {
+    change();
+    for (const callback of observers) callback([], {} as ResizeObserver);
+    if (vi.isFakeTimers()) await vi.advanceTimersByTimeAsync(40);
+    else await new Promise((resolve) => setTimeout(resolve, 40));
+  });
+
+const said: Message = {
   id: 'hello',
   profileId: 'profile',
   sessionId: 'session',
   runId: 'hello-run',
-  role: 'assistant' as const,
+  role: 'assistant',
   content: 'The report is ready.',
   createdAt: '2026-11-07T10:00:00Z',
 };
-const api = { messages: async () => [said], activities: async () => [], timeline: async () => [] };
+let messages = [said];
+const api = {
+  messages: async () => messages,
+  activities: async () => [],
+  timeline: async () => [],
+};
 
 let element: HTMLDivElement;
 let root: ReturnType<typeof createRoot>;
@@ -95,6 +122,8 @@ afterEach(async () => {
   await act(async () => root.unmount());
   element.remove();
   observers = [];
+  messages = [said];
+  vi.useRealTimers();
   vi.unstubAllGlobals();
 });
 
@@ -103,13 +132,34 @@ const mount = async () => {
   await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
   const view = element.querySelector<HTMLElement>('.message-history');
   if (!view) throw new Error('No history on screen');
-  return geometry(view, 500, 2000);
+  const sized = geometry(view, 2000);
+  // The rows replacing the skeleton resize the content, as a browser would report.
+  await sized.grow(0);
+  return sized;
 };
 const button = () => {
-  const found = element.querySelector<HTMLButtonElement>('[aria-label="Go to the latest message"]');
+  const found = element.querySelector<HTMLButtonElement>('.to-latest button');
   if (!found) throw new Error('No way back to the end');
   return found;
 };
+const rows = () => element.querySelectorAll<HTMLElement>('.message-list > .history-row');
+/** Another message reaches the conversation through the stream, as a new last row. */
+const arrives = (content: string) =>
+  act(async () => {
+    messages = [
+      ...messages,
+      {
+        ...said,
+        id: `m-${content}`,
+        runId: `run-${content}`,
+        role: 'user',
+        content,
+        createdAt: '2026-11-07T10:05:00Z',
+      },
+    ];
+    hear?.({ type: 'session.message', data: { sessionId: 'session' } });
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  });
 const shown = () => !button().hasAttribute('inert');
 const dotted = () => Boolean(button().querySelector('.to-latest-dot'));
 
@@ -171,20 +221,25 @@ it('jumps to the end under reduced motion', async () => {
   expect(shown()).toBe(false);
 });
 
-it('marks what arrives below while away, until the reader reaches the end', async () => {
+it('names itself, and goes nowhere while it is hidden', async () => {
+  const view = await mount();
+  await view.scroll(0);
+
+  expect(button().getAttribute('aria-label')).toBe('Go to the latest message');
+});
+
+it('marks a new last row while away, until the reader reaches the end', async () => {
   const view = await mount();
   await view.scroll(0);
 
   expect(dotted()).toBe(false);
 
-  // Earlier pages read above the reader are not news.
-  await view.grow(0, 800);
-
-  expect(dotted()).toBe(false);
-
+  await arrives('One more thing.');
+  expect(rows()).toHaveLength(2);
   await view.grow(120);
 
   expect(dotted()).toBe(true);
+  expect(button().getAttribute('aria-label')).toBe('Go to the latest message, new messages below');
 
   // Coming closer is not reaching it.
   await view.scroll(view.top + 1000);
@@ -194,5 +249,92 @@ it('marks what arrives below while away, until the reader reaches the end', asyn
   await view.scroll(10_000);
 
   expect(dotted()).toBe(false);
-  expect(shown()).toBe(false);
+  expect(button().getAttribute('aria-label')).toBe('Go to the latest message');
+});
+
+it('marks the last row growing while away, as an answer being written does', async () => {
+  const view = await mount();
+  const last = rows()[rows().length - 1] as HTMLElement;
+  let height = 100;
+  Object.defineProperty(last, 'offsetHeight', { configurable: true, get: () => height });
+  await view.grow(0);
+  await view.scroll(0);
+
+  expect(dotted()).toBe(false);
+
+  height = 220;
+  await view.grow(120);
+
+  expect(dotted()).toBe(true);
+});
+
+it('does not mark content that grows in place, or a view that changes size', async () => {
+  const view = await mount();
+  await view.scroll(0);
+
+  // Earlier pages read above the reader.
+  await view.grow(0, 800);
+  // A tool opened around the reader, or an image loaded under them, short of the last row.
+  await view.grow(300);
+  // The composer grows with a long draft.
+  await view.view(300);
+
+  expect(dotted()).toBe(false);
+});
+
+it('stops gliding when the reader scrolls back up, and leaves them there', async () => {
+  const view = await mount();
+  await view.scroll(0);
+
+  await act(async () => button().click());
+  await view.scroll(300);
+  await view.grow(400);
+
+  expect(view.top).toBe(300);
+
+  await view.grow(300);
+
+  expect(view.top).toBe(300);
+});
+
+it('stops gliding when the reader takes the wheel or touches the history', async () => {
+  for (const kind of ['wheel', 'touchstart', 'pointerdown']) {
+    const view = await mount();
+    await view.scroll(0);
+
+    await act(async () => button().click());
+    const halfway = view.top;
+    await act(async () => {
+      element.querySelector('.message-history')?.dispatchEvent(new Event(kind));
+    });
+    await view.grow(400);
+
+    expect({ kind, top: view.top }).toEqual({ kind, top: halfway });
+    await act(async () => root.unmount());
+    root = createRoot(element);
+    observers = [];
+  }
+});
+
+it('follows after a glide that never landed only if it left the reader at the end', async () => {
+  const view = await mount();
+  await view.scroll(0);
+  vi.useFakeTimers();
+
+  await act(async () => button().click());
+  const halfway = view.top;
+  await act(async () => vi.advanceTimersByTimeAsync(1_000));
+  await view.grow(400);
+
+  expect(view.top).toBe(halfway);
+});
+
+it('hands focus to the history when the keyboard pressed it', async () => {
+  const view = await mount();
+  await view.scroll(0);
+  button().focus();
+
+  await act(async () => button().click());
+
+  expect(document.activeElement).toBe(element.querySelector('.message-history'));
 });

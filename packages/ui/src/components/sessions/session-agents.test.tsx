@@ -114,3 +114,34 @@ it('never shows another conversation’s subagents', async () => {
 
   expect(trigger()?.textContent).toBe('1 agent working');
 });
+
+it('goes when the store moves to another conversation while it is on screen', async () => {
+  await read([agent(1, 'running')]);
+  await render('session');
+  await open();
+
+  expect(rows()).toHaveLength(1);
+
+  // The owner opened another conversation, whose History now shows its own agents.
+  await read([agent(2, 'running'), agent(3, 'running')], 'elsewhere');
+
+  expect(trigger()).toBeNull();
+  expect(rows()).toEqual([]);
+
+  await read([agent(1, 'running')], 'session');
+
+  expect(trigger()?.textContent).toBe('1 agent working');
+});
+
+it('goes when its conversation is left, and only then', async () => {
+  await read([agent(1, 'running')]);
+  await render('session');
+
+  await act(async () => useCrew.getState().leave('elsewhere'));
+
+  expect(trigger()?.textContent).toBe('1 agent working');
+
+  await act(async () => useCrew.getState().leave('session'));
+
+  expect(trigger()).toBeNull();
+});

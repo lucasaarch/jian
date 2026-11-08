@@ -8,10 +8,15 @@ type Anchor = { element: Element; offset: number };
 /** A reader this near the end, in px, is at it: the history follows them again. */
 export const FOLLOW_WITHIN_PX = 80;
 /**
- * The longest a smooth scroll to the end is waited on, in ms. Reduced motion or a reader taking
- * the wheel may end it without the scroll event that says it landed.
+ * The longest a smooth scroll to the end is waited on, in ms. A browser may end it without the
+ * scroll event that says it landed; the history then follows only if it left the reader there.
  */
 const GLIDE_MS = 1000;
+/** What a reader does to take the scroll back from a glide, before or without a scroll. */
+const TAKEN = ['wheel', 'touchstart', 'pointerdown'] as const;
+
+const nearEnd = (view: HTMLElement) =>
+  view.scrollHeight - view.scrollTop - view.clientHeight < FOLLOW_WITHIN_PX;
 
 /**
  * Chats open at the end and follow new content until the reader scrolls up.
@@ -31,9 +36,12 @@ export function useFollowBottom() {
   // replace the anchor or make the history follow the end.
   const holding = useRef(false);
   // A smooth scroll to the end passes through the conversation, reporting scrolls that are not
-  // the reader leaving it: until it lands, the history keeps following.
+  // the reader leaving it: until it lands, the history keeps following. A reader who scrolls
+  // back up, or reaches for the wheel or the screen, ends it at once, where they are.
   const gliding = useRef(false);
   const glide = useRef<ReturnType<typeof setTimeout>>(undefined);
+  // Where the last scroll left the view, in px, to tell a reader going up from the glide.
+  const lastTop = useRef(0);
 
   const place = useCallback((element: Element): Anchor | undefined => {
     const view = scroller.current;
@@ -82,32 +90,51 @@ export function useFollowBottom() {
     return () => observer.disconnect();
   }, [place]);
 
+  /** The glide is over: the history follows from here only if the reader is at the end. */
+  const land = useCallback(() => {
+    const view = scroller.current;
+    clearTimeout(glide.current);
+    if (!gliding.current || !view) return;
+    gliding.current = false;
+    following.current = nearEnd(view);
+  }, []);
+  useEffect(() => {
+    const view = scroller.current;
+    if (!view) return;
+    for (const kind of TAKEN) view.addEventListener(kind, land, { passive: true });
+    return () => {
+      for (const kind of TAKEN) view.removeEventListener(kind, land);
+      clearTimeout(glide.current);
+    };
+  }, [land]);
+
   const follow = useCallback(() => {
     following.current = true;
   }, []);
   /** Back to the end, gliding unless motion is reduced, and following from there. */
-  const toEnd = useCallback((smooth: boolean) => {
-    const view = scroller.current;
-    if (!view) return;
-    following.current = true;
-    gliding.current = smooth;
-    clearTimeout(glide.current);
-    if (smooth) {
-      glide.current = setTimeout(() => {
-        gliding.current = false;
-      }, GLIDE_MS);
-    }
-    view.scrollTo({ top: view.scrollHeight, behavior: smooth ? 'smooth' : 'auto' });
-  }, []);
-  useEffect(() => () => clearTimeout(glide.current), []);
+  const toEnd = useCallback(
+    (smooth: boolean) => {
+      const view = scroller.current;
+      if (!view) return;
+      following.current = true;
+      gliding.current = smooth;
+      lastTop.current = view.scrollTop;
+      clearTimeout(glide.current);
+      if (smooth) glide.current = setTimeout(land, GLIDE_MS);
+      view.scrollTo({ top: view.scrollHeight, behavior: smooth ? 'smooth' : 'auto' });
+    },
+    [land],
+  );
   const onScroll = useCallback(
     (element: HTMLElement) => {
+      const up = element.scrollTop < lastTop.current;
+      lastTop.current = element.scrollTop;
       if (holding.current) return;
-      const near =
-        element.scrollHeight - element.scrollTop - element.clientHeight < FOLLOW_WITHIN_PX;
+      const near = nearEnd(element);
       if (gliding.current) {
-        if (!near) return;
+        if (!near && !up) return;
         gliding.current = false;
+        clearTimeout(glide.current);
       }
       following.current = near;
       const top = topmost();
