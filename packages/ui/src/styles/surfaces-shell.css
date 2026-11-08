@@ -194,6 +194,35 @@
   .session-pull-number {
     @apply shrink-0 font-mono tabular-nums;
   }
+  /* The subagents at work in the badge's list, laid out as its pull requests are: who and what it
+     is doing on the left, how long it has worked on the right. */
+  .model-menu.session-agents-popup {
+    @apply gap-1 p-3 leading-snug;
+  }
+  .model-menu > .session-agents {
+    @apply -mx-1.5 -mb-1.5 grid max-h-80 list-none gap-0.5 overflow-y-auto p-0 text-xs;
+    color: var(--muted);
+  }
+  .session-agent {
+    @apply flex w-full min-w-0 items-start gap-2 rounded-lg p-1.5 text-left transition-colors;
+  }
+  .session-agent:hover,
+  .session-agent:focus-visible {
+    background: var(--glass-press);
+  }
+  .session-agent-text {
+    @apply grid min-w-0 flex-1;
+  }
+  .session-agent-name {
+    @apply truncate;
+    color: var(--ink);
+  }
+  .session-agent-now {
+    @apply truncate;
+  }
+  .session-agent-time {
+    @apply shrink-0 font-mono tabular-nums;
+  }
   /* A worktree in the badge's list: what it is above, what can be done with it below. The grid has
      one column so a long branch or base name wraps inside the popup, on a phone too. */
   .session-worktree {
