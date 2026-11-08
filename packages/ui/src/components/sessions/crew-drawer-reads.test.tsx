@@ -234,3 +234,112 @@ it('opens a cut tool whole from the agent’s own session', async () => {
   expect(toolStep).toHaveBeenCalledWith('profile', alpha.sessionId, alpha.runId, 'read');
   expect(details?.textContent).toContain('Every line of the notes, read whole.');
 });
+
+it('keeps only the open conversation’s agents once it moves to another', async () => {
+  let alphaRead = Promise.resolve([said(alpha, 'Alpha drafted the outreach email.')]);
+  const api: Api = {
+    messages: (_profile, session) =>
+      session === alpha.sessionId
+        ? alphaRead
+        : Promise.resolve([said(beta, 'Beta removed the old channel.')]),
+    timeline: async () => [],
+  };
+  useCrew.setState({ sessionId: 'parent', agents: [alpha], following: alpha.runId });
+  await draw(api);
+  expect(drawer()?.textContent).toContain('Alpha drafted the outreach email.');
+
+  await act(async () =>
+    useCrew.setState({ sessionId: 'other', agents: [beta], following: beta.runId }),
+  );
+  expect(drawer()?.textContent).toContain('Beta removed the old channel.');
+
+  // Back in the first conversation, its agent is read afresh: what was read of it went.
+  alphaRead = new Promise(() => {});
+  await act(async () =>
+    useCrew.setState({ sessionId: 'parent', agents: [alpha], following: alpha.runId }),
+  );
+  expect(drawer()?.textContent).not.toContain('Alpha drafted');
+  expect(drawer()?.querySelector('[aria-busy="true"]')).not.toBeNull();
+});
+
+it('reads an agent that ends mid-read once more, after that read, and then stops', async () => {
+  vi.useFakeTimers();
+  const working = agentOf('epsilon', 'running');
+  const reads: Array<ReturnType<typeof held<Message[]>>> = [];
+  let open = 0;
+  let most = 0;
+  const api: Api = {
+    messages: () => {
+      const read = held<Message[]>();
+      reads.push(read);
+      open += 1;
+      most = Math.max(most, open);
+      return read.promise.finally(() => {
+        open -= 1;
+      });
+    },
+    timeline: async () => [],
+  };
+  useCrew.setState({ sessionId: 'parent', agents: [working], following: working.runId });
+  await draw(api);
+  // Working and never read: the live turn stands in for it, with no skeleton beside it.
+  expect(drawer()?.querySelector('[aria-busy="true"]')).toBeNull();
+  await act(async () => reads[0]?.answer([]));
+  await act(async () => vi.advanceTimersByTime(1500));
+  expect(reads).toHaveLength(2);
+
+  // The poll's read is out when the agent ends.
+  await act(async () => useCrew.setState({ agents: [{ ...working, status: 'completed' }] }));
+  expect(reads).toHaveLength(2);
+
+  await act(async () => reads[1]?.answer([]));
+  expect(reads).toHaveLength(3);
+  await act(async () => reads[2]?.answer([said(working, 'Epsilon finished the audit.')]));
+  await act(async () => vi.advanceTimersByTime(6000));
+
+  expect(reads).toHaveLength(3);
+  expect(most).toBe(1);
+  expect(drawer()?.textContent).toContain('Epsilon finished the audit.');
+});
+
+it('tries the last read once more when it fails, and says what it could not read', async () => {
+  vi.useFakeTimers();
+  let tries = 0;
+  const api: Api = {
+    messages: async () => [said(alpha, 'Alpha drafted the outreach email.')],
+    timeline: async () => {
+      tries += 1;
+      throw new Error('Connection lost.');
+    },
+  };
+  useCrew.setState({ sessionId: 'parent', agents: [alpha], following: alpha.runId });
+  await draw(api);
+  expect(drawer()?.textContent).toContain('Could not load this agent’s tools: Connection lost.');
+  expect(tries).toBe(1);
+
+  await act(async () => vi.advanceTimersByTime(1500));
+  expect(tries).toBe(2);
+  await act(async () => vi.advanceTimersByTime(6000));
+  expect(tries).toBe(2);
+});
+
+it('keeps the words it read when a later read of them fails', async () => {
+  vi.useFakeTimers();
+  const working = agentOf('zeta', 'running');
+  let fail = false;
+  const api: Api = {
+    messages: async () => {
+      if (fail) throw new Error('Connection lost.');
+      return [said(working, 'Zeta listed the open issues.')];
+    },
+    timeline: async () => [],
+  };
+  useCrew.setState({ sessionId: 'parent', agents: [working], following: working.runId });
+  await draw(api);
+  expect(drawer()?.textContent).toContain('Zeta listed the open issues.');
+
+  fail = true;
+  await act(async () => vi.advanceTimersByTime(1500));
+  expect(drawer()?.textContent).toContain('Could not load this agent’s messages: Connection lost.');
+  expect(drawer()?.textContent).toContain('Zeta listed the open issues.');
+});

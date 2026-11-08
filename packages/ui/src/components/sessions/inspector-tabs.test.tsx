@@ -5,7 +5,7 @@ import { type InspectorTab, useCrew } from '../../lib/stores/crew';
 import { InspectorHost } from './inspector-host';
 
 /** The strip's width, and where each tab sits in it unscrolled, in px. */
-const STRIP = 200;
+const STRIP = 400;
 const TAB = 140;
 const STEP = 150;
 const tabs: InspectorTab[] = [101, 102, 103, 104, 105].map((number) => ({
@@ -13,6 +13,8 @@ const tabs: InspectorTab[] = [101, 102, 103, 104, 105].map((number) => ({
   kind: 'github',
   item: { kind: 'pull', owner: 'atlas', repo: 'web', number, url: '' },
 }));
+/** How wide the tabs are together; the strip overflows while this passes `STRIP`. */
+let wide = tabs.length * STEP;
 let root: Root | undefined;
 let element: HTMLDivElement;
 
@@ -34,12 +36,13 @@ beforeEach(() => {
     }
     return { left: 0, right: 1600, width: 1600 } as DOMRect;
   });
+  wide = tabs.length * STEP;
   for (const [name, value] of [
-    ['scrollWidth', tabs.length * STEP],
-    ['clientWidth', STRIP],
+    ['scrollWidth', () => wide],
+    ['clientWidth', () => STRIP],
   ] as const) {
     vi.spyOn(HTMLElement.prototype, name, 'get').mockImplementation(function (this: HTMLElement) {
-      return this.getAttribute('role') === 'tablist' ? value : 0;
+      return this.getAttribute('role') === 'tablist' ? value() : 0;
     });
   }
   useCrew.setState({
@@ -74,23 +77,55 @@ it('brings the tab it turns to into view, and leaves the strip where it is for o
   expect(strip().scrollLeft).toBe(0);
 
   await act(async () => useCrew.getState().select(tabs[3]?.key ?? ''));
-  // The fourth tab ends at 590px; the strip shows 200px of it, clear of the fade at its edge.
+  // The fourth tab runs from 450px to 590px: the strip shows it whole, clear of the fade.
   const scrolled = strip().scrollLeft;
   expect(scrolled).toBeGreaterThanOrEqual(3 * STEP + TAB - STRIP);
   expect(scrolled).toBeLessThanOrEqual(3 * STEP);
+
+  // The third, 300px to 440px, is already in view beside it.
+  await act(async () => useCrew.getState().select(tabs[2]?.key ?? ''));
+  expect(strip().scrollLeft).toBe(scrolled);
 
   await act(async () => useCrew.getState().select(tabs[0]?.key ?? ''));
   expect(strip().scrollLeft).toBe(0);
 });
 
+const wheel = (init: WheelEventInit) => {
+  const event = new WheelEvent('wheel', { bubbles: true, cancelable: true, ...init });
+  // happy-dom's WheelEvent leaves out the modifier keys it is given.
+  if (init.ctrlKey) Object.defineProperty(event, 'ctrlKey', { value: true });
+  strip().dispatchEvent(event);
+  return event;
+};
+
 it('turns the wheel into a sideways scroll while the tabs overflow', async () => {
   await show();
-  const wheel = new WheelEvent('wheel', { deltaY: 120, bubbles: true, cancelable: true });
-
-  await act(async () => strip().dispatchEvent(wheel));
+  let event: WheelEvent | undefined;
+  await act(async () => {
+    event = wheel({ deltaY: 120 });
+  });
 
   expect(strip().scrollLeft).toBe(120);
-  expect(wheel.defaultPrevented).toBe(true);
+  expect(event?.defaultPrevented).toBe(true);
+});
+
+it('leaves the wheel to the page when the tabs fit, at their end, or for a sideways swipe', async () => {
+  wide = STRIP;
+  await show();
+  expect(wheel({ deltaY: 120 }).defaultPrevented).toBe(false);
+  expect(strip().scrollLeft).toBe(0);
+
+  wide = tabs.length * STEP;
+  // A trackpad's own sideways scroll is the browser's.
+  expect(wheel({ deltaX: 80, deltaY: 10 }).defaultPrevented).toBe(false);
+  // Zooming, not scrolling.
+  expect(wheel({ deltaY: 120, ctrlKey: true }).defaultPrevented).toBe(false);
+  // Already at the start, turned back towards it.
+  expect(wheel({ deltaY: -120 }).defaultPrevented).toBe(false);
+
+  strip().scrollLeft = wide - STRIP;
+  expect(wheel({ deltaY: 120 }).defaultPrevented).toBe(false);
+  expect(strip().scrollLeft).toBe(wide - STRIP);
 });
 
 it('marks the edges that have more tabs past them', async () => {
@@ -99,7 +134,7 @@ it('marks the edges that have more tabs past them', async () => {
   expect(strip().hasAttribute('data-more-start')).toBe(false);
 
   await act(async () => {
-    strip().scrollLeft = tabs.length * STEP - STRIP;
+    strip().scrollLeft = wide - STRIP;
     strip().dispatchEvent(new Event('scroll'));
   });
   expect(strip().hasAttribute('data-more-start')).toBe(true);

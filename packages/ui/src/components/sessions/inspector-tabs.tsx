@@ -69,7 +69,8 @@ export function InspectorTabs({
                 const selected = tabs[next];
                 if (selected) {
                   useCrew.getState().select(selected.key);
-                  document.getElementById(`${id}-${next}`)?.focus();
+                  // The strip brings it into view itself, clear of its fades.
+                  document.getElementById(`${id}-${next}`)?.focus({ preventScroll: true });
                 }
               }
             }}

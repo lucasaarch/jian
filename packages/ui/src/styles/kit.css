@@ -31,10 +31,9 @@
 
 /* A row that scrolls sideways with no scrollbar, as tabs do (`ScrollStrip`, which sets the edge
    marks): a bar is too low to hold one, and it reads as broken. An edge with more past it fades
-   out over 1.5rem, the room `ScrollStrip` keeps a revealed item clear of. The mask only takes
-   alpha, so black here is opaque, not a colour. */
+   out over `--strip-fade`, which `ScrollStrip` sets with the room it keeps a revealed item clear
+   of. The mask only takes alpha, so black here is opaque, not a colour. */
 @utility scroll-strip {
-  --strip-fade: 1.5rem;
   overflow-x: auto;
   overscroll-behavior-x: contain;
   scrollbar-width: none;

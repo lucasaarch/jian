@@ -88,7 +88,8 @@ export function CrewDrawer({
   return (
     <InspectorContent>
       <StepDetailsContext.Provider value={details}>
-        <aside className="crew-drawer" aria-label={agent.name}>
+        {/* One element per agent: turning to another starts its scroll and live turn afresh. */}
+        <aside key={agent.runId} className="crew-drawer subagent-drawer" aria-label={agent.name}>
           <InspectorBar
             closer={closer}
             options={
@@ -154,9 +155,9 @@ export function CrewDrawer({
               <Elapsed agent={agent} className="font-mono text-xs tabular-nums" />
             </p>
           </InspectorHeader>
-          <InspectorBody className="inspector-conversation grid content-start gap-3 pt-4 [&_.chat-line]:mb-0">
+          <InspectorBody className="grid content-start gap-3 px-[var(--inspector-content-inset,var(--inspector-inset))] pt-4 [&_.chat-line]:mb-0">
             {error && <p className="text-[13px] text-bad">{error}</p>}
-            {!read && !shown.length && (
+            {!read && !working && !shown.length && (
               <SkeletonRegion label="Loading this agent…" className="grid gap-2">
                 <SkeletonLine className="w-1/3" />
                 <SkeletonLine className="w-full" />

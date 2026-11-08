@@ -1,9 +1,12 @@
 'use client';
 
-import { type HTMLAttributes, useEffect, useLayoutEffect, useRef } from 'react';
+import { type CSSProperties, type HTMLAttributes, useEffect, useLayoutEffect, useRef } from 'react';
 import { watchSize } from '../lib/watch-size';
 
-/** How far an item is kept from an edge that fades, in px: the `scroll-strip` fade, 1.5rem. */
+/**
+ * How wide an edge fades, in px, and how far a revealed item is kept from it. Given to the
+ * `scroll-strip` utility as `--strip-fade`, so the two cannot disagree.
+ */
 const FADE = 24;
 /** A wheel's line, in px, for a mouse that counts in lines rather than pixels. */
 const LINE = 16;
@@ -36,6 +39,7 @@ function revealedAt(
 export function ScrollStrip({
   active,
   className = '',
+  style,
   children,
   ...props
 }: HTMLAttributes<HTMLDivElement> & {
@@ -53,8 +57,12 @@ export function ScrollStrip({
     // Mapped by hand: a wheel that only moves vertically does nothing to a row. Not passive, so
     // the page under it does not scroll too.
     const wheel = (event: WheelEvent) => {
-      if (element.scrollWidth <= element.clientWidth) return;
-      if (Math.abs(event.deltaX) >= Math.abs(event.deltaY)) return;
+      // A held modifier zooms the page or means something else to the host: never the row's.
+      if (event.ctrlKey || event.metaKey) return;
+      const more = element.scrollWidth - element.clientWidth;
+      if (more <= 0 || Math.abs(event.deltaX) >= Math.abs(event.deltaY)) return;
+      // At the end it was turned towards, the wheel is left to what is under the row.
+      if (event.deltaY > 0 ? element.scrollLeft >= more - 1 : element.scrollLeft <= 0) return;
       event.preventDefault();
       const unit =
         event.deltaMode === WheelEvent.DOM_DELTA_LINE
@@ -102,7 +110,12 @@ export function ScrollStrip({
   }, [active]);
 
   return (
-    <div ref={strip} className={`scroll-strip ${className}`} {...props}>
+    <div
+      ref={strip}
+      className={`scroll-strip ${className}`}
+      style={{ '--strip-fade': `${FADE}px`, ...style } as CSSProperties}
+      {...props}
+    >
       {children}
     </div>
   );

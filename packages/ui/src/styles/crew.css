@@ -162,19 +162,25 @@
   }
 }
 
-/* One edge for everything in the Inspector: its tabs, its bars, what they show, on either side. A
-   surface here takes its side padding from this, or it stops lining up with the rest. */
+/* One edge for the Inspector's chrome and what runs flush: its tabs, its bars, diffs, pull
+   requests, on either side. A surface there takes its side padding from this, or it stops lining
+   up with the rest. A view read as prose sets `--inspector-content-inset` instead, which its
+   header and body take, so the two still line up with each other. */
 :root {
   --inspector-inset: 0.5rem;
 }
 
-/* A conversation read in the Inspector, a subagent's, laid out as the conversation lays its own:
-   the text a chat gutter in from where its bubbles and cards would reach, here the Inspector's
-   edge. The edge alone suits bars, tabs and diffs that run flush, but leaves prose against the
-   pane's side. The conversation's gutter belongs to its pane, so the same width is named here. */
-.inspector-conversation {
-  --chat-gutter: 0.75rem;
-  padding-inline: calc(var(--inspector-inset) + var(--chat-gutter));
+/* A subagent's conversation, read as the conversation's own is: its text as far in as the
+   conversation's sits, 1.25rem, where the shared edge would leave it against the pane's side.
+   Set on the drawer, so it holds wherever the drawer is drawn, the desktop's portal included. */
+.subagent-drawer {
+  --inspector-content-inset: 1.25rem;
+}
+/* On a phone the sheet keeps the conversation's own side padding there. */
+@media (max-width: 760px) {
+  .subagent-drawer {
+    --inspector-content-inset: 0.75rem;
+  }
 }
 
 /* The width arrives as a variable, not an inline width, so the phone layout below can replace it
