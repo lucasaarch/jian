@@ -3,20 +3,26 @@ import { z } from 'zod';
 import { GatewayError } from '../../core/errors.js';
 import { readMediaBody } from '../../media/providers.js';
 import type { DeliveryOutcome } from '../channel.js';
-import type { EmailProvider, Net, OutgoingEmail, ReceivedEmail } from './provider.js';
+import {
+  type EmailProvider,
+  FILE_NOTE,
+  MAX_FILES,
+  MORE_FILES_NOTE,
+  type Net,
+  type OutgoingEmail,
+  type ReceivedEmail,
+  type WebhookHeaders,
+} from './provider.js';
 import { svixSigned } from './svix.js';
+
+/** What Resend needs of a channel's credential: its key alone. */
+type Account = { apiKey: string };
 
 const API = 'https://api.resend.com';
 const REQUEST_TIMEOUT_MS = 20_000;
 /** The id lookup after a send only improves reply matching; it must not hold the outbox. */
 const LOOKUP_TIMEOUT_MS = 5_000;
 const FILE_TIMEOUT_MS = 30_000;
-/** As many files as one incoming message may carry into a run. */
-const MAX_FILES = 4;
-
-const FILE_NOTE =
-  '[An attachment could not be downloaded or exceeds 16 MB. Ask the sender to send it again in a smaller file.]';
-const MORE_FILES_NOTE = `[Only the first ${MAX_FILES} attachments were kept.]`;
 
 const id = z.string().min(1).max(200);
 const addresses = z.array(z.string().max(320)).max(100).nullish();
@@ -114,7 +120,7 @@ export class Resend implements EmailProvider {
       : `HTTP ${response.status}`;
   }
 
-  async verify(apiKey: string, address: string, net: Net) {
+  async verify({ apiKey, address }: Account & { address: string }, net: Net) {
     const domain = address.split('@')[1]?.toLowerCase();
     let response: Response;
     try {
@@ -157,7 +163,7 @@ export class Resend implements EmailProvider {
     }
   }
 
-  async subscribe(apiKey: string, endpoint: string, net: Net) {
+  async subscribe({ apiKey }: Account, endpoint: string, net: Net) {
     let response: Response;
     try {
       response = await this.call(
@@ -188,7 +194,7 @@ export class Resend implements EmailProvider {
     return { webhookId: created.data.id, signingSecret: created.data.signing_secret };
   }
 
-  async unsubscribe(apiKey: string, webhookId: string, net: Net) {
+  async unsubscribe({ apiKey, webhookId }: Account & { webhookId: string }, net: Net) {
     const path = `/webhooks/${encodeURIComponent(webhookId)}`;
     const response = await this.call(apiKey, path, { method: 'DELETE' }, net);
     // Already gone is what was asked for.
@@ -197,15 +203,17 @@ export class Resend implements EmailProvider {
     }
   }
 
-  authentic(
-    raw: Buffer,
-    headers: Readonly<Record<string, string | string[] | undefined>>,
-    secret: string,
-  ) {
+  authentic(raw: Buffer, headers: WebhookHeaders, secret: string) {
     return svixSigned(raw, headers, secret);
   }
 
-  event(payload: unknown) {
+  async event(raw: Buffer) {
+    let payload: unknown;
+    try {
+      payload = JSON.parse(raw.toString('utf8'));
+    } catch {
+      throw new GatewayError(400, 'Invalid email event');
+    }
     const parsed = eventSchema.safeParse(payload);
     if (!parsed.success || parsed.data.type !== 'email.received' || !parsed.data.data.email_id)
       return undefined;
@@ -216,7 +224,7 @@ export class Resend implements EmailProvider {
     };
   }
 
-  async read(apiKey: string, emailId: string, net: Net): Promise<ReceivedEmail> {
+  async read({ apiKey }: Account, emailId: string, net: Net): Promise<ReceivedEmail> {
     // `cid` keeps inline images as references; the default writes each one into the HTML.
     const response = await this.call(
       apiKey,
@@ -255,7 +263,7 @@ export class Resend implements EmailProvider {
     };
   }
 
-  async attachments(apiKey: string, emailId: string, net: Net) {
+  async attachments({ apiKey }: Account, emailId: string, net: Net) {
     let files: z.infer<typeof filesSchema>['data'];
     try {
       const response = await this.call(
@@ -305,7 +313,7 @@ export class Resend implements EmailProvider {
   }
 
   async send(
-    apiKey: string,
+    { apiKey }: Account,
     email: OutgoingEmail,
     idempotencyKey: string,
     net: Net,

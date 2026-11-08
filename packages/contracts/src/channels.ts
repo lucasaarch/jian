@@ -20,15 +20,34 @@ export const GROUP_AGENT_TURN_LIMIT = 3;
 /** A conversation is one person writing privately, or a room where several participants write. */
 export const conversationScopeSchema = z.enum(['direct', 'group']);
 
-/**
- * An email address the agent receives and sends at, through a provider the owner has an account
- * with. Resend is the only provider today; its API key goes to the vault and is never read back.
- */
-export const emailInputSchema = z.strictObject({
+/** Resend: an API key with full access, which checks the domain and registers the webhook. */
+export const resendEmailSchema = z.strictObject({
   provider: z.literal('resend'),
   apiKey: secretSchema,
   address: z.email().max(254),
 });
+
+/**
+ * Cloudflare Email Service: an API token and the account it belongs to. Email Routing matches an
+ * address of at most 90 characters, so a longer one could never receive anything.
+ */
+export const cloudflareEmailSchema = z.strictObject({
+  provider: z.literal('cloudflare'),
+  apiKey: secretSchema,
+  accountId: z
+    .string()
+    .regex(/^[0-9a-f]{32}$/i, 'A Cloudflare account ID is 32 hexadecimal characters'),
+  address: z.email().max(90),
+});
+
+/**
+ * An email address the agent receives and sends at, through a provider the owner has an account
+ * with. The key or token goes to the vault and is never read back.
+ */
+export const emailInputSchema = z.discriminatedUnion('provider', [
+  resendEmailSchema,
+  cloudflareEmailSchema,
+]);
 
 export const channelInputSchema = z
   .strictObject({

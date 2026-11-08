@@ -18,7 +18,7 @@ export const kinds = [
     type: 'email' as const,
     name: 'Email',
     icon: Mail,
-    description: 'An address on a domain you send and receive with through Resend.',
+    description: 'An address on a domain you send and receive with through Resend or Cloudflare.',
   },
   {
     type: 'api' as const,

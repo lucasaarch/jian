@@ -89,7 +89,7 @@ describe('Resend sends', () => {
     }) as typeof fetch;
 
     const outcome = await new Resend().send(
-      apiKey,
+      { apiKey },
       {
         from: '"Mia" <mia@agents.test>',
         to: 'ada@mail.test',
@@ -122,9 +122,9 @@ describe('Resend sends', () => {
       signal: new AbortController().signal,
     });
     const mail = { from: 'mia@agents.test', to: 'ada@mail.test', subject: 'S', text: 'T' };
-    expect((await new Resend().send(apiKey, mail, 'd', net(422))).status).toBe('failed');
-    expect((await new Resend().send(apiKey, mail, 'd', net(429))).status).toBe('pending');
-    expect((await new Resend().send(apiKey, mail, 'd', net(500))).status).toBe('unknown');
+    expect((await new Resend().send({ apiKey }, mail, 'd', net(422))).status).toBe('failed');
+    expect((await new Resend().send({ apiKey }, mail, 'd', net(429))).status).toBe('pending');
+    expect((await new Resend().send({ apiKey }, mail, 'd', net(500))).status).toBe('unknown');
   });
 });
 

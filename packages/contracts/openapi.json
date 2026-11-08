@@ -14617,31 +14617,67 @@
                     "writeOnly": true
                   },
                   "email": {
-                    "type": "object",
-                    "properties": {
-                      "provider": {
-                        "type": "string",
-                        "const": "resend"
+                    "oneOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "provider": {
+                            "type": "string",
+                            "const": "resend"
+                          },
+                          "apiKey": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 16000,
+                            "writeOnly": true
+                          },
+                          "address": {
+                            "type": "string",
+                            "maxLength": 254,
+                            "format": "email",
+                            "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+                          }
+                        },
+                        "required": [
+                          "provider",
+                          "apiKey",
+                          "address"
+                        ],
+                        "additionalProperties": false
                       },
-                      "apiKey": {
-                        "type": "string",
-                        "minLength": 1,
-                        "maxLength": 16000,
-                        "writeOnly": true
-                      },
-                      "address": {
-                        "type": "string",
-                        "maxLength": 254,
-                        "format": "email",
-                        "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+                      {
+                        "type": "object",
+                        "properties": {
+                          "provider": {
+                            "type": "string",
+                            "const": "cloudflare"
+                          },
+                          "apiKey": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 16000,
+                            "writeOnly": true
+                          },
+                          "accountId": {
+                            "type": "string",
+                            "pattern": "^[0-9a-f]{32}$"
+                          },
+                          "address": {
+                            "type": "string",
+                            "maxLength": 90,
+                            "format": "email",
+                            "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+                          }
+                        },
+                        "required": [
+                          "provider",
+                          "apiKey",
+                          "accountId",
+                          "address"
+                        ],
+                        "additionalProperties": false
                       }
-                    },
-                    "required": [
-                      "provider",
-                      "apiKey",
-                      "address"
-                    ],
-                    "additionalProperties": false
+                    ]
                   }
                 },
                 "required": [
@@ -19116,7 +19152,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "description": "A Resend webhook event, authenticated with its Svix signature over the original bytes. Maximum 256 KB."
+                "description": "A Resend webhook event (JSON, authenticated with its Svix signature over the original bytes, at most 256 KB), or the raw message the Email Worker Jian deploys on Cloudflare forwards (message/rfc822, signed with the channel secret in X-Jian-Signature, at most 26 MiB)."
               }
             }
           }

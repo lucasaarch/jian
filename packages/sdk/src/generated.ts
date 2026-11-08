@@ -9943,6 +9943,13 @@ export interface operations {
                         apiKey: string;
                         /** Format: email */
                         address: string;
+                    } | {
+                        /** @constant */
+                        provider: "cloudflare";
+                        apiKey: string;
+                        accountId: string;
+                        /** Format: email */
+                        address: string;
                     };
                 };
             };

@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { Channel, DeliveryContext, DeliveryOutcome, OutgoingMessage } from '../channel.js';
 import { plainText } from '../plain.js';
+import { Cloudflare } from './cloudflare.js';
 import { emailHtml } from './html.js';
 import { type EmailCredential, type EmailProvider, emailCredentialSchema } from './provider.js';
 import { Resend } from './resend.js';
@@ -9,6 +10,7 @@ import { bareAddress, envelope } from './text.js';
 /** The providers an email channel can use, by the name the owner chose at connect. */
 export const EMAIL_PROVIDERS: Record<EmailCredential['provider'], EmailProvider> = {
   resend: new Resend(),
+  cloudflare: new Cloudflare(),
 };
 
 export function emailCredential(value: string | undefined): EmailCredential {
@@ -56,7 +58,7 @@ export class EmailChannel implements Channel {
     const mail = envelope(message.text, message.emailThread, files[0]?.name);
 
     return provider.send(
-      credential.apiKey,
+      credential,
       {
         ...mail,
         text: plainText(mail.text),

@@ -52,10 +52,16 @@ One agent's own, from the agent chooser at the foot of the sidebar.
   or at a size the owner sets. See \`managing-context\`.
 - **Skills** and **Memories**: this agent's.
 - **Channels**: on a server gateway, WhatsApp, Telegram, Email and API Server, with contact
-  approvals and groups. Email goes through Resend: an API key with full access, an address on a
-  domain verified there with receiving on and its MX record, and JIAN_PUBLIC_URL set so Resend
-  can reach the gateway. Its senders, actions and questions are approved in the panel, never by
-  email.
+  approvals and groups. Email goes through Resend or Cloudflare, chosen when it is connected,
+  with JIAN_PUBLIC_URL set so the provider can reach the gateway. Resend takes an API key with
+  full access and an address on a domain verified there with receiving on and its MX record;
+  Jian registers the webhook. Cloudflare takes an API token, the account ID and an address of
+  a zone in that account, with Email Routing enabled and the domain onboarded in Email Sending
+  in the dashboard; Jian uploads a Worker that forwards the address's mail and adds its routing
+  rule. The token needs Account › Email Sending: Edit, Account › Workers Scripts: Edit, Zone ›
+  Email Routing Rules: Edit, Zone › Zone Settings: Read and Zone › Zone: Read. Disconnecting
+  removes the webhook, or the rule and the Worker. Its senders, actions and questions are
+  approved in the panel, never by email.
 
 ## In the conversation
 

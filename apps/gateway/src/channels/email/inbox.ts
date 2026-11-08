@@ -9,7 +9,13 @@ import { findChannel, findContactByChat, findDeliveryByRemoteId } from '../repos
 import { type ChannelRecord, channelSecret } from '../service.js';
 import { EMAIL_PROVIDERS, emailCredential } from './channel.js';
 import { logEmail } from './log.js';
-import type { MailAuthentication, ReceivedEmail } from './provider.js';
+import {
+  type EmailCredential,
+  FILE_NOTE,
+  type MailAuthentication,
+  type Net,
+  type ReceivedEmail,
+} from './provider.js';
 import { expectedDomain, freeMail } from './signups.js';
 import {
   bareAddress,
@@ -121,7 +127,8 @@ async function answeredAddress(db: Queryable, channelId: string, email: Received
 
 /**
  * Mail for an email channel, as the provider's webhook announces it. Each event is checked
- * against the channel's own signing secret, read in full from the provider, and handed to the
+ * against the channel's own signing secret, read in full from the provider unless the event
+ * carried the whole message (Cloudflare's Worker posts it raw), and handed to the
  * gateway's ordinary intake. Taken in while the webhook waits, like Telegram: a failure to read
  * the email answers 502, so the provider delivers the event again, and the request key keeps
  * a second delivery from starting a second run.
@@ -151,13 +158,7 @@ export class EmailInbox {
     if (!provider.authentic(raw, headers, credential.signingSecret))
       throw new GatewayError(401, 'Unauthorized');
 
-    let payload: unknown;
-    try {
-      payload = JSON.parse(raw.toString('utf8'));
-    } catch {
-      throw new GatewayError(400, 'Invalid email event');
-    }
-    const event = provider.event(payload);
+    const event = await provider.event(raw, headers);
     if (!event || !channel.enabled) return { accepted: false };
     // The webhook hears every address of the domain; only this channel's mail is its own.
     if (!event.recipients.includes(credential.address)) return { accepted: false };
@@ -165,7 +166,7 @@ export class EmailInbox {
     const net = { fetch: this.fetcher, signal: this.signal };
     let email: ReceivedEmail;
     try {
-      email = await provider.read(credential.apiKey, event.emailId, net);
+      email = event.email ?? (await this.read(credential, event.emailId, net));
     } catch {
       throw new GatewayError(502, 'The email could not be read from the provider');
     }
@@ -207,7 +208,8 @@ export class EmailInbox {
       return { accepted: false };
 
     if (email.attachments) {
-      const files = await provider.attachments(credential.apiKey, email.id, net);
+      const files = email.files ??
+        (await provider.attachments?.(credential, email.id, net)) ?? { note: FILE_NOTE };
       if (files.media?.length) message.media = files.media;
       if (files.note) message.text = `${message.text}\n${files.note}`;
     }
@@ -228,5 +230,12 @@ export class EmailInbox {
     });
 
     return accept(channel, message);
+  }
+
+  /** The email an event only names, read back from the provider that keeps it. */
+  private read(credential: EmailCredential, emailId: string, net: Net) {
+    const provider = this.providers[credential.provider];
+    if (!provider.read) throw new Error('The provider sent no email to read');
+    return provider.read(credential, emailId, net);
   }
 }
