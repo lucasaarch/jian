@@ -2,16 +2,13 @@
 
 import { Menu } from '@base-ui/react/menu';
 import {
-  Bot,
   FileCode2,
-  GitPullRequest,
   Globe,
   type LucideIcon,
   Maximize2,
   Minimize2,
   PanelRight,
   Plus,
-  X,
 } from 'lucide-react';
 import {
   type CSSProperties,
@@ -31,6 +28,7 @@ import { usePhone } from '../../lib/phone';
 import { type BrowserPageTab, type InspectorTab, useCrew } from '../../lib/stores/crew';
 import { MIN_CHAT_WIDTH, useLayout } from '../../lib/stores/layout';
 import { watchSize } from '../../lib/watch-size';
+import { InspectorTabs } from './inspector-tabs';
 
 /** The conversation's browser brought forward, or opened if it has none yet. */
 export const showBrowser = () => {
@@ -348,70 +346,13 @@ export function InspectorHost({
               className={`relative z-40 flex h-10 shrink-0 items-center gap-1 pr-[calc(var(--window-controls,0px)+var(--inspector-inset))] ${full && wholePanel && !sidebar ? 'pl-52' : 'pl-(--inspector-inset)'} [-webkit-app-region:no-drag]`}
             >
               <div className="flex min-w-0 flex-1 items-center gap-1">
-                <div
-                  role="tablist"
-                  aria-label="Inspector tabs"
-                  className="flex min-w-0 items-center gap-1 overflow-x-auto"
-                >
-                  {tabs.map((tab, index) => (
-                    <div
-                      key={tab.key}
-                      className="flex min-w-0 shrink-0 items-center rounded-lg transition-colors hover:bg-glass-hover data-[active=true]:bg-glass-press"
-                      data-active={tab.key === following}
-                    >
-                      <button
-                        type="button"
-                        role="tab"
-                        id={`${id}-${index}`}
-                        aria-selected={tab.key === following}
-                        aria-controls={`${id}-panel`}
-                        tabIndex={tab.key === following ? 0 : -1}
-                        className="flex h-7 min-w-0 max-w-44 items-center gap-1.5 rounded-lg pr-1 pl-2 text-xs text-muted transition-colors hover:text-ink aria-selected:text-ink"
-                        title={tab.kind === 'browser' ? tab.title || tab.url : undefined}
-                        onClick={() => useCrew.getState().select(tab.key)}
-                        onKeyDown={(event) => {
-                          const next =
-                            event.key === 'ArrowRight'
-                              ? (index + 1) % tabs.length
-                              : event.key === 'ArrowLeft'
-                                ? (index + tabs.length - 1) % tabs.length
-                                : event.key === 'Home'
-                                  ? 0
-                                  : event.key === 'End'
-                                    ? tabs.length - 1
-                                    : -1;
-                          if (next >= 0) {
-                            event.preventDefault();
-                            const selected = tabs[next];
-                            if (selected) {
-                              useCrew.getState().select(selected.key);
-                              document.getElementById(`${id}-${next}`)?.focus();
-                            }
-                          }
-                        }}
-                      >
-                        {tab.kind === 'browser' ? (
-                          <Globe size={13} />
-                        ) : tab.kind === 'github' ? (
-                          <GitPullRequest size={13} />
-                        ) : tab.kind === 'changes' ? (
-                          <FileCode2 size={13} />
-                        ) : (
-                          <Bot size={13} />
-                        )}
-                        <span className="truncate">{label(tab)}</span>
-                      </button>
-                      <button
-                        type="button"
-                        aria-label={`Close ${label(tab)} tab`}
-                        className="mr-1 grid size-5 shrink-0 place-items-center rounded-full text-muted transition-colors hover:text-ink"
-                        onClick={() => closeTab(tab)}
-                      >
-                        <X size={11} />
-                      </button>
-                    </div>
-                  ))}
-                </div>
+                <InspectorTabs
+                  tabs={tabs}
+                  following={following}
+                  id={id}
+                  label={label}
+                  onClose={closeTab}
+                />
                 {actions.length > 0 && tabs.length > 0 && (
                   <Menu.Root>
                     <Menu.Trigger aria-label="Open in inspector" className={button}>

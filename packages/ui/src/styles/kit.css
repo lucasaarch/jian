@@ -29,6 +29,44 @@
   }
 }
 
+/* A row that scrolls sideways with no scrollbar, as tabs do (`ScrollStrip`, which sets the edge
+   marks): a bar is too low to hold one, and it reads as broken. An edge with more past it fades
+   out over 1.5rem, the room `ScrollStrip` keeps a revealed item clear of. The mask only takes
+   alpha, so black here is opaque, not a colour. */
+@utility scroll-strip {
+  --strip-fade: 1.5rem;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+  &[data-more-start] {
+    -webkit-mask-image: linear-gradient(to right, transparent, black var(--strip-fade));
+    mask-image: linear-gradient(to right, transparent, black var(--strip-fade));
+  }
+  &[data-more-end] {
+    -webkit-mask-image: linear-gradient(to left, transparent, black var(--strip-fade));
+    mask-image: linear-gradient(to left, transparent, black var(--strip-fade));
+  }
+  &[data-more-start][data-more-end] {
+    -webkit-mask-image: linear-gradient(
+      to right,
+      transparent,
+      black var(--strip-fade),
+      black calc(100% - var(--strip-fade)),
+      transparent
+    );
+    mask-image: linear-gradient(
+      to right,
+      transparent,
+      black var(--strip-fade),
+      black calc(100% - var(--strip-fade)),
+      transparent
+    );
+  }
+}
+
 /* A bar flat against the window's edge: the blur and the edge line, without the lift. */
 @utility glass-bar {
   background: var(--glass);

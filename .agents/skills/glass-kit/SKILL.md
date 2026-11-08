@@ -24,6 +24,7 @@ from the rest is a bug.
 | Search and filter a list | `SearchField`, with a `FilterSelect` beside it |
 | On and off, or one of a few | `SwitchControl`, `Toggle`, `Segmented` |
 | List that opens | `Picker`, `MenuEntry`, `MenuDivider`, `menuPopup` |
+| Row of tabs that can outgrow its bar | `ScrollStrip`: no scrollbar, wheel and fades |
 | Anything over the page | `Overlay`, `OverlayActions`, `ConfirmDialog` |
 | Room of pages with a list | `Overlay` with `SettingsLayout`, `SettingsGroup`, `SettingsRow` |
 | Things to connect, side by side | `SettingsCards` holding a `SettingsCard` each |

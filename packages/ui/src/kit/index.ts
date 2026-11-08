@@ -12,6 +12,7 @@ export { Overlay, OverlayActions } from './overlay';
 export { Picker, PickerAction, PickerRow } from './picker';
 export { Progress } from './progress';
 export { RowInput, RowTextArea } from './row-field';
+export { ScrollStrip } from './scroll-strip';
 export { SearchField } from './search-field';
 export { Segmented } from './segmented';
 export { type FieldOption, FilterSelect, SelectButton, SelectField } from './select-field';
