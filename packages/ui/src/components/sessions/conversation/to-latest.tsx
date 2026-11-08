@@ -11,10 +11,16 @@ import { FOLLOW_WITHIN_PX } from '../follow-bottom';
 const below = (view: HTMLElement) => view.scrollHeight - view.scrollTop - view.clientHeight;
 /** A row's height in px; what is not an element of the page has none. */
 const heightOf = (row: Element | null) => (row instanceof HTMLElement ? row.offsetHeight : 0);
+/**
+ * Less than this below the end, in px, is the end: a zoomed or high-density screen scrolls by
+ * fractions of a pixel and may stop just short of it.
+ */
+const AT_END_PX = 1;
 
 /**
- * The way back to the end of a long conversation, over its bottom edge. It shows only to a reader
- * a screen or more from the end, and its dot says something arrived down there meanwhile. It
+ * The way back to the end of a long conversation, over its bottom edge. It shows as soon as the
+ * reader leaves the end, however little, and its dot says something arrived below where the
+ * history no longer follows them. It
  * listens to the scroll and sizes itself, so the history around it never draws for them.
  */
 export const ToLatest = memo(function ToLatest({
@@ -38,7 +44,7 @@ export const ToLatest = memo(function ToLatest({
     let tailHeight = heightOf(tail);
     const measure = () => {
       last = below(view);
-      setAway(last > view.clientHeight);
+      setAway(last > AT_END_PX);
       if (last < FOLLOW_WITHIN_PX) setFresh(false);
     };
     // News is only what lands at the end: a new last row, or the last one growing, as an answer
@@ -52,7 +58,8 @@ export const ToLatest = memo(function ToLatest({
       width = content.clientWidth;
       tail = now;
       tailHeight = heightOf(now);
-      if (news && !rewrapped && last > view.clientHeight) setFresh(true);
+      // Within FOLLOW_WITHIN_PX the history follows the reader to the news: nothing is missed.
+      if (news && !rewrapped && last >= FOLLOW_WITHIN_PX) setFresh(true);
       measure();
     };
     view.addEventListener('scroll', measure, { passive: true });

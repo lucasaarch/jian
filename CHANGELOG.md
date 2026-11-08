@@ -4,6 +4,23 @@ Every release of Jian, newest first.
 
 <!-- Generated from docs/releases by scripts/changelog.mjs. Edit the release note, then run `make changelog`. -->
 
+## 1.9.1 — 2026-11-08
+
+Forwarded emails reach the agent whole, and the way back to the latest message shows up as soon as you scroll.
+
+### Email
+
+* **Forwarded emails arrive whole:** When you forwarded an email from Apple Mail, the agent got only the line you wrote above it. Jian took the forwarded message for the quoted history of a reply and cut it. Now it cuts that history only from a real reply, so a forward reaches the agent complete, up to the 7,800 characters a turn takes.
+
+### Conversations
+
+* **Back to the latest message, sooner:** The round button that takes you to the last message used to wait until you were a full screen up. It now shows as soon as you scroll up from the end, however little, and hides again when you get back there. Its dot also shows for something new that arrives while you're only a little way up. This applies to the desktop app and the web panel.
+
+### Upgrading
+
+* The desktop app updates itself to this release.
+* **Servers:** Recreate the gateway and web containers with the 1.9.1 images, or follow the `latest` tags. There is no migration.
+
 ## 1.9.0 — 2026-11-07
 
 Agents get their own email address, a turn rides out network drops, and long conversations stay light and easy to follow.

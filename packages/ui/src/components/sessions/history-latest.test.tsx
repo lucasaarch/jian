@@ -163,26 +163,30 @@ const arrives = (content: string) =>
 const shown = () => !button().hasAttribute('inert');
 const dotted = () => Boolean(button().querySelector('.to-latest-dot'));
 
-it('stays out of the way at the end and within a screen of it', async () => {
+it('stays out of the way at the end, even a fraction of a pixel short of it', async () => {
   const view = await mount();
   await view.scroll(1500);
 
   expect(shown()).toBe(false);
   expect(button().getAttribute('aria-hidden')).toBe('true');
 
-  await view.scroll(1100);
+  await view.scroll(1499.5);
 
   expect(shown()).toBe(false);
 });
 
-it('shows a screen or more from the end, and goes on coming back', async () => {
+it('shows as soon as the reader scrolls up from the end, and hides back there', async () => {
   const view = await mount();
-  await view.scroll(900);
+  await view.scroll(1490);
 
   expect(shown()).toBe(true);
   expect(button().getAttribute('aria-hidden')).toBeNull();
 
-  await view.scroll(1200);
+  await view.scroll(900);
+
+  expect(shown()).toBe(true);
+
+  await view.scroll(1500);
 
   expect(shown()).toBe(false);
 });
@@ -250,6 +254,17 @@ it('marks a new last row while away, until the reader reaches the end', async ()
 
   expect(dotted()).toBe(false);
   expect(button().getAttribute('aria-label')).toBe('Go to the latest message');
+});
+
+it('marks news a little above the end, where the history no longer follows', async () => {
+  const view = await mount();
+  await view.scroll(1400);
+
+  await arrives('One more thing.');
+  await view.grow(120);
+
+  expect(dotted()).toBe(true);
+  expect(view.top).toBe(1400);
 });
 
 it('marks the last row growing while away, as an answer being written does', async () => {
