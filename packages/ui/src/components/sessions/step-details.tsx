@@ -8,8 +8,8 @@ import { thoughtOf } from './trace';
 /**
  * Where an opened tool reads its whole step, when a brief timeline cut it: by the turn that
  * called it and its call id, since a model may use the same id in another turn. Given by the
- * conversation that read the timeline; without one (the crew drawer, a draft, a test), a tool
- * shows what its step has.
+ * conversation or the subagent drawer that read the timeline; without one (a draft, a test), a
+ * tool shows what its step has.
  */
 export type StepDetails = {
   /** The step whole, read once: a later call for the same tool gets the same answer. */

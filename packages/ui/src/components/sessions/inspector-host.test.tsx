@@ -152,10 +152,11 @@ it('leaves room for a sidebar that arrives after it, as one does behind a stage'
 });
 
 it('waits for its first measurement before deciding that it must take the chatâ€™s place', async () => {
-  let resizeObserver: ResizeObserverCallback | undefined;
+  // Every observer in the Inspector: its tabs watch their own size too.
+  const resizeObservers: ResizeObserverCallback[] = [];
   class Observer {
     constructor(callback: ResizeObserverCallback) {
-      resizeObserver = callback;
+      resizeObservers.push(callback);
     }
     observe() {}
     disconnect() {}
@@ -168,7 +169,7 @@ it('waits for its first measurement before deciding that it must take the chatâ€
 
   room = 660;
   await act(async () => {
-    resizeObserver?.([], {} as ResizeObserver);
+    for (const observed of resizeObservers) observed([], {} as ResizeObserver);
     await new Promise((resolve) => requestAnimationFrame(resolve));
   });
   expect(host()?.hasAttribute('data-full')).toBe(true);
