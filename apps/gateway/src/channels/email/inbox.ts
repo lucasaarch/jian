@@ -1,13 +1,11 @@
 import type { ingressResultSchema } from '@jian/contracts';
-import { and, eq } from 'drizzle-orm';
 import type { z } from 'zod';
 import { GatewayError } from '../../core/errors.js';
 import type { Vault } from '../../security/vault.js';
 import type { Queryable, Store } from '../../storage/database.js';
-import { emailThreads } from '../../storage/schema.js';
 import type { IncomingMessage } from '../channel.js';
 import { channelLog } from '../logging.js';
-import { findChannel } from '../repository.js';
+import { findChannel, findContactByChat, findDeliveryByRemoteId } from '../repository.js';
 import { type ChannelRecord, channelSecret } from '../service.js';
 import { EMAIL_PROVIDERS, emailCredential } from './channel.js';
 import type { MailAuthentication, ReceivedEmail } from './provider.js';
@@ -20,6 +18,7 @@ import {
   oneLine,
   referencesOf,
 } from './text.js';
+import { ID_CHARS, saveEmailThread } from './threads.js';
 
 type IngressResult = z.infer<typeof ingressResultSchema>;
 type Headers = Readonly<Record<string, string | string[] | undefined>>;
@@ -27,8 +26,8 @@ type Headers = Readonly<Record<string, string | string[] | undefined>>;
 /** What the agent reads of one email, below the line that names its subject. */
 const TEXT_CHARS = 7800;
 const SUBJECT_CHARS = 300;
-/** As far as a message id may go into a field the gateway keeps for it. */
-const ID_CHARS = 200;
+/** How many of the ids a reply names are looked up among the emails the agent sent. */
+const ANSWERED_LOOKUPS = 10;
 
 /**
  * Whether the sender's domain vouched for this message. `From` is only text anyone can write,
@@ -41,7 +40,10 @@ export function authenticated(authentication: MailAuthentication): boolean {
   return authentication?.dmarc === 'pass' || authentication?.dkim === 'pass';
 }
 
-/** Mail a machine wrote on its own — an out-of-office, a bounce, a list — is not a turn. */
+/**
+ * Mail a machine wrote on its own — an out-of-office, a bounce, a list, a ticket system's
+ * acknowledgement. It is never a turn and never answered, or two machines answer each other.
+ */
 export function automatic(headers: Record<string, string>): boolean {
   const submitted = headers['auto-submitted']?.split(';')[0]?.trim().toLowerCase();
   const precedence = headers.precedence?.trim().toLowerCase();
@@ -53,11 +55,15 @@ export function automatic(headers: Record<string, string>): boolean {
   );
 }
 
-/** One received email as a message for the agent, or undefined when it is not one to answer. */
+/**
+ * One received email as a message for the agent, or undefined when it is not one to read.
+ * Automatic mail is marked, not dropped: the inbox keeps it only when it answers an email the
+ * agent sent, and the service never answers it.
+ */
 export function incoming(email: ReceivedEmail, own: string) {
   const from = bareAddress(email.headers.from ?? email.from);
   if (!from || from === own || from.length > 100) return undefined;
-  if (!authenticated(email.authentication) || automatic(email.headers)) return undefined;
+  if (!authenticated(email.authentication)) return undefined;
 
   const subject = oneLine(email.subject).slice(0, SUBJECT_CHARS);
   const body = mailBody(email.text, email.html);
@@ -78,6 +84,7 @@ export function incoming(email: ReceivedEmail, own: string) {
     ...(name ? { displayName: name } : {}),
     ...(messageId ? { channelMessage: { id: messageId } } : {}),
     ...(answered ? { target: answered } : {}),
+    ...(automatic(email.headers) ? { automatic: true } : {}),
   };
 
   const thread: EmailThread | undefined = messageId
@@ -91,22 +98,23 @@ export function incoming(email: ReceivedEmail, own: string) {
   return { message, thread };
 }
 
-/** The thread a reply to this person continues, when they have written in one. */
-export async function findEmailThread(
-  db: Queryable,
-  channelId: string,
-  chatId: string,
-): Promise<EmailThread | undefined> {
-  const [row] = await db
-    .select({
-      subject: emailThreads.subject,
-      messageId: emailThreads.messageId,
-      references: emailThreads.references,
-    })
-    .from(emailThreads)
-    .where(and(eq(emailThreads.channelId, channelId), eq(emailThreads.chatId, chatId)))
-    .limit(1);
-  return row;
+const domainOf = (address: string) => address.slice(address.lastIndexOf('@') + 1);
+
+/**
+ * The address the agent sent the email this one answers to, from the ids it names: its
+ * `In-Reply-To` first, then its `References` from the newest. Only the `Message-ID`s kept on the
+ * agent's own deliveries match, so naming a thread takes having been sent a message in it.
+ */
+async function answeredAddress(db: Queryable, channelId: string, email: ReceivedEmail) {
+  const named = [
+    ...messageIds(email.headers['in-reply-to']),
+    ...messageIds(email.headers.references).reverse(),
+  ].filter((id) => id.length <= ID_CHARS);
+  for (const id of [...new Set(named)].slice(0, ANSWERED_LOOKUPS)) {
+    const delivery = await findDeliveryByRemoteId(db, channelId, id);
+    if (delivery) return delivery.chatId;
+  }
+  return undefined;
 }
 
 /**
@@ -167,6 +175,29 @@ export class EmailInbox {
     }
 
     const { message, thread } = read;
+    const answered = await answeredAddress(this.store.db, channelId, email);
+    // A support desk answers from another address of its domain than the one written to. In
+    // the agent's own thread, signed by that domain, and from no contact of its own, it is the
+    // reply of the address the agent wrote to. Nothing else widens who a message is from.
+    if (
+      answered &&
+      answered !== message.chatId &&
+      domainOf(answered) === domainOf(message.chatId) &&
+      !(await findContactByChat(this.store.db, channelId, message.chatId))
+    ) {
+      message.text = `From: ${message.chatId}\n${message.text}`.slice(0, TEXT_CHARS);
+      message.actorId = answered;
+      message.chatId = answered;
+    }
+    // A machine's mail matters only as an answer to the agent's own email, which the service
+    // knows by the wait it keeps on a contact; from anyone else it is noise, dropped unread.
+    if (
+      message.automatic &&
+      answered !== message.chatId &&
+      !(await findContactByChat(this.store.db, channelId, message.chatId))
+    )
+      return { accepted: false };
+
     if (email.attachments) {
       const files = await provider.attachments(credential.apiKey, email.id, net);
       if (files.media?.length) message.media = files.media;
@@ -174,21 +205,9 @@ export class EmailInbox {
     }
 
     if (thread) {
-      await this.store.transaction(channel.profileId, async (tx) => {
-        const values = { channelId, chatId: message.chatId, ...thread, updatedAt: new Date() };
-        await tx
-          .insert(emailThreads)
-          .values(values)
-          .onConflictDoUpdate({
-            target: [emailThreads.channelId, emailThreads.chatId],
-            set: {
-              subject: values.subject,
-              messageId: values.messageId,
-              references: values.references,
-              updatedAt: values.updatedAt,
-            },
-          });
-      });
+      await this.store.transaction(channel.profileId, (tx) =>
+        saveEmailThread(tx, channelId, message.chatId, thread),
+      );
     }
 
     return accept(channel, message);

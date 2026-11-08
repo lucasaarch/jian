@@ -1,4 +1,9 @@
-/** What the agent may do with the people its owner approved. Nothing here reaches a stranger. */
+import type { EmailRequest } from './service.js';
+
+/**
+ * What the agent may do with the people its owner approved. The one way to a stranger is
+ * `email`, and only after the owner read that very email (`needsOwner`).
+ */
 export interface Outreach {
   reachable(
     profileId: string,
@@ -19,4 +24,13 @@ export interface Outreach {
     text: string,
     requestKey: string,
   ): Promise<{ to: string; channel: string; sessionId: string } | undefined>;
+  mailbox(profileId: string): Promise<{ channelId: string; address: string } | undefined>;
+  needsOwner(profileId: string, to: string): Promise<boolean>;
+  email(
+    profileId: string,
+    fromSessionId: string,
+    runId: string,
+    request: EmailRequest,
+    requestKey: string,
+  ): Promise<{ to: string; contact: 'approved' | 'pending'; waitingUntil?: string }>;
 }

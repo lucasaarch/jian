@@ -35,6 +35,7 @@ import type { Sessions } from '../sessions/service.js';
 import { findSkill } from '../skills/builtin/index.js';
 import { longRunningWork, longRunningWorkFor } from '../skills/builtin/long-running-work.js';
 import { managingContext, managingContextFor } from '../skills/builtin/managing-context.js';
+import { ownerAndContacts, ownerAndContactsFor } from '../skills/builtin/owner-and-contacts.js';
 import { remoteControl, remoteControlFor } from '../skills/builtin/remote-control.js';
 import { type WebAccess, webResearch, webResearchFor } from '../skills/builtin/web-research.js';
 import { worktreesFor, worktrees as worktreesSkill } from '../skills/builtin/worktrees.js';
@@ -121,6 +122,15 @@ export type ToolServices = {
 };
 
 /**
+ * A tool whose call waits for the owner even where actions run on their own: Auto, or a subagent.
+ * True for this input means the owner decides; only Full access runs it without them.
+ */
+export type OwnerGate = { asksOwner: (input: unknown) => Promise<boolean> };
+
+export const asksOwner = (definition: unknown, input: unknown): Promise<boolean> =>
+  (definition as Partial<OwnerGate>).asksOwner?.(input) ?? Promise.resolve(false);
+
+/**
  * A skill as this run may load it: the owner's own of that name as they wrote it, and the two
  * built-in ones that say only what the run can do, written for this run.
  */
@@ -135,6 +145,8 @@ export function skillFor(
     worktrees?: { create: boolean; machine: boolean; signals: boolean; files?: boolean };
     /** The conversation targets a machine, and whether this run's file tools work on it. */
     machine?: { files: boolean };
+    /** The run has `send_email`. */
+    email?: boolean;
   },
   /** The skills of the conversation's workspaces, named apart from the profile's already. */
   projectSkills: readonly Skill[] = [],
@@ -156,6 +168,7 @@ export function skillFor(
     });
   }
   if (skill === remoteControl) return remoteControlFor(can.machine);
+  if (skill === ownerAndContacts) return ownerAndContactsFor(Boolean(can.email));
   return skill;
 }
 
@@ -181,6 +194,8 @@ export function profileTools(
    * bounds its result, or a page sized in other units would be cut again.
    */
   scale?: () => number,
+  /** Whether the profile has a live email channel this run may write from (`send_email`). */
+  email = false,
 ): ToolSet {
   const coordination = new Coordination(services);
   const rechecked = new Set<string>();
@@ -549,6 +564,7 @@ export function profileTools(
             web,
             xConnected,
             worktrees,
+            email,
             ...(remoteTarget ? { machine: { files: Boolean(machineFiles) } } : {}),
           },
           projectSkills,
@@ -759,6 +775,35 @@ export function profileTools(
         services.errands.ask(run.profileId, contactId, run.sessionId, run.id, text, expectReply),
     }),
 
+    // The owner reads an email to anyone but an approved contact before it leaves, whatever
+    // this conversation's protection short of Full access: see `asksOwner` below.
+    send_email: tool({
+      description:
+        'Send an email from this agent’s own address to any address, such as a company’s support. An address that is not an approved contact waits for the owner to approve this very email first. Without a subject it continues your latest thread with that address. With expectReply, every reply in the next 7 days comes back to this conversation, an automatic acknowledgement included, not in this turn: say so to whoever asked.',
+      inputSchema: z.object({
+        to: z.string().trim().min(3).max(100),
+        subject: z
+          .string()
+          .trim()
+          .min(1)
+          .max(200)
+          .optional()
+          .describe('Starts a new thread. Required for the first email to an address.'),
+        // Short enough that the owner's approval card shows all of it.
+        text: z.string().trim().min(1).max(3500),
+        expectReply: z.boolean().default(true),
+        requestKey: z.string().min(1).max(120).optional(),
+      }),
+      execute: async ({ requestKey, ...request }, { toolCallId }) =>
+        services.errands.email(
+          run.profileId,
+          run.sessionId,
+          run.id,
+          request,
+          requestKey ?? toolCallId,
+        ),
+    }),
+
     read_inbox: tool({
       description: 'Read messages sent to this session.',
       inputSchema: z.object({}),
@@ -786,6 +831,17 @@ export function profileTools(
         coordination.release(run.profileId, { ...input, sessionId: run.sessionId }),
     }),
   };
+
+  // Read by the runtime before the call, as it reads where an action lands (`asksOwner`).
+  if (email)
+    Object.assign(tools.send_email as object, {
+      asksOwner: (input: unknown) =>
+        services.errands.needsOwner(
+          run.profileId,
+          String((input as { to?: unknown } | null)?.to ?? ''),
+        ),
+    } satisfies OwnerGate);
+  else delete tools.send_email;
 
   Object.assign(tools, {
     list_agents: tool({
@@ -965,7 +1021,7 @@ export const TOOL_GROUPS = {
   contacts: {
     summary:
       'list the people the owner approved on your channels and write to one, optionally bringing their answer back here',
-    tools: ['list_contacts', 'message_contact'],
+    tools: ['list_contacts', 'message_contact', 'send_email'],
   },
   self: {
     summary: 'read and version your own identity, and create profiles',
@@ -975,6 +1031,10 @@ export const TOOL_GROUPS = {
 } as const;
 
 export type ToolGroup = keyof typeof TOOL_GROUPS;
+
+/** The `contacts` group for a run that has `send_email`. */
+export const CONTACTS_WITH_EMAIL_SUMMARY =
+  'list the people the owner approved on your channels and write to one, or email any address once the owner approves that email, optionally bringing the answers back here';
 
 /** The `files` group for a run whose file tools reach its machine, not the gateway's. */
 export const MACHINE_FILES_SUMMARY =

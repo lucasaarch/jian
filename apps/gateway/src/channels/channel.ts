@@ -3,7 +3,11 @@ import type { z } from 'zod';
 
 export type ChannelType = z.infer<typeof channelTypeSchema>;
 
-export type IncomingMessage = z.infer<typeof ingressSchema>;
+/**
+ * `automatic` is the gateway's own mark, never part of the ingress contract: only the email
+ * inbox sets it, for mail a machine wrote on its own, which nothing may answer.
+ */
+export type IncomingMessage = z.infer<typeof ingressSchema> & { automatic?: boolean };
 
 export interface ChannelRequest {
   type: ChannelType;
