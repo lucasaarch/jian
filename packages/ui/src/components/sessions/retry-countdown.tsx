@@ -2,13 +2,21 @@
 
 import { useEffect, useRef } from 'react';
 
+/** A wait in its two largest units: a provider's retry-after can be hours away. */
 const wait = (seconds: number) =>
-  seconds < 60 ? `${seconds}s` : `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
+  seconds < 60
+    ? `${seconds}s`
+    : seconds < 3600
+      ? `${Math.floor(seconds / 60)}m ${seconds % 60}s`
+      : `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`;
+
+export const attemptsText = (attempts: number) =>
+  `${attempts} ${attempts === 1 ? 'attempt' : 'attempts'}`;
 
 /** The attempts so far and the whole seconds to the next, rounded up so it reaches zero on time. */
 function retryText(attempts: number, nextAt: number, now: number) {
   const left = Math.max(0, Math.ceil((nextAt - now) / 1000));
-  return `attempt ${attempts} · ${left > 0 ? `next in ${wait(left)}` : 'trying now'}`;
+  return `${attemptsText(attempts)} · ${left > 0 ? `next in ${wait(left)}` : 'trying now'}`;
 }
 
 /**

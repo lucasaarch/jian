@@ -283,14 +283,18 @@ it('a progress frame that is reconnecting shows it, counting down to the next at
 
     expect(line()?.querySelector('.thought-label')?.textContent).toBe('Reconnecting to the model');
     const retry = line()?.querySelector('.thought-retry');
-    expect(retry?.textContent).toBe('attempt 12 · next in 30s');
+    expect(retry?.textContent).toBe('12 attempts · next in 30s');
+    // Said to a screen reader too, with why, since the countdown itself is hidden from it.
+    expect(line()?.querySelector('[role="status"]')?.textContent).toBe(
+      'Reconnecting to the model · connection timed out, 12 attempts',
+    );
 
     // The countdown paints its own element: nothing else is drawn again for it.
     const label = line()?.querySelector('.thought-label');
     await act(async () => {
       await vi.advanceTimersByTimeAsync(5_000);
     });
-    expect(line()?.querySelector('.thought-retry')?.textContent).toBe('attempt 12 · next in 25s');
+    expect(line()?.querySelector('.thought-retry')?.textContent).toBe('12 attempts · next in 25s');
     expect(line()?.querySelector('.thought-label')).toBe(label);
   } finally {
     await view.done();

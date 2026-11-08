@@ -182,6 +182,7 @@ export function ThoughtLine({
   finishedAt,
   failed = false,
   after,
+  spoken: said,
 }: {
   working: boolean;
   /** It ended without finishing: the settled mark is a cross, not a check. */
@@ -195,6 +196,8 @@ export function ThoughtLine({
   finishedAt?: string | number;
   /** What follows the clock in the head, such as the countdown to a retry. */
   after?: ReactNode;
+  /** What a screen reader hears after the label while it works: what `after` shows, in words. */
+  spoken?: string;
 }) {
   // Nothing opens itself, not even an in-progress run; each tool's details are independently folded.
   const [open, setOpen] = useState(false);
@@ -253,7 +256,11 @@ export function ThoughtLine({
         {after}
         {foldable && <ChevronDown size={14} className="thought-chevron" aria-hidden="true" />}
         <span className="sr-only" role="status">
-          {working || settled === undefined ? current : `${summary} · ${spoken(settled)}`}
+          {working || settled === undefined
+            ? working && said
+              ? `${current} · ${said}`
+              : current
+            : `${summary} · ${spoken(settled)}`}
         </span>
       </button>
       {foldable && open && (

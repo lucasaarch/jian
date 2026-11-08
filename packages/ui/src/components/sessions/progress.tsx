@@ -6,7 +6,7 @@ import { Markdown } from '../ui/markdown';
 import { RefineFrame } from '../ui/refine-frame';
 import { AgentLine } from './conversation/agent-line';
 import { drawnBox } from './media';
-import { RetryCountdown } from './retry-countdown';
+import { attemptsText, RetryCountdown } from './retry-countdown';
 import { ThoughtLine, type ThoughtStep } from './thought-line';
 import { isMcpName, toolLabel } from './tool-labels';
 
@@ -110,6 +110,9 @@ export function LiveThought({
           steps={traceOf(steps)}
           startedAt={startedAt}
           finishedAt={writing ? (steps.at(-1)?.finishedAt ?? run.progress?.updatedAt) : undefined}
+          {...(reconnecting
+            ? { spoken: `${reconnecting.reason}, ${attemptsText(reconnecting.attempts)}` }
+            : {})}
           after={
             reconnecting && (
               <RetryCountdown
