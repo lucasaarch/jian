@@ -32,6 +32,9 @@ const RATE_LIMIT_KINDS = new Set([
   'tokens',
   'requests',
   'RESOURCE_EXHAUSTED',
+  // Compatible servers' own words for it.
+  'too_many_requests',
+  'rate_limit',
 ]);
 /**
  * Kinds that say the provider refuses this call, whatever else beside them suggests waiting: a
@@ -174,12 +177,14 @@ function verdict(kinds: string[]): 'refused' | 'rate limited' | 'busy' | undefin
 /**
  * Whether a 429 is a rate limit, which passes with time, rather than a refusal: a spent quota, a
  * billing or permission error, or the bare 429 Anthropic answers a malformed subscription request
- * with. A body that names its kind decides, since a spent quota can carry rate-limit headers too:
- * a rate limit waits, and any other kind it names refuses. A body that names none leaves it to
- * the headers.
+ * with. A refusal kind refuses even beside rate-limit headers, which a spent quota can carry; a
+ * rate-limit kind waits. A kind Jian does not know decides nothing, so a server's own word for a
+ * rate limit still waits when its headers say so: the headers decide, as for a body naming none.
  */
 function rateLimited(link: Link, kinds: string[]): boolean {
-  if (kinds.length) return verdict(kinds) === 'rate limited';
+  const said = verdict(kinds);
+  if (said === 'refused') return false;
+  if (said === 'rate limited') return true;
   const headers = link.responseHeaders as Link | undefined;
   return Object.keys(headers ?? {}).some(
     (name) =>

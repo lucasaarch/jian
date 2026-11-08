@@ -41,8 +41,8 @@ panel says **Reconnecting to the model** meanwhile, with the attempts and when t
 goes. The turn goes on where it was once a call gets through; the owner's Cancel stops it.
 
 - A 429 is waited out only when it is a rate limit: its body names one (Gemini's
-  \`RESOURCE_EXHAUSTED\` among them), or, when the body names nothing, it says when to come back
-  or carries the provider's rate-limit headers. A subscription's usage limit waits until it
+  \`RESOURCE_EXHAUSTED\` among them), or, when the body names no refusal, it says when to come
+  back or carries the provider's rate-limit headers. A subscription's usage limit waits until it
   resets. Any other 429, such as a spent quota, a billing error or a refused subscription
   request, fails at once with the provider's own words.
 - A look back in your Learning conversation gets one round, ten attempts, then fails as before.

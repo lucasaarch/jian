@@ -171,3 +171,42 @@ describe('one precedence, over HTTP and in a stream', () => {
     expect(retryable(told)).toMatchObject({ reason: 'HTTP 429, rate limited' });
   });
 });
+
+describe('a 429 naming a kind Jian does not know', () => {
+  const http = (error: object, headers: Record<string, string> = {}) => ({
+    statusCode: 429,
+    responseHeaders: headers,
+    responseBody: JSON.stringify({ error: { message: 'Said by the provider.', ...error } }),
+  });
+
+  it('is a rate limit when the kind says too many requests, headers or not', () => {
+    expect(retryable(http({ type: 'too_many_requests' }))).toMatchObject({
+      reason: 'HTTP 429, rate limited',
+    });
+    expect(retryable(http({ code: 'rate_limit' }))).toMatchObject({
+      reason: 'HTTP 429, rate limited',
+    });
+    expect(retryable({ message: 'Slow down.', type: 'too_many_requests' })).toMatchObject({
+      reason: 'rate limited',
+    });
+  });
+
+  it('is left to its headers otherwise: waited out with them, refused without', () => {
+    expect(retryable(http({ code: 'something_new' }, { 'retry-after': '5' }))).toEqual({
+      reason: 'HTTP 429, rate limited',
+      afterMs: 5_000,
+    });
+    expect(retryable(http({ code: 'something_new' }))).toBeUndefined();
+  });
+
+  it('still refuses a spent quota beside rate-limit headers', () => {
+    expect(
+      retryable(
+        http(
+          { type: 'insufficient_quota' },
+          { 'retry-after': '5', 'x-ratelimit-remaining-requests': '0' },
+        ),
+      ),
+    ).toBeUndefined();
+  });
+});
