@@ -22,19 +22,43 @@ const RETRIED_STATUS: Record<number, string> = {
 };
 
 /**
- * The status a stream error stands for when it names its kind and no status, as OpenAI-style
- * servers send one in the stream after a 200.
+ * The kinds of error that say a call is waiting on a rate limit, which passes with time: Anthropic's
+ * and OpenAI's own, the `tokens` and `requests` types of older OpenAI-compatible servers, and
+ * Gemini's `RESOURCE_EXHAUSTED` status.
  */
-const KIND_STATUS: Record<string, number> = {
+const RATE_LIMIT_KINDS = new Set([
+  'rate_limit_error',
+  'rate_limit_exceeded',
+  'tokens',
+  'requests',
+  'RESOURCE_EXHAUSTED',
+]);
+/**
+ * Kinds that say the provider refuses this call, whatever else beside them suggests waiting: a
+ * spent quota, billing, a credential, a permission, a request it will never take.
+ */
+const REFUSAL_KINDS = new Set([
+  'insufficient_quota',
+  'billing_error',
+  'authentication_error',
+  'permission_error',
+  'invalid_request_error',
+  'not_found_error',
+  'request_too_large',
+  'context_length_exceeded',
+  'PERMISSION_DENIED',
+  'UNAUTHENTICATED',
+  'INVALID_ARGUMENT',
+]);
+/**
+ * The status a stream error stands for when it names a busy server and no status, as
+ * OpenAI-style servers send one in the stream after a 200.
+ */
+const BUSY_KINDS: Record<string, number> = {
   server_error: 500,
-  rate_limit_exceeded: 429,
-  rate_limit_error: 429,
   overloaded: 529,
   overloaded_error: 529,
 };
-
-/** The kinds of error body that say a 429 is a rate limit, on Anthropic and OpenAI. */
-const RATE_LIMIT_KINDS = new Set(['rate_limit_error', 'rate_limit_exceeded']);
 /**
  * Kinds that say nothing about which 429 it is: Anthropic's envelope, and the bare `error` a
  * subscription answers with. Beside them the headers decide.
@@ -101,33 +125,61 @@ function retryAfter(headers: Link | undefined, now: number): number | undefined 
 }
 
 /**
- * The kinds an error names, from the link itself (a stream error part) or the body it carries:
- * the parsed `data` when the provider parsed it, else `responseBody`, parsed once here.
+ * The body an error carries: the parsed `data` when the provider parsed it, else `responseBody`,
+ * parsed here once. A stream error part has its fields on itself and its frame as `data`.
  */
-function kindsOf(link: Link): string[] {
-  let body = link.data;
-  if (body === undefined && typeof link.responseBody === 'string') {
-    try {
-      body = JSON.parse(link.responseBody);
-    } catch {
-      body = undefined;
-    }
+function bodyOf(link: Link): Link | undefined {
+  if (link.data && typeof link.data === 'object') return link.data as Link;
+  if (typeof link.responseBody !== 'string' || !link.responseBody) return undefined;
+  try {
+    const body: unknown = JSON.parse(link.responseBody);
+    return body && typeof body === 'object' ? (body as Link) : undefined;
+  } catch {
+    return undefined;
   }
-  const inner = (body as { error?: Link } | undefined)?.error;
-  return [link.type, link.code, inner?.type, inner?.code].filter(
-    (kind): kind is string => typeof kind === 'string',
+}
+
+/** The kinds an error names, on itself and in its body's `error`: types, codes and statuses. */
+function kindsOf(link: Link, body: Link | undefined): string[] {
+  const inner = (body?.error ?? undefined) as Link | undefined;
+  return [link.type, link.code, link.status, inner?.type, inner?.code, inner?.status].filter(
+    (kind): kind is string => typeof kind === 'string' && !VAGUE_KINDS.has(kind),
   );
+}
+
+/** Gemini's own retry-after: a `google.rpc.RetryInfo` in the details, as `"17s"`, in ms. */
+function retryInfo(body: Link | undefined): number | undefined {
+  const details = (body?.error as Link | undefined)?.details;
+  if (!Array.isArray(details)) return undefined;
+  for (const detail of details as Link[]) {
+    if (!String(detail?.['@type'] ?? '').endsWith('google.rpc.RetryInfo')) continue;
+    const delay = /^(\d+(?:\.\d+)?)s$/.exec(String(detail.retryDelay ?? '').trim());
+    if (delay) return Number(delay[1]) * 1000;
+  }
+  return undefined;
+}
+
+/**
+ * What the kinds an error names say, by one precedence on every path: a refusal fails, whatever
+ * else is beside it; then a rate limit waits; then a busy server waits. `undefined` when they say
+ * none of these, and something else must decide.
+ */
+function verdict(kinds: string[]): 'refused' | 'rate limited' | 'busy' | undefined {
+  if (kinds.some((kind) => REFUSAL_KINDS.has(kind))) return 'refused';
+  if (kinds.some((kind) => RATE_LIMIT_KINDS.has(kind))) return 'rate limited';
+  if (kinds.some((kind) => kind in BUSY_KINDS)) return 'busy';
+  return undefined;
 }
 
 /**
  * Whether a 429 is a rate limit, which passes with time, rather than a refusal: a spent quota, a
  * billing or permission error, or the bare 429 Anthropic answers a malformed subscription request
- * with. A body that names its kind decides, since a spent quota can carry rate-limit headers too;
- * a body that names none leaves it to the headers.
+ * with. A body that names its kind decides, since a spent quota can carry rate-limit headers too:
+ * a rate limit waits, and any other kind it names refuses. A body that names none leaves it to
+ * the headers.
  */
-function rateLimited(link: Link): boolean {
-  const kinds = kindsOf(link).filter((kind) => !VAGUE_KINDS.has(kind));
-  if (kinds.length) return kinds.some((kind) => RATE_LIMIT_KINDS.has(kind));
+function rateLimited(link: Link, kinds: string[]): boolean {
+  if (kinds.length) return verdict(kinds) === 'rate limited';
   const headers = link.responseHeaders as Link | undefined;
   return Object.keys(headers ?? {}).some(
     (name) =>
@@ -146,19 +198,31 @@ function rateLimited(link: Link): boolean {
 export function retryable(error: unknown): { reason: string; afterMs?: number } | undefined {
   const links = chain(error);
   for (const link of links) {
+    const body = bodyOf(link);
+    const kinds = kindsOf(link, body);
     if (typeof link.statusCode === 'number') {
       const said = RETRIED_STATUS[link.statusCode];
-      if (!said || (link.statusCode === 429 && !rateLimited(link))) return undefined;
-      const afterMs = retryAfter(link.responseHeaders as Link | undefined, Date.now());
+      if (!said || (link.statusCode === 429 && !rateLimited(link, kinds))) return undefined;
+      const waits = [
+        retryAfter(link.responseHeaders as Link | undefined, Date.now()),
+        retryInfo(body),
+      ].filter((ms): ms is number => ms !== undefined);
       return {
         reason: `HTTP ${link.statusCode}, ${said}`,
-        ...(afterMs !== undefined ? { afterMs } : {}),
+        ...(waits.length ? { afterMs: Math.max(...waits) } : {}),
       };
     }
-    const kind = [link.code, link.type].find(
-      (value): value is string => typeof value === 'string' && value in KIND_STATUS,
-    );
-    if (kind) return { reason: RETRIED_STATUS[KIND_STATUS[kind] ?? 500] ?? 'server error' };
+    // A stream error after a 200 names its kind and no status: the same precedence decides.
+    const said = verdict(kinds);
+    if (said === 'refused') return undefined;
+    if (said === 'rate limited') {
+      const afterMs = retryInfo(body);
+      return { reason: 'rate limited', ...(afterMs !== undefined ? { afterMs } : {}) };
+    }
+    if (said === 'busy') {
+      const kind = kinds.find((value) => value in BUSY_KINDS) ?? 'server_error';
+      return { reason: RETRIED_STATUS[BUSY_KINDS[kind] ?? 500] ?? 'server error' };
+    }
   }
   for (const link of links) {
     const codes = [
