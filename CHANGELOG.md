@@ -4,6 +4,47 @@ Every release of Jian, newest first.
 
 <!-- Generated from docs/releases by scripts/changelog.mjs. Edit the release note, then run `make changelog`. -->
 
+## 1.9.0 — 2026-11-07
+
+Agents get their own email address, a turn rides out network drops, and long conversations stay light and easy to follow.
+
+### Email
+
+* **An address of the agent's own:** Connect a Resend API key and an address on a domain verified for receiving, and the agent reads and answers email there. Mail is taken in only when its sender's domain authenticates it. Auto-replies and mailing lists are ignored, and a stranger waits as a pending contact until you approve them. Replies stay in their thread, and attachments travel both ways.
+* **Writing to anyone, with your say:** The agent can email any address. The first email to someone who isn't an approved contact waits for you to read and approve it, address and subject included. After that the address is a contact, and later emails to it go out without asking. Replies come back to the conversation that wrote.
+* **Each correspondent gets their own conversation:** The agent answers people in those conversations and tells you what matters. When a service asks for something only you have, such as a code, a password or a payment, the agent asks you first.
+* **Signing up to services:** The agent can sign up to a service with its own address and read the confirmation email or code it gets back. It can also search everything it has sent and received.
+
+### Conversations
+
+* **Subagents at work, one click away:** A badge above the composer lists the subagents that are working, with what each is doing. Click one to follow it in the Inspector, instead of scrolling back to its card. The badge goes away when none are working.
+* **Back to the latest message:** When you scroll up, a round button appears over the end of the conversation and takes you back to the last message. A dot on it means something new arrived below.
+* **Lighter tool calls:** A turn's tool calls now come as short previews, and a tool's full input and output are fetched only when you open it. A long turn no longer downloads megabytes on every step.
+* **The subagent drawer shows the right agent:** Switching tabs in the Inspector could show another subagent's messages, and a finished subagent's tool calls could disappear. Both are fixed. The drawer reads only that subagent's own turn, and its text and header now sit a gutter in from the edge.
+* **Inspector tabs:** With many tabs open, the strip scrolls sideways with the mouse wheel, shows no scrollbar, and keeps the open tab in view.
+
+### Model calls
+
+* **A network drop no longer ends the turn:** When a call to the model fails because the network or the provider is down, the agent keeps trying until it gets through. It makes 10 attempts a second apart, then waits 30 seconds, 1, 2 and 4 minutes, and then every 5 minutes for as long as it takes. When the provider says how long to wait, it waits that long. While it waits, the working line says "Reconnecting to the model" with the attempts so far and a countdown, and stopping the run ends the wait.
+* **Rate limits wait, refusals don't:** A 429 that is a rate limit, including Gemini's, waits as above. A 429 that is a refusal, such as an exhausted quota or a malformed subscription request, fails at once with the provider's message. Other errors that waiting can't fix, such as a bad key or a request that is too large, also fail at once.
+* **Learning stops sooner:** A background look back at a turn makes one round of 10 attempts, then gives up, so it never holds a slot waiting on the network.
+
+### Desktop
+
+* **No more false "gateway offline":** The app checks each gateway on a connection of its own, so a busy conversation no longer makes it think the gateway went away. A check that gets no answer now says "No answer in 8 seconds".
+
+### Chats
+
+* **WhatsApp Business is gone:** The WhatsApp Business (Meta Cloud API) channel is removed. WhatsApp keeps working through the linked app.
+
+### Upgrading
+
+* The desktop app updates itself to this release.
+* **Servers:** Recreate the gateway and web containers with the 1.9.0 images, or follow the `latest` tags. Migrations 0097 to 0100 run when the gateway starts.
+* **WhatsApp Business channels:** Migration 0098 disconnects every WhatsApp Business channel and discards its stored credentials. Its contacts and conversations stay. Messages still waiting to be sent through one are marked failed. To keep talking to those people, connect WhatsApp through the linked app.
+* **Email:** The gateway needs `JIAN_PUBLIC_URL` set to the address the internet reaches it at, so Resend can deliver incoming mail. Then add an Email channel in the agent's settings, under Channels, with a Resend API key and an address on a domain verified for receiving.
+* **API:** `GET /v1/profiles/{profileId}/sessions/{sessionId}/timeline` takes `brief=1` for short previews, and `GET /v1/profiles/{profileId}/sessions/{sessionId}/runs/{runId}/steps/{toolCallId}` returns one tool step in full. A run's `progress` can carry `reconnecting`, with the attempts, the next try and the reason, while it waits on the model.
+
 ## 1.8.0 — 2026-11-07
 
 Answers flow in as the agent writes them, the chat stops jumping, and the agent's questions in a chat come to you.
