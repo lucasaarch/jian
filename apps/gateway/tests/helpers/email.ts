@@ -9,6 +9,9 @@ const token = 'synthetic-outreach-admin-token-32-chars';
 const secret = `whsec_${randomBytes(24).toString('base64')}`;
 const apiKey = 're_synthetic_test_key';
 export const support = 'support@contabo.test';
+/** Why Mia writes to the desk, as she would give it with the email. */
+export const brief =
+  'Get the owner’s VPS booting again; tell them when it works or it costs money.';
 
 function sign(body: string) {
   const at = Math.floor(Date.now() / 1000);
@@ -170,19 +173,21 @@ export async function emailSetup() {
 
   /** An outreach email as an approved call sends it, and the dispatcher delivers it. */
   const outreach = async () => {
-    await services.errands.email(
+    const sent = await services.errands.email(
       profile.id,
       owner.id,
       writing.id,
-      { to: support, subject: 'VPS down', text: 'My VPS does not boot.', expectReply: true },
+      { to: support, subject: 'VPS down', text: 'My VPS does not boot.', brief },
       'outreach',
     );
     await channels.dispatch();
+    return sent;
   };
 
-  /** What the owner's conversation now holds, newest last. */
-  const ownerMessages = async () =>
-    (await services.sessions.messages(profile.id, owner.id, 100)).map((m) => m.content);
+  /** What a conversation now holds, newest last: the owner's unless another is named. */
+  const messagesOf = async (sessionId = owner.id) =>
+    (await services.sessions.messages(profile.id, sessionId, 100)).map((m) => m.content);
+  const ownerMessages = () => messagesOf();
 
   /** Closes the turns the replies started, as a worker would once they answered. */
   const settle = async () => {
@@ -230,6 +235,7 @@ export async function emailSetup() {
     another,
     outreach,
     ownerMessages,
+    messagesOf,
     settle,
     contactOf,
   };

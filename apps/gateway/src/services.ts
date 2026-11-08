@@ -1,5 +1,6 @@
 import { localPlace, remotePlace } from './agent/github-git-place.js';
 import { prepareGitAccess } from './agent/worker-workspace.js';
+import { Contacts } from './channels/contacts.js';
 import { Contexts } from './context/service.js';
 import type { Clock } from './core/clock.js';
 import { Decisions } from './decisions/service.js';
@@ -230,7 +231,7 @@ export function buildServices({
     settings,
     lifecycle,
     contexts: new Contexts(store, runs, sessions, settings, decisions.judge, worktrees),
-    errands: new Errands(store, clock),
+    errands: new Errands(store, clock, new Contacts({ profiles, sessions, store }, clock)),
     work: new Work(store, sessions, runs, clock, decisions.judge),
     objectives: new ObjectiveContinuation(store, sessions, runs, clock),
     pulls,

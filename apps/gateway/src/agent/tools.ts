@@ -779,7 +779,7 @@ export function profileTools(
     // whatever this conversation's protection short of Full access: see `asksOwner` below.
     send_email: tool({
       description:
-        'Send an email from this agent’s own address to any address, such as a company’s support. The first email to an address that is not an approved contact waits for the owner to approve it; later emails to it from this conversation go without asking while its replies still come back here. Without a subject it continues your latest thread with that address. With expectReply, every reply in the next 7 days comes back to this conversation, an automatic acknowledgement included, not in this turn: say so to whoever asked.',
+        'Send an email from this agent’s own address to any address, such as a company’s support. The first email to an address that is not an approved contact waits for the owner to approve it; once sent, the address is your correspondent: an approved contact with an email conversation of its own, where its replies start turns and you answer them, and later emails to it go without asking. The brief and the email are kept there. Returns that conversation’s sessionId. Without a subject it continues your latest thread with that address.',
       inputSchema: z.object({
         to: z.string().trim().min(3).max(100),
         subject: z
@@ -791,7 +791,14 @@ export function profileTools(
           .describe('Starts a new thread. Required for the first email to an address.'),
         // Short enough that the owner's approval card shows all of it.
         text: z.string().trim().min(1).max(3500),
-        expectReply: z.boolean().default(true),
+        brief: z
+          .string()
+          .trim()
+          .min(1)
+          .max(500)
+          .describe(
+            'For the conversation that answers the replies: what you are getting done, for whom, and what the owner wants to hear of it.',
+          ),
         requestKey: z.string().min(1).max(120).optional(),
       }),
       execute: async ({ requestKey, ...request }, { toolCallId }) =>
@@ -804,10 +811,10 @@ export function profileTools(
         ),
     }),
 
-    // Sends nothing and asks nobody: what it lets in reaches only this conversation, as data.
+    // Sends nothing and asks nobody: a machine's mail it lets in starts no turn anywhere.
     expect_email: tool({
       description:
-        'Before you sign up to a service with this agent’s own address, wait for its mail: for the next 30 minutes, email from that domain or its subdomains, signed by it, comes to this conversation as text from outside — a confirmation code or link, an automatic one included — though the sender is no contact. Nothing answers it. Only for a signup or a request you are making yourself; call it again to wait again. Returns the address to sign up with.',
+        'Before you sign up to a service with this agent’s own address, expect its mail: for 30 days, email from that domain or its subdomains, signed by it, is taken in though the sender is no contact. Automatic mail, such as a confirmation code or link, starts no turn and is never answered: find it with search_email. A person writing from that domain gets an email conversation of their own, like a correspondent. Refused for mailbox providers such as gmail.com. Only for a signup or a request you are making yourself; calling it again counts the 30 days again. Returns the address to sign up with.',
       inputSchema: z.object({
         domain: z
           .string()
@@ -817,8 +824,7 @@ export function profileTools(
           .describe('The service’s own domain, such as example.com, not a mailbox provider’s.'),
         reason: z.string().trim().min(1).max(200).describe('What you are signing up for.'),
       }),
-      execute: async ({ domain, reason }) =>
-        services.errands.expect(run.profileId, run.sessionId, domain, reason),
+      execute: async ({ domain, reason }) => services.errands.expect(run.profileId, domain, reason),
     }),
 
     search_email: tool({
@@ -870,7 +876,6 @@ export function profileTools(
       asksOwner: (input: unknown) =>
         services.errands.needsOwner(
           run.profileId,
-          run.sessionId,
           String((input as { to?: unknown } | null)?.to ?? ''),
         ),
     } satisfies OwnerGate);
@@ -1071,7 +1076,7 @@ export type ToolGroup = keyof typeof TOOL_GROUPS;
 
 /** The `contacts` group for a run that has `send_email`. */
 export const CONTACTS_WITH_EMAIL_SUMMARY =
-  'list the people the owner approved on your channels and write to one, or email any address once the owner approves that email, optionally bringing the answers back here; wait for a signup’s confirmation email, and search the mail you received and sent';
+  'list the people the owner approved on your channels and write to one, optionally bringing their answer back here, or email any address once the owner approves that email; expect a service’s mail when you sign up, and search the mail you received and sent';
 
 /** The `files` group for a run whose file tools reach its machine, not the gateway's. */
 export const MACHINE_FILES_SUMMARY =

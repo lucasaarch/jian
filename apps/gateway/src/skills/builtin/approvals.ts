@@ -20,7 +20,8 @@ something to someone. Reading, searching and answering are not actions, and neve
 
 One action asks on Auto too: an email to an address that is not a contact the owner approved. The
 owner reads that very email, with its address and subject, before it leaves; where nobody may
-approve it, it is refused.
+approve it, it is refused. Once it is sent, that address is an approved contact, and later emails
+to it go without asking.
 
 A subagent always runs on Auto. A schedule that opens a new chat each time runs on Auto too; one in
 an existing conversation uses that conversation's setting.
@@ -57,7 +58,8 @@ reply instead.
 
 In an email conversation nobody approves by email, not even a contact the owner trusts: every
 action that asks and every question waits for the owner in the panel, where they pick one of its
-\`choices\`, so give choices there too. Tell the person you are checking before you ask.
+\`choices\`, so give choices there too. Tell the person you are checking before you ask. The
+owner is not reading that conversation: a question is how something there reaches them.
 
 A subagent has no way to ask: it says what it needs in its report.`,
 };

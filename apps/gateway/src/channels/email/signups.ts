@@ -1,17 +1,43 @@
 import { randomUUID } from 'node:crypto';
-import { and, desc, eq, gt, inArray, lt, lte, sql } from 'drizzle-orm';
+import { and, desc, eq, gt, inArray, lte } from 'drizzle-orm';
 import type { Queryable } from '../../storage/database.js';
-import { emailWindows } from '../../storage/schema.js';
+import { emailDomains } from '../../storage/schema.js';
 
 /**
- * How long a signup waits for the service's mail, in milliseconds: a confirmation code arrives
- * within minutes, and the shorter the wait, the less a stranger at that domain can slip in.
+ * How long the agent expects mail from a service it signed up to, in milliseconds: a support desk
+ * or a renewal notice writes days or weeks later, not in the minutes a code takes. Each call to
+ * `expect_email` counts it again from then.
  */
-export const SIGNUP_WINDOW_MS = 30 * 60 * 1000;
-/** Emails one window brings in at most: a code, a resent code, a welcome; then it closes. */
-export const SIGNUP_EMAILS = 5;
+export const EXPECTED_MS = 30 * 24 * 60 * 60 * 1000;
 
-export type SignupWindow = typeof emailWindows.$inferSelect;
+export type ExpectedDomain = typeof emailDomains.$inferSelect;
+
+/**
+ * Mailbox providers anyone can open an address at. Expecting mail from one would let every
+ * stranger with an address there in, and two addresses there are not colleagues of one desk.
+ */
+const FREE_MAIL = new Set([
+  'gmail.com',
+  'googlemail.com',
+  'outlook.com',
+  'hotmail.com',
+  'live.com',
+  'msn.com',
+  'icloud.com',
+  'me.com',
+  'mac.com',
+  'aol.com',
+  'proton.me',
+  'protonmail.com',
+  'mail.ru',
+  'zoho.com',
+  'uol.com.br',
+  'bol.com.br',
+  'terra.com.br',
+  'ig.com.br',
+]);
+/** Providers with a domain per country: `yahoo.com.br`, `gmx.de`, `yandex.ru` and the like. */
+const FREE_MAIL_BRANDS = /^(?:yahoo|gmx|yandex)\.[a-z]{2,3}(?:\.[a-z]{2})?$/;
 
 /** `contabo.com` from what the agent typed: an address, `@contabo.com`, or the domain itself. */
 export function signupDomain(value: string): string | undefined {
@@ -22,92 +48,71 @@ export function signupDomain(value: string): string | undefined {
 }
 
 /**
- * The domains a window may have been opened for to take mail from this address: its own and
- * each parent with a dot in it, so `noreply@mail.contabo.com` reaches a wait for `contabo.com`
- * and never one for `com`.
+ * The domains mail from this address or domain may have been expected under: its own and each
+ * parent with a dot in it, so `noreply@mail.contabo.com` matches `contabo.com` and never `com`.
  */
 function parents(address: string): string[] {
   const labels = address.slice(address.lastIndexOf('@') + 1).split('.');
   return labels.slice(0, -1).map((_, index) => labels.slice(index).join('.'));
 }
 
-/** Opens or extends this conversation's wait for mail from a domain. */
-export async function openSignupWindow(
+/** Whether this address or domain is at a mailbox provider, a subdomain of one included. */
+export function freeMail(address: string): boolean {
+  return parents(address.toLowerCase()).some(
+    (domain) => FREE_MAIL.has(domain) || FREE_MAIL_BRANDS.test(domain),
+  );
+}
+
+/** Starts or extends expecting mail from a domain on this channel. */
+export async function expectDomain(
   db: Queryable,
-  window: {
-    profileId: string;
-    channelId: string;
-    sessionId: string;
-    domain: string;
-    reason: string;
-  },
+  expected: { profileId: string; channelId: string; domain: string; reason: string },
   now: number,
 ) {
-  const expiresAt = new Date(now + SIGNUP_WINDOW_MS);
-  // Waits that ended hold nothing worth keeping; the profile's are cleared as it opens one.
+  const expiresAt = new Date(now + EXPECTED_MS);
+  // What ran out holds nothing worth keeping; the profile's are cleared as it expects another.
   await db
-    .delete(emailWindows)
+    .delete(emailDomains)
     .where(
-      and(eq(emailWindows.profileId, window.profileId), lte(emailWindows.expiresAt, new Date(now))),
+      and(
+        eq(emailDomains.profileId, expected.profileId),
+        lte(emailDomains.expiresAt, new Date(now)),
+      ),
     );
   const [row] = await db
-    .insert(emailWindows)
-    .values({ id: randomUUID(), ...window, expiresAt, createdAt: new Date(now) })
+    .insert(emailDomains)
+    .values({ id: randomUUID(), ...expected, expiresAt, createdAt: new Date(now) })
     .onConflictDoUpdate({
-      target: [emailWindows.sessionId, emailWindows.domain],
-      // A new signup attempt, or a code asked for again, is a new wait.
-      set: { reason: window.reason, channelId: window.channelId, expiresAt, received: 0 },
+      target: [emailDomains.channelId, emailDomains.domain],
+      set: { reason: expected.reason, expiresAt },
     })
     .returning();
   return row;
 }
 
-function openFor(channelId: string, address: string, now: number) {
-  return and(
-    eq(emailWindows.channelId, channelId),
-    inArray(emailWindows.domain, parents(address)),
-    gt(emailWindows.expiresAt, new Date(now)),
-    lt(emailWindows.received, SIGNUP_EMAILS),
-  );
-}
-
-/** Whether mail from this address would be taken by a wait, without taking it. */
-export async function awaitedSignup(
+/** The expected domain mail from this address falls under, while it is expected. */
+export async function expectedDomain(
   db: Queryable,
   channelId: string,
   address: string,
   now: number,
-) {
+): Promise<ExpectedDomain | undefined> {
   const [row] = await db
-    .select({ id: emailWindows.id })
-    .from(emailWindows)
-    .where(openFor(channelId, address, now))
+    .select()
+    .from(emailDomains)
+    .where(
+      and(
+        eq(emailDomains.channelId, channelId),
+        inArray(emailDomains.domain, parents(address)),
+        gt(emailDomains.expiresAt, new Date(now)),
+      ),
+    )
+    .orderBy(desc(emailDomains.expiresAt))
     .limit(1);
-  return Boolean(row);
+  return row;
 }
 
-/**
- * Takes one email from this address into the newest open wait for its domain, and returns that
- * wait. Counted in the same statement that matches it, so two emails at once cannot both pass
- * the last place.
- */
-export async function takeSignupEmail(
-  db: Queryable,
-  channelId: string,
-  address: string,
-  now: number,
-) {
-  const [newest] = await db
-    .select({ id: emailWindows.id })
-    .from(emailWindows)
-    .where(openFor(channelId, address, now))
-    .orderBy(desc(emailWindows.expiresAt))
-    .limit(1);
-  if (!newest) return undefined;
-  const [taken] = await db
-    .update(emailWindows)
-    .set({ received: sql`${emailWindows.received} + 1` })
-    .where(and(eq(emailWindows.id, newest.id), openFor(channelId, address, now)))
-    .returning();
-  return taken;
+/** Keeps the email conversation this domain's automatic mail goes to. */
+export async function setDomainSession(db: Queryable, id: string, sessionId: string) {
+  await db.update(emailDomains).set({ sessionId }).where(eq(emailDomains.id, id));
 }

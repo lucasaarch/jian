@@ -10,7 +10,7 @@ import { type ChannelRecord, channelSecret } from '../service.js';
 import { EMAIL_PROVIDERS, emailCredential } from './channel.js';
 import { logEmail } from './log.js';
 import type { MailAuthentication, ReceivedEmail } from './provider.js';
-import { awaitedSignup } from './signups.js';
+import { expectedDomain, freeMail } from './signups.js';
 import {
   bareAddress,
   displayNameOf,
@@ -182,26 +182,27 @@ export class EmailInbox {
     const answered = await answeredAddress(this.store.db, channelId, email);
     // A support desk answers from another address of its domain than the one written to. In
     // the agent's own thread, signed by that domain, and from no contact of its own, it is the
-    // reply of the address the agent wrote to. Nothing else widens who a message is from.
+    // reply of the address the agent wrote to. Nothing else widens who a message is from, and
+    // never at a mailbox provider: two strangers there are not colleagues.
     if (
       answered &&
       answered !== message.chatId &&
       domainOf(answered) === domainOf(message.chatId) &&
+      !freeMail(answered) &&
       !known
     ) {
       message.text = `From: ${message.chatId}\n${message.text}`.slice(0, TEXT_CHARS);
       message.actorId = answered;
       message.chatId = answered;
     }
-    // A machine's mail matters only as an answer to the agent's own email, which the service
-    // knows by the wait it keeps on a contact, or as the confirmation of a signup the agent is
-    // waiting on (`expect_email`): no-reply senders write those. From anyone else it is noise,
-    // dropped unread. Kept, it is still never answered.
+    // A machine's mail matters only from someone the agent writes to, or from a service whose
+    // mail it expects (`expect_email`): no-reply senders write confirmations. From anyone else
+    // it is noise, dropped unread. Kept, it is still never answered and starts no turn.
     if (
       message.automatic &&
       answered !== message.chatId &&
       !(await findContactByChat(this.store.db, channelId, message.chatId)) &&
-      !(await awaitedSignup(this.store.db, channelId, message.chatId, Date.now()))
+      !(await expectedDomain(this.store.db, channelId, message.chatId, Date.now()))
     )
       return { accepted: false };
 
