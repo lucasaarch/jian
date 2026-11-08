@@ -1,8 +1,13 @@
 import { createAnthropic } from '@ai-sdk/anthropic';
+import { createOpenAI } from '@ai-sdk/openai';
+import type { RunProgress } from '@jian/contracts';
 import { generateText, type LanguageModel, streamText } from 'ai';
+import { MockLanguageModelV4, simulateReadableStream } from 'ai/test';
 import { errors } from 'undici';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { retryable, retryDelay, withModelRetry } from '../src/agent/model-retry.js';
+import { retryable } from '../src/agent/model-failure.js';
+import { retryDelay, withModelRetry } from '../src/agent/model-retry.js';
+import { ProgressReporter } from '../src/agent/progress.js';
 import { createSafeFetch } from '../src/security/outbound.js';
 
 /**
@@ -148,6 +153,100 @@ describe('which failures of a model call are retried', () => {
   it('never retries a failure that carries no network code, whatever it says', () => {
     expect(retryable(new Error('socket hang up near the load balancer'))).toBeUndefined();
   });
+
+  it('retries a TLS handshake that timed out, never a certificate or a protocol it refuses', async () => {
+    const tls = (code: string) => outboundFailure(systemError(code, 'connect', code));
+
+    expect(retryable(await tls('ERR_TLS_HANDSHAKE_TIMEOUT'))).toMatchObject({
+      reason: 'TLS handshake timed out',
+    });
+    expect(retryable(await tls('ERR_SSL_TLSV1_ALERT_UNKNOWN_CA'))).toBeUndefined();
+    expect(retryable(await tls('ERR_SSL_SSLV3_ALERT_BAD_CERTIFICATE'))).toBeUndefined();
+    expect(retryable(await tls('ERR_SSL_WRONG_VERSION_NUMBER'))).toBeUndefined();
+  });
+
+  it('reads a stream error that names its kind but no status, as OpenAI-style servers send', () => {
+    const said = (code: string) => ({ message: 'Try again later.', type: code, code });
+
+    expect(retryable(said('server_error'))).toMatchObject({ reason: 'server error' });
+    expect(retryable(said('rate_limit_exceeded'))).toMatchObject({ reason: 'rate limited' });
+    expect(retryable(said('overloaded'))).toMatchObject({ reason: 'overloaded' });
+    expect(retryable(said('invalid_request_error'))).toBeUndefined();
+  });
+});
+
+/** An OpenAI chat model whose every request is answered by `answer`. */
+async function openaiError(response: Response) {
+  const model = createOpenAI({
+    apiKey: 'synthetic-openai-key',
+    baseURL: 'https://api.openai.test/v1',
+    fetch: (async () => response) as typeof globalThis.fetch,
+  }).chat('gpt-test');
+  return generateText({ model, prompt: 'Hello', maxRetries: 0 }).catch((error: unknown) => error);
+}
+
+describe('a 429: a rate limit waits, a refusal fails', () => {
+  const tooMany = (headers: Record<string, string>, body?: object) =>
+    new Response(body ? JSON.stringify(body) : '', {
+      status: 429,
+      headers: { ...(body ? { 'content-type': 'application/json' } : {}), ...headers },
+    });
+
+  it('waits on one that says when to come back', async () => {
+    const error = await apiError(tooMany({ 'retry-after': '7' }));
+
+    expect(retryable(error)).toEqual({ reason: 'HTTP 429, rate limited', afterMs: 7_000 });
+  });
+
+  it("waits on a subscription's window, told by Anthropic's rate-limit headers", async () => {
+    const error = await apiError(
+      tooMany(
+        { 'anthropic-ratelimit-unified-reset': '1794081600' },
+        {
+          type: 'error',
+          error: { type: 'error', message: 'usage limit reached, resets at 9pm' },
+        },
+      ),
+    );
+
+    expect(retryable(error)).toMatchObject({ reason: 'HTTP 429, rate limited' });
+  });
+
+  it('waits on one whose body says it is a rate limit, headers or not', async () => {
+    const anthropicBody = await apiError(
+      tooMany({}, { type: 'error', error: { type: 'rate_limit_error', message: 'Slow down' } }),
+    );
+    const openaiBody = await openaiError(
+      tooMany(
+        {},
+        { error: { message: 'Slow down', type: 'requests', code: 'rate_limit_exceeded' } },
+      ),
+    );
+
+    expect(retryable(anthropicBody)).toMatchObject({ reason: 'HTTP 429, rate limited' });
+    expect(retryable(openaiBody)).toMatchObject({ reason: 'HTTP 429, rate limited' });
+  });
+
+  it('fails at once on a spent quota, even beside rate-limit headers', async () => {
+    const error = await openaiError(
+      tooMany(
+        { 'x-ratelimit-remaining-requests': '0' },
+        {
+          error: {
+            message: 'You exceeded your current quota, please check your plan.',
+            type: 'insufficient_quota',
+            code: 'insufficient_quota',
+          },
+        },
+      ),
+    );
+
+    expect(retryable(error)).toBeUndefined();
+  });
+
+  it('fails at once on a bare 429, which Anthropic answers a malformed subscription request with', async () => {
+    expect(retryable(await apiError(tooMany({})))).toBeUndefined();
+  });
 });
 
 describe('the retry schedule', () => {
@@ -240,8 +339,143 @@ describe('a model call that cannot get through', () => {
     const outcome = await failed;
 
     expect(outcome).toMatchObject({ name: 'AbortError' });
+    // Nothing of the wait is left behind: no timer, no beat.
+    expect(vi.getTimerCount()).toBe(0);
     await vi.advanceTimersByTimeAsync(600_000);
     expect(attempts).toHaveLength(10);
+  });
+
+  it('never fires early on a retry-after longer than a timer can hold', async () => {
+    // About 35 days: past 2^31-1 ms, which Node turns into a timer of 1 ms.
+    const { model, attempts } = anthropic(async (attempt) =>
+      attempt === 1 ? refusal(503, { 'retry-after': '3000000' }) : message('Late.'),
+    );
+    const cancel = new AbortController();
+
+    const call = generateText({
+      model: retrying(model),
+      prompt: 'Hello',
+      maxRetries: 0,
+      abortSignal: cancel.signal,
+    });
+    const failed = call.catch((error: unknown) => error);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(attempts).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(2 ** 31);
+    expect(attempts).toHaveLength(1);
+
+    cancel.abort();
+    expect(await failed).toMatchObject({ name: 'AbortError' });
+  });
+
+  it('logs every wait of 30 s or more, not only the end of a round', async () => {
+    const { model } = anthropic(async (attempt) =>
+      attempt === 1 ? refusal(529, { 'retry-after': '60' }) : message('Ready.'),
+    );
+    const lines: string[] = [];
+
+    const call = generateText({
+      model: retrying(model, { label: 'run 7f1c', log: (line) => lines.push(line) }),
+      prompt: 'Hello',
+      maxRetries: 0,
+    });
+    await vi.advanceTimersByTimeAsync(60_000);
+    await call;
+
+    expect(lines).toEqual([
+      'jian: run 7f1c model unreachable (HTTP 529, overloaded), attempt 1, next in 60s',
+      'jian: run 7f1c model reached after 2 attempts (HTTP 529, overloaded)',
+    ]);
+  });
+
+  it('stops after the attempts it is allowed, and fails as before', async () => {
+    const { model, attempts } = anthropic(async () => {
+      throw failure;
+    });
+
+    const call = generateText({
+      model: retrying(model, { attempts: 10 }),
+      prompt: 'Hello',
+      maxRetries: 0,
+    });
+    const failed = call.catch((error: unknown) => error);
+    await vi.advanceTimersByTimeAsync(120_000);
+
+    expect(await failed).toBe(failure);
+    expect(attempts).toHaveLength(10);
+    expect((attempts[9] ?? 0) - (attempts[0] ?? 0)).toBe(9_000);
+  });
+
+  it('stops saying it is reconnecting however the call ends', async () => {
+    const written: RunProgress[] = [];
+    const progress = new ProgressReporter(async (frame) => {
+      written.push(frame);
+    }, 0);
+    const { model } = anthropic(async (attempt) =>
+      attempt <= 2 ? refusal(529) : attempt === 3 ? refusal(400) : message('Fresh.'),
+    );
+    const steady = retrying(model, {
+      waiting: (state) => progress.reconnecting(state),
+      settled: () => progress.reconnected(),
+    });
+
+    const first = generateText({ model: steady, prompt: 'Hello', maxRetries: 0 });
+    const refused = first.catch((error: unknown) => error);
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(await refused).toMatchObject({ statusCode: 400 });
+    // The next call is a fresh one, through on its first attempt.
+    expect((await generateText({ model: steady, prompt: 'Again', maxRetries: 0 })).text).toBe(
+      'Fresh.',
+    );
+    progress.stepEnded();
+    await progress.flush();
+
+    expect(written.some((frame) => frame.reconnecting)).toBe(true);
+    expect(written.at(-1)).not.toHaveProperty('reconnecting');
+  });
+
+  it('retries a stream error that names a server error but no status', async () => {
+    let attempts = 0;
+    const model = new MockLanguageModelV4({
+      doStream: async () => {
+        attempts += 1;
+        const chunks: unknown[] =
+          attempts === 1
+            ? [
+                { type: 'stream-start', warnings: [] },
+                {
+                  type: 'error',
+                  error: {
+                    message: 'The server had an error',
+                    type: 'server_error',
+                    code: 'server_error',
+                  },
+                },
+              ]
+            : [
+                { type: 'stream-start', warnings: [] },
+                { type: 'text-start', id: 't' },
+                { type: 'text-delta', id: 't', delta: 'Recovered.' },
+                { type: 'text-end', id: 't' },
+                {
+                  type: 'finish',
+                  finishReason: { unified: 'stop', raw: 'stop' },
+                  usage: {
+                    inputTokens: { total: 1, noCache: 1, cacheRead: 0, cacheWrite: 0 },
+                    outputTokens: { total: 1, text: 1, reasoning: 0 },
+                  },
+                },
+              ];
+        return { stream: simulateReadableStream({ chunks, chunkDelayInMs: null }) as never };
+      },
+    });
+
+    const result = streamText({ model: retrying(model), prompt: 'Hello', maxRetries: 0 });
+    const said = result.text;
+    await vi.advanceTimersByTimeAsync(5_000);
+
+    expect(await said).toBe('Recovered.');
+    expect(attempts).toBe(2);
   });
 
   it('retries a stream that fails before it says anything', async () => {
@@ -298,7 +532,7 @@ describe('a model call that cannot get through', () => {
           signs += 1;
         },
         waiting: (state) => told.push({ ...state, nextAt: state.nextAt.toISOString() }),
-        through: (attempts) => told.push({ through: attempts }),
+        settled: (attempts) => told.push({ settled: attempts }),
         log: (line) => lines.push(line),
       }),
       prompt: 'Hello',
@@ -317,7 +551,7 @@ describe('a model call that cannot get through', () => {
       reason: 'connection timed out',
     });
     expect(told[9]).toMatchObject({ attempts: 10, nextAt: '2026-11-07T12:00:39.000Z' });
-    expect(told.at(-1)).toEqual({ through: 13 });
+    expect(told.at(-1)).toEqual({ settled: 13 });
     // One line per round and one when it got through: never a line per attempt.
     expect(lines).toEqual([
       'jian: run 7f1c model unreachable (connection timed out), attempt 10, next in 30s',
