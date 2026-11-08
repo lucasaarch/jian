@@ -10,8 +10,9 @@ Agents get their own email address, a turn rides out network drops, and long con
 
 ### Email
 
-* **An address of the agent's own:** Connect a Resend API key and an address on a domain verified for receiving, and the agent reads and answers email there. Mail is taken in only when its sender's domain authenticates it. Auto-replies and mailing lists are ignored, and a stranger waits as a pending contact until you approve them. Replies stay in their thread, and attachments travel both ways.
-* **Writing to anyone, with your say:** The agent can email any address. The first email to someone who isn't an approved contact waits for you to read and approve it, address and subject included. After that the address is a contact, and later emails to it go out without asking. Replies come back to the conversation that wrote.
+* **An address of the agent's own:** Connect an address on your own domain through Resend or Cloudflare, and the agent reads and answers email there. On Cloudflare, Jian sets up the forwarding Worker and the routing rule itself, and removes them when you disconnect. Mail is taken in only when its sender's domain authenticates it. Auto-replies and mailing lists are ignored, and a stranger waits as a pending contact until you approve them. Replies stay in their thread, and attachments travel both ways.
+* **Writing to anyone, with your say:** The agent can email any address. The first email to someone who isn't an approved contact waits for you to read and approve it, and so does one that copies such an address. You see every address it goes to, its files with their sizes, and the subject. After that each of those addresses is a contact, and later emails to them go out without asking. Replies come back to the conversation that wrote.
+* **Formatted email, copies and files:** The agent's email goes out formatted, with a plain-text copy for mail clients that show only text. It can copy up to 10 addresses and attach up to 5 files, 16 MB each and 20 MB together. A reply in a correspondent's conversation goes to that person alone.
 * **Each correspondent gets their own conversation:** The agent answers people in those conversations and tells you what matters. When a service asks for something only you have, such as a code, a password or a payment, the agent asks you first.
 * **Signing up to services:** The agent can sign up to a service with its own address and read the confirmation email or code it gets back. It can also search everything it has sent and received.
 
@@ -40,10 +41,12 @@ Agents get their own email address, a turn rides out network drops, and long con
 ### Upgrading
 
 * The desktop app updates itself to this release.
-* **Servers:** Recreate the gateway and web containers with the 1.9.0 images, or follow the `latest` tags. Migrations 0097 to 0100 run when the gateway starts.
+* **Servers:** Recreate the gateway and web containers with the 1.9.0 images, or follow the `latest` tags. Migrations 0097 to 0101 run when the gateway starts.
 * **WhatsApp Business channels:** Migration 0098 disconnects every WhatsApp Business channel and discards its stored credentials. Its contacts and conversations stay. Messages still waiting to be sent through one are marked failed. To keep talking to those people, connect WhatsApp through the linked app.
-* **Email:** The gateway needs `JIAN_PUBLIC_URL` set to the address the internet reaches it at, so Resend can deliver incoming mail. Then add an Email channel in the agent's settings, under Channels, with a Resend API key and an address on a domain verified for receiving.
-* **API:** `GET /v1/profiles/{profileId}/sessions/{sessionId}/timeline` takes `brief=1` for short previews, and `GET /v1/profiles/{profileId}/sessions/{sessionId}/runs/{runId}/steps/{toolCallId}` returns one tool step in full. A run's `progress` can carry `reconnecting`, with the attempts, the next try and the reason, while it waits on the model.
+* **Email:** The gateway needs `JIAN_PUBLIC_URL` set to the address the internet reaches it at, so the provider can deliver incoming mail. Then add an Email channel in the agent's settings, under Channels, and pick a provider.
+* **Email through Resend:** It takes an API key with full access and an address on a domain verified in Resend, with receiving on and its MX record in place.
+* **Email through Cloudflare:** It takes an API token, the account ID, and an address of a zone in that account, with Email Routing enabled and the domain onboarded in Email Sending. The token needs Account › Email Sending: Edit, Account › Workers Scripts: Edit, Zone › Email Routing Rules: Edit, Zone › Zone Settings: Read and Zone › Zone: Read. The address can be at most 90 characters.
+* **API:** `GET /v1/profiles/{profileId}/sessions/{sessionId}/timeline` takes `brief=1` for short previews, and `GET /v1/profiles/{profileId}/sessions/{sessionId}/runs/{runId}/steps/{toolCallId}` returns one tool step in full. An Email channel takes `provider: "cloudflare"` with `accountId`, besides `resend`. A run's `progress` can carry `reconnecting`, with the attempts, the next try and the reason, while it waits on the model.
 
 ## 1.8.0 — 2026-11-07
 
