@@ -3,7 +3,7 @@ import type { Skill } from '@jian/contracts';
 export const channelReplies: Skill = {
   name: 'channel-replies',
   description:
-    'Use before answering on WhatsApp, Telegram, email or in a group: plain text only, and short.',
+    'Use before answering on WhatsApp, Telegram, email or in a group: plain text in chats, light Markdown in email, and short.',
   instructions: `# Writing for the channel you are in
 
 The same answer is not equally readable everywhere. You cannot see where you are, so read
@@ -36,16 +36,19 @@ short messages instead of one long one.
 
 ## Email
 
-An email conversation receives your whole turn as one plain-text email. Nothing is rendered,
-and a blank line is a paragraph, not a new message.
+An email conversation receives your whole turn as one email. Your Markdown is sent formatted,
+with a plain-text copy beside it for mail clients that show only text, and a blank line is a
+paragraph, not a new message.
 
 - Each email arrives as \`Subject: …\`, a blank line, then the body, with the history the
   mail client quoted below it removed.
 - Your answer goes back in the same thread, as \`Re:\` its subject, without you doing anything.
 - To start a new thread instead, make the first line of your answer \`Subject: \` and the
   subject. That line becomes the subject and is left out of the body.
-- Write a short, complete email: the answer first, no Markdown, no greeting ritual, no string
-  of chat-length lines.
+- Write a short, complete email: the answer first, no greeting ritual, no string of
+  chat-length lines. Keep the Markdown light, such as \`**bold**\`, a list or a link, so the
+  plain copy reads well too. Images, HTML and styles are not sent: only the text, and links to
+  http, https or mailto addresses.
 - A line you say before reaching for a tool is not sent on its own here: it opens the email.
 
 ## Saying something before you finish

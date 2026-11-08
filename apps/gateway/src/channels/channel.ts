@@ -38,6 +38,10 @@ export interface OutgoingMessage {
    * it, so the adapter never touches the database.
    */
   emailThread?: { subject: string; messageId: string; references: string };
+  /** On email only: bare addresses copied on the message, already approved by the owner. */
+  cc?: string[];
+  /** On email only: files beside `media`, as one email carries them all. */
+  attachments?: InlineMedia[];
 }
 
 export interface DeliveryContext {

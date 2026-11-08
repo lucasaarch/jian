@@ -35,7 +35,15 @@ export type Received = {
 
 /** A Resend account in memory: one verified domain, the mail that arrives, and what is sent. */
 function resendAccount() {
-  const sent: Array<{ to: string[]; subject: string; text: string; headers?: object }> = [];
+  const sent: Array<{
+    to: string[];
+    cc?: string[];
+    subject: string;
+    text: string;
+    html?: string;
+    headers?: object;
+    attachments?: Array<{ filename: string; content: string }>;
+  }> = [];
   const mail = new Map<string, Received & { to: string }>();
   const fetcher = (async (input: string | URL, init?: RequestInit) => {
     const url = String(input);

@@ -130,6 +130,30 @@ const field = (input: unknown, name: string): string | undefined => {
   return typeof value === 'string' && value.trim() ? value.trim() : undefined;
 };
 
+/** A list argument as one labelled line, each item as `show` words it; none when it is empty. */
+const listed = (
+  input: unknown,
+  name: string,
+  show: (item: unknown) => string,
+  label: string,
+): string | undefined => {
+  const value =
+    input && typeof input === 'object' ? (input as Record<string, unknown>)[name] : undefined;
+  return Array.isArray(value) && value.length
+    ? `${label}: ${value.map(show).join(', ')}`
+    : undefined;
+};
+
+/**
+ * A file as the card names it: the tool's own line with its size when it could read one, or what
+ * the call gave of it, when it could not.
+ */
+const fileShown = (item: unknown): string => {
+  if (typeof item === 'string') return item;
+  const file = (item ?? {}) as { name?: unknown; path?: unknown; mediaId?: unknown };
+  return String(file.name ?? file.path ?? file.mediaId ?? 'a file');
+};
+
 /**
  * What a card says for each kind of action when the model could not write it: what it does in
  * plain words, and the one argument a person checks before saying yes, never the raw call.
@@ -226,8 +250,15 @@ const PLAIN: Record<
   send_email: (input) => ({
     // The address it goes to, as the send reads it, not a display name in front of it.
     title: `Send an email to ${bareAddress(field(input, 'to')) ?? field(input, 'to')}`,
+    // Who else it goes to and what it carries come first, where the card's cut never reaches.
     detail: [
-      `Subject: ${field(input, 'subject') ?? '(continues the latest thread)'}`,
+      [
+        listed(input, 'cc', (address) => bareAddress(String(address)) ?? String(address), 'Cc'),
+        listed(input, 'attachments', fileShown, 'Attachments'),
+        `Subject: ${field(input, 'subject') ?? '(continues the latest thread)'}`,
+      ]
+        .filter(Boolean)
+        .join('\n'),
       field(input, 'text'),
     ]
       .filter(Boolean)

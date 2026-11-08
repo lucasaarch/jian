@@ -36,11 +36,17 @@ export type ReceivedEmail = {
   attachments: number;
 };
 
-/** An email the agent sends, with the thread it answers already resolved by the gateway. */
+/**
+ * An email the agent sends, with the thread it answers already resolved by the gateway. `text`
+ * is the plain part, readable as it is; `html` the same words drawn from their Markdown. `cc`
+ * are bare addresses the owner already let it write to.
+ */
 export type OutgoingEmail = Envelope & {
   from: string;
   to: string;
-  media?: InlineMedia;
+  html?: string;
+  cc?: string[];
+  attachments?: InlineMedia[];
 };
 
 /** Network access for one call, as the gateway hands it to every adapter. */
