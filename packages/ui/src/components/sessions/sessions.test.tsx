@@ -20,17 +20,17 @@ afterEach(async () => {
 });
 
 const session = {
-  id: 'business-session',
+  id: 'customer-session',
   profileId: profile.id,
-  channel: 'whatsapp-business',
+  channel: 'whatsapp',
   createdAt: '2026-10-23T12:00:00Z',
 } as Session;
 const contact = {
   id: 'customer',
   sessionId: session.id,
   profileId: profile.id,
-  channelId: 'business',
-  type: 'whatsapp-business',
+  channelId: 'linked',
+  type: 'whatsapp',
   displayName: 'Customer',
   actorId: '5511999999999',
   status: 'approved',
@@ -43,7 +43,7 @@ async function render({
   busy = false,
   fail = false,
   status = 'approved',
-  channel = 'whatsapp-business',
+  channel = 'whatsapp',
   contacts = [contact],
   sessions = [{ ...session, channel }],
 }: {
@@ -90,7 +90,7 @@ async function render({
       // The conversation is the one in the URL.
       <AgentCache
         profile={profile}
-        params={{ sessionId: 'business-session' }}
+        params={{ sessionId: 'customer-session' }}
         slices={{
           providers: [],
           sessions,
@@ -99,10 +99,9 @@ async function render({
           contacts: contacts.map((item) => ({ ...item, aiEnabled, status })),
           channels: [
             {
-              id: 'business',
+              id: 'linked',
               profileId: profile.id,
-              type: 'whatsapp-business',
-              whatsappBusinessStatus: 'configured',
+              type: 'whatsapp',
               enabled: false,
             } as Channel,
           ],

@@ -868,13 +868,13 @@ export const releaseReads = pgTable('release_reads', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
-export const channelType = pgEnum('channel_type', [
-  'api',
-  'telegram',
-  'whatsapp',
-  'whatsapp-business',
-  'email',
-]);
+/**
+ * The types this gateway speaks. The database type also still holds `whatsapp-business`, retired
+ * in 0098: Postgres cannot drop an enum value, and its channels stay, revoked, for the history
+ * their contacts carry. Every read of a channel keeps to these values, so such a row never
+ * reaches the contract.
+ */
+export const channelType = pgEnum('channel_type', ['api', 'telegram', 'whatsapp', 'email']);
 
 export const channels = pgTable(
   'channels',
@@ -909,15 +909,6 @@ export const channels = pgTable(
   ],
 );
 
-/** Explicit, exclusive routing binding. Credentials live only in the profile vault. */
-export const metaBindings = pgTable('meta_bindings', {
-  channelId: uuid('channel_id')
-    .primaryKey()
-    .references(() => channels.id, { onDelete: 'cascade' }),
-  phoneNumberId: text('phone_number_id').notNull().unique(),
-  businessAccountId: text('business_account_id').notNull(),
-});
-
 /**
  * The address a live email channel holds, lowercased. Unique because a provider's webhook gets
  * every message for its domain: two profiles claiming one address would read each other's mail.
@@ -947,56 +938,6 @@ export const emailThreads = pgTable(
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [primaryKey({ columns: [table.channelId, table.chatId] })],
-);
-
-export const metaWindows = pgTable(
-  'meta_windows',
-  {
-    channelId: uuid('channel_id')
-      .notNull()
-      .references(() => channels.id, { onDelete: 'cascade' }),
-    chatId: text('chat_id').notNull(),
-    lastInbound: timestamp('last_inbound', { withTimezone: true }).notNull(),
-  },
-  (table) => [primaryKey({ columns: [table.channelId, table.chatId] })],
-);
-
-/** Kept after processing: Meta retries for seven days; completed ids must not be forgotten. */
-export const metaInbox = pgTable(
-  'meta_inbox',
-  {
-    sequence: bigserial('sequence', { mode: 'number' }).notNull(),
-    channelId: uuid('channel_id')
-      .notNull()
-      .references(() => channels.id, { onDelete: 'cascade' }),
-    eventId: text('event_id').notNull(),
-    payload: jsonb('payload').notNull().$type<unknown>(),
-    availableAt: timestamp('available_at', { withTimezone: true }).notNull().defaultNow(),
-    processedAt: timestamp('processed_at', { withTimezone: true }),
-    createdAt,
-  },
-  (table) => [
-    primaryKey({ columns: [table.channelId, table.eventId] }),
-    index('meta_inbox_pending').on(table.availableAt).where(sql`${table.processedAt} is null`),
-    index('meta_inbox_head')
-      .on(table.channelId, table.sequence)
-      .where(sql`${table.processedAt} is null`),
-  ],
-);
-
-export const metaReceipts = pgTable(
-  'meta_receipts',
-  {
-    chatId: text('chat_id').notNull(),
-    channelId: uuid('channel_id')
-      .notNull()
-      .references(() => channels.id, { onDelete: 'cascade' }),
-    remoteId: text('remote_id').notNull(),
-    status: text('status').notNull(),
-    rank: integer('rank').notNull(),
-    at: timestamp('at', { withTimezone: true }).notNull(),
-  },
-  (table) => [primaryKey({ columns: [table.channelId, table.remoteId] })],
 );
 
 export const contactScope = pgEnum('contact_scope', ['direct', 'group']);
@@ -1130,8 +1071,6 @@ export const deliveries = pgTable(
     notice: text('notice'),
     reaction: jsonb('reaction').$type<import('@jian/contracts').ReactionDelivery>(),
     mediaId: uuid('media_id'),
-    // Only direct inbound intake can grant a Meta delivery its causal authority.
-    inboundEventId: text('inbound_event_id'),
     status: deliveryStatus('status').notNull(),
     error: text('error'),
     // What the protocol called the message it accepted, for a later receipt to match.

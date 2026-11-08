@@ -27,9 +27,7 @@ export const requestNote = (channel: Channel, contact: Contact) =>
     ? 'Approving does not turn the channel back on, nor answer what arrived while it was off.'
     : contact.scope === 'group'
       ? 'Until you approve, the agent reads nothing there.'
-      : channel.type === 'whatsapp-business'
-        ? 'Approving hands this message to the agent. An expired reply window blocks delivery.'
-        : 'Approving hands this message to the agent, and it answers.';
+      : 'Approving hands this message to the agent, and it answers.';
 
 const agents = (count: number) => (count === 1 ? '1 agent' : `${count} agents`);
 
@@ -72,9 +70,7 @@ export function contactActions(
         silenced(channel, contact)
           ? `${name} approved. The agent stays quiet there until the channel and the contact are on again.`
           : contact.status === 'pending'
-            ? channel.type === 'whatsapp-business'
-              ? `${name} approved. Replies still require an open customer-service window.`
-              : `${name} approved. What they wrote went to the agent.`
+            ? `${name} approved. What they wrote went to the agent.`
             : `${name} approved again.`,
       );
     },

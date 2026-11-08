@@ -78,22 +78,16 @@ export function ChannelsPage() {
     setPairingOpen(true);
   };
 
-  const connect = (request: NewChannel) => {
-    let created: Channel | undefined;
-    return mutate(async () => {
-      created = await connectChannel(api, profile.id, request, {
+  const connect = (request: NewChannel) =>
+    mutate(async () => {
+      await connectChannel(api, profile.id, request, {
         pairing: pair,
         secret: (next) => {
           setSecret(next);
           setSecretOpen(true);
         },
       });
-    }, connectedMessage(request.type)).then((ok) => {
-      // Meta's channel is half set up: its callback and the credentials to complete come next.
-      if (ok && created?.type === 'whatsapp-business') configure(created);
-      return ok;
-    });
-  };
+    }, connectedMessage(request.type));
 
   return (
     <>

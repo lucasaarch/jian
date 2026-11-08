@@ -52,8 +52,7 @@ function devicePill(device: Device): ReactNode {
 }
 
 /**
- * How a channel stands, in pills: linked or set up, paused, and how many wait on the owner. Meta's
- * is set up in two steps, and only the second makes it work.
+ * How a channel stands, in pills: linked or set up, paused, and how many wait on the owner.
  */
 export function ChannelPills({
   channel,
@@ -68,12 +67,6 @@ export function ChannelPills({
     <>
       {channel.type === 'whatsapp' ? (
         devicePill(device)
-      ) : channel.type === 'whatsapp-business' ? (
-        channel.whatsappBusinessStatus === 'pending' ? (
-          <StatusPill tone="warn">Setup pending</StatusPill>
-        ) : (
-          <StatusPill tone="good">Configured</StatusPill>
-        )
       ) : (
         <StatusPill tone="good">Connected</StatusPill>
       )}

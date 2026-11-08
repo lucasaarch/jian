@@ -48,7 +48,6 @@ const MAX_HELD_CHARACTERS = 8000;
 /** Each channel as the owner and the agent name it. */
 export const CHANNEL_NAMES: Record<ChannelType, string> = {
   whatsapp: 'WhatsApp',
-  'whatsapp-business': 'WhatsApp Business (Meta)',
   telegram: 'Telegram',
   api: 'API',
   email: 'Email',
@@ -58,7 +57,7 @@ export const CHANNEL_NAMES: Record<ChannelType, string> = {
  * Protocols that deliver one message again until they hear back, so a redelivery must be told
  * from a new message by its request key.
  */
-const REDELIVERED = new Set<ChannelType>(['whatsapp-business', 'email']);
+const REDELIVERED = new Set<ChannelType>(['email']);
 
 type ContactServices = {
   profiles: ProfileReader;

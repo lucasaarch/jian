@@ -119,7 +119,7 @@ it('shows a channel only when it is connected or has conversations', () => {
       { id: 'c2', type: 'whatsapp', revokedAt: '2026-10-01T00:00:00Z' } as Channel,
     ],
     sessions: [
-      chat('business', 'whatsapp-business', '2026-10-20T00:00:00Z'),
+      chat('earlier', 'whatsapp', '2026-10-20T00:00:00Z'),
       chat('linked', 'whatsapp', '2026-10-21T00:00:00Z'),
       chat('script', 'api', '2026-10-19T00:00:00Z'),
     ],
@@ -127,7 +127,7 @@ it('shows a channel only when it is connected or has conversations', () => {
 
   expect(names(sections)).toEqual([
     ['Recent', []],
-    ['WhatsApp', ['linked', 'business']],
+    ['WhatsApp', ['linked', 'earlier']],
     ['Telegram', []],
     ['API Server', ['script']],
   ]);
