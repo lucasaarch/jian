@@ -1,4 +1,5 @@
 import type { ProtectionMode, RunApproval } from '@jian/contracts';
+import { bareAddress } from '../channels/email/text.js';
 import { isChatChannel } from '../channels/kinds.js';
 import { X_ACTION_KINDS, xActionTitle } from '../integrations/x/catalog/index.js';
 
@@ -27,6 +28,7 @@ const ACTION_KINDS: Partial<Record<string, ActionKind>> = {
   send_file: 'message',
   send_session_message: 'message',
   message_contact: 'message',
+  send_email: 'message',
   ask_agent: 'message',
   ...X_ACTION_KINDS,
 };
@@ -78,6 +80,25 @@ export function protectionFor(input: {
     return { mode: 'decline', reason: NO_APPROVER };
   }
 
+  return { mode: 'pause' };
+}
+
+export const OWNER_DECIDES =
+  'Not sent: an email to an address that is not an approved contact waits for the owner to approve it, and nobody in this conversation may. This is a protection, not a missing permission: say what you would send, and that the owner can have it sent from their own conversation with you, or approve the address as a contact in Jian.';
+
+/**
+ * The protection of a call only the owner may let through (`asksOwner`): it waits for them even
+ * on Auto, and where nobody who may approve is reachable it is declined. Full access still runs it,
+ * as it runs every action, because that is what the owner chose for the conversation.
+ */
+export function ownerProtection(
+  protection: Protection,
+  input: { subagent: boolean; channel: string; contactCanApprove: boolean },
+): Protection {
+  if (protection.mode === 'run') return protection;
+  if (input.subagent || (isChatChannel(input.channel) && !input.contactCanApprove)) {
+    return { mode: 'decline', reason: OWNER_DECIDES };
+  }
   return { mode: 'pause' };
 }
 
@@ -202,6 +223,17 @@ const PLAIN: Record<
     detail: field(input, 'text'),
     confirm: 'Send',
   }),
+  send_email: (input) => ({
+    // The address it goes to, as the send reads it, not a display name in front of it.
+    title: `Send an email to ${bareAddress(field(input, 'to')) ?? field(input, 'to')}`,
+    detail: [
+      `Subject: ${field(input, 'subject') ?? '(continues the latest thread)'}`,
+      field(input, 'text'),
+    ]
+      .filter(Boolean)
+      .join('\n\n'),
+    confirm: 'Send',
+  }),
   ask_agent: (input) => ({
     title: 'Ask another agent',
     detail: field(input, 'text'),
@@ -246,6 +278,14 @@ const PLAIN: Record<
     }
   },
 };
+
+/**
+ * Cards no model writes: the owner approves exactly what leaves, so they read it from the call
+ * itself, never from a summary the agent being approved wrote about it.
+ */
+const PLAIN_ONLY = new Set(['send_email']);
+
+export const plainOnly = (toolName: string) => PLAIN_ONLY.has(toolName);
 
 /** A tool of X's, of which there are too many to word by hand: its own summary, and its words. */
 function xPlain(toolName: string, input: unknown) {

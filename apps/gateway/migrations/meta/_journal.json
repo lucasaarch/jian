@@ -694,6 +694,13 @@
       "when": 1794100000000,
       "tag": "0098_remove-whatsapp-business",
       "breakpoints": true
+    },
+    {
+      "idx": 99,
+      "version": "7",
+      "when": 1794200000000,
+      "tag": "0099_email-inbox",
+      "breakpoints": true
     }
   ]
 }

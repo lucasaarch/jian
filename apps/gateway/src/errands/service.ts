@@ -1,20 +1,41 @@
 import { randomUUID } from 'node:crypto';
-import { and, eq, gt, isNull } from 'drizzle-orm';
+import { and, asc, eq, gt, isNull, lte } from 'drizzle-orm';
 import type { ContactRecord } from '../channels/contacts.js';
-import { insertDelivery, toContact } from '../channels/repository.js';
+import { type EmailSearch, searchEmail } from '../channels/email/log.js';
+import { openSignupWindow, signupDomain } from '../channels/email/signups.js';
+import { bareAddress, oneLine } from '../channels/email/text.js';
+import { findEmailThread } from '../channels/email/threads.js';
+import {
+  findContact,
+  findContactByIdentity,
+  insertContact,
+  insertDelivery,
+  toContact,
+} from '../channels/repository.js';
 import { findConnection } from '../channels/whatsapp/repository.js';
 import type { Clock } from '../core/clock.js';
 import { assertFound, GatewayError } from '../core/errors.js';
+import { recordEvent } from '../core/events.js';
 import { stableUuid } from '../core/ids.js';
 import { insertMessage } from '../sessions/repository.js';
 import type { Queryable, Store } from '../storage/database.js';
-import { channels, contacts, errands } from '../storage/schema.js';
+import { channels, contacts, emailBindings, errands } from '../storage/schema.js';
 
 /**
  * How long a question stays open. Past it, a message from that contact is a new conversation
  * rather than a late answer — mistaking the two is worse than losing a slow reply.
  */
 const ERRAND_WINDOW_MS = 48 * 60 * 60 * 1000;
+/**
+ * Email answers slower: a support desk acknowledges at once and a person replies days later.
+ * Counted from the agent's latest email to that address, and every reply in it comes back.
+ */
+export const EMAIL_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+
+const windowOf = (contact: Pick<ContactRecord, 'type'>) =>
+  contact.type === 'email' ? EMAIL_WINDOW_MS : ERRAND_WINDOW_MS;
+
+export type EmailRequest = { to: string; subject?: string; text: string; expectReply: boolean };
 
 export type Errand = typeof errands.$inferSelect;
 
@@ -158,7 +179,10 @@ export class Errands {
     }
   }
 
-  /** Records that this session is waiting on this contact. The message itself is a delivery. */
+  /**
+   * Records that this session is waiting on this contact. The message itself is a delivery. An
+   * email written again from the same conversation is the same wait, counted from the new one.
+   */
   async open(
     tx: Queryable,
     profileId: string,
@@ -167,6 +191,35 @@ export class Errands {
     question: string,
   ): Promise<Errand> {
     const now = this.clock();
+    const expiresAt = new Date(now + windowOf(contact));
+
+    if (contact.type === 'email') {
+      const [extended] = await tx
+        .update(errands)
+        .set({ question, expiresAt, updatedAt: new Date(now) })
+        .where(
+          and(
+            eq(errands.contactId, contact.id),
+            eq(errands.fromSessionId, fromSessionId),
+            eq(errands.status, 'waiting'),
+            gt(errands.expiresAt, new Date(now)),
+          ),
+        )
+        .returning();
+      if (extended) return extended;
+    }
+
+    // A wait whose time is up no longer holds the contact's one open slot.
+    await tx
+      .update(errands)
+      .set({ status: 'expired', updatedAt: new Date(now) })
+      .where(
+        and(
+          eq(errands.contactId, contact.id),
+          eq(errands.status, 'waiting'),
+          lte(errands.expiresAt, new Date(now)),
+        ),
+      );
 
     const [row] = await tx
       .insert(errands)
@@ -177,7 +230,7 @@ export class Errands {
         fromSessionId,
         question,
         status: 'waiting',
-        expiresAt: new Date(now + ERRAND_WINDOW_MS),
+        expiresAt,
         createdAt: new Date(now),
         updatedAt: new Date(now),
       })
@@ -191,16 +244,48 @@ export class Errands {
     return row;
   }
 
+  /** The wait still open on this contact, if its time is not up. */
+  async openFor(tx: Queryable, contactId: string): Promise<Errand | undefined> {
+    const [open] = await tx
+      .select()
+      .from(errands)
+      .where(
+        and(
+          eq(errands.contactId, contactId),
+          eq(errands.status, 'waiting'),
+          gt(errands.expiresAt, new Date(this.clock())),
+        ),
+      )
+      .limit(1);
+    return open;
+  }
+
   /**
    * Closes the open question this message answers, if there is one. Returns it so the caller
-   * can route the reply to the conversation that asked instead of to the contact's own.
+   * can route the reply to the conversation that asked instead of to the contact's own. With
+   * `keepOpen` (email) the wait stays open until its time is up: a desk's acknowledgement, then a
+   * person, then a follow-up all belong to the conversation that wrote.
    */
   async answer(
     tx: Queryable,
     contactId: string,
     text: string,
     requestKey?: string,
+    keepOpen = false,
   ): Promise<Errand | null> {
+    if (keepOpen) {
+      const open = await this.openFor(tx, contactId);
+      if (!open) {
+        await this.expire(tx, contactId);
+        return null;
+      }
+      const [kept] = await tx
+        .update(errands)
+        .set({ answer: text, answerRequestKey: requestKey, updatedAt: new Date(this.clock()) })
+        .where(eq(errands.id, open.id))
+        .returning();
+      return kept ?? open;
+    }
     if (requestKey) {
       const [previous] = await tx
         .select()
@@ -255,6 +340,168 @@ export class Errands {
       .where(and(eq(errands.contactId, contactId), eq(errands.status, 'waiting')));
   }
 
+  /** The profile's live email channel and its own address, when it has one. */
+  async mailbox(
+    profileId: string,
+    db: Queryable = this.store.db,
+  ): Promise<{ channelId: string; address: string } | undefined> {
+    const [row] = await db
+      .select({ channelId: channels.id, address: emailBindings.address })
+      .from(channels)
+      .innerJoin(emailBindings, eq(emailBindings.channelId, channels.id))
+      .where(
+        and(
+          eq(channels.profileId, profileId),
+          eq(channels.type, 'email'),
+          eq(channels.enabled, true),
+          isNull(channels.revokedAt),
+        ),
+      )
+      .orderBy(asc(channels.createdAt))
+      .limit(1);
+    return row;
+  }
+
+  /**
+   * Whether an email to this address waits for the owner whatever the conversation's
+   * protection. Writing to someone new is how an agent is turned against its owner, so the owner
+   * reads the first email before it leaves. After that the agent carries the exchange alone, as
+   * the owner chose: an approved contact, or an address this same conversation is still waiting
+   * on (`openFor`, 7 days from its latest email), takes no approval. Another conversation, a
+   * subagent's included, or a wait that ran out asks again.
+   */
+  async needsOwner(profileId: string, sessionId: string, to: string): Promise<boolean> {
+    const address = bareAddress(to);
+    const mailbox = await this.mailbox(profileId);
+    if (!address || !mailbox) return true;
+    const contact = await findContactByIdentity(this.store.db, mailbox.channelId, address, address);
+    if (!contact || contact.status === 'blocked') return true;
+    if (contact.status === 'approved') return false;
+    const open = await this.openFor(this.store.db, contact.id);
+    return open?.fromSessionId !== sessionId;
+  }
+
+  /**
+   * An email from this conversation to any address. One that is no contact becomes a pending
+   * one: the owner approved this email, not the person, so their mail starts nothing on its own
+   * and reaches only the conversation that wrote, while it waits. The delivery id comes from the
+   * run and the request key, so a repeated call sends once.
+   */
+  async email(
+    profileId: string,
+    fromSessionId: string,
+    runId: string,
+    request: EmailRequest,
+    requestKey: string,
+  ): Promise<{ to: string; contact: 'approved' | 'pending'; waitingUntil?: string }> {
+    const mailbox = await this.mailbox(profileId);
+    if (!mailbox) throw new GatewayError(409, 'This agent has no email channel');
+    const address = bareAddress(request.to);
+    if (!address || address.length > 100)
+      throw new GatewayError(400, 'That is not an email address');
+    if (address === mailbox.address)
+      throw new GatewayError(409, "That is this agent's own address");
+    const subject = request.subject ? oneLine(request.subject) : undefined;
+
+    return this.store.transaction(profileId, async (tx) => {
+      const contact = await this.mailContact(tx, profileId, mailbox.channelId, address);
+      if (contact.status === 'blocked')
+        throw new GatewayError(409, 'The owner blocked that address');
+      if (!subject && !(await findEmailThread(tx, mailbox.channelId, address))) {
+        throw new GatewayError(400, 'Give a subject: nothing was written to that address yet');
+      }
+
+      await this.deliver(
+        tx,
+        profileId,
+        contact,
+        runId,
+        // A first line naming the subject starts a new thread; without one the email continues
+        // the latest thread with that address (`envelope`).
+        subject ? `Subject: ${subject}\n\n${request.text}` : request.text,
+        stableUuid(`email:${profileId}:${runId}:${requestKey}`),
+      );
+
+      const errand = request.expectReply
+        ? await this.open(tx, profileId, contact, fromSessionId, request.text)
+        : undefined;
+
+      return {
+        to: address,
+        contact: contact.status === 'approved' ? 'approved' : 'pending',
+        ...(errand ? { waitingUntil: errand.expiresAt.toISOString() } : {}),
+      };
+    });
+  }
+
+  /**
+   * Opens this conversation's wait for a service's mail (`expect_email`): for 30 minutes, mail
+   * signed by that domain or a subdomain reaches here as text from outside, a contact or not.
+   * No owner approval: it sends nothing, and what it lets in only this conversation reads.
+   */
+  async expect(profileId: string, sessionId: string, domain: string, reason: string) {
+    const mailbox = await this.mailbox(profileId);
+    if (!mailbox) throw new GatewayError(409, 'This agent has no email channel');
+    const named = signupDomain(domain);
+    if (!named) throw new GatewayError(400, 'That is not a domain, such as example.com');
+    const window = await this.store.transaction(profileId, (tx) =>
+      openSignupWindow(
+        tx,
+        {
+          profileId,
+          channelId: mailbox.channelId,
+          sessionId,
+          domain: named,
+          reason: oneLine(reason),
+        },
+        this.clock(),
+      ),
+    );
+    return {
+      address: mailbox.address,
+      domain: named,
+      waitingUntil: assertFound(window ?? null, 'Window').expiresAt.toISOString(),
+    };
+  }
+
+  /** The mail this profile received and sent, newest first (`search_email`). */
+  async searchEmail(profileId: string, search: EmailSearch) {
+    return searchEmail(this.store.db, profileId, search);
+  }
+
+  /** The contact an address is, or a new pending one: the owner approved an email, not them. */
+  private async mailContact(
+    tx: Queryable,
+    profileId: string,
+    channelId: string,
+    address: string,
+  ): Promise<ContactRecord> {
+    const existing = await findContactByIdentity(tx, channelId, address, address);
+    if (existing) return existing;
+    const now = new Date(this.clock()).toISOString();
+    const contact: ContactRecord = {
+      id: randomUUID(),
+      profileId,
+      channelId,
+      type: 'email',
+      scope: 'direct',
+      actorId: address,
+      chatId: address,
+      status: 'pending',
+      aiEnabled: true,
+      canApprove: false,
+      createdAt: now,
+      updatedAt: now,
+    };
+    const inserted = await insertContact(tx, contact);
+    if (!inserted) {
+      return assertFound(await findContactByIdentity(tx, channelId, address, address), 'Contact');
+    }
+    // The panel lists it among the requests, where the owner may approve it as anyone else.
+    await recordEvent(tx, this.clock, profileId, 'contact.requested', contact);
+    return inserted;
+  }
+
   /** Who this profile may write to, and who it is already waiting on. */
   async reachable(profileId: string) {
     const rows = await this.store.db
@@ -289,12 +536,9 @@ export class Errands {
   }
 
   async contact(profileId: string, contactId: string): Promise<ContactRecord> {
-    const [row] = await this.store.db
-      .select()
-      .from(contacts)
-      .where(and(eq(contacts.id, contactId), eq(contacts.profileId, profileId)))
-      .limit(1);
+    // With its channel's type, which decides how long a question to it stays open.
+    const contact = await findContact(this.store.db, contactId);
 
-    return assertFound(row as ContactRecord | undefined, 'Contact');
+    return assertFound(contact?.profileId === profileId ? contact : null, 'Contact');
   }
 }

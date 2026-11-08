@@ -23,6 +23,8 @@ export function outsideContent(name: string, mcpToolNames: readonly string[]): b
     name === 'web_search' ||
     name === 'inspect_page' ||
     name === 'browser_control' ||
+    // Mail anyone can write, read back from the agent's own inbox.
+    name === 'search_email' ||
     readsFromX(name) ||
     mcpToolNames.includes(name)
   );

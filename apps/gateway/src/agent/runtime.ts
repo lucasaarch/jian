@@ -122,9 +122,11 @@ import {
   actionKind,
   approvedOutcome,
   mcpActionKind,
+  ownerProtection,
   type PausedCall,
   type Protection,
   plainDescription,
+  plainOnly,
   protectionFor,
   requestText,
 } from './guard.js';
@@ -147,6 +149,8 @@ import { type StepRequest, summaryCall } from './summary-call.js';
 import { plainTitle, type TitleModel, writeTitle } from './title.js';
 import { reason, toolFailure } from './tool-failure.js';
 import {
+  asksOwner,
+  CONTACTS_WITH_EMAIL_SUMMARY,
   deferTools,
   groupMates,
   MACHINE_FILES_SUMMARY,
@@ -512,6 +516,19 @@ export class AgentRuntime {
     });
   }
 
+  /** Who could approve in this conversation, for a call that waits for the owner on any setting. */
+  private async approvers(run: Run, session: Session) {
+    const contact =
+      !run.subagent && isChatChannel(session.channel)
+        ? await findContactBySession(this.services.store.db, run.profileId, session.id)
+        : null;
+    return {
+      subagent: Boolean(run.subagent),
+      channel: session.channel,
+      contactCanApprove: contact?.canApprove === true,
+    };
+  }
+
   /**
    * Parks the run on the action it wanted to take. The card is written by the run's own model,
    * briefly; a model that cannot, or is slow, gets a plain one built from the call. Nothing here
@@ -526,7 +543,10 @@ export class AgentRuntime {
     service?: { server: string; tool: string },
   ) {
     const input = redactOutput(call.input, secrets);
-    const written = describer ? await describeAction(describer, run, call, input, secrets) : null;
+    const written =
+      describer && !plainOnly(call.toolName)
+        ? await describeAction(describer, run, call, input, secrets)
+        : null;
     const card = written ?? plainDescription({ ...call, input }, service);
     const approval: RunApproval = {
       id: randomUUID(),
@@ -877,6 +897,9 @@ export class AgentRuntime {
         : undefined;
       // Said in compact_context's description, as the Context line says it.
       const point = compactionPoint(policy);
+      // A subagent cannot ask the owner, which emailing someone new takes; nor can a look back.
+      const email =
+        !learning && !run.subagent && Boolean(await this.services.errands.mailbox(profileId));
       const tools: ToolSet = {
         ...profileTools(
           this.services,
@@ -890,6 +913,7 @@ export class AgentRuntime {
           worktreeCan,
           machineFiles,
           () => scale,
+          email,
         ),
         ...(!learning && this.options.github && gitPlace
           ? githubGitTools({
@@ -999,11 +1023,10 @@ export class AgentRuntime {
               .map((load) => load.name),
       );
       const keptTools = new Set(loadedTools);
-      const { gated } = deferTools(
-        tools,
-        loadedTools,
-        machineFiles ? { files: MACHINE_FILES_SUMMARY } : {},
-      );
+      const { gated } = deferTools(tools, loadedTools, {
+        ...(machineFiles ? { files: MACHINE_FILES_SUMMARY } : {}),
+        ...('send_email' in tools ? { contacts: CONTACTS_WITH_EMAIL_SUMMARY } : {}),
+      });
       const { mcpToolNames, selectedMcpTools, unavailable, catalog } = await connectMcpTools(
         servers,
         tools,
@@ -1032,6 +1055,7 @@ export class AgentRuntime {
               web: webAccess ?? { browser: false, inspects: true, subagent: Boolean(run.subagent) },
               xConnected: Object.keys(xTools).length > 0,
               ...(worktreeCan ? { worktrees: worktreeCan } : {}),
+              email: 'send_email' in tools,
               // As load_skill builds it: a skill kept from an earlier turn reads the same.
               ...(session.remoteMachineId ? { machine: { files: Boolean(machineFiles) } } : {}),
             },
@@ -1081,13 +1105,13 @@ export class AgentRuntime {
 
       // Whether actions here run, wait for a person, or are declined: settled once for the turn,
       // so a mode changed mid-turn applies from the next one.
-      const protection = await this.protection(run, session);
+      const turnProtection = await this.protection(run, session);
       const judge = this.services.decisions?.judge;
       const lowEffort = leastReasoningOptions(config);
       // On Auto an action runs unless the guardrail finds it catastrophic; nobody is waited for.
       // Its own model is the run's, asked beside the turn and counted on it.
-      const guard =
-        protection.mode === 'guard'
+      const turnGuard =
+        turnProtection.mode === 'guard'
           ? guardrail({
               ...(judge ? { judge } : {}),
               model: {
@@ -1236,6 +1260,15 @@ export class AgentRuntime {
                 : (await actsOnComputer(definition, input, options.toolCallId, options.abortSignal))
                   ? 'machine'
                   : actionKind(name, input);
+              // An approved call was the owner's decision already; asking again would loop.
+              const protection =
+                kind &&
+                approvedCallId !== options.toolCallId &&
+                turnProtection.mode !== 'run' &&
+                (await asksOwner(definition, input))
+                  ? ownerProtection(turnProtection, await this.approvers(run, session))
+                  : turnProtection;
+              const guard = protection === turnProtection ? turnGuard : undefined;
 
               if (kind && protection.mode !== 'run') {
                 if (approvedCallId !== undefined && approvedCallId === options.toolCallId) {

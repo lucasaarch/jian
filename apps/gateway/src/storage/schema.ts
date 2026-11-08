@@ -940,6 +940,62 @@ export const emailThreads = pgTable(
   (table) => [primaryKey({ columns: [table.channelId, table.chatId] })],
 );
 
+/**
+ * Every email an email channel took in or sent, as the agent searches it (`search_email`). Mail
+ * is otherwise spread over conversations, held messages and deliveries, none of them keyed by
+ * the address on the other side. `address` is the sender of mail received, the recipient of mail
+ * sent; the id comes from the provider's email or the delivery, so a retry logs once.
+ */
+export const emailLog = pgTable(
+  'email_log',
+  {
+    id: uuid('id').primaryKey(),
+    profileId: uuid('profile_id')
+      .notNull()
+      .references(() => profiles.id, { onDelete: 'cascade' }),
+    channelId: uuid('channel_id')
+      .notNull()
+      .references(() => channels.id, { onDelete: 'cascade' }),
+    direction: text('direction').$type<'received' | 'sent'>().notNull(),
+    address: text('address').notNull(),
+    subject: text('subject').notNull(),
+    text: text('text').notNull(),
+    createdAt,
+  },
+  (table) => [index('email_log_recent').on(table.profileId, table.createdAt.desc())],
+);
+
+/**
+ * A short wait a conversation opened for mail from a service it signed up to (`expect_email`):
+ * mail signed by that domain reaches that conversation as text from outside, though the sender
+ * is no contact. One per conversation and domain; asking again extends it.
+ */
+export const emailWindows = pgTable(
+  'email_windows',
+  {
+    id: uuid('id').primaryKey(),
+    profileId: uuid('profile_id')
+      .notNull()
+      .references(() => profiles.id, { onDelete: 'cascade' }),
+    channelId: uuid('channel_id')
+      .notNull()
+      .references(() => channels.id, { onDelete: 'cascade' }),
+    sessionId: uuid('session_id')
+      .notNull()
+      .references(() => sessions.id, { onDelete: 'cascade' }),
+    domain: text('domain').notNull(),
+    reason: text('reason').notNull(),
+    // How many emails it brought in; past a few it stops, so a sender cannot fill the turn.
+    received: integer('received').notNull().default(0),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    createdAt,
+  },
+  (table) => [
+    uniqueIndex('email_windows_per_session').on(table.sessionId, table.domain),
+    index('email_windows_open').on(table.channelId, table.domain, table.expiresAt),
+  ],
+);
+
 export const contactScope = pgEnum('contact_scope', ['direct', 'group']);
 export const contactStatus = pgEnum('contact_status', ['pending', 'approved', 'blocked']);
 
