@@ -71,9 +71,10 @@ export function Elapsed({
 }
 
 /**
- * Every state keeps a single status line, including the outcome, so cards never shrink.
+ * Every state keeps a single status line, including the outcome, so cards never shrink. The
+ * badge of agents at work says the same, so both read alike.
  */
-function nowOf(agent: Subagent) {
+export function nowOf(agent: Subagent) {
   if (agent.status === 'queued') return 'Waiting to start';
   if (agent.status === 'running') return statusOf(agent).label;
   if (agent.status === 'completed') return 'Completed';

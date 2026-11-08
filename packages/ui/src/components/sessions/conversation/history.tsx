@@ -17,6 +17,7 @@ import { Earlier, useEarlier } from './earlier';
 import { mapEntries } from './map-entries';
 import { DecidingContext, RowContext, type RowEnv, RowView } from './row';
 import { ConversationContext } from './store';
+import { ToLatest } from './to-latest';
 import { Tray } from './tray';
 import { useConversationStore, useLanding, useReader, useRows } from './use-history';
 import { useStepDetails } from './use-step-details';
@@ -110,7 +111,7 @@ export function History({
     store,
     useShallow(({ error, behind, toolsUnread }) => ({ error, behind, toolsUnread })),
   );
-  const { scroller, follow, onScroll, hold } = useFollowBottom();
+  const { scroller, follow, toEnd, onScroll, hold } = useFollowBottom();
   const { more, earlier, read, near } = useEarlier(store, reader, scroller);
 
   // Sending is a return to the end, wherever the reader had scrolled.
@@ -198,6 +199,8 @@ export function History({
               </p>
               <section
                 ref={scroller}
+                // Reachable by script alone, to take the focus of the way back to the end.
+                tabIndex={-1}
                 className="message-history"
                 aria-label="Session history"
                 aria-busy={loading}
@@ -228,6 +231,7 @@ export function History({
                 </div>
               </section>
               <ConversationMap scroller={scroller} entries={entries} />
+              <ToLatest scroller={scroller} toEnd={toEnd} />
               {/* A chat on WhatsApp or Telegram has no screen there to throw it on. */}
               <Confetti runs={tools} off={Boolean(chat)} />
               <Tray

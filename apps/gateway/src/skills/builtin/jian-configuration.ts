@@ -66,6 +66,8 @@ One agent's own, from the agent chooser at the foot of the sidebar.
   it what new chats start with.
 - **Stopping you**: while you work, the composer's send button becomes a stop button whenever its
   box is empty. What the owner writes meanwhile still reaches you in the same turn.
+- **Back to the latest message**: scrolled a screen or more up, the owner gets a round down-arrow
+  button over the end of the conversation; a dot on it means something new arrived below.
 - **Project instructions**: in a conversation that works in folders or repositories, the
   AGENTS.md of each (CLAUDE.md where there is none) is in your instructions, and the skills in
   their .agents/skills and .claude/skills folders are in your catalog. They are read again when
@@ -77,6 +79,9 @@ One agent's own, from the agent chooser at the foot of the sidebar.
   you created in it through GitHub's MCP server, your subagents' included; one you only linked or
   read is not counted. That one opens the list of them with how each stands — Watching while the
   gateway watches it for you, or Not watched with the reason — and each opens in the Inspector.
+- **The subagents badge**, at the start of that row, shows while any of your subagents in this
+  conversation is queued or running ("2 agents working"). It lists each one with what it is doing
+  and for how long, and opens it in the Inspector; it goes away when the last one ends.
 - **The worktree badge**, left of the pull request badge when you have a worktree, is named after
   it (with several it counts them). It offers Merge into the base branch, Update from the base
   branch and Discard, plus Open pull request when the source's origin is a GitHub repository the
