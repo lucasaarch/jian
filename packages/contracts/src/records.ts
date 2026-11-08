@@ -518,6 +518,11 @@ export const toolStepSchema = z.strictObject({
   diff: codeDiffSchema.optional(),
   /** The shape an image being drawn was asked for, so its frame takes it before it exists. */
   aspectRatio: imageAspectSchema.optional(),
+  /**
+   * The step was cut for a list: input and output are previews, and the diff's hunks have no
+   * lines. Read the step for all of it. Absent, the step is as whole as a timeline gives it.
+   */
+  brief: z.boolean().optional(),
 });
 
 /**

@@ -14,7 +14,7 @@ import { LiveAnswer, LiveWork } from './live-answer';
 import { spentOf } from './live-text';
 import { type Row, type Span, sameRow } from './rows';
 import { useConversation } from './store';
-import { answers } from './turns';
+import { answers, turnOf } from './turns';
 import { RunChangesSummary, Worked } from './work';
 
 /** What every row draws with that is not the row itself: the same for the whole conversation. */
@@ -61,10 +61,11 @@ function Asked({ row, env }: { row: Asking; env: RowEnv }) {
 }
 
 /** The tools a turn used before the line a row draws. */
-const headOf = (row: { head?: ToolStep[]; headSpan?: Span }) =>
+const headOf = (row: { head?: ToolStep[]; headSpan?: Span }, runId: string | undefined) =>
   row.head?.length ? (
     <Worked
       steps={row.head}
+      runId={runId}
       startedAt={row.headSpan?.startedAt}
       finishedAt={row.headSpan?.finishedAt}
     />
@@ -89,7 +90,7 @@ function draw(
       return [
         null,
         <div className="chat-line theirs" key="line">
-          {headOf(row)}
+          {headOf(row, row.runId)}
           <CrewCards agents={row.crewBefore} />
           <Asked row={row} env={env} />
         </div>,
@@ -98,7 +99,12 @@ function draw(
       return [
         null,
         <div className="chat-line theirs work" key="line">
-          <Worked steps={row.steps} startedAt={row.startedAt} finishedAt={row.finishedAt} />
+          <Worked
+            steps={row.steps}
+            runId={row.runId}
+            startedAt={row.startedAt}
+            finishedAt={row.finishedAt}
+          />
         </div>,
       ];
     case 'changes':
@@ -181,7 +187,7 @@ function drawMessage(
   people: Map<string, Person>,
 ): [ReactNode, ReactNode] {
   const { message, previous } = row;
-  const thought = headOf(row);
+  const thought = headOf(row, turnOf(message));
   // A line sent while the turn was at work: what the turn did before it stays above it.
   const above =
     row.steered && thought ? (

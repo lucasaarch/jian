@@ -6,9 +6,10 @@ import {
   TOOL_DISPLAY_CHARS,
   type ToolStep,
 } from '@jian/contracts';
-import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, type SQL, sql } from 'drizzle-orm';
 import type { Queryable } from '../storage/database.js';
 import { checkpoints, runs } from '../storage/schema.js';
+import { previewJson } from './json-preview.js';
 
 /** How many recent turns a timeline covers when it is not told which. */
 const TIMELINE_RUNS = 50;
@@ -24,21 +25,68 @@ const phases = [
   'tool-completed',
 ];
 
+/** How much of a tool's input and output a brief timeline gives, in characters, laid out. */
+export const BRIEF_CHARS = 240;
+
+/**
+ * How much a value is shown, and how much of its JSON the database sends to show it, in
+ * characters. A brief read takes four times the preview: the layout only adds characters, and a
+ * string's escapes take two for one (`\n`, `\"`), so the preview is still filled. A control
+ * character written `\u0001` takes six for one; a value made mostly of those previews shorter,
+ * and is still marked cut.
+ */
+type Bound = { show: number; read: number };
+const FULL: Bound = { show: TOOL_DISPLAY_CHARS, read: TOOL_DISPLAY_CHARS };
+const BRIEF: Bound = { show: BRIEF_CHARS, read: BRIEF_CHARS * 4 };
+
 /** The database has already cut oversized JSON; never fetch the prompt or full artifacts. */
-function display(field: 'input' | 'output', value: string | null): Partial<ToolStep> {
+function display(
+  field: 'input' | 'output',
+  value: string | null,
+  bound: Bound = FULL,
+): Partial<ToolStep> {
   if (value === null) return {};
+  // The database sends one character more than it was asked to read when it cut the value.
+  const whole = value.length <= bound.read;
   let text = value;
-  if (value.length <= TOOL_DISPLAY_CHARS) {
+  if (whole) {
     try {
       const parsed: unknown = JSON.parse(value);
       text = typeof parsed === 'string' ? parsed : JSON.stringify(parsed, null, 2);
     } catch {
       // An old or already-cut checkpoint is still useful as display text.
     }
+  } else if (bound === BRIEF) {
+    // A full read shows a value too long to parse as it stands; a preview is laid out anyway.
+    text = previewJson(value.slice(0, bound.read));
   }
   return {
-    [field]: text.slice(0, TOOL_DISPLAY_CHARS),
-    ...(text.length > TOOL_DISPLAY_CHARS ? { [`${field}Truncated`]: true } : {}),
+    [field]: text.slice(0, bound.show),
+    ...(!whole || text.length > bound.show ? { [`${field}Truncated`]: true } : {}),
+  };
+}
+
+/**
+ * A diff's hunks without their lines, for a brief read: the starts, counts and headers say
+ * where a write landed, and the lines, the weight of it, stay in the database. Whether any
+ * hunk had lines tells whether the step was cut.
+ */
+function briefDiff(diff: SQL) {
+  const hunks = sql`case when jsonb_typeof(${diff}->'hunks') = 'array'
+    then ${diff}->'hunks' else '[]'::jsonb end`;
+  return {
+    diff: sql<unknown>`case when jsonb_typeof(${diff}->'hunks') = 'array'
+      then jsonb_set(${diff}, '{hunks}', coalesce((
+        select jsonb_agg(case when jsonb_typeof(hunk) = 'object'
+          then hunk || '{"lines": []}'::jsonb else hunk end order by n)
+        from jsonb_array_elements(${diff}->'hunks') with ordinality as h(hunk, n)
+      ), '[]'::jsonb))
+      else ${diff} end`,
+    diffLines: sql<boolean | null>`(
+      select bool_or(case when jsonb_typeof(hunk->'lines') = 'array'
+        then jsonb_array_length(hunk->'lines') > 0 else false end)
+      from jsonb_array_elements(${hunks}) as hunk
+    )`,
   };
 }
 
@@ -53,8 +101,18 @@ export async function sessionTimeline(
   sessionId: string,
   /** The turns to read, however old; only those of this conversation are ever read. */
   runIds?: string[],
+  /**
+   * `brief`: each tool as a list shows it, marked `brief` when it was cut. `toolCallId`: only
+   * that call's checkpoints, and only its own result among a step's, for a step read alone.
+   */
+  options: { brief?: boolean; toolCallId?: string } = {},
 ): Promise<RunTimeline[]> {
   if (runIds && !runIds.length) return [];
+  const bound = options.brief ? BRIEF : FULL;
+  // One more than is read, so a value the database cut is told from one that just fits.
+  const read = bound.read + 1;
+  const diff = sql`${checkpoints.data}->'diff'`;
+  const call = options.toolCallId;
 
   const recent = await db
     .select({
@@ -86,27 +144,26 @@ export async function sessionTimeline(
       // Only a tool server's call carries one; every other row reads null here.
       mcp: sql<unknown>`${checkpoints.data}->'mcp'`,
       // These fields were redacted at write time. Bound them in SQL, before they leave the DB.
-      input: sql<
-        string | null
-      >`left((${checkpoints.data}->'input')::text, ${TOOL_DISPLAY_CHARS + 1})`,
-      output: sql<
-        string | null
-      >`left((${checkpoints.data}->'result')::text, ${TOOL_DISPLAY_CHARS + 1})`,
+      input: sql<string | null>`left((${checkpoints.data}->'input')::text, ${read})`,
+      output: sql<string | null>`left((${checkpoints.data}->'result')::text, ${read})`,
       tools: sql<Array<{ toolCallId: string; toolName: string; output: string | null }> | null>`(
         select jsonb_agg(jsonb_build_object(
           'toolCallId', item->>'toolCallId',
           'toolName', item->>'toolName',
-          'output', left((item->'result')::text, ${TOOL_DISPLAY_CHARS + 1})
+          'output', left((item->'result')::text, ${read})
         )) from jsonb_array_elements(
           case when jsonb_typeof(${checkpoints.data}->'tools') = 'array'
           then ${checkpoints.data}->'tools' else '[]'::jsonb end
         ) as item
+        ${call === undefined ? sql`` : sql`where item->>'toolCallId' = ${call}`}
       )`,
       reason: sql<
         string | null
       >`left(coalesce(${checkpoints.data}->>'detail', ${checkpoints.data}->>'reason'), ${TOOL_DISPLAY_CHARS})`,
       // Only a write's own diff checkpoint carries one; every other row reads null here.
-      diff: sql<unknown>`${checkpoints.data}->'diff'`,
+      ...(options.brief
+        ? briefDiff(diff)
+        : { diff: sql<unknown>`${diff}`, diffLines: sql<boolean | null>`null` }),
       // Only an image being drawn is asked for one; every other row reads null here.
       aspectRatio: sql<string | null>`${checkpoints.data}->'input'->>'aspectRatio'`,
     })
@@ -119,6 +176,13 @@ export async function sessionTimeline(
           recent.map((run) => run.id),
         ),
         inArray(sql`${checkpoints.data}->>'phase'`, phases),
+        // A step's result arrives in its turn's step checkpoint, among the others' results.
+        call === undefined
+          ? undefined
+          : sql`(${checkpoints.data}->>'toolCallId' = ${call}
+              or (${checkpoints.data}->>'phase' = 'step-completed'
+                and ${checkpoints.data}->'tools' @> jsonb_build_array(
+                  jsonb_build_object('toolCallId', ${call}::text))))`,
       ),
     )
     .orderBy(asc(checkpoints.createdAt), asc(checkpoints.id));
@@ -129,6 +193,8 @@ export async function sessionTimeline(
       .map((run) => run.id),
   );
   const timelines = new Map<string, Map<string, ToolStep>>();
+  // The steps whose diff lost its lines to a brief read.
+  const linesCut = new Set<ToolStep>();
 
   for (const row of rows) {
     const steps = timelines.get(row.runId) ?? new Map<string, ToolStep>();
@@ -147,7 +213,7 @@ export async function sessionTimeline(
         ...(mcp?.success ? { mcp: mcp.data } : {}),
         status: 'running',
         startedAt: row.at.toISOString(),
-        ...display('input', row.input),
+        ...display('input', row.input, bound),
         ...(aspect?.success ? { aspectRatio: aspect.data } : {}),
       });
       continue;
@@ -159,7 +225,10 @@ export async function sessionTimeline(
       // never passed through.
       const diff = codeDiffSchema.safeParse(row.diff);
 
-      if (step && diff.success) step.diff = diff.data;
+      if (step && diff.success) {
+        step.diff = diff.data;
+        if (row.diffLines) linesCut.add(step);
+      }
       continue;
     }
 
@@ -168,7 +237,7 @@ export async function sessionTimeline(
       const step = row.toolCallId ? steps.get(row.toolCallId) : undefined;
 
       if (step && step.toolName === row.toolName) {
-        Object.assign(step, display('output', row.output));
+        Object.assign(step, display('output', row.output, bound));
         if (step.status === 'running') {
           Object.assign(step, { status: 'done', finishedAt: row.at.toISOString() });
         }
@@ -180,7 +249,7 @@ export async function sessionTimeline(
       for (const result of row.tools ?? []) {
         const step = steps.get(result.toolCallId);
         if (!step || step.toolName !== result.toolName) continue;
-        Object.assign(step, display('output', result.output));
+        Object.assign(step, display('output', result.output, bound));
         if (step.status === 'running') {
           Object.assign(step, { status: 'done', finishedAt: row.at.toISOString() });
         }
@@ -199,7 +268,7 @@ export async function sessionTimeline(
               ? 'refused'
               : 'uncertain',
         finishedAt: row.at.toISOString(),
-        ...display('output', row.output),
+        ...display('output', row.output, bound),
         ...(row.reason ? { error: row.reason.slice(0, TOOL_DISPLAY_CHARS) } : {}),
       });
     }
@@ -212,11 +281,32 @@ export async function sessionTimeline(
     .reverse()
     .map((run) => ({
       runId: run.id,
-      steps: [...(timelines.get(run.id)?.values() ?? [])].map((step) =>
+      steps: [...(timelines.get(run.id)?.values() ?? [])].map((step) => ({
+        ...step,
         // A tool still "running" in a turn that ended never came back.
-        step.status === 'running' && !active.has(run.id) ? { ...step, status: 'stopped' } : step,
-      ),
+        ...(step.status === 'running' && !active.has(run.id) ? { status: 'stopped' as const } : {}),
+        // Only a step that lost something to the list is read again when it is opened.
+        ...(options.brief && (step.inputTruncated || step.outputTruncated || linesCut.has(step))
+          ? { brief: true }
+          : {}),
+      })),
       ...(run.approval ? { approval: run.approval } : {}),
       ...(run.question ? { question: run.question } : {}),
     }));
+}
+
+/**
+ * One tool of a conversation in full: the call its model named, in the turn that made it, read
+ * as a timeline reads it. Only that turn of this conversation is read, and only that call's
+ * checkpoints in it: a call id is the model's own, and another turn may have used it too.
+ */
+export async function sessionToolStep(
+  db: Queryable,
+  profileId: string,
+  sessionId: string,
+  runId: string,
+  toolCallId: string,
+): Promise<ToolStep | undefined> {
+  const [timeline] = await sessionTimeline(db, profileId, sessionId, [runId], { toolCallId });
+  return timeline?.steps.find((step) => step.toolCallId === toolCallId);
 }

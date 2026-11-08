@@ -96,5 +96,12 @@ export function LiveWork({
     updatedAt: now.updatedAt ?? createdAt,
   };
 
-  return <LiveThought run={{ status, createdAt, progress }} steps={steps} startedAt={startedAt} />;
+  return (
+    <LiveThought
+      run={{ status, createdAt, progress }}
+      runId={runId}
+      steps={steps}
+      startedAt={startedAt}
+    />
+  );
 }

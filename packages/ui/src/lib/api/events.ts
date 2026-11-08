@@ -66,6 +66,9 @@ export async function readEvents(
     let response = await open(!textless.has(origin));
     if (response.status === 400 && !textless.has(origin)) {
       textless.add(origin);
+      // Left unread, the refusal's body would hold its stream on the connection every request
+      // to this gateway shares.
+      await response.body?.cancel().catch(() => {});
       response = await open(false);
     }
 

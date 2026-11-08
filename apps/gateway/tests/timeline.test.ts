@@ -198,3 +198,187 @@ describe("a conversation's tool timeline", () => {
     });
   });
 });
+
+describe('a brief timeline, for a list of tools', () => {
+  // How long a preview is, in characters: what a list shows of a tool before it is opened.
+  const BRIEF_CHARS = 240;
+  const diff = {
+    path: 'src/deploy.ts',
+    language: 'typescript',
+    additions: 2,
+    deletions: 1,
+    hunks: [
+      {
+        oldStart: 3,
+        oldLines: 2,
+        newStart: 3,
+        newLines: 3,
+        header: 'function deploy()',
+        lines: [
+          { kind: 'context', old: 3, new: 3, text: 'const host = "example.test";' },
+          { kind: 'del', old: 4, text: 'run(host);' },
+          { kind: 'add', new: 4, text: 'await run(host);' },
+          { kind: 'add', new: 5, text: 'log(host);' },
+        ],
+      },
+    ],
+  };
+
+  const longInput = {
+    path: 'src/deploy.ts',
+    options: { mode: 'overwrite', tags: [], owners: ['ada', 'grace'], note: 'say "hi"\tnow' },
+    contents: 'const value = "x";\n'.repeat(400),
+  };
+
+  const written = async () => {
+    const f = await setup();
+    const turn = await f.turn('brief');
+    await turn.write({
+      phase: 'tool-started',
+      toolName: 'write_file',
+      toolCallId: 'long',
+      input: longInput,
+    });
+    await turn.write({ phase: 'tool-diff', toolName: 'write_file', toolCallId: 'long', diff });
+    await turn.write({
+      phase: 'tool-started',
+      toolName: 'web_search',
+      toolCallId: 'short',
+      input: { query: 'deploy jian' },
+    });
+    await turn.write({
+      phase: 'step-completed',
+      tools: [
+        { toolCallId: 'long', toolName: 'write_file', result: 'y'.repeat(5_000) },
+        { toolCallId: 'short', toolName: 'web_search', result: { hits: 3 } },
+      ],
+    });
+    await turn.finish();
+    return { ...f, runId: turn.run.id };
+  };
+
+  /** One write in a turn of its own, with the diff given and a short input and output. */
+  const wrote = async (key: string, written: unknown) => {
+    const f = await setup();
+    const turn = await f.turn(key);
+    await turn.write({
+      phase: 'tool-started',
+      toolName: 'write_file',
+      toolCallId: 'w',
+      input: { path: 'src/deploy.ts' },
+    });
+    await turn.write({
+      phase: 'tool-diff',
+      toolName: 'write_file',
+      toolCallId: 'w',
+      diff: written,
+    });
+    await turn.write({
+      phase: 'step-completed',
+      tools: [{ toolCallId: 'w', toolName: 'write_file', result: 'Written.' }],
+    });
+    await turn.finish();
+    const [timeline] = await f.services.sessions.timeline(f.profile.id, f.session.id, undefined, {
+      brief: true,
+    });
+    return timeline?.steps[0];
+  };
+
+  it('cuts input and output to a preview and empties the lines of a diff, keeping its hunks', async () => {
+    const f = await written();
+    const [timeline] = await f.services.sessions.timeline(f.profile.id, f.session.id, undefined, {
+      brief: true,
+    });
+    const step = timeline?.steps[0];
+
+    expect(step).toMatchObject({ brief: true, inputTruncated: true, outputTruncated: true });
+    expect(step?.input?.length).toBe(BRIEF_CHARS);
+    // Cut after it is laid out, as the full step is: a preview reads the way the whole does.
+    const [whole] = await f.services.sessions.timeline(f.profile.id, f.session.id);
+    expect(step?.input).toBe(whole?.steps[0]?.input?.slice(0, BRIEF_CHARS));
+    expect(step?.input).toContain('"tags": [],\n');
+    expect(step?.output).toBe('y'.repeat(BRIEF_CHARS));
+    expect(step?.diff).toEqual({
+      ...diff,
+      hunks: diff.hunks.map((hunk) => ({ ...hunk, lines: [] })),
+    });
+  });
+
+  it('marks no step brief that it did not have to cut', async () => {
+    const f = await written();
+    const [timeline] = await f.services.sessions.timeline(f.profile.id, f.session.id, undefined, {
+      brief: true,
+    });
+    const step = timeline?.steps[1];
+
+    expect(step).not.toHaveProperty('brief');
+    expect(step).not.toHaveProperty('inputTruncated');
+    expect(JSON.parse(step?.input ?? 'null')).toEqual({ query: 'deploy jian' });
+    expect(JSON.parse(step?.output ?? 'null')).toEqual({ hits: 3 });
+  });
+
+  it('answers in full when it is not asked to be brief', async () => {
+    const f = await written();
+    const [timeline] = await f.services.sessions.timeline(f.profile.id, f.session.id);
+    const step = timeline?.steps[0];
+
+    expect(step).not.toHaveProperty('brief');
+    expect(step).not.toHaveProperty('inputTruncated');
+    expect(JSON.parse(step?.input ?? 'null')).toEqual(longInput);
+    expect(step?.output).toBe('y'.repeat(5_000));
+    expect(step?.diff).toEqual(diff);
+  });
+
+  it('marks a step brief whose diff alone was cut', async () => {
+    const step = await wrote('diff-only', diff);
+
+    expect(step).toMatchObject({ brief: true, input: expect.any(String), output: 'Written.' });
+    expect(step).not.toHaveProperty('inputTruncated');
+    expect(step).not.toHaveProperty('outputTruncated');
+  });
+
+  it('leaves a diff whose hunks had no lines unmarked', async () => {
+    const step = await wrote('no-lines', {
+      ...diff,
+      hunks: diff.hunks.map((hunk) => ({ ...hunk, lines: [] })),
+    });
+
+    expect(step?.diff?.hunks).toHaveLength(1);
+    expect(step).not.toHaveProperty('brief');
+  });
+
+  it('keeps the hunks of a brief diff in their order', async () => {
+    const second = { ...diff.hunks[0], oldStart: 40, newStart: 41, header: 'function log()' };
+    const step = await wrote('order', {
+      ...diff,
+      hunks: [...diff.hunks, second, { ...second, oldStart: 90, newStart: 91, header: 'end' }],
+    });
+
+    expect(step?.diff?.hunks.map((hunk) => hunk.header)).toEqual([
+      'function deploy()',
+      'function log()',
+      'end',
+    ]);
+    expect(step?.diff?.hunks.every((hunk) => hunk.lines.length === 0)).toBe(true);
+  });
+
+  it('reads one step in full, and only from its own conversation', async () => {
+    const f = await written();
+    const elsewhere = await f.services.sessions.createGatewaySession(f.profile.id, {});
+    const step = await f.services.sessions.toolStep(f.profile.id, f.session.id, f.runId, 'long');
+
+    expect(step).toMatchObject({ toolCallId: 'long', toolName: 'write_file', status: 'done' });
+    expect(step).not.toHaveProperty('brief');
+    expect(step.output).toBe('y'.repeat(5_000));
+    expect(step.diff).toEqual(diff);
+    await expect(
+      f.services.sessions.toolStep(f.profile.id, elsewhere.id, f.runId, 'long'),
+    ).rejects.toMatchObject({ statusCode: 404 });
+    await expect(
+      f.services.sessions.toolStep(f.profile.id, f.session.id, f.runId, 'unknown'),
+    ).rejects.toMatchObject({ statusCode: 404 });
+    await expect(
+      f.services.sessions.toolStep(f.other.id, f.session.id, f.runId, 'long'),
+    ).rejects.toMatchObject({ statusCode: 404 });
+  });
+});

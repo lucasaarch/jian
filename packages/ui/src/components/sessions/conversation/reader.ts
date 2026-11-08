@@ -29,6 +29,13 @@ export type Reader = {
 type Ended = { runs: Set<string>; calls: Set<string> };
 
 /**
+ * Every timeline this reader asks for is brief: a turn's tools are read again on each of its
+ * steps, and their whole inputs and outputs, drawn only once a tool is opened, made a long
+ * turn's read megabytes. An opened tool reads its own step whole, through `StepDetails`.
+ */
+const BRIEF = { brief: true };
+
+/**
  * The last question this profile carried to another agent, while its answer has not come back.
  * That agent's work reaches this profile's stream only when it ends, so it is followed by reads.
  */
@@ -143,12 +150,14 @@ export function createReader(options: {
     const [timeline, worked] = await Promise.all([
       // Nothing to ask: a timeline asked for no turn answers with the latest ones instead.
       api.timeline && turns.length
-        ? api.timeline(profileId, sessionId, turns).catch(() => undefined)
+        ? api.timeline(profileId, sessionId, turns, BRIEF).catch(() => undefined)
         : Promise.resolve(api.timeline ? [] : undefined),
       api.timeline
         ? Promise.all(
             [...calls.values()].map((call) =>
-              api.timeline?.(call.profileId, call.sessionId, call.runs).catch(() => undefined),
+              api
+                .timeline?.(call.profileId, call.sessionId, call.runs, BRIEF)
+                .catch(() => undefined),
             ),
           )
         : Promise.resolve([]),
@@ -263,7 +272,7 @@ export function createReader(options: {
     if (!turns.length || !api.timeline || stopped) return;
     const number = ++sent;
     try {
-      const timeline = await api.timeline(profileId, sessionId, turns);
+      const timeline = await api.timeline(profileId, sessionId, turns, BRIEF);
       if (stopped) return;
       // A turn that ended while this was read has its final tools from the read that ended it.
       const still = turns.filter((turn) => !state().ended.runs.has(turn));
@@ -325,7 +334,9 @@ export function createReader(options: {
     const number = ++sent;
     const [current, steps] = await Promise.all([
       api.run(pending.profileId, pending.runId).catch(() => undefined),
-      api.timeline?.(pending.profileId, pending.sessionId, [pending.runId]).catch(() => undefined),
+      api
+        .timeline?.(pending.profileId, pending.sessionId, [pending.runId], BRIEF)
+        .catch(() => undefined),
     ]);
     // Its answer came back while this was read: the read that saw it holds the final word.
     if (stopped || state().ended.calls.has(pending.runId)) return;
