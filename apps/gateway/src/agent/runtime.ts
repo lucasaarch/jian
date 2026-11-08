@@ -151,6 +151,7 @@ import { reason, toolFailure } from './tool-failure.js';
 import {
   asksOwner,
   CONTACTS_WITH_EMAIL_SUMMARY,
+  cardInput,
   deferTools,
   groupMates,
   MACHINE_FILES_SUMMARY,
@@ -541,13 +542,16 @@ export class AgentRuntime {
     describer: Describer | undefined,
     secrets: Set<string>,
     service?: { server: string; tool: string },
+    shown?: unknown,
   ) {
     const input = redactOutput(call.input, secrets);
     const written =
       describer && !plainOnly(call.toolName)
         ? await describeAction(describer, run, call, input, secrets)
         : null;
-    const card = written ?? plainDescription({ ...call, input }, service);
+    const card =
+      written ??
+      plainDescription({ ...call, input: redactOutput(shown ?? call.input, secrets) }, service);
     const approval: RunApproval = {
       id: randomUUID(),
       toolCallId: call.toolCallId,
@@ -620,6 +624,8 @@ export class AgentRuntime {
     let askUser: { prompt: string; choices?: string[] } | undefined;
     // The action that parked this run, once one has: the first, since the stream stops there.
     let pausedCall: PausedCall | undefined;
+    // What that action's card is written from: the call, with what the tool adds for the owner.
+    let pausedCard: unknown;
     // The one call an approval let through, consumed as it runs.
     let approvedCallId: string | undefined;
     // What writes an approval's card: the run's own model, once it is known.
@@ -1308,7 +1314,15 @@ export class AgentRuntime {
                     return { declined: verdict.reason };
                   }
                 } else {
-                  pausedCall ??= { toolName: name, toolCallId: options.toolCallId, kind, input };
+                  if (!pausedCall) {
+                    pausedCall = { toolName: name, toolCallId: options.toolCallId, kind, input };
+                    // Read where the call itself would read, so the card sees what it sends.
+                    pausedCard = await withFolders(
+                      folders,
+                      () => cardInput(definition, input),
+                      worktrees?.scope.guarded,
+                    ).catch(() => input);
+                  }
                   controller.abort();
                   throw new ApprovalPause(pausedCall);
                 }
@@ -2471,6 +2485,7 @@ export class AgentRuntime {
           describer,
           secrets,
           mcpCatalog.find((entry) => entry.name === pausedCall?.toolName),
+          pausedCard,
         );
         return;
       }
@@ -2581,6 +2596,7 @@ export class AgentRuntime {
             describer,
             secrets,
             mcpCatalog.find((entry) => entry.name === call.toolName),
+            pausedCard,
           ).catch((waitError: unknown) =>
             console.error(
               `jian: run ${runId} could not wait for approval — ${redactText(describe(waitError), secrets)}`,

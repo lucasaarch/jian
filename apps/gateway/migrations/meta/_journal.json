@@ -708,6 +708,13 @@
       "when": 1794300000000,
       "tag": "0100_email-domains",
       "breakpoints": true
+    },
+    {
+      "idx": 101,
+      "version": "7",
+      "when": 1794400000000,
+      "tag": "0101_email-copies-and-files",
+      "breakpoints": true
     }
   ]
 }

@@ -317,17 +317,18 @@ export class Resend implements EmailProvider {
     const body = {
       from: email.from,
       to: [email.to],
+      ...(email.cc?.length ? { cc: email.cc } : {}),
       subject: email.subject,
       text: email.text || ' ',
+      ...(email.html ? { html: email.html } : {}),
       ...(Object.keys(headers).length ? { headers } : {}),
-      ...(email.media
+      // Resend takes each file as base64, which is how the gateway keeps them already.
+      ...(email.attachments?.length
         ? {
-            attachments: [
-              {
-                filename: email.media.name ?? fileNameOf(email.media.mimeType),
-                content: email.media.data,
-              },
-            ],
+            attachments: email.attachments.map((file) => ({
+              filename: file.name ?? fileNameOf(file.mimeType),
+              content: file.data,
+            })),
           }
         : {}),
     };

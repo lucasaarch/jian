@@ -1,5 +1,5 @@
 import type { EmailSearch } from '../channels/email/log.js';
-import type { EmailRequest, Errands } from './service.js';
+import type { EmailRequest, EmailSent, Errands } from './service.js';
 
 /**
  * What the agent may do with the people its owner approved. The one way to a stranger is
@@ -26,14 +26,15 @@ export interface Outreach {
     requestKey: string,
   ): Promise<{ to: string; channel: string; sessionId: string } | undefined>;
   mailbox(profileId: string): Promise<{ channelId: string; address: string } | undefined>;
-  needsOwner(profileId: string, to: string): Promise<boolean>;
+  /** Whether the owner decides an email to these addresses, `to` and every copy. */
+  needsOwner(profileId: string, recipients: readonly string[]): Promise<boolean>;
   email(
     profileId: string,
     fromSessionId: string,
     runId: string,
     request: EmailRequest,
     requestKey: string,
-  ): Promise<{ to: string; sessionId: string; note: string }>;
+  ): Promise<EmailSent>;
   expect(
     profileId: string,
     domain: string,

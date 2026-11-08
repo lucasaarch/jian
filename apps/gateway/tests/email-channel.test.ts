@@ -315,7 +315,7 @@ describe('the email channel', () => {
       const [delivery] = await f.channels.deliveries(f.profile.id);
       expect(delivery).toMatchObject({ status: 'sent' });
       expect(sent[0]?.headers.get('idempotency-key')).toBe(delivery?.id);
-      const messageId = /<([^@]+)@mail\.test>/.exec(JSON.stringify(sent[0]?.body))?.[0];
+      const messageId = /<([^@<>]+)@mail\.test>/.exec(JSON.stringify(sent[0]?.body))?.[0];
       expect(sent[0]?.body).toMatchObject({
         from: '"Mia" <mia@agents.test>',
         to: ['ada@mail.test'],

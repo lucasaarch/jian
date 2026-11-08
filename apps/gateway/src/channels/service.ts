@@ -8,6 +8,7 @@ import {
   type deliverySchema,
   type Group,
   type GroupTurn,
+  type InlineMedia,
   type ingressResultSchema,
   type Message,
   type Session,
@@ -47,6 +48,7 @@ import {
   CredentialRefused,
   type DeliveryOutcome,
   type IncomingMessage,
+  type OutgoingMessage,
 } from './channel.js';
 import { CHANNEL_NAMES, type ContactRecord, Contacts, type Intake } from './contacts.js';
 import { conversational } from './conversation.js';
@@ -125,6 +127,8 @@ export type DeliveryRecord = z.infer<typeof deliverySchema> & {
   connectionGeneration?: number;
   /** The producer of media/notices, whose text must not replace their caption. */
   sourceRunId?: string;
+  /** An email's copied addresses and the media ids of its files (`send_email`). */
+  email?: { cc?: string[]; attachments?: string[] };
 };
 
 class AutomationPaused extends Error {}
@@ -2069,13 +2073,15 @@ export class Channels {
             text: mail.text,
             key: delivery.id,
           });
-          await keepSentThread(
-            tx,
-            delivery.channelId,
-            delivery.chatId,
-            outbound,
-            outcome.remoteMessageIds,
-          );
+          // Everyone copied is in the thread too: a later email to them continues it.
+          for (const chatId of [delivery.chatId, ...(delivery.email?.cc ?? [])])
+            await keepSentThread(
+              tx,
+              delivery.channelId,
+              chatId,
+              outbound,
+              outcome.remoteMessageIds,
+            );
         }
       });
       channelLog('delivery.result', {
@@ -2342,6 +2348,10 @@ export class Channels {
           ? await findEmailThread(this.services.store.db, channel.id, delivery.chatId)
           : undefined;
       const thread = emailThread ? { emailThread } : {};
+      const copies = channel.type === 'email' ? await this.emailParts(delivery) : {};
+      if (!copies) {
+        return { status: 'failed', remoteMessageIds: [], error: 'A file of this email is gone.' };
+      }
 
       if (delivery.reaction)
         return adapter.send(
@@ -2365,6 +2375,7 @@ export class Channels {
             },
             people,
             ...thread,
+            ...copies,
           },
           context,
         );
@@ -2399,6 +2410,7 @@ export class Channels {
             text: part,
             people,
             ...thread,
+            ...copies,
             // Choices ride on the last bubble, as its own text: one reply keyboard, under the
             // line that asks, and no bubble said twice.
             ...(index === parts.length - 1 && poll ? { poll: { ...poll, question: part } } : {}),
@@ -2423,6 +2435,30 @@ export class Channels {
       // An unexpected adapter failure may happen after a remote write. Never retry it blindly.
       return { status: attemptedSend ? 'unknown' : 'failed', remoteMessageIds: [] };
     }
+  }
+
+  /**
+   * The addresses an email copies and its files, read when it leaves; undefined when a file is
+   * gone, as an email the owner approved with a file must not leave without it.
+   */
+  private async emailParts(
+    delivery: DeliveryRecord,
+  ): Promise<Pick<OutgoingMessage, 'cc' | 'attachments'> | undefined> {
+    const { cc = [], attachments: ids = [] } = delivery.email ?? {};
+    const attachments: InlineMedia[] = [];
+    for (const id of ids) {
+      const media = await this.services.media?.read(delivery.profileId, id).catch(() => undefined);
+      if (!media) return undefined;
+      attachments.push({
+        mimeType: media.mimeType as InlineMedia['mimeType'],
+        data: media.data,
+        ...(media.name ? { name: media.name } : {}),
+      });
+    }
+    return {
+      ...(cc.length ? { cc } : {}),
+      ...(attachments.length ? { attachments } : {}),
+    };
   }
 
   /**

@@ -1122,6 +1122,9 @@ export const deliveries = pgTable(
     notice: text('notice'),
     reaction: jsonb('reaction').$type<import('@jian/contracts').ReactionDelivery>(),
     mediaId: uuid('media_id'),
+    // An email's own: the addresses it copies and the media ids of its files, read when it is
+    // sent. Only `send_email` writes it, after the owner saw every one of them.
+    email: jsonb('email').$type<{ cc?: string[]; attachments?: string[] }>(),
     status: deliveryStatus('status').notNull(),
     error: text('error'),
     // What the protocol called the message it accepted, for a later receipt to match.

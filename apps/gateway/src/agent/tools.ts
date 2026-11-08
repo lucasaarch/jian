@@ -19,6 +19,13 @@ import { Coordination } from '../coordination/service.js';
 import { assertFound, GatewayError } from '../core/errors.js';
 import { gatewayTimeZone } from '../core/time-zone.js';
 import type { Decisions, Question } from '../decisions/service.js';
+import {
+  type EmailFileRequest,
+  emailFileLines,
+  MAX_EMAIL_CC,
+  MAX_EMAIL_CC_CHARS,
+  MAX_EMAIL_FILES,
+} from '../errands/email-parts.js';
 import type { Outreach } from '../errands/port.js';
 import { X_TOOL_GROUPS } from '../integrations/x/catalog/index.js';
 import { sameSubject } from '../memories/duplicates.js';
@@ -125,10 +132,22 @@ export type ToolServices = {
  * A tool whose call waits for the owner even where actions run on their own: Auto, or a subagent.
  * True for this input means the owner decides; only Full access runs it without them.
  */
-export type OwnerGate = { asksOwner: (input: unknown) => Promise<boolean> };
+export type OwnerGate = {
+  asksOwner: (input: unknown) => Promise<boolean>;
+  /**
+   * What the owner's card is written from in place of the call: the call with what it does not
+   * say itself, such as the size of a file it names. Only the card reads it; what runs is the call.
+   */
+  cardInput?: (input: unknown) => Promise<unknown>;
+};
 
 export const asksOwner = (definition: unknown, input: unknown): Promise<boolean> =>
   (definition as Partial<OwnerGate>).asksOwner?.(input) ?? Promise.resolve(false);
+
+/** The input the card is written from; the call's own when the tool adds nothing, or fails to. */
+export const cardInput = (definition: unknown, input: unknown): Promise<unknown> =>
+  (definition as Partial<OwnerGate>).cardInput?.(input).catch(() => input) ??
+  Promise.resolve(input);
 
 /**
  * A skill as this run may load it: the owner's own of that name as they wrote it, and the two
@@ -779,9 +798,18 @@ export function profileTools(
     // whatever this conversation's protection short of Full access: see `asksOwner` below.
     send_email: tool({
       description:
-        'Send an email from this agent’s own address to any address, such as a company’s support. The first email to an address that is not an approved contact waits for the owner to approve it; once sent, the address is your correspondent: an approved contact with an email conversation of its own, where its replies start turns and you answer them, and later emails to it go without asking. The brief and the email are kept there. Returns that conversation’s sessionId. Without a subject it continues your latest thread with that address.',
+        'Send an email from this agent’s own address to any address, such as a company’s support. The first email to an address that is not an approved contact waits for the owner to approve it, and so does one that copies (cc) any such address; once sent, each address is your correspondent: an approved contact with an email conversation of its own, where its replies start turns and you answer them, and later emails to it go without asking. The brief and the email are kept there. Returns that conversation’s sessionId. Without a subject it continues your latest thread with that address. Write the text in Markdown: it is sent formatted, with a plain-text copy.',
       inputSchema: z.object({
         to: z.string().trim().min(3).max(100),
+        cc: z
+          .array(z.string().trim().min(3).max(100))
+          .max(MAX_EMAIL_CC)
+          .refine(
+            (list) => list.join(', ').length <= MAX_EMAIL_CC_CHARS,
+            `At most ${MAX_EMAIL_CC_CHARS} characters of copied addresses, so the owner sees them all`,
+          )
+          .optional()
+          .describe('Addresses copied on the email, each a recipient like to.'),
         subject: z
           .string()
           .trim()
@@ -798,6 +826,19 @@ export function profileTools(
           .max(500)
           .describe(
             'For the conversation that answers the replies: what you are getting done, for whom, and what the owner wants to hear of it.',
+          ),
+        attachments: z
+          .array(
+            z.object({
+              mediaId: z.uuid().optional().describe('A file of this conversation.'),
+              path: z.string().min(1).max(4096).optional().describe('An absolute path.'),
+              name: z.string().trim().min(1).max(200).optional(),
+            }),
+          )
+          .max(MAX_EMAIL_FILES)
+          .optional()
+          .describe(
+            `Files to attach, each by mediaId or path: up to ${MAX_EMAIL_FILES}, 16 MB each and 20 MB together.`,
           ),
         requestKey: z.string().min(1).max(120).optional(),
       }),
@@ -871,15 +912,34 @@ export function profileTools(
   };
 
   // Read by the runtime before the call, as it reads where an action lands (`asksOwner`).
-  if (email)
+  if (email) {
+    const asked = (input: unknown) =>
+      (input ?? {}) as { to?: unknown; cc?: unknown; attachments?: unknown };
     Object.assign(tools.send_email as object, {
-      asksOwner: (input: unknown) =>
-        services.errands.needsOwner(
-          run.profileId,
-          String((input as { to?: unknown } | null)?.to ?? ''),
-        ),
+      // Every address it goes to counts: one stranger among the copies is a stranger.
+      asksOwner: (input: unknown) => {
+        const { to, cc } = asked(input);
+        return services.errands.needsOwner(run.profileId, [
+          String(to ?? ''),
+          ...(Array.isArray(cc) ? cc.map(String) : []),
+        ]);
+      },
+      // The card names each file with the size that will leave, which the call does not say.
+      cardInput: async (input: unknown) => {
+        const files = asked(input).attachments;
+        if (!Array.isArray(files) || !files.length) return input;
+        return {
+          ...(input as object),
+          attachments: await emailFileLines(
+            services.store.db,
+            run.profileId,
+            run.sessionId,
+            files as EmailFileRequest[],
+          ),
+        };
+      },
     } satisfies OwnerGate);
-  else {
+  } else {
     delete tools.send_email;
     delete tools.expect_email;
     delete tools.search_email;

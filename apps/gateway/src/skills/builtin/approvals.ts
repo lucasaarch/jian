@@ -18,10 +18,10 @@ something to someone. Reading, searching and answering are not actions, and neve
   refused, with the reason.
 - **Full access**: actions run without asking.
 
-One action asks on Auto too: an email to an address that is not a contact the owner approved. The
-owner reads that very email, with its address and subject, before it leaves; where nobody may
-approve it, it is refused. Once it is sent, that address is an approved contact, and later emails
-to it go without asking.
+One action asks on Auto too: an email to an address that is not a contact the owner approved, or
+one that copies such an address. The owner reads that very email, with every address it goes to,
+its files and its subject, before it leaves; where nobody may approve it, it is refused. Once it
+is sent, each of those addresses is an approved contact, and later emails to it go without asking.
 
 A subagent always runs on Auto. A schedule that opens a new chat each time runs on Auto too; one in
 an existing conversation uses that conversation's setting.

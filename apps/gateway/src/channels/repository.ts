@@ -424,6 +424,7 @@ function toDelivery(row: DeliveryRow): DeliveryRecord {
       saidCount: row.saidCount,
     }),
     ...(row.sourceRunId ? { sourceRunId: row.sourceRunId } : {}),
+    ...(row.email ? { email: row.email } : {}),
     ...(row.connectionGeneration === null
       ? {}
       : { connectionGeneration: row.connectionGeneration }),
@@ -441,6 +442,7 @@ function toDeliveryRow(delivery: DeliveryRecord): typeof deliveries.$inferInsert
     reaction: delivery.reaction ?? null,
     mediaId: delivery.mediaId ?? null,
     sourceRunId: delivery.sourceRunId ?? null,
+    email: delivery.email ?? null,
     status: delivery.status,
     error: delivery.error ?? null,
     remoteMessageIds: delivery.remoteMessageIds,

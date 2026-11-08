@@ -15,9 +15,16 @@ import { findConnection } from '../channels/whatsapp/repository.js';
 import type { Clock } from '../core/clock.js';
 import { assertFound, GatewayError } from '../core/errors.js';
 import { stableUuid } from '../core/ids.js';
+import { mediaMarker } from '../media/repository.js';
 import { insertMessage } from '../sessions/repository.js';
 import type { Queryable, Store } from '../storage/database.js';
 import { channels, contacts, emailBindings, errands } from '../storage/schema.js';
+import {
+  copiedAddresses,
+  type EmailFileRequest,
+  emailFiles,
+  keepEmailFiles,
+} from './email-parts.js';
 
 /**
  * How long a question stays open. Past it, a message from that contact is a new conversation
@@ -27,9 +34,27 @@ const ERRAND_WINDOW_MS = 48 * 60 * 60 * 1000;
 
 /**
  * `brief` is what the agent is getting done by writing, for whom, and what the owner wants to
- * hear of it: kept in the address's own conversation, where its replies are answered.
+ * hear of it: kept in the address's own conversation, where its replies are answered. `cc` are
+ * copied, and become correspondents as `to` does; `attachments` are files of the conversation
+ * that writes, or on the machine.
  */
-export type EmailRequest = { to: string; subject?: string; text: string; brief: string };
+export type EmailRequest = {
+  to: string;
+  cc?: string[] | undefined;
+  subject?: string | undefined;
+  text: string;
+  brief: string;
+  attachments?: EmailFileRequest[] | undefined;
+};
+
+/** What `send_email` tells the agent it queued: who it goes to, copied and attached. */
+export type EmailSent = {
+  to: string;
+  cc?: string[];
+  attachments?: string[];
+  sessionId: string;
+  note: string;
+};
 
 export type Errand = typeof errands.$inferSelect;
 
@@ -131,7 +156,8 @@ export class Errands {
    * Queues the message on the contact's channel and records it in their conversation, where it
    * belongs even when another conversation produced it: without the record the agent writes to
    * someone and their own history shows nothing, which reads as the message never sent. A
-   * `note` goes before it in that history only, never to the person.
+   * `note` goes before it in that history only, never to the person. An email's copies and
+   * files ride with the delivery, and the files show in that history after the text.
    */
   private async deliver(
     tx: Queryable,
@@ -141,6 +167,7 @@ export class Errands {
     text: string,
     id: string,
     note?: string,
+    email?: { cc: string[]; attachments: string[] },
   ) {
     const connection = await findConnection(tx, contact.channelId);
     const now = new Date(this.clock()).toISOString();
@@ -158,9 +185,11 @@ export class Errands {
       remoteMessageIds: [],
       saidCount: 0,
       ...(connection ? { connectionGeneration: connection.generation } : {}),
+      ...(email?.cc.length || email?.attachments.length ? { email } : {}),
     });
 
     if (contact.sessionId) {
+      const files = (email?.attachments ?? []).map(mediaMarker);
       await insertMessage(
         tx,
         {
@@ -169,7 +198,7 @@ export class Errands {
           sessionId: contact.sessionId,
           runId,
           role: 'assistant',
-          content: note ? `${note}\n\n${text}` : text,
+          content: [note, text, ...files].filter(Boolean).join('\n\n'),
           createdAt: now,
         },
         true,
@@ -310,17 +339,27 @@ export class Errands {
   }
 
   /**
-   * Whether an email to this address waits for the owner whatever the conversation's
-   * protection. Writing to someone new is how an agent is turned against its owner, so the owner
-   * reads the first email before it leaves. After that the address is the agent's correspondent,
-   * an approved contact, and the agent carries the exchange alone from any conversation.
+   * Whether an email to these addresses, `to` and every `cc`, waits for the owner whatever the
+   * conversation's protection. Writing to someone new is how an agent is turned against its
+   * owner, so the owner reads the first email before it leaves, and one new address among the
+   * copies is someone new. After that each address is the agent's correspondent, an approved
+   * contact, and the agent carries the exchange alone from any conversation.
    */
-  async needsOwner(profileId: string, to: string): Promise<boolean> {
-    const address = bareAddress(to);
+  async needsOwner(profileId: string, recipients: readonly string[]): Promise<boolean> {
     const mailbox = await this.mailbox(profileId);
-    if (!address || !mailbox) return true;
-    const contact = await findContactByIdentity(this.store.db, mailbox.channelId, address, address);
-    return contact?.status !== 'approved';
+    if (!mailbox || !recipients.length) return true;
+    for (const recipient of recipients) {
+      const address = bareAddress(recipient);
+      if (!address) return true;
+      const contact = await findContactByIdentity(
+        this.store.db,
+        mailbox.channelId,
+        address,
+        address,
+      );
+      if (contact?.status !== 'approved') return true;
+    }
+    return false;
   }
 
   /**
@@ -335,7 +374,7 @@ export class Errands {
     runId: string,
     request: EmailRequest,
     requestKey: string,
-  ): Promise<{ to: string; sessionId: string; note: string }> {
+  ): Promise<EmailSent> {
     const mailbox = await this.mailbox(profileId);
     if (!mailbox) throw new GatewayError(409, 'This agent has no email channel');
     const people = assertFound(this.people ?? null, 'Contacts');
@@ -344,35 +383,74 @@ export class Errands {
       throw new GatewayError(400, 'That is not an email address');
     if (address === mailbox.address)
       throw new GatewayError(409, "That is this agent's own address");
+    const cc = copiedAddresses(request.cc ?? [], address, mailbox.address);
     const subject = request.subject ? oneLine(request.subject) : undefined;
+    // Read before the transaction: a file is checked and held whole before anything is queued.
+    const files = request.attachments?.length
+      ? await emailFiles(this.store.db, profileId, fromSessionId, request.attachments)
+      : [];
+    const id = stableUuid(`email:${profileId}:${runId}:${requestKey}`);
 
     return this.store.transaction(profileId, async (tx) => {
-      const known = await findContactByIdentity(tx, mailbox.channelId, address, address);
-      if (known?.status === 'blocked')
-        throw new GatewayError(409, 'The owner blocked that address');
+      for (const recipient of [address, ...cc]) {
+        const known = await findContactByIdentity(tx, mailbox.channelId, recipient, recipient);
+        if (known?.status === 'blocked')
+          throw new GatewayError(409, `The owner blocked ${recipient}`);
+      }
       if (!subject && !(await findEmailThread(tx, mailbox.channelId, address))) {
         throw new GatewayError(400, 'Give a subject: nothing was written to that address yet');
       }
       const contact = await people.correspondent(tx, profileId, mailbox.channelId, address);
       const sessionId = assertFound(contact.sessionId ?? null, 'Session');
+      // The owner approved writing to each of them, as to `to`: each is a correspondent, whose
+      // replies are turns in a conversation of its own, under the same checks of who sent them.
+      const copied: ContactRecord[] = [];
+      for (const recipient of cc)
+        copied.push(await people.correspondent(tx, profileId, mailbox.channelId, recipient));
 
+      const attachments = await keepEmailFiles(tx, { profileId, sessionId, runId, id }, files);
+
+      // A first line naming the subject starts a new thread; without one the email continues
+      // the latest thread with that address (`envelope`).
+      const text = subject ? `Subject: ${subject}\n\n${request.text}` : request.text;
+      const brief = oneLine(request.brief);
+      const copying = cc.length ? `, copying ${cc.join(', ')}` : '';
       await this.deliver(
         tx,
         profileId,
         contact,
         runId,
-        // A first line naming the subject starts a new thread; without one the email continues
-        // the latest thread with that address (`envelope`).
-        subject ? `Subject: ${subject}\n\n${request.text}` : request.text,
-        stableUuid(`email:${profileId}:${runId}:${requestKey}`),
+        text,
+        id,
         // Read by the turns its replies start here: why it was written, and what to report.
-        `[Your note, from conversation ${fromSessionId}, as you sent the email below: ${oneLine(request.brief)}]`,
+        `[Your note, from conversation ${fromSessionId}, as you sent the email below${copying}: ${brief}]`,
+        { cc, attachments },
       );
+      // Each copied address's own conversation keeps the email too, for the turns its replies
+      // start there.
+      for (const person of copied) {
+        if (!person.sessionId) continue;
+        await insertMessage(
+          tx,
+          {
+            id: stableUuid(`email-copy:${id}:${person.chatId}`),
+            profileId,
+            sessionId: person.sessionId,
+            runId,
+            role: 'assistant',
+            content: `[Your note, from conversation ${fromSessionId}, as you sent the email below to ${address}, copying this address: ${brief}]\n\n${text}`,
+            createdAt: new Date(this.clock()).toISOString(),
+          },
+          true,
+        );
+      }
 
       return {
         to: address,
+        ...(cc.length ? { cc } : {}),
+        ...(files.length ? { attachments: files.map((file) => file.name) } : {}),
         sessionId,
-        note: 'Their replies start turns in that email conversation, not this one: you answer them there and tell the owner only what matters. Read it with read_session.',
+        note: `Their replies start turns in that email conversation, not this one${cc.length ? ', and each copied address answers in its own' : ''}: you answer them there and tell the owner only what matters. Read it with read_session.`,
       };
     });
   }
