@@ -19,7 +19,7 @@ from the rest is a bug.
 
 | Need | Use |
 |---|---|
-| Button | `Action`, tones `primary`, `glass`, `quiet`, `outline`, `danger` |
+| Button | `Action`, tones `primary`, `glass`, `quiet`, `outline`, `danger`; `size="icon"` for a round one holding only an icon, named by `aria-label` |
 | Field | `TextField`, `TextArea`, `SelectField`, `DateTimeField`, `RowInput` |
 | Search and filter a list | `SearchField`, with a `FilterSelect` beside it |
 | On and off, or one of a few | `SwitchControl`, `Toggle`, `Segmented` |

@@ -1,9 +1,17 @@
 'use client';
 
-import { useCallback, useLayoutEffect, useRef } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef } from 'react';
 
 /** Something in the conversation, and how far below the top of the view it sat. */
 type Anchor = { element: Element; offset: number };
+
+/** A reader this near the end, in px, is at it: the history follows them again. */
+export const FOLLOW_WITHIN_PX = 80;
+/**
+ * The longest a smooth scroll to the end is waited on, in ms. Reduced motion or a reader taking
+ * the wheel may end it without the scroll event that says it landed.
+ */
+const GLIDE_MS = 1000;
 
 /**
  * Chats open at the end and follow new content until the reader scrolls up.
@@ -22,6 +30,10 @@ export function useFollowBottom() {
   // content shrinks and reports it as a scroll; that is not the reader moving, and must not
   // replace the anchor or make the history follow the end.
   const holding = useRef(false);
+  // A smooth scroll to the end passes through the conversation, reporting scrolls that are not
+  // the reader leaving it: until it lands, the history keeps following.
+  const gliding = useRef(false);
+  const glide = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   const place = useCallback((element: Element): Anchor | undefined => {
     const view = scroller.current;
@@ -73,10 +85,31 @@ export function useFollowBottom() {
   const follow = useCallback(() => {
     following.current = true;
   }, []);
+  /** Back to the end, gliding unless motion is reduced, and following from there. */
+  const toEnd = useCallback((smooth: boolean) => {
+    const view = scroller.current;
+    if (!view) return;
+    following.current = true;
+    gliding.current = smooth;
+    clearTimeout(glide.current);
+    if (smooth) {
+      glide.current = setTimeout(() => {
+        gliding.current = false;
+      }, GLIDE_MS);
+    }
+    view.scrollTo({ top: view.scrollHeight, behavior: smooth ? 'smooth' : 'auto' });
+  }, []);
+  useEffect(() => () => clearTimeout(glide.current), []);
   const onScroll = useCallback(
     (element: HTMLElement) => {
       if (holding.current) return;
-      following.current = element.scrollHeight - element.scrollTop - element.clientHeight < 80;
+      const near =
+        element.scrollHeight - element.scrollTop - element.clientHeight < FOLLOW_WITHIN_PX;
+      if (gliding.current) {
+        if (!near) return;
+        gliding.current = false;
+      }
+      following.current = near;
       const top = topmost();
       anchor.current = top ? place(top) : undefined;
     },
@@ -104,6 +137,7 @@ export function useFollowBottom() {
   return {
     scroller,
     follow,
+    toEnd,
     onScroll,
     hold,
   };

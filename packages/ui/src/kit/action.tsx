@@ -32,10 +32,14 @@ const afloat: Record<ActionTone, string> = {
  */
 export const FloatingActions = createContext<{ form?: string } | null>(null);
 
-/** `small` sits at the end of a settings row. */
+/**
+ * `small` sits at the end of a settings row. `icon` is round and holds only an icon, so it needs
+ * an `aria-label` to be named.
+ */
 const sizes = {
   regular: 'h-9 gap-2 rounded-full px-4 text-sm',
   small: 'h-7 gap-1.5 rounded-md px-2.5 text-xs',
+  icon: 'size-9 shrink-0 rounded-full',
 } as const;
 
 /** A button of the kit. Busy disables it and says why, so a slow action cannot fire twice. */

@@ -307,6 +307,33 @@
   .conversation-dock {
     @apply absolute inset-x-0 bottom-0 z-[2];
   }
+  /* The way back to the end floats centred over the conversation's bottom edge, on the column's
+     axis, above the tray, the badges and the composer, which it must never cover. It fades and
+     rises in; reduced motion drops the transition (flight.css). The wrapper moves, since the
+     button's own colour transition would replace this one. */
+  .to-latest {
+    @apply pointer-events-none absolute left-1/2 z-[2];
+    bottom: calc(var(--dock-height, 0px) + var(--tray-height, 0px) + 0.75rem);
+    translate: -50% 0.375rem;
+    opacity: 0;
+    transition:
+      opacity 160ms ease-out,
+      translate 160ms ease-out;
+  }
+  .to-latest[data-shown] {
+    @apply pointer-events-auto;
+    translate: -50% 0;
+    opacity: 1;
+  }
+  .to-latest > button {
+    @apply relative shadow-md;
+  }
+  /* Something arrived below while the reader was away. */
+  .to-latest-dot {
+    @apply absolute top-0.5 right-0.5 size-2 rounded-full;
+    background: var(--accent);
+    box-shadow: 0 0 0 2px var(--canvas);
+  }
   /* Glass behind the dock: the blur comes in by degrees from above the project and machine
      menus, light first and then deep, so the text going under it fades out of focus instead
      of being cut. Two masked layers make the gradient; a backdrop blur cannot vary on its own. */
