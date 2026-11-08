@@ -72,9 +72,15 @@ describe('email text', () => {
 
   it('drops the history a mail client quoted under a reply', () => {
     expect(
-      mailBody('Yes, go ahead.\n\nOn Mon, Ada <ada@mail.test>\nwrote:\n> Shall I?\n>', null),
+      mailBody('Yes, go ahead.\n\nOn Mon, Ada <ada@mail.test>\nwrote:\n> Shall I?\n>', null, true),
     ).toBe('Yes, go ahead.');
-    expect(mailBody(null, '<p>Hello <b>there</b></p>')).toBe('Hello there');
+    expect(mailBody(null, '<p>Hello <b>there</b></p>', true)).toBe('Hello there');
+  });
+
+  it('keeps a forwarded message, which Apple Mail quotes with no In-Reply-To', () => {
+    const forward =
+      'What did they answer?\n\n> Begin forwarded message:\n>\n> Subject: Re: [#123]: refund\n>\n> Your storage was suspended.\n';
+    expect(mailBody(forward, null, false)).toBe(forward.trim());
   });
 });
 

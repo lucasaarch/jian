@@ -64,10 +64,19 @@ export function withoutQuote(text: string): string {
   return kept || text.trim();
 }
 
-/** What a received email says: its plain text, or its HTML read as text, without the quote. */
-export function mailBody(text: string | null | undefined, html: string | null | undefined) {
-  const body = text?.trim() ? text : html ? pageText(html).text : '';
-  return withoutQuote(body.replace(/\r\n?/g, '\n'));
+/**
+ * What a received email says: its plain text, or its HTML read as text. The quote is cut only
+ * from a `reply` (one with `In-Reply-To`), where it is history the conversation already has. A
+ * forward carries no `In-Reply-To`, and Apple Mail quotes the forwarded message with `>` at the
+ * end: cutting it would leave only the line written above it.
+ */
+export function mailBody(
+  text: string | null | undefined,
+  html: string | null | undefined,
+  reply: boolean,
+) {
+  const body = (text?.trim() ? text : html ? pageText(html).text : '').replace(/\r\n?/g, '\n');
+  return reply ? withoutQuote(body) : body.trim();
 }
 
 /**

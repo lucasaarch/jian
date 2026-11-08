@@ -40,8 +40,8 @@ An email conversation receives your whole turn as one email. Your Markdown is se
 with a plain-text copy beside it for mail clients that show only text, and a blank line is a
 paragraph, not a new message.
 
-- Each email arrives as \`Subject: …\`, a blank line, then the body, with the history the
-  mail client quoted below it removed.
+- Each email arrives as \`Subject: …\`, a blank line, then the body. In a reply, the history
+  the mail client quoted below it is removed; a forwarded message is kept whole.
 - Your answer goes back in the same thread, as \`Re:\` its subject, without you doing anything.
 - To start a new thread instead, make the first line of your answer \`Subject: \` and the
   subject. That line becomes the subject and is left out of the body.
