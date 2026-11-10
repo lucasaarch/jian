@@ -216,6 +216,8 @@ export function profileTools(
   scale?: () => number,
   /** Whether the profile has a live email channel this run may write from (`send_email`). */
   email = false,
+  /** In an email conversation, the correspondent `reply_email` answers. */
+  replyTo?: string,
 ): ToolSet {
   const coordination = new Coordination(services);
   const rechecked = new Set<string>();
@@ -960,6 +962,26 @@ export function profileTools(
     delete tools.send_email;
     delete tools.expect_email;
     delete tools.search_email;
+  }
+
+  // Not an action that asks: it answers the person this conversation is with, as a chat's
+  // turn does by ending. An email turn's own answer is never sent.
+  if (replyTo) {
+    tools.reply_email = tool({
+      description: `Reply by email to ${replyTo}, in this conversation's thread. Nothing else you write in this conversation reaches them. Most email needs no reply: use it only when they are waiting for an answer you can give, never for a newsletter, a notification or a no-reply sender. Write Markdown: it is sent formatted, with a plain-text copy. A first line "Subject: …" starts a new thread instead.`,
+      inputSchema: z.object({
+        text: z.string().trim().min(1).max(8000),
+        requestKey: z.string().min(1).max(120).optional(),
+      }),
+      execute: async ({ text, requestKey }, { toolCallId }) =>
+        services.errands.reply(
+          run.profileId,
+          run.sessionId,
+          run.id,
+          text,
+          requestKey ?? toolCallId,
+        ),
+    });
   }
 
   Object.assign(tools, {

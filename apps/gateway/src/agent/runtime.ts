@@ -906,6 +906,10 @@ export class AgentRuntime {
       // A subagent cannot ask the owner, which emailing someone new takes; nor can a look back.
       const email =
         !learning && !run.subagent && Boolean(await this.services.errands.mailbox(profileId));
+      // An email conversation's turn answers its correspondent only on purpose (`reply_email`).
+      const replyTo = email
+        ? (await this.services.errands.replyContact(profileId, run.sessionId))?.chatId
+        : undefined;
       const tools: ToolSet = {
         ...profileTools(
           this.services,
@@ -920,6 +924,7 @@ export class AgentRuntime {
           machineFiles,
           () => scale,
           email,
+          replyTo,
         ),
         ...(!learning && this.options.github && gitPlace
           ? githubGitTools({

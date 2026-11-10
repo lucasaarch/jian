@@ -40,6 +40,15 @@ export interface Outreach {
     request: EmailRequest,
     requestKey: string,
   ): Promise<EmailSent>;
+  /** The correspondent of this email conversation, whom `reply_email` answers; else undefined. */
+  replyContact(profileId: string, sessionId: string): Promise<{ chatId: string } | undefined>;
+  reply(
+    profileId: string,
+    sessionId: string,
+    runId: string,
+    text: string,
+    requestKey: string,
+  ): Promise<{ to: string; note: string }>;
   expect(
     profileId: string,
     domain: string,

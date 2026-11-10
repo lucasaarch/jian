@@ -23,6 +23,7 @@ import {
   type EmailThread,
   mailBody,
   messageIds,
+  noReply,
   oneLine,
   referencesOf,
 } from './text.js';
@@ -66,7 +67,8 @@ export function automatic(headers: Record<string, string>): boolean {
 /**
  * One received email as a message for the agent, or undefined when it is not one to read.
  * Automatic mail is marked, not dropped: the inbox keeps it only when it answers an email the
- * agent sent, and the service never answers it.
+ * agent sent, and the service never answers it. Mail from a no-reply address is automatic too,
+ * whatever its headers say: nobody would read an answer.
  */
 export function incoming(email: ReceivedEmail, own: string) {
   const from = bareAddress(email.headers.from ?? email.from);
@@ -93,7 +95,7 @@ export function incoming(email: ReceivedEmail, own: string) {
     ...(name ? { displayName: name } : {}),
     ...(messageId ? { channelMessage: { id: messageId } } : {}),
     ...(answered ? { target: answered } : {}),
-    ...(automatic(email.headers) ? { automatic: true } : {}),
+    ...(automatic(email.headers) || noReply(from) ? { automatic: true } : {}),
   };
 
   const thread: EmailThread | undefined = messageId

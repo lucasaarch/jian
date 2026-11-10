@@ -3,7 +3,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, afterEach, describe, expect, it, vi } from 'vitest';
 import { AgentRuntime } from '../src/agent/runtime.js';
-import { brief, mailer, emailSetup as setup, support } from './helpers/email.js';
+import { incoming } from '../src/channels/email/inbox.js';
+import { noReply } from '../src/channels/email/text.js';
+import { brief, caller, mailer, emailSetup as setup, support } from './helpers/email.js';
 
 const root = realpathSync(mkdtempSync(join(tmpdir(), 'jian-outreach-')));
 const previousRoot = process.env.JIAN_WORKSPACES;
@@ -166,6 +168,24 @@ describe('emailing an address that is no contact', () => {
     }
   });
 
+  it('never writes to a no-reply address, nor copies one', async () => {
+    const f = await setup();
+    try {
+      for (const email of [
+        { to: 'noreply@contabo.test', subject: 'VPS down', text: 'Hello', brief },
+        { to: support, cc: ['Do-Not-Reply@contabo.test'], subject: 'VPS', text: 'Hi', brief },
+      ])
+        await expect(
+          f.services.errands.email(f.profile.id, f.owner.id, f.writing.id, email, email.to),
+        ).rejects.toMatchObject({ statusCode: 400 });
+      await f.channels.dispatch();
+      expect(f.resend.sent).toHaveLength(0);
+      expect(await f.channels.contacts(f.profile.id)).toHaveLength(0);
+    } finally {
+      await f.app.close();
+    }
+  });
+
   it('sends once for a repeated call, and never to its own address', async () => {
     const f = await setup();
     try {
@@ -230,12 +250,108 @@ describe('replies to an outreach email', () => {
       const owner = (await f.ownerMessages()).join('\n');
       for (const text of ['Ticket #123', 'We restarted the host.', 'Is it working now?'])
         expect(owner).not.toContain(text);
-      // The turns' replies are the emails answering them.
+      // A turn's own answer is not an email: most mail needs none.
       await f.channels.dispatch();
-      expect(f.resend.sent.slice(1)).toMatchObject([
-        { to: [support], text: 'Noted.' },
-        { to: [support], text: 'Noted.' },
+      expect(f.resend.sent).toHaveLength(1);
+      expect(await f.channels.deliveries(f.profile.id)).toHaveLength(1);
+    } finally {
+      await f.app.close();
+    }
+  });
+
+  it('answer only on purpose, with reply_email, in the thread', async () => {
+    const f = await setup();
+    try {
+      const { sessionId } = await f.outreach();
+      const reply = await f.arrive({
+        from: support,
+        text: 'Which VPS is it?',
+        inReplyTo: '<sent-1@resend.test>',
+      });
+      expect(reply).toMatchObject({ accepted: true });
+
+      const answer = { text: 'It is **vps-1**.' };
+      await new AgentRuntime(f.services, () => caller('reply_email', answer)).execute(
+        f.profile.id,
+        reply.runId,
+      );
+      const run = await f.services.runs.run(f.profile.id, reply.runId);
+      expect(run).toMatchObject({ status: 'completed', output: 'Sent.' });
+      await f.channels.dispatch();
+
+      // Only what the tool sent left; the turn's "Sent." stayed in the conversation.
+      expect(f.resend.sent).toHaveLength(2);
+      expect(f.resend.sent[1]).toMatchObject({
+        to: [support],
+        subject: 'Re: VPS down',
+        text: 'It is vps-1.',
+      });
+      expect(f.resend.sent[1]?.html).toContain('<strong>vps-1</strong>');
+      expect(f.resend.sent[1]?.headers).toMatchObject({
+        'In-Reply-To': expect.stringMatching(/@contabo\.test>$/),
+      });
+      expect(await f.services.errands.searchEmail(f.profile.id, { text: 'vps-1' })).toMatchObject([
+        { direction: 'sent' },
       ]);
+
+      // Offered only where there is someone to answer: the owner's conversation has no thread.
+      await expect(
+        f.services.errands.reply(f.profile.id, f.owner.id, f.writing.id, 'Hi', 'owner'),
+      ).rejects.toMatchObject({ statusCode: 409 });
+      expect(await f.services.errands.replyContact(f.profile.id, f.owner.id)).toBeUndefined();
+      expect(await f.services.errands.replyContact(f.profile.id, sessionId)).toMatchObject({
+        chatId: support,
+      });
+    } finally {
+      await f.app.close();
+    }
+  });
+
+  it('take a no-reply sender’s mail as automatic: kept, with no turn', async () => {
+    for (const address of [
+      'noreply@x.test',
+      'no-reply@x.test',
+      'no_reply+abc@x.test',
+      'alerts-noreply@x.test',
+      'donotreply@x.test',
+      'do-not-reply@x.test',
+      'MAILER-DAEMON@x.test',
+      'bounces+123@x.test',
+    ])
+      expect(noReply(address)).toBe(true);
+    for (const address of ['support@x.test', 'honoreply@x.test', 'reply@x.test', 'bouncer@x.test'])
+      expect(noReply(address)).toBe(false);
+
+    const read = incoming(
+      {
+        id: 'e1',
+        from: 'noreply@contabo.test',
+        to: ['mia@agents.test'],
+        cc: [],
+        receivedFor: [],
+        subject: 'Invoice',
+        text: 'Your invoice is ready.',
+        headers: { from: 'noreply@contabo.test' },
+        authentication: { spf: 'pass', dkim: 'pass', dmarc: 'pass' },
+        attachments: 0,
+      },
+      'mia@agents.test',
+    );
+    expect(read?.message.automatic).toBe(true);
+
+    const f = await setup();
+    try {
+      const { sessionId } = await f.outreach();
+      const runs = (await f.services.runs.activities(f.profile.id)).length;
+      const notice = await f.arrive({
+        from: 'noreply@contabo.test',
+        text: 'Ticket #9 was updated.',
+        inReplyTo: '<sent-1@resend.test>',
+      });
+      expect(notice).toMatchObject({ accepted: false });
+      expect(await f.services.runs.activities(f.profile.id)).toHaveLength(runs);
+      expect((await f.messagesOf(sessionId)).join('\n')).toContain('Ticket #9 was updated.');
+      expect(await f.contactOf('noreply@contabo.test')).toBeUndefined();
     } finally {
       await f.app.close();
     }

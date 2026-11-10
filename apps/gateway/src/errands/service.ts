@@ -3,7 +3,7 @@ import { and, asc, eq, gt, isNull, lte } from 'drizzle-orm';
 import type { ContactRecord, Contacts } from '../channels/contacts.js';
 import { type EmailSearch, searchEmail } from '../channels/email/log.js';
 import { expectDomain, freeMail, signupDomain } from '../channels/email/signups.js';
-import { bareAddress, oneLine } from '../channels/email/text.js';
+import { bareAddress, NO_REPLY_REFUSAL, noReply, oneLine } from '../channels/email/text.js';
 import { findEmailThread } from '../channels/email/threads.js';
 import {
   findContact,
@@ -170,6 +170,9 @@ export class Errands {
     note?: string,
     email?: { cc: string[]; attachments: string[] },
   ) {
+    // Whichever tool writes to them: nobody reads mail sent to a no-reply address.
+    if (contact.type === 'email' && noReply(contact.chatId))
+      throw new GatewayError(409, NO_REPLY_REFUSAL);
     const connection = await findConnection(tx, contact.channelId);
     const now = new Date(this.clock()).toISOString();
 
@@ -385,6 +388,8 @@ export class Errands {
     if (address === mailbox.address)
       throw new GatewayError(409, "That is this agent's own address");
     const cc = copiedAddresses(request.cc ?? [], address, mailbox.address);
+    const unread = [address, ...cc].find(noReply);
+    if (unread) throw new GatewayError(400, `${NO_REPLY_REFUSAL} (${unread})`);
     const subject = request.subject ? oneLine(request.subject) : undefined;
     // Read before the transaction: a file is checked and held whole before anything is queued.
     const files = request.attachments?.length
@@ -452,6 +457,61 @@ export class Errands {
         ...(files.length ? { attachments: files.map((file) => file.name) } : {}),
         sessionId,
         note: `Their replies start turns in that email conversation, not this one${cc.length ? ', and each copied address answers in its own' : ''}: you answer them there and tell the owner only what matters. Read it with read_session.`,
+      };
+    });
+  }
+
+  /**
+   * The correspondent an email conversation answers (`reply_email`): an approved contact of the
+   * live mailbox whose conversation this is. Undefined in any other conversation.
+   */
+  async replyContact(
+    profileId: string,
+    sessionId: string,
+    db: Queryable = this.store.db,
+  ): Promise<ContactRecord | undefined> {
+    const mailbox = await this.mailbox(profileId, db);
+    if (!mailbox) return undefined;
+    const contact = await findContactBySession(db, profileId, sessionId);
+    return contact?.status === 'approved' && contact.channelId === mailbox.channelId
+      ? contact
+      : undefined;
+  }
+
+  /**
+   * Answers the email conversation this run is in, in its thread (`reply_email`): a turn's own
+   * answer is never emailed. Only to that correspondent, never to a no-reply address, and once
+   * for a repeated call.
+   */
+  async reply(
+    profileId: string,
+    sessionId: string,
+    runId: string,
+    text: string,
+    requestKey: string,
+  ) {
+    return this.store.transaction(profileId, async (tx) => {
+      const contact = await this.replyContact(profileId, sessionId, tx);
+      if (!contact)
+        throw new GatewayError(409, 'This is not an email conversation with an approved contact');
+      if (noReply(contact.chatId)) throw new GatewayError(409, NO_REPLY_REFUSAL);
+      const now = new Date(this.clock()).toISOString();
+      await insertDelivery(tx, {
+        id: stableUuid(`email-reply:${profileId}:${runId}:${requestKey}`),
+        sourceRunId: runId,
+        profileId,
+        channelId: contact.channelId,
+        chatId: contact.chatId,
+        notice: text,
+        status: 'pending',
+        createdAt: now,
+        updatedAt: now,
+        remoteMessageIds: [],
+        saidCount: 0,
+      });
+      return {
+        to: contact.chatId,
+        note: 'Queued: it leaves in this thread in a moment. Your answer at the end of this turn is not sent.',
       };
     });
   }
