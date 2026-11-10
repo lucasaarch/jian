@@ -206,6 +206,34 @@ describe('outbound policy', () => {
     }
   });
 
+  // An OAuth error read as "[object Response]": the MCP SDK checks `instanceof Response`.
+  it("answers with Node's own Response, so a library that checks for one reads the error", async () => {
+    const server = createServer((_request, response) => {
+      response
+        .writeHead(400, { 'content-type': 'application/json' })
+        .end('{"error":"invalid_redirect_uri"}');
+    });
+
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+
+    const origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+    const client = createSafeFetch({ allowPrivateOrigins: [origin] });
+
+    clients.push(client);
+
+    try {
+      const answer = await client.fetch(`${origin}/oauth/register`, { method: 'POST' });
+
+      expect(answer).toBeInstanceOf(Response);
+      expect(answer.status).toBe(400);
+      expect(answer.url).toBe(`${origin}/oauth/register`);
+      expect(answer.headers.get('content-type')).toBe('application/json');
+      expect(await answer.text()).toBe('{"error":"invalid_redirect_uri"}');
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
+
   it('rejects any private DNS answer, including a mixed answer set', async () => {
     const client = createSafeFetch({ lookup: async () => ['8.8.8.8', '127.0.0.1'] });
 

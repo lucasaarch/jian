@@ -259,6 +259,24 @@ function codesOf(error: unknown): string[] {
   return codes;
 }
 
+/**
+ * The bundled undici's response as Node's own. Otherwise `instanceof Response` is false for it,
+ * and a library that checks that reads it wrong: the MCP OAuth error handling took it for a
+ * string and reported the body as "[object Response]", hiding what the server said.
+ */
+function asNodeResponse(response: Awaited<ReturnType<typeof undiciFetch>>): Response {
+  const noBody = [204, 205, 304].includes(response.status);
+  const node = new Response(noBody ? null : (response.body as ReadableStream | null), {
+    status: response.status,
+    statusText: response.statusText,
+    headers: [...response.headers],
+  });
+
+  Object.defineProperty(node, 'url', { value: response.url });
+
+  return node;
+}
+
 /** The failure code of an error or of whatever it was raised from, and nothing else of it. */
 function reason(error: unknown): string {
   const codes: string[] = [];
@@ -365,13 +383,15 @@ export function createSafeFetch(options: SafeFetchOptions = {}): {
     try {
       const request = await asUndiciRequest(input, init);
 
-      return (await undiciFetch(request.url, {
-        ...request.init,
-        // Never followed here: the next address has not been checked. A caller that asks for
-        // `manual` gets the 3xx back and sends the next hop through this same guard.
-        redirect: init?.redirect === 'manual' ? 'manual' : 'error',
-        dispatcher: agent,
-      })) as unknown as Response;
+      return asNodeResponse(
+        await undiciFetch(request.url, {
+          ...request.init,
+          // Never followed here: the next address has not been checked. A caller that asks for
+          // `manual` gets the 3xx back and sends the next hop through this same guard.
+          redirect: init?.redirect === 'manual' ? 'manual' : 'error',
+          dispatcher: agent,
+        }),
+      );
     } catch (error) {
       // The cause carries the address and can carry a credential, so only its codes travel —
       // which is the part that says whether the host refused, resolved or timed out.
