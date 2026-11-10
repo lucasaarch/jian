@@ -26,7 +26,6 @@ export const MCP_APP_ADDRESSES = {
   stripe: ['https://mcp.stripe.com'],
   paypal: ['https://mcp.paypal.com/mcp'],
   square: ['https://mcp.squareup.com/mcp'],
-  mercado_pago: ['https://mcp.mercadopago.com/mcp'],
   intercom: ['https://mcp.intercom.com/mcp'],
   attio: ['https://mcp.attio.com/mcp'],
   sentry: ['https://mcp.sentry.dev/mcp'],

@@ -16,7 +16,6 @@ import {
   siIntercom,
   siLinear,
   siMake,
-  siMercadopago,
   siMiro,
   siMixpanel,
   siNeon,
@@ -58,6 +57,9 @@ export type Category = keyof typeof CATEGORIES;
  * server and signs in with OAuth. Every one here was checked to offer dynamic client
  * registration (RFC 7591), which is what lets the gateway sign in with no client id to paste;
  * one that needs a pre-registered client (Asana, HubSpot, Box) belongs on the MCP servers page.
+ * So does one whose registration takes only its own list of redirect addresses: Mercado Pago
+ * refuses any callback outside localhost and a few vendors' hosts, so a hosted gateway cannot
+ * sign in there; it connects with an access token in a header instead.
  */
 export type McpApp = {
   /** Also the MCP server's name, so it follows that name's rule. */
@@ -249,13 +251,6 @@ const CATALOG: Array<Omit<McpApp, 'url' | 'formerUrls'>> = [
     description: 'Payments, orders, catalog and customers on Square.',
     category: 'payments',
     icon: siSquare,
-  },
-  {
-    id: 'mercado_pago',
-    name: 'Mercado Pago',
-    description: 'Mercado Pago applications and credentials, webhooks, test users and the docs.',
-    category: 'payments',
-    icon: siMercadopago,
   },
   {
     id: 'intercom',
