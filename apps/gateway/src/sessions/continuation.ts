@@ -55,7 +55,7 @@ export class ObjectiveContinuation {
       if (objective.continuations >= MAX_OBJECTIVE_CONTINUATIONS) {
         const blocked = objectiveAt(objective.text, 'blocked', nowIso(this.clock), {
           continuations: objective.continuations,
-          note: `Paused after ${MAX_OBJECTIVE_CONTINUATIONS} automatic continuations. Send a message or /objective to resume.`,
+          note: `Paused after ${MAX_OBJECTIVE_CONTINUATIONS} automatic continuations. Ask the agent to go on, or send /objective with the goal, to resume.`,
         });
         await setSessionObjective(tx, run.profileId, run.sessionId, blocked);
         return null;

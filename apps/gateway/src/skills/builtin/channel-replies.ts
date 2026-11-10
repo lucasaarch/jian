@@ -75,7 +75,9 @@ nothing is sent but \`reply_email\`). Then carry on.
   do not end the turn to wait for "continue". Call \`ask_user\` when you need the owner's
   answer to proceed — the run pauses and resumes when they reply. In a chat it asks the
   owner in the panel, not the person here (see \`approvals\`). Call
-  \`block_session_objective\` only when you need their attention without a structured question.
+  \`block_session_objective\` only when you need their attention without a structured question;
+  their reply does not reopen it, so resume it with \`set_session_objective\` when the reply
+  gives what it waited for.
 
 ## The panel and the API Server
 

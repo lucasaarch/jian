@@ -79,6 +79,16 @@ export { TURN_CONTEXT };
 const DELEGATION =
   'You can hand work to a subagent with spawn_subagent, which returns its report: worth it for output not worth keeping here (a wide search, long logs, a test run, many files), for independent pieces run in parallel and for a fresh-eyes review. Do a single lookup or a few files yourself, never delegate understanding what the owner asked, and check a report before relying on it.';
 
+/**
+ * What the agent does with the objective in each state. A message never reopens a blocked one
+ * for it, so the agent alone decides whether this message gives what the goal waited for.
+ */
+const objectiveHints: Partial<Record<SessionObjective['status'], string>> = {
+  open: ' (open — keep working with tools until complete_session_objective, or block_session_objective if you need the owner)',
+  blocked:
+    ' (blocked — no turn follows this one on its own. If this message gives what it waited for or asks you to go on, resume it with set_session_objective and the same text; otherwise answer and leave it blocked)',
+};
+
 /** A memory judged this unlikely to help is left out, and its room goes to one that may. */
 const IRRELEVANT = 0.1;
 
@@ -328,9 +338,7 @@ export function buildContext(
       : []),
     ...(!worker && objectiveForPrompt
       ? [
-          objectiveForPrompt.status === 'open'
-            ? `Session objective (open — keep working with tools until complete_session_objective, or block_session_objective if you need the owner): ${JSON.stringify(objectiveForPrompt)}`
-            : `Session objective: ${JSON.stringify(objectiveForPrompt)}`,
+          `Session objective${objectiveHints[objectiveForPrompt.status] ?? ''}: ${JSON.stringify(objectiveForPrompt)}`,
         ]
       : []),
     // Without this an agent reached on Telegram does not know its WhatsApp exists, and says it
