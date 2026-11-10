@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { readdir } from 'node:fs/promises';
 import { basename, join } from 'node:path';
-import type { Run, Session, Skill } from '@jian/contracts';
+import { ABSOLUTE_PATH, type Run, type Session, type Skill } from '@jian/contracts';
 import { and, eq, sql } from 'drizzle-orm';
 import { projectCheckout, sessionCheckouts } from '../agent/workspace-home.js';
 import type { Clock } from '../core/clock.js';
@@ -148,7 +148,8 @@ export class Workspaces {
     const location = session.remoteMachineId ?? 'gateway';
     const found: Place[] = [
       ...(session.folders ?? []),
-      ...(run.subagent?.repositories ?? []).filter((path) => path.startsWith('/')),
+      // A brief names a repository as `owner/name` or as a path; only a path is a folder here.
+      ...(run.subagent?.repositories ?? []).filter((path) => ABSOLUTE_PATH.test(path)),
     ].map((path) => ({ location, path }));
 
     if (!session.remoteMachineId) {

@@ -147,15 +147,18 @@ export const remoteBrowserResultSchema = z.strictObject({
 export const REMOTE_FILES_CAPABILITY = 'files-v1';
 
 /**
- * Absolute on the worker's own system: POSIX `/…` or Windows `C:\…` / `C:/…`. A relative path
- * would resolve against whatever folder the worker happens to run in. `C:x` (drive-relative) and
- * `\\server\share` are refused; `//server/share` passes the POSIX branch, and the worker decides
- * what it means.
+ * Absolute on the system the path belongs to: POSIX `/…` or Windows `C:\…` / `C:/…`. A relative
+ * path would resolve against whatever folder the process happens to run in. `C:x` (drive-relative)
+ * and `\\server\share` are refused; `//server/share` passes the POSIX branch, and that system
+ * decides what it means. Not Node's `isAbsolute`, which answers only for the system the gateway
+ * runs on, while a path may name a folder on a machine of another kind.
  */
+export const ABSOLUTE_PATH = /^(?:\/|[A-Za-z]:[\\/])/;
+
 const remoteFilesPathSchema = z
   .string()
   .max(4096)
-  .regex(/^(\/|[A-Za-z]:[\\/])/)
+  .regex(ABSOLUTE_PATH)
   .refine((path) => !hasNul(path), 'A path cannot contain NUL.');
 
 const hasNul = (value: string) => value.includes('\0');

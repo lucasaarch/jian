@@ -1,4 +1,5 @@
 import {
+  ABSOLUTE_PATH,
   REMOTE_FILES_MAX_GIT_SIDE,
   type RemoteFilesAnswer,
   type RemoteFilesOp,
@@ -198,7 +199,6 @@ export class MachineAnswers {
   }
 }
 
-const ABSOLUTE = /^(?:\/|[A-Za-z]:[\\/])/;
 const lastPart = (path: string) => path.split(/[\\/]/).filter(Boolean).at(-1);
 
 /**
@@ -235,7 +235,7 @@ export async function cloneOnMachine(
       (await listLoads(db, profileId, session.id))
         .filter((load) => load.kind === 'workspace' && load.name.startsWith(`${machineId}|`))
         .map((load) => load.name.slice(machineId.length + 1))
-        .filter((path) => ABSOLUTE.test(path) && names.has(lastPart(path))),
+        .filter((path) => ABSOLUTE_PATH.test(path) && names.has(lastPart(path))),
     ),
   ];
   if (new Set(clones.map(lastPart)).size > 1) throw several();

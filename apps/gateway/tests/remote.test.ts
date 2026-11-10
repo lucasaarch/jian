@@ -1033,6 +1033,19 @@ describe('what a chat works on', () => {
     ).rejects.toMatchObject({ statusCode: 400 });
   });
 
+  it('takes the folders a Windows computer names, and still no relative ones', async () => {
+    const services = await testServices();
+    const owner = await services.profiles.createProfile(input);
+    const local = new Sessions(services.store, services.profiles, Date.now, true);
+    const windows = ['C:\\Users\\ana\\atlas', 'D:/work/atlas'];
+
+    const session = await local.createGatewaySession(owner.id, { folders: windows });
+    expect((await local.session(owner.id, session.id)).folders).toEqual(windows);
+    for (const relative of ['atlas', 'C:atlas', '.\\atlas']) {
+      await expect(local.createGatewaySession(owner.id, { folders: [relative] })).rejects.toThrow();
+    }
+  });
+
   it('asks for a machine and repositories before a clone destination', async () => {
     const services = await testServices();
     const owner = await services.profiles.createProfile(input);
