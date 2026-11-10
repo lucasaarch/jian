@@ -298,7 +298,13 @@ describe('the email channel on Cloudflare', () => {
       const [run] = await f.services.runs.activities(f.profile.id);
       if (!run) throw new Error('Run missing');
       await f.services.lifecycle.claim(run.id, f.profile.id, 'worker');
-      await f.services.lifecycle.finish(f.profile.id, run.id, 'worker', 'completed', 'Sure.');
+      await f.services.lifecycle.finish(f.profile.id, run.id, 'worker', 'completed', 'A note.');
+      await f.channels.dispatch();
+      // The turn's own answer is not an email; the agent answers with `reply_email`.
+      expect(f.cloudflare.calls.some((call) => call.url.endsWith('/email/sending/send'))).toBe(
+        false,
+      );
+      await f.services.errands.reply(f.profile.id, run.sessionId, run.id, 'Sure.', 'reply');
       await f.channels.dispatch();
 
       const sent = f.cloudflare.calls.filter((call) => call.url.endsWith('/email/sending/send'));

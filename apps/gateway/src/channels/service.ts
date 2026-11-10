@@ -1655,7 +1655,9 @@ export class Channels {
       });
     if (!run) return null;
 
-    if (this.registry.get(channel.type).send) {
+    // An email turn's answer stays in its conversation: most mail needs none, and the agent
+    // answers one on purpose, with `reply_email`.
+    if (this.registry.get(channel.type).send && channel.type !== 'email') {
       await this.services.store.transaction(channel.profileId, async (tx) => {
         if (await findDelivery(tx, run.id)) {
           return;
@@ -1819,7 +1821,8 @@ export class Channels {
       sessionId,
     );
 
-    if (contact?.status !== 'approved') {
+    // As in `submit`: an email conversation is answered with `reply_email`, never by a turn's end.
+    if (contact?.status !== 'approved' || contact.type === 'email') {
       return;
     }
 
