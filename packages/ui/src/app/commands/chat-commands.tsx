@@ -1,6 +1,5 @@
 'use client';
 
-import { GATEWAY_SESSION_CHANNEL } from '@jian/contracts';
 import { History, Pencil, Pin, PinOff, Trash2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { conversationName } from '../../lib/conversation-name';
@@ -20,12 +19,14 @@ export function ChatCommands({ profileId }: { profileId: string }) {
   const profiles = useAgents();
   const actions = useChatActions(profileId);
   const { sessionId } = useParams<{ sessionId?: string }>();
-  const [renaming, setRenaming] = useState(false);
+  const [renamingOpen, setRenaming] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const session = sessionId ? sessions.find((item) => item.id === sessionId) : undefined;
   const name = session ? conversationName(session, { projects, contacts, profiles }) : '';
-  // A contact's or another agent's chat goes by their name, which is not the chat's to change.
-  const renames = session?.channel === GATEWAY_SESSION_CHANNEL;
+  // A group's or another agent's chat goes by their name, which is not the chat's to change.
+  const renaming = session ? actions.renaming(session, contacts) : undefined;
+  // What the memo reads of it: the object itself is new on every render.
+  const renames = renaming?.what;
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: the actions read only what they are given when run.
   const commands = useMemo<AppCommand[]>(
@@ -55,9 +56,9 @@ export function ChatCommands({ profileId }: { profileId: string }) {
                   {
                     id: 'rename-chat',
                     group: 'Chats' as const,
-                    title: 'Rename chat',
+                    title: `Rename ${renames}`,
                     detail: name,
-                    keywords: ['conversation', 'title', 'name'],
+                    keywords: ['conversation', 'title', 'name', 'contact'],
                     icon: <Pencil size={15} />,
                     run: () => setRenaming(true),
                   },
@@ -83,12 +84,12 @@ export function ChatCommands({ profileId }: { profileId: string }) {
 
   return (
     <>
-      {renames && (
+      {renaming && (
         <RenameDialog
-          open={renaming}
+          open={renamingOpen}
           onOpenChange={setRenaming}
           name={name}
-          rename={(title) => actions.rename(session, title)}
+          renaming={renaming}
         />
       )}
       <DeleteChatDialog

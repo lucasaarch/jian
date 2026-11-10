@@ -9,6 +9,11 @@ export interface Outreach {
   reachable(
     profileId: string,
   ): Promise<Array<{ id: string; name: string; channel: string; waitingOnThem: boolean }>>;
+  rename(
+    profileId: string,
+    target: { contactId?: string | undefined; sessionId?: string | undefined },
+    name: string,
+  ): Promise<{ contactId: string; name: string; channel: string; sessionId?: string }>;
   ask(
     profileId: string,
     contactId: string,

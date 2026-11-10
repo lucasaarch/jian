@@ -208,7 +208,7 @@ it('offers AI replies on every messaging channel, and nowhere else', async () =>
   ).toBeNull();
 });
 
-it('creates and titles a chat only when the first message is sent, then opens it', async () => {
+it('creates a chat only when the first message is sent, leaves its title to the agent, then opens it', async () => {
   const result = await render();
   await act(async () => goTo(`/agents/${profile.id}/sessions`));
 
@@ -226,11 +226,8 @@ it('creates and titles a chat only when the first message is sent, then opens it
 
   // No project and no remote machine were picked for the draft: it runs on the gateway.
   expect(result.createGatewaySession).toHaveBeenCalledWith(profile.id, {});
-  expect(result.renameSession).toHaveBeenCalledWith(
-    profile.id,
-    'new-gateway-chat',
-    'Fix the first bug',
-  );
+  // A chat with a name is one the gateway never titles from its first message.
+  expect(result.renameSession).not.toHaveBeenCalled();
   expect(result.sendMessage).toHaveBeenCalledWith(
     profile.id,
     'new-gateway-chat',

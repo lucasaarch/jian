@@ -8,6 +8,15 @@ import { Action, ConfirmDialog, Overlay, OverlayActions, TextField } from '../ki
 import { MenuEntry, menuPopup } from '../kit/menu';
 import { ago } from '../lib/format';
 
+/** How a conversation is renamed: a chat by its title, a person by their name. */
+export type Renaming = {
+  what: 'chat' | 'contact';
+  /** The longest name the gateway keeps for it. */
+  maxLength: number;
+  /** Whether the name was saved. */
+  rename: (title: string) => Promise<boolean>;
+};
+
 export type ChatRowProps = {
   name: string;
   /** Where it takes place: the app's own chat, or a channel's mark. A project's own chats leave
@@ -25,9 +34,8 @@ export type ChatRowProps = {
   /** Worked on somewhere other than this computer. */
   remote?: boolean;
   open: () => void;
-  /** Absent where the name is not the chat's own: a contact's, another agent's. */
-  /** Whether the name was saved. */
-  rename?: (title: string) => Promise<boolean>;
+  /** Absent where the name is not the conversation's to change: a group's, another agent's. */
+  renaming?: Renaming | undefined;
   pinned?: boolean;
   pin?: () => void;
   /** Whether it was deleted. Only ever called once the owner has said yes. */
@@ -55,7 +63,7 @@ export function ChatRow(props: ChatRowProps) {
           {props.pinned ? 'Unpin' : 'Pin'}
         </MenuEntry>
       )}
-      {props.rename && (
+      {props.renaming && (
         <MenuEntry icon={<Pencil size={14} />} onClick={() => setRenaming(true)}>
           Rename
         </MenuEntry>
@@ -108,12 +116,12 @@ export function ChatRow(props: ChatRowProps) {
           </ContextMenu.Positioner>
         </ContextMenu.Portal>
       </ContextMenu.Root>
-      {props.rename && (
+      {props.renaming && (
         <RenameDialog
           open={renaming}
           onOpenChange={setRenaming}
           name={props.name}
-          rename={props.rename}
+          renaming={props.renaming}
         />
       )}
       <DeleteChatDialog
@@ -193,27 +201,27 @@ export function RenameDialog({
   open,
   onOpenChange,
   name,
-  rename,
+  renaming,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   name: string;
-  rename: (title: string) => Promise<boolean>;
+  renaming: Renaming;
 }) {
   return (
-    <Overlay open={open} onOpenChange={onOpenChange} title="Rename chat" size="form">
-      {open && <RenameForm name={name} rename={rename} close={() => onOpenChange(false)} />}
+    <Overlay open={open} onOpenChange={onOpenChange} title={`Rename ${renaming.what}`} size="form">
+      {open && <RenameForm name={name} renaming={renaming} close={() => onOpenChange(false)} />}
     </Overlay>
   );
 }
 
 function RenameForm({
   name,
-  rename,
+  renaming: { what, maxLength, rename },
   close,
 }: {
   name: string;
-  rename: (title: string) => Promise<boolean>;
+  renaming: Renaming;
   close: () => void;
 }) {
   const [title, setTitle] = useState(name);
@@ -236,11 +244,11 @@ function RenameForm({
         if (saved) close();
       }}
     >
-      <h2 className="pr-10 text-lg font-semibold tracking-tight">Rename chat</h2>
+      <h2 className="pr-10 text-lg font-semibold tracking-tight">Rename {what}</h2>
       <TextField
         label="Name"
         value={title}
-        maxLength={160}
+        maxLength={maxLength}
         autoComplete="off"
         onChange={(event) => setTitle(event.target.value)}
       />

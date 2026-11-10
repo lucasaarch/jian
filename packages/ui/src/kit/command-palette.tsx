@@ -136,7 +136,9 @@ export function CommandPalette({
             id={list}
             role="listbox"
             aria-label={labels.title}
-            className="scroll-inset grid max-h-80 gap-px overflow-y-auto p-1.5"
+            // One column as wide as the palette: an implicit column grew to the longest title,
+            // and the list scrolled sideways instead of cutting it short.
+            className="scroll-inset grid max-h-80 grid-cols-1 gap-px overflow-x-hidden overflow-y-auto p-1.5"
           >
             {shown.map((command, index) => (
               <Fragment key={command.id}>

@@ -8,7 +8,7 @@ import { recordEvent } from '../core/events.js';
 import { stableUuid } from '../core/ids.js';
 import type { ProfileReader } from '../profiles/port.js';
 import type { SessionWriter } from '../sessions/port.js';
-import { insertMessage } from '../sessions/repository.js';
+import { insertMessage, renameSession } from '../sessions/repository.js';
 import type { Queryable, Store } from '../storage/database.js';
 import { mediaAssets } from '../storage/schema.js';
 import { API_SESSION_START } from './api-conversation.js';
@@ -260,13 +260,14 @@ export class Contacts {
   }
 
   /**
-   * The owner's switches on one conversation: whether the agent answers it, and whether the
-   * people in it may approve the agent's actions. Only chat channels have either.
+   * The owner's switches on one conversation: whether the agent answers it, whether the people
+   * in it may approve the agent's actions, and what a person is called. Only chat channels have
+   * any of them.
    */
   async setSettings(
     profileId: string,
     id: string,
-    patch: { aiEnabled?: boolean; canApprove?: boolean },
+    patch: { aiEnabled?: boolean; canApprove?: boolean; displayName?: string },
     tx: Queryable,
   ): Promise<ContactRecord> {
     const current = await this.read(profileId, id, tx);
@@ -278,12 +279,19 @@ export class Contacts {
     // Approving is answered in the conversation itself, which only a chat channel has.
     if (patch.canApprove && !isChatChannel(channel.type))
       throw new GatewayError(400, 'Approving from the conversation is for WhatsApp and Telegram');
+    // A room is called what its members named it, and intake takes that name again each time
+    // they change it, so a name given here would not last.
+    if (patch.displayName !== undefined && current.scope === 'group')
+      throw new GatewayError(400, 'A group keeps the name its members gave it');
+    if (patch.displayName !== undefined && !isChatChannel(channel.type))
+      throw new GatewayError(400, 'Renaming a contact is for WhatsApp and Telegram');
     const now = nowIso(this.clock);
     const aiEnabled = patch.aiEnabled ?? current.aiEnabled;
     const contact: ContactRecord = {
       ...current,
       aiEnabled,
       canApprove: patch.canApprove ?? current.canApprove,
+      ...(patch.displayName !== undefined ? { displayName: patch.displayName } : {}),
       updatedAt: now,
       ...(current.aiEnabled !== aiEnabled ? { aiPausedAt: now } : {}),
       ...(!aiEnabled
@@ -292,6 +300,12 @@ export class Contacts {
     };
     await updateContact(tx, contact);
     await recordEvent(tx, this.clock, profileId, 'contact.updated', this.view(contact));
+    // The conversation carries the name too: notifications and the agent's own list of
+    // conversations read it from there.
+    if (patch.displayName !== undefined && contact.sessionId) {
+      const session = await renameSession(tx, profileId, contact.sessionId, this.title(contact));
+      if (session) await recordEvent(tx, this.clock, profileId, 'session.renamed', session);
+    }
     return contact;
   }
 
