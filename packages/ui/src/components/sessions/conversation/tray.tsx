@@ -63,16 +63,15 @@ export function Tray({
           onAction={() => onReload(true)}
         />
       )}
+      {/* The reader tries these again on its own: there is nothing to press. */}
       {!loading && !error && (toolsUnread || (behind && onlineManager.isOnline())) && (
         <TroubleCard
           title={behind ? 'This conversation may be out of date' : 'Some tools could not be read'}
           detail={
             behind
-              ? 'The latest read failed, so what is shown may be missing what happened since.'
-              : 'The tools could not be read, so some of what the agent did may be missing here.'
+              ? 'The latest read failed. Catching up on its own…'
+              : 'Some of what the agent did may be missing here. Reading it again on its own…'
           }
-          action="Try again"
-          onAction={() => onReload(false)}
         />
       )}
       {run && trouble && run.id !== dismissed && (
