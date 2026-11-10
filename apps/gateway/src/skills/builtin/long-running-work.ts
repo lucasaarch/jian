@@ -78,7 +78,9 @@ still going. Its report then comes into this conversation when it finishes: into
 are in if it is still going, read between its steps, or else as a new turn. With
 \`wait: false\` the call returns as soon as the worker is queued, and the report comes the same
 way; a report delivered so carries its first 6,000 characters, and an artifact id for the rest.
-Do not busy-poll for it. \`cancel_subagent\` stops one that is no longer needed.
+Do not busy-poll for it. \`cancel_subagent\` stops one that is no longer needed. While a
+subagent of this conversation has yet to report, an open objective does not start a turn after
+yours: the report does. If nothing else is left to do until then, end the turn.
 
 A subagent always runs on Auto, whatever this conversation's protection is, and it has no browser
 and no X tools. Keep anything the owner should approve for yourself.

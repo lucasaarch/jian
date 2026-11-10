@@ -1,6 +1,7 @@
 import { LEARNING_SESSION_CHANNEL, type Run, TASK_SESSION_CHANNEL } from '@jian/contracts';
 import type { Clock } from '../core/clock.js';
 import { nowIso } from '../core/clock.js';
+import { awaitsSubagentReport } from '../runs/repository.js';
 import type { Runs } from '../runs/service.js';
 import type { Store } from '../storage/database.js';
 import { MAX_OBJECTIVE_CONTINUATIONS, objectiveAt, objectiveContinuePrompt } from './objective.js';
@@ -46,6 +47,10 @@ export class ObjectiveContinuation {
 
       const objective = session.objective;
       if (objective?.status !== 'open') return null;
+
+      // A subagent's report starts the next turn when it lands. Nudging before then only has
+      // the agent say it is still waiting, again and again, until the cap blocks the objective.
+      if (await awaitsSubagentReport(tx, run.profileId, run.sessionId)) return null;
 
       if (objective.continuations >= MAX_OBJECTIVE_CONTINUATIONS) {
         const blocked = objectiveAt(objective.text, 'blocked', nowIso(this.clock), {
