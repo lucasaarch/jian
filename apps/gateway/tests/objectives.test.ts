@@ -358,7 +358,7 @@ it('caps oversized objective writes to a short durable goal', async () => {
   expect(updated.objective?.text.startsWith('Implement the full voice stack')).toBe(true);
 });
 
-it('blocks on the owner and reopens when they reply', async () => {
+it('blocks on the owner, stays blocked through a reply, and reopens only when the agent resumes it', async () => {
   const services = await testServices();
   const profile = await services.profiles.createProfile(input);
   const session = await services.sessions.createSession(profile.id, {
@@ -406,7 +406,11 @@ it('blocks on the owner and reopens when they reply', async () => {
     [],
   );
 
-  await services.runs.submit(
+  const queued = async () =>
+    (await services.runs.activities(profile.id)).filter((r) => r.status === 'queued');
+
+  // A reply that does not give what the goal waited for leaves it blocked, and starts no loop.
+  const chat = await services.runs.submit(
     profile.id,
     session.id,
     {
@@ -416,9 +420,50 @@ it('blocks on the owner and reopens when they reply', async () => {
     { ownerMessage: true },
   );
   expect((await services.sessions.session(profile.id, session.id)).objective).toMatchObject({
+    status: 'blocked',
+  });
+  await new AgentRuntime(services, () =>
+    mockModel({ doGenerate: async () => answer('Take your time.') }),
+  ).execute(profile.id, chat.id);
+  expect((await services.sessions.session(profile.id, session.id)).objective).toMatchObject({
+    status: 'blocked',
+  });
+  expect(await queued()).toEqual([]);
+
+  // The answer it waited for: the agent resumes the goal, and the gateway continues it.
+  const reply = await services.runs.submit(
+    profile.id,
+    session.id,
+    { text: 'Go with the first provider.', requestKey: 'answer' },
+    { ownerMessage: true },
+  );
+  let resumed = 0;
+  await new AgentRuntime(services, () =>
+    mockModel({
+      doGenerate: async () => {
+        resumed++;
+        if (resumed > 1) return answer('Wiring the first provider.');
+        return {
+          content: [
+            {
+              type: 'tool-call',
+              toolCallId: 'resume',
+              toolName: 'set_session_objective',
+              input: JSON.stringify({ text: 'Choose a Live API provider' }),
+            },
+          ],
+          finishReason: { unified: 'tool-calls', raw: 'tool-calls' },
+          usage,
+          warnings: [],
+        };
+      },
+    }),
+  ).execute(profile.id, reply.id);
+  expect((await services.sessions.session(profile.id, session.id)).objective).toMatchObject({
     status: 'open',
     text: 'Choose a Live API provider',
   });
+  expect(await queued()).toHaveLength(1);
 });
 
 it('isolates objectives between profiles', async () => {

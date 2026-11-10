@@ -304,7 +304,7 @@ export function profileTools(
 
     set_session_objective: tool({
       description:
-        'Set or replace the durable objective for this conversation. Pass a short durable goal (what to achieve) — never shell output, logs, stack traces, or tool dumps. The gateway re-injects this text on every auto-continue. Use when the owner asks for multi-step work and no open objective fits, or when the goal clearly changed.',
+        'Set or replace the durable objective for this conversation. Pass a short durable goal (what to achieve) — never shell output, logs, stack traces, or tool dumps. The gateway re-injects this text on every auto-continue. Use when the owner asks for multi-step work and no open objective fits, or when the goal clearly changed. A message never reopens a blocked objective: call this with the same text to resume it when the owner gives what it waited for or asks you to go on.',
       inputSchema: z.object({
         text: z.string().trim().min(1).max(MAX_OBJECTIVE_TEXT),
       }),
@@ -344,7 +344,7 @@ export function profileTools(
 
     block_session_objective: tool({
       description:
-        'Pause the open objective because you need the owner’s input. The gateway will not auto-continue until they reply.',
+        'Pause the open objective because you need the owner’s input. The gateway will not auto-continue until you resume it with set_session_objective; their reply alone does not.',
       inputSchema: z.object({
         note: z.string().trim().min(1).max(500),
       }),

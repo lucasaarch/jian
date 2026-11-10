@@ -616,7 +616,9 @@ it('tells a worker of a machine conversation it works on the gateway, even witho
 });
 
 it('keeps the files a compaction summarised as the machine has them, or names them', async () => {
-  const { services, profile, chat, worker, turn } = await setup();
+  // A window wide enough that only /compact compacts: at the default the tools and history alone
+  // reach the point, the first turn compacts by itself, and /compact finds nothing left to fold.
+  const { services, profile, chat, worker, turn } = await setup({ inputTokens: 128_000 });
   const retry = '/home/ana/site/retry.ts';
   const gone = '/home/ana/site/old.ts';
   worker.files.set(retry, { text: 'const backoff = 100;\n', mtimeMs: 50 });

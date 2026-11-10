@@ -311,14 +311,7 @@ export class Runs {
 
         if (modeChange) await setPonytailMode(tx, profileId, sessionId, modeChange);
         if (cavemanChange) await setCavemanMode(tx, profileId, sessionId, cavemanChange);
-        await this.applyObjectiveOnSubmit(
-          tx,
-          profileId,
-          sessionId,
-          session,
-          objectiveCommand,
-          fromPerson,
-        );
+        await this.applyObjectiveOnSubmit(tx, profileId, sessionId, session, objectiveCommand);
         return this.resumeWaiting(
           tx,
           profileId,
@@ -395,14 +388,7 @@ export class Runs {
 
         if (modeChange) await setPonytailMode(tx, profileId, sessionId, modeChange);
         if (cavemanChange) await setCavemanMode(tx, profileId, sessionId, cavemanChange);
-        await this.applyObjectiveOnSubmit(
-          tx,
-          profileId,
-          sessionId,
-          session,
-          objectiveCommand,
-          fromPerson,
-        );
+        await this.applyObjectiveOnSubmit(tx, profileId, sessionId, session, objectiveCommand);
 
         await appendSteer(tx, inFlight.id, data.text);
 
@@ -510,14 +496,7 @@ export class Runs {
       await insertMessage(tx, message);
       if (modeChange) await setPonytailMode(tx, profileId, sessionId, modeChange);
       if (cavemanChange) await setCavemanMode(tx, profileId, sessionId, cavemanChange);
-      await this.applyObjectiveOnSubmit(
-        tx,
-        profileId,
-        sessionId,
-        session,
-        objectiveCommand,
-        fromPerson,
-      );
+      await this.applyObjectiveOnSubmit(tx, profileId, sessionId, session, objectiveCommand);
 
       await recordEvent(
         tx,
@@ -987,7 +966,9 @@ export class Runs {
   /**
    * Explicit owner commands set/close the session objective. Casual chat never seeds one —
    * that is the agent's job via set_session_objective (or the session API / /objective).
-   * A person message while blocked only resumes the existing goal; it does not replace the text.
+   * A plain message never reopens a blocked objective: any chat while it waits would restart
+   * auto-continue with a fresh budget. The agent reads the message and resumes the goal itself
+   * (set_session_objective) when it gives what the goal waited for.
    */
   private async applyObjectiveOnSubmit(
     tx: Queryable,
@@ -995,7 +976,6 @@ export class Runs {
     sessionId: string,
     session: Session,
     command: ObjectiveCommand | undefined,
-    fromPerson: boolean,
   ) {
     if (session.channel === TASK_SESSION_CHANNEL) return;
     const at = nowIso(this.clock);
@@ -1027,19 +1007,6 @@ export class Runs {
         profileId,
         sessionId,
         objectiveAt(current.text, 'cancelled', at, { continuations: current.continuations }),
-      );
-      return;
-    }
-
-    if (!fromPerson) return;
-
-    // Owner/channel reply while blocked: resume the same goal — never promote chat into a new title.
-    if (current?.status === 'blocked' && current.text) {
-      await setSessionObjective(
-        tx,
-        profileId,
-        sessionId,
-        objectiveAt(current.text, 'open', at, { continuations: 0 }),
       );
     }
   }

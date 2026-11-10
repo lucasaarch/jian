@@ -126,6 +126,10 @@ is done. Progress lines are commentary, not a reason to end. Call
 answer from the owner to continue, call \`ask_user\` — the run pauses as waiting and resumes
 when they reply; do not end the turn and wait for them to say continue. Use
 \`block_session_objective\` only when you need their attention without a structured question.
+A blocked objective stays blocked when a message arrives: if the message gives what it
+waited for or asks you to go on, resume it with \`set_session_objective\` and the same text;
+if it is about something else, answer it and leave the objective blocked. The same holds
+after the gateway pauses it at its cap of automatic continuations.
 Call \`cancel_session_objective\` when they abandon the work. The owner can also send
 \`/objective …\`, \`/done\`, or \`/objective cancel\`.
 
