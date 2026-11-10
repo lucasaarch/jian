@@ -467,6 +467,57 @@ it(`pauses after ${MAX_OBJECTIVE_CONTINUATIONS} automatic continuations`, async 
   );
 });
 
+it('lets a subagent report, not a nudge, start the next turn of an open objective', async () => {
+  const services = await testServices();
+  const profile = await services.profiles.createProfile(input);
+  const session = await services.sessions.createSession(profile.id, { channel: 'api' });
+  await services.sessions.setObjective(profile.id, session.id, {
+    text: 'Audit the release before shipping it',
+    status: 'open',
+  });
+  const first = await services.runs.submit(profile.id, session.id, {
+    text: 'Hand the audit to a subagent',
+    requestKey: 'delegate',
+  });
+  const child = await services.work.spawnInConversation(
+    first,
+    { brief: 'Audit the release notes.' },
+    'audit',
+  );
+  const runtime = new AgentRuntime(services, () =>
+    mockModel({ doGenerate: async () => answer('The audit is still running.') }),
+  );
+  const queuedHere = async () =>
+    (await services.runs.activities(profile.id)).filter(
+      (run) => run.sessionId === session.id && run.status === 'queued',
+    );
+
+  await runtime.execute(profile.id, first.id);
+  // Nothing to do but wait: no nudge, and none of the objective's continuations spent.
+  expect(await queuedHere()).toEqual([]);
+  expect((await services.sessions.session(profile.id, session.id)).objective).toMatchObject({
+    status: 'open',
+    continuations: 0,
+  });
+
+  await services.lifecycle.claim(child.runId, profile.id, 'lease-audit');
+  await services.lifecycle.finish(
+    profile.id,
+    child.runId,
+    'lease-audit',
+    'completed',
+    'Notes audited.',
+  );
+  await services.work.reportWorker(profile.id, child.runId);
+  const [wake] = await queuedHere();
+  expect(wake?.input).toContain('Notes audited.');
+  if (!wake) throw new Error('expected the report to start a turn');
+
+  await runtime.execute(profile.id, wake.id);
+  const [next] = await queuedHere();
+  expect(next?.input).toContain('Continue the open session objective');
+});
+
 it('injects the open objective into the prompt', async () => {
   const services = await testServices();
   const profile = await services.profiles.createProfile(input);

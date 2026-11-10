@@ -11,6 +11,7 @@ import {
   isNotNull,
   isNull,
   lte,
+  ne,
   or,
   sql,
 } from 'drizzle-orm';
@@ -42,6 +43,38 @@ export async function listUnreportedSubagents(db: Queryable, limit: number) {
     )
     .orderBy(asc(runs.updatedAt))
     .limit(limit);
+}
+
+/**
+ * Whether a subagent started in this conversation has a report still to hand over, so its
+ * handoff will start the conversation's next turn. A cancelled principal's workers are left
+ * out: their reports are dropped, not delivered, and would never wake anything.
+ */
+export async function awaitsSubagentReport(db: Queryable, profileId: string, sessionId: string) {
+  const principals = db
+    .select({ id: sql<string>`${runs.id}::text`.as('principal_id') })
+    .from(runs)
+    .where(
+      and(
+        eq(runs.profileId, profileId),
+        eq(runs.sessionId, sessionId),
+        isNull(runs.subagent),
+        ne(runs.status, 'cancelled'),
+      ),
+    );
+  const [pending] = await db
+    .select({ id: runs.id })
+    .from(runs)
+    .where(
+      and(
+        eq(runs.profileId, profileId),
+        isNotNull(runs.subagent),
+        isNull(runs.subagentReportedAt),
+        inArray(sql`${runs.subagent}->>'parentRunId'`, principals),
+      ),
+    )
+    .limit(1);
+  return Boolean(pending);
 }
 
 /**
