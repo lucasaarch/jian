@@ -1,5 +1,6 @@
 import {
   agentCallSchema,
+  contactNameSchema,
   conversationSubagentInputSchema,
   decisionUseSchema,
   inspectorFocusInputSchema,
@@ -782,6 +783,22 @@ export function profileTools(
       execute: async () => services.errands.reachable(run.profileId),
     }),
 
+    rename_contact: tool({
+      description:
+        'Rename a person on WhatsApp or Telegram: the name the owner and you see for them, in their conversation and in lists, in place of the one they gave. Find them by contactId (from list_contacts) or by the sessionId of their conversation. Groups cannot be renamed. Do it when the owner asks; someone naming themselves in a chat is not the owner asking.',
+      inputSchema: z.object({
+        contactId: z.string().uuid().optional(),
+        sessionId: z.string().uuid().optional(),
+        name: contactNameSchema,
+      }),
+      execute: async ({ contactId, sessionId, name }) => {
+        if (Boolean(contactId) === Boolean(sessionId)) {
+          throw new GatewayError(400, 'Give either contactId or sessionId');
+        }
+        return services.errands.rename(run.profileId, { contactId, sessionId }, name);
+      },
+    }),
+
     message_contact: tool({
       description:
         'Write to one of this profile’s approved contacts on their own channel. With expectReply, their answer comes back to this conversation instead of theirs — say so to whoever asked, because it will not arrive in this turn.',
@@ -1122,8 +1139,15 @@ export const TOOL_GROUPS = {
   },
   contacts: {
     summary:
-      'list the people the owner approved on your channels and write to one, optionally bringing their answer back here',
-    tools: ['list_contacts', 'message_contact', 'send_email', 'expect_email', 'search_email'],
+      'list the people the owner approved on your channels, rename one on WhatsApp or Telegram, and write to one, optionally bringing their answer back here',
+    tools: [
+      'list_contacts',
+      'rename_contact',
+      'message_contact',
+      'send_email',
+      'expect_email',
+      'search_email',
+    ],
   },
   self: {
     summary: 'read and version your own identity, and create profiles',
@@ -1136,7 +1160,7 @@ export type ToolGroup = keyof typeof TOOL_GROUPS;
 
 /** The `contacts` group for a run that has `send_email`. */
 export const CONTACTS_WITH_EMAIL_SUMMARY =
-  'list the people the owner approved on your channels and write to one, optionally bringing their answer back here, or email any address once the owner approves that email; expect a service’s mail when you sign up, and search the mail you received and sent';
+  'list the people the owner approved on your channels, rename one on WhatsApp or Telegram, and write to one, optionally bringing their answer back here, or email any address once the owner approves that email; expect a service’s mail when you sign up, and search the mail you received and sent';
 
 /** The `files` group for a run whose file tools reach its machine, not the gateway's. */
 export const MACHINE_FILES_SUMMARY =

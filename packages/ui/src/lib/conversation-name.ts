@@ -23,10 +23,20 @@ export function conversationName(
     return profiles.find((item) => item.id === session.peerProfileId)?.name ?? stored ?? 'Agent';
   }
   if (['whatsapp', 'telegram', 'email'].includes(session.channel)) {
-    const contact = contacts.find(
-      (item) => item.sessionId === session.id && item.profileId === session.profileId,
-    );
-    return contact?.displayName ?? stored ?? 'Unknown contact';
+    return contactOf(session, contacts)?.displayName ?? stored ?? 'Unknown contact';
   }
   return session.title ?? 'Untitled conversation';
+}
+
+const contactOf = (session: Session, contacts: Contact[]) =>
+  contacts.find((item) => item.sessionId === session.id && item.profileId === session.profileId);
+
+/**
+ * The person whose name a rename of this conversation changes: one on WhatsApp or Telegram. A
+ * group keeps the name its members gave it, and the gateway refuses to change it.
+ */
+export function renamedContact(session: Session, contacts: Contact[]): Contact | undefined {
+  if (session.channel !== 'whatsapp' && session.channel !== 'telegram') return undefined;
+  const contact = contactOf(session, contacts);
+  return contact?.scope === 'direct' ? contact : undefined;
 }

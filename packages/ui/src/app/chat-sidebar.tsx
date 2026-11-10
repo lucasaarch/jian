@@ -245,11 +245,7 @@ function AgentSidebar({ profileId }: { profileId: string }) {
       unread={unread(session)}
       working={working.has(session.id)}
       open={() => open(session.id)}
-      {...(session.channel === GATEWAY_SESSION_CHANNEL
-        ? {
-            rename: (title: string) => actions.rename(session, title),
-          }
-        : {})}
+      renaming={actions.renaming(session, contacts)}
       remove={() => actions.remove(session)}
       loss={<WorktreeLoss profileId={profileId} sessionId={session.id} />}
     />

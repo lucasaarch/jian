@@ -147,7 +147,9 @@ export function DraftPane({
     try {
       const session = await ensure();
       const title = openingTitle(message.text, message.mediaIds.length > 0);
-      // The sidebar shows the chat as soon as it exists; the rest follows behind it.
+      // The sidebar shows the chat as soon as it exists, under its opening for now; the rest
+      // follows behind it. The opening is never saved as the name: a chat already named is one
+      // the agent leaves alone, so saving it would keep the agent from titling the chat.
       client.setQueryData<Session[]>(keys.sessions(profile.id), (known = []) => [
         { ...session, title },
         ...known.filter((item) => item.id !== session.id),
@@ -158,7 +160,8 @@ export function DraftPane({
         protection !== 'ask'
           ? api.setSessionProtection(profile.id, session.id, protection)
           : undefined,
-        api.renameSession(profile.id, session.id, title),
+        // Files alone give the agent no words to title the chat from.
+        message.text.trim() ? undefined : api.renameSession(profile.id, session.id, title),
       ]);
       const run = await api.send(
         profile.id,

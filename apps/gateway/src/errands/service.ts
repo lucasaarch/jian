@@ -8,6 +8,7 @@ import { findEmailThread } from '../channels/email/threads.js';
 import {
   findContact,
   findContactByIdentity,
+  findContactBySession,
   insertDelivery,
   toContact,
 } from '../channels/repository.js';
@@ -514,6 +515,35 @@ export class Errands {
       channel: row.channel,
       waitingOnThem: row.open !== null,
     }));
+  }
+
+  /**
+   * Gives a person on WhatsApp or Telegram the name the owner wants, found by their contact or
+   * by their conversation. A group is refused: it keeps the name its members gave it.
+   */
+  async rename(
+    profileId: string,
+    target: { contactId?: string | undefined; sessionId?: string | undefined },
+    name: string,
+  ): Promise<{ contactId: string; name: string; channel: string; sessionId?: string }> {
+    const people = assertFound(this.people ?? null, 'Contacts');
+
+    return this.store.transaction(profileId, async (tx) => {
+      const id =
+        target.contactId ??
+        (target.sessionId
+          ? (await findContactBySession(tx, profileId, target.sessionId))?.id
+          : undefined);
+      if (!id) throw new GatewayError(404, 'No WhatsApp or Telegram contact has that conversation');
+      const renamed = await people.setSettings(profileId, id, { displayName: name }, tx);
+
+      return {
+        contactId: renamed.id,
+        name: renamed.displayName ?? name,
+        channel: renamed.type,
+        ...(renamed.sessionId ? { sessionId: renamed.sessionId } : {}),
+      };
+    });
   }
 
   async waiting(profileId: string): Promise<Errand[]> {

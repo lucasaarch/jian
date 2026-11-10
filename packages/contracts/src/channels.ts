@@ -150,11 +150,22 @@ export const contactSchema = z.strictObject({
   updatedAt: z.iso.datetime(),
 });
 
+/** What the owner calls a person on WhatsApp or Telegram, in place of the name they gave. */
+export const contactNameSchema = z.string().trim().min(1).max(100);
+
 export const contactPatchSchema = z
-  .strictObject({ aiEnabled: z.boolean().optional(), canApprove: z.boolean().optional() })
-  .refine((patch) => patch.aiEnabled !== undefined || patch.canApprove !== undefined, {
-    message: 'Change at least one setting',
-  });
+  .strictObject({
+    aiEnabled: z.boolean().optional(),
+    canApprove: z.boolean().optional(),
+    displayName: contactNameSchema.optional(),
+  })
+  .refine(
+    (patch) =>
+      patch.aiEnabled !== undefined ||
+      patch.canApprove !== undefined ||
+      patch.displayName !== undefined,
+    { message: 'Change at least one setting' },
+  );
 
 export const ingressSchema = z.strictObject({
   channelMessage: channelMessageSchema.optional(),
