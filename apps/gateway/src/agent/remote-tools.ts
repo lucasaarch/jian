@@ -1,6 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import type { Run } from '@jian/contracts';
-import { mediaMimeOf, REMOTE_FILES_MAX_TEXT, remoteComputerActionSchema } from '@jian/contracts';
+import {
+  ABSOLUTE_PATH,
+  mediaMimeOf,
+  REMOTE_FILES_MAX_TEXT,
+  remoteComputerActionSchema,
+} from '@jian/contracts';
 import { type ToolSet, tool } from 'ai';
 import { z } from 'zod';
 import { GatewayError } from '../core/errors.js';
@@ -169,7 +174,6 @@ const COMMAND_CHARS = 8000;
 /** The most bytes whose base64 is REMOTE_FILES_MAX_TEXT: a read-bytes answer then stays under the result limit. */
 const FILE_BYTES_MAX = (REMOTE_FILES_MAX_TEXT / 4) * 3;
 const BASE64 = /^[A-Za-z0-9+/]*={0,2}$/;
-const ABSOLUTE = /^(\/|[A-Za-z]:[\\/])/;
 const TOO_LARGE_TO_PULL =
   'Files over about 300 KB do not fit through the machine channel: split or compress it with run_remote_command first, then pull the parts.';
 
@@ -375,7 +379,7 @@ export function remoteTools(
 
         let base64: string;
         if (await remote.offersFiles(machineId)) {
-          if (!ABSOLUTE.test(path)) {
+          if (!ABSOLUTE_PATH.test(path)) {
             return { ok: false, error: 'Give the absolute path of the file on that machine.' };
           }
           const answer = await remote.executeFiles(
@@ -465,7 +469,7 @@ export function remoteTools(
             : Buffer.from(content, 'utf8').toString('base64');
 
         if (await remote.offersFiles(machineId)) {
-          if (!ABSOLUTE.test(path)) {
+          if (!ABSOLUTE_PATH.test(path)) {
             return { ok: false, error: 'Give the absolute path of the file on that machine.' };
           }
           if (base64.length > REMOTE_FILES_MAX_TEXT) {

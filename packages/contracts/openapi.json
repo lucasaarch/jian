@@ -4977,7 +4977,7 @@
                                 "path": {
                                   "type": "string",
                                   "maxLength": 4096,
-                                  "pattern": "^(\\/|[A-Za-z]:[\\\\/])"
+                                  "pattern": "^(?:\\/|[A-Za-z]:[\\\\/])"
                                 },
                                 "maxBytes": {
                                   "type": "integer",
@@ -5002,7 +5002,7 @@
                                 "path": {
                                   "type": "string",
                                   "maxLength": 4096,
-                                  "pattern": "^(\\/|[A-Za-z]:[\\\\/])"
+                                  "pattern": "^(?:\\/|[A-Za-z]:[\\\\/])"
                                 },
                                 "content": {
                                   "type": "string",
@@ -5033,7 +5033,7 @@
                                 "path": {
                                   "type": "string",
                                   "maxLength": 4096,
-                                  "pattern": "^(\\/|[A-Za-z]:[\\\\/])"
+                                  "pattern": "^(?:\\/|[A-Za-z]:[\\\\/])"
                                 },
                                 "limit": {
                                   "type": "integer",
@@ -5058,7 +5058,7 @@
                                 "path": {
                                   "type": "string",
                                   "maxLength": 4096,
-                                  "pattern": "^(\\/|[A-Za-z]:[\\\\/])"
+                                  "pattern": "^(?:\\/|[A-Za-z]:[\\\\/])"
                                 },
                                 "pattern": {
                                   "type": "string",
@@ -5089,7 +5089,7 @@
                                 "path": {
                                   "type": "string",
                                   "maxLength": 4096,
-                                  "pattern": "^(\\/|[A-Za-z]:[\\\\/])"
+                                  "pattern": "^(?:\\/|[A-Za-z]:[\\\\/])"
                                 },
                                 "pattern": {
                                   "type": "string",
@@ -5144,7 +5144,7 @@
                                 "path": {
                                   "type": "string",
                                   "maxLength": 4096,
-                                  "pattern": "^(\\/|[A-Za-z]:[\\\\/])"
+                                  "pattern": "^(?:\\/|[A-Za-z]:[\\\\/])"
                                 },
                                 "maxBytes": {
                                   "type": "integer",
@@ -5169,7 +5169,7 @@
                                 "path": {
                                   "type": "string",
                                   "maxLength": 4096,
-                                  "pattern": "^(\\/|[A-Za-z]:[\\\\/])"
+                                  "pattern": "^(?:\\/|[A-Za-z]:[\\\\/])"
                                 },
                                 "base64": {
                                   "type": "string",
@@ -5194,7 +5194,7 @@
                                 "root": {
                                   "type": "string",
                                   "maxLength": 4096,
-                                  "pattern": "^(\\/|[A-Za-z]:[\\\\/])"
+                                  "pattern": "^(?:\\/|[A-Za-z]:[\\\\/])"
                                 },
                                 "against": {
                                   "type": "string",
@@ -5217,7 +5217,7 @@
                                 "root": {
                                   "type": "string",
                                   "maxLength": 4096,
-                                  "pattern": "^(\\/|[A-Za-z]:[\\\\/])"
+                                  "pattern": "^(?:\\/|[A-Za-z]:[\\\\/])"
                                 },
                                 "path": {
                                   "type": "string",
@@ -5261,7 +5261,7 @@
                                 "root": {
                                   "type": "string",
                                   "maxLength": 4096,
-                                  "pattern": "^(\\/|[A-Za-z]:[\\\\/])"
+                                  "pattern": "^(?:\\/|[A-Za-z]:[\\\\/])"
                                 },
                                 "base": {
                                   "type": "string",
@@ -29773,14 +29773,14 @@
                       "type": "string",
                       "minLength": 1,
                       "maxLength": 4096,
-                      "pattern": "^\\/"
+                      "pattern": "^(?:\\/|[A-Za-z]:[\\\\/])"
                     }
                   },
                   "cloneInto": {
                     "type": "string",
                     "minLength": 1,
                     "maxLength": 4096,
-                    "pattern": "^\\/"
+                    "pattern": "^(?:\\/|[A-Za-z]:[\\\\/])"
                   }
                 },
                 "additionalProperties": false
@@ -30152,14 +30152,14 @@
                       "type": "string",
                       "minLength": 1,
                       "maxLength": 4096,
-                      "pattern": "^\\/"
+                      "pattern": "^(?:\\/|[A-Za-z]:[\\\\/])"
                     }
                   },
                   "cloneInto": {
                     "type": "string",
                     "minLength": 1,
                     "maxLength": 4096,
-                    "pattern": "^\\/"
+                    "pattern": "^(?:\\/|[A-Za-z]:[\\\\/])"
                   }
                 },
                 "required": [

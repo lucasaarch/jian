@@ -5,6 +5,7 @@ import {
   providerCredentialSchema,
   reasoningEffortSchema,
 } from './providers.js';
+import { ABSOLUTE_PATH } from './remote.js';
 import { secretSchema } from './security.js';
 import { skillOriginSchema } from './skills.js';
 
@@ -343,10 +344,16 @@ export const TASK_SESSION_CHANNEL = 'task';
 const sessionWorkspaceFields = {
   /** Several repositories at once; a single one may also come as `projectId`. */
   projectIds: z.array(z.uuid()).max(MAX_WORKSPACE_ITEMS).optional(),
-  /** Folders on the owner's computer, the machine's or this gateway's own. Never with projects. */
-  folders: z.array(z.string().min(1).max(4096).regex(/^\//)).max(MAX_WORKSPACE_ITEMS).optional(),
+  /**
+   * Folders on the owner's computer, the machine's or this gateway's own. Never with projects.
+   * Windows paths too: the desktop app's folder dialog answers `C:\…` there.
+   */
+  folders: z
+    .array(z.string().min(1).max(4096).regex(ABSOLUTE_PATH))
+    .max(MAX_WORKSPACE_ITEMS)
+    .optional(),
   /** Where on the machine its repositories are cloned, chosen by the owner. */
-  cloneInto: z.string().min(1).max(4096).regex(/^\//).optional(),
+  cloneInto: z.string().min(1).max(4096).regex(ABSOLUTE_PATH).optional(),
 };
 
 export const gatewaySessionInputSchema = z.strictObject({
