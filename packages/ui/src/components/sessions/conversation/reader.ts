@@ -28,6 +28,9 @@ export type Reader = {
 
 type Ended = { runs: Set<string>; calls: Set<string> };
 
+/** How long a failed read waits before it is tried again, one after another, the last repeated. */
+export const RETRY_MS = [1_000, 2_000, 5_000, 10_000, 30_000];
+
 /**
  * Every timeline this reader asks for is brief: a turn's tools are read again on each of its
  * steps, and their whole inputs and outputs, drawn only once a tool is opened, made a long
@@ -101,6 +104,25 @@ export function createReader(options: {
   // Something is on screen, kept or read: a failed read leaves it there rather than covering it
   // with an error. Nothing yet is loading; a first read that failed left its error.
   const shown = () => !state().loading && !state().error;
+
+  // A read that failed is tried again on its own, soon at first and then less often, until one
+  // works: the owner should not have to press anything for the conversation to catch up.
+  let failures = 0;
+  let retryTimer: ReturnType<typeof setTimeout> | undefined;
+  const retryLater = () => {
+    if (stopped || retryTimer) return;
+    const wait = RETRY_MS[Math.min(failures, RETRY_MS.length - 1)];
+    failures += 1;
+    retryTimer = setTimeout(() => {
+      retryTimer = undefined;
+      if (!stopped) void latest();
+    }, wait);
+  };
+  const caughtUp = () => {
+    failures = 0;
+    clearTimeout(retryTimer);
+    retryTimer = undefined;
+  };
 
   // Reads of one turn's tools overlap: a step's, the latest read's, the other agent's poll, each
   // its own single flight, answered in any order. Each read is numbered as it is sent, and what it
@@ -248,9 +270,12 @@ export function createReader(options: {
       if (members) state().peopleRead(members);
       state().patch({ toolsUnread: read.unread });
       answered = reloads;
+      if (read.unread) retryLater();
+      else caughtUp();
       if (fresh) toast.success('Chat reloaded.');
     } catch (failure) {
       if (stopped) return;
+      retryLater();
       const said = failure instanceof Error ? failure.message : 'The history could not be loaded.';
       if (!shown()) {
         state().patch({ loading: false, error: said });
@@ -286,7 +311,9 @@ export function createReader(options: {
         ),
       );
     } catch {
-      if (!stopped) state().patch({ toolsUnread: true });
+      if (stopped) return;
+      state().patch({ toolsUnread: true });
+      retryLater();
     }
   };
 
@@ -389,6 +416,7 @@ export function createReader(options: {
     call: () => call(),
     stop: () => {
       stopped = true;
+      caughtUp();
     },
   };
 }

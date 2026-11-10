@@ -5,7 +5,7 @@ import type { Message, Run, ToolStep } from '../../../lib/api';
 
 vi.mock('sonner', () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
 
-import { createReader, type HistoryApi } from './reader';
+import { createReader, type HistoryApi, RETRY_MS } from './reader';
 import { createConversationStore } from './store';
 
 const said = (id: string, extra: Partial<Message> = {}): Message => ({
@@ -281,6 +281,68 @@ describe('the conversation reader', () => {
     await reader.latest();
     expect(store.getState()).toMatchObject({ error: '', behind: true });
     expect(store.getState().messages).toHaveLength(1);
+    reader.stop();
+  });
+
+  it('a failed read is tried again on its own, less often each time, until one works', async () => {
+    vi.useFakeTimers();
+    try {
+      let fail = false;
+      let reads = 0;
+      const { api } = fakeApi({
+        messages: async () => {
+          reads += 1;
+          if (fail) throw new Error('Gateway unreachable');
+          return [said('a')];
+        },
+      });
+      const { store, reader } = open(api);
+
+      await reader.latest();
+      fail = true;
+      await reader.latest();
+      expect(store.getState().behind).toBe(true);
+      expect(reads).toBe(2);
+
+      await vi.advanceTimersByTimeAsync(RETRY_MS[0] ?? 0);
+      expect(reads).toBe(3);
+      // The second wait is longer: nothing yet when only the first one has passed again.
+      await vi.advanceTimersByTimeAsync(RETRY_MS[0] ?? 0);
+      expect(reads).toBe(3);
+
+      fail = false;
+      await vi.advanceTimersByTimeAsync(RETRY_MS[1] ?? 0);
+      expect(reads).toBe(4);
+      expect(store.getState().behind).toBe(false);
+
+      // Caught up: no more reads of its own.
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(reads).toBe(4);
+      reader.stop();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('a stopped reader tries nothing again', async () => {
+    vi.useFakeTimers();
+    try {
+      let reads = 0;
+      const { api } = fakeApi({
+        messages: async () => {
+          reads += 1;
+          throw new Error('Gateway unreachable');
+        },
+      });
+      const { reader } = open(api);
+
+      await reader.latest();
+      reader.stop();
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(reads).toBe(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('a reload that fails while something is shown says so', async () => {

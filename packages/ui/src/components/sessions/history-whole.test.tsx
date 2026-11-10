@@ -3,6 +3,7 @@ import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { GatewayApi } from '../../lib/api';
+import { RETRY_MS } from './conversation/reader';
 import { History, joinHistory } from './history';
 
 let element: HTMLDivElement;
@@ -302,30 +303,35 @@ it('says when earlier messages could not be read, and lets the owner try again',
   expect(element.textContent).not.toContain('could not be read');
 });
 
-it('says when the tools of a conversation could not be read, until they are', async () => {
-  let failing = true;
-  await show({
-    messages: async () => [line('first', 1)],
-    activities: async () => [],
-    timeline: async () => {
-      if (failing) throw new Error('offline');
-      return [{ runId: 'run', steps: [step('tool', 2)] }];
-    },
-  });
+it('says when the tools of a conversation could not be read, and reads them again on its own', async () => {
+  vi.useFakeTimers({ shouldAdvanceTime: true });
+  try {
+    let failing = true;
+    await show({
+      messages: async () => [line('first', 1)],
+      activities: async () => [],
+      timeline: async () => {
+        if (failing) throw new Error('offline');
+        return [{ runId: 'run', steps: [step('tool', 2)] }];
+      },
+    });
 
-  expect(element.textContent).toContain('tools could not be read');
+    expect(element.textContent).toContain('tools could not be read');
+    // Nothing to press: the reader tries again by itself.
+    expect(
+      [...element.querySelectorAll('button')].some((button) => button.textContent === 'Try again'),
+    ).toBe(false);
 
-  failing = false;
-  const retry = [...element.querySelectorAll('button')].find(
-    (button) => button.textContent === 'Try again',
-  );
-  await act(async () => retry?.click());
-  await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 0));
-  });
+    failing = false;
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(RETRY_MS[0] ?? 0);
+    });
 
-  expect(element.textContent).not.toContain('tools could not be read');
-  expect(element.textContent).toContain('1 tool call');
+    expect(element.textContent).not.toContain('tools could not be read');
+    expect(element.textContent).toContain('1 tool call');
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 const said = (id: string) => ({ id });
