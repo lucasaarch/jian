@@ -1,7 +1,9 @@
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, expect, it, vi } from 'vitest';
-import { ChatRow, RenameDialog } from './chat-row';
+import { ChatRow, RenameDialog, type Renaming } from './chat-row';
+
+const chat = (rename: Renaming['rename']): Renaming => ({ what: 'chat', maxLength: 160, rename });
 
 const roots: (() => void)[] = [];
 afterEach(() => {
@@ -29,7 +31,7 @@ async function render(
         unread={false}
         working={false}
         open={() => {}}
-        {...(rename ? { rename } : {})}
+        {...(rename ? { renaming: chat(rename) } : {})}
         pinned={pinned}
         pin={pin}
         remove={remove}
@@ -47,7 +49,7 @@ async function render(
   return { host, remove, menu };
 }
 
-async function dialog(rename: (title: string) => Promise<boolean>) {
+async function dialog(rename: (title: string) => Promise<boolean>, renaming = chat(rename)) {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
   const close = vi.fn();
   const host = document.createElement('div');
@@ -55,7 +57,7 @@ async function dialog(rename: (title: string) => Promise<boolean>) {
   const root = createRoot(host);
   roots.push(() => root.unmount());
   await act(async () =>
-    root.render(<RenameDialog open onOpenChange={close} name="Old title" rename={rename} />),
+    root.render(<RenameDialog open onOpenChange={close} name="Old title" renaming={renaming} />),
   );
   return close;
 }
@@ -94,6 +96,17 @@ it('stays open when the name could not be saved', async () => {
   await type('Release checks');
   await save();
   expect(close).not.toHaveBeenCalled();
+});
+
+it('renames a person by the name the gateway keeps for a contact', async () => {
+  const rename = vi.fn(async () => true);
+  await dialog(rename, { what: 'contact', maxLength: 100, rename });
+
+  expect(document.querySelector('[role="dialog"] h2')?.textContent).toBe('Rename contact');
+  expect(field()?.maxLength).toBe(100);
+  await type('Ada Lovelace');
+  await save();
+  expect(rename).toHaveBeenCalledExactlyOnceWith('Ada Lovelace');
 });
 
 it('asks nothing of the gateway when the name did not change', async () => {

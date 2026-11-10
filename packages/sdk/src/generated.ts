@@ -10490,6 +10490,7 @@ export interface operations {
                 "application/json": {
                     aiEnabled?: boolean;
                     canApprove?: boolean;
+                    displayName?: string;
                 };
             };
         };

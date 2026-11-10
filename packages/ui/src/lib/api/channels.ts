@@ -52,7 +52,7 @@ export const channelCalls = (client: Client) => ({
   updateContact: (
     profileId: string,
     id: string,
-    body: { aiEnabled: boolean } | { canApprove: boolean },
+    body: { aiEnabled: boolean } | { canApprove: boolean } | { displayName: string },
   ) =>
     result(
       client.PATCH('/v1/profiles/{profileId}/contacts/{id}', {

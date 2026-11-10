@@ -66,6 +66,9 @@ One agent's own, from the agent chooser at the foot of the sidebar.
 ## In the conversation
 
 - **Schedules** open from the top of the sidebar.
+- **Renaming**: right-click a conversation in the sidebar, or use the palette, to rename a chat
+  or a person on WhatsApp or Telegram. A chat is named by you from its first message until the
+  owner renames it; a group keeps the name its members gave it.
 - **A new chat** chooses above its composer what it works on: from scratch, folders, or GitHub
   repositories, and where it runs.
 - **Model, effort and protection** are chosen in the composer, for that chat. Picking one also makes
