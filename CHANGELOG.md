@@ -4,6 +4,24 @@ Every release of Jian, newest first.
 
 <!-- Generated from docs/releases by scripts/changelog.mjs. Edit the release note, then run `make changelog`. -->
 
+## 1.9.3 — 2026-11-11
+
+Claude Fable 5.2 answers on a Claude subscription, and standard subagents go back to Sonnet.
+
+### Models
+
+* **Claude Fable 5.2 works on a Claude subscription:** Anthropic refused it with a 400 asking for Claude Code 2.1.290 or newer. Jian now presents itself as at least 2.1.290. If the machine has a newer `claude` CLI installed, its version is still the one Jian sends.
+
+### Subagents
+
+* **Standard subagents cost less again:** Jian picked a subagent's model by its family name. Fable matched neither the light nor the deep names, so it landed in standard, and because standard takes the newest model there, every standard subagent ran on Fable, which costs twice as much as Opus 5.5. Fable and Mythos now count as deep. On a Claude subscription, light runs on Haiku, standard on Sonnet and deep on Fable.
+* **New model names land in the right tier:** A family Jian doesn't recognize by name now counts as deep when it costs as much as a deep model from the same provider or more, so the next top model with a new name won't take over the standard tier.
+
+### Upgrading
+
+* The desktop app updates itself to this release.
+* **Servers:** Recreate the gateway and web containers with the 1.9.3 images, or follow the `latest` tags. There is no migration.
+
 ## 1.9.2 — 2026-11-11
 
 Objectives stop looping while a subagent works, email gets answered only when someone waits for it, and you can rename people on WhatsApp and Telegram.
