@@ -44,10 +44,11 @@ export function anthropicCredential(
 const BETAS = 'claude-code-20250219,oauth-2025-04-20';
 
 /**
- * The subscription adapter must announce at least this protocol version: Opus 5.5 refuses
- * anything before 2.1.280. A missing or older host CLI must not downgrade the container.
+ * The subscription adapter must announce at least this protocol version: Fable 5.2 refuses
+ * anything before 2.1.290 (Opus 5.5 needed 2.1.280). A missing or older host CLI must not
+ * downgrade the container.
  */
-const MINIMUM_VERSION = '2.1.280';
+const MINIMUM_VERSION = '2.1.290';
 
 const run = promisify(execFile);
 

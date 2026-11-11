@@ -13,12 +13,13 @@ beforeEach(() => {
 });
 
 it.each([
-  { cli: undefined, expected: '2.1.280' },
-  { cli: '2.1.278 (Claude Code)', expected: '2.1.280' },
-  { cli: '2.1.280 (Claude Code)', expected: '2.1.280' },
+  { cli: undefined, expected: '2.1.290' },
+  { cli: '2.1.280 (Claude Code)', expected: '2.1.290' },
+  { cli: '2.1.290 (Claude Code)', expected: '2.1.290' },
+  { cli: '2.1.295 (Claude Code)', expected: '2.1.295' },
   { cli: '2.1.1000 (Claude Code)', expected: '2.1.1000' },
   { cli: '2.2.1 (Claude Code)', expected: '2.2.1' },
-  { cli: '2026-invalid', expected: '2.1.280' },
+  { cli: '2026-invalid', expected: '2.1.290' },
 ])('sends a supported subscription version with CLI $cli', async ({ cli, expected }) => {
   if (cli === undefined) version.mockRejectedValue(new Error('ENOENT'));
   else version.mockResolvedValue({ stdout: cli });

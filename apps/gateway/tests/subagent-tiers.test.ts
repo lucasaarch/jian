@@ -7,11 +7,12 @@ import { chooseTier } from '../src/tasks/tier.js';
 import { testServices } from './helpers/services.js';
 
 const now = 1_700_000_000_000;
-const chat = (release: string, effort = false) => ({
+const chat = (release: string, effort = false, output?: number) => ({
   modalities: { input: ['text'], output: ['text'] },
   limit: { context: 200_000, output: 32_000 },
   release_date: release,
   ...(effort ? { reasoning_options: [{ type: 'effort', values: ['low', 'medium', 'high'] }] } : {}),
+  ...(output !== undefined ? { cost: { input: output / 5, output } } : {}),
 });
 
 /** One public catalog for every vendor the tests list models from. */
@@ -27,9 +28,11 @@ const catalog = new ModelCatalog(
       },
       openai: {
         models: {
-          'gpt-6-astra': chat('2026-07-01', true),
-          'gpt-6': chat('2026-07-01', true),
+          'gpt-6-astra': chat('2026-07-01', true, 40),
+          'gpt-6': chat('2026-07-01', true, 10),
           'gpt-6-mini': chat('2026-07-01', true),
+          // A family no name rule knows, newer than the rest and priced above `astra`.
+          'gpt-6-sage': chat('2026-09-01', true, 80),
           'text-embedding-4': {
             modalities: { input: ['text'], output: [] },
             release_date: '2026-07-01',
@@ -66,6 +69,7 @@ const listed: Record<string, string[]> = {
   claude: ['claude-opus-5-5', 'claude-sonnet-5-5', 'claude-haiku-5-5'],
   'anthropic-key': ['claude-opus-5-5', 'claude-sonnet-5-5', 'claude-haiku-5-5'],
   grok: ['grok-5', 'grok-5-fast', 'grok-5-heavy'],
+  'openai-priced': ['gpt-6-astra', 'gpt-6', 'gpt-6-mini', 'gpt-6-sage'],
 };
 
 function tiers(records: ProviderRecord[]) {
@@ -99,10 +103,15 @@ describe('the tier a model is in', () => {
       ['claude-haiku-5-5', 'gpt-6-mini', 'gpt-5-nano', 'grok-5-fast', 'gemini-3-flash'].map(tier),
     ).toEqual(['light', 'light', 'light', 'light', 'light']);
     expect(
-      ['claude-opus-5-5', 'gpt-6-astra', 'gemini-3-pro', 'grok-5-heavy', 'gpt-5.1-codex-max'].map(
-        tier,
-      ),
-    ).toEqual(['deep', 'deep', 'deep', 'deep', 'deep']);
+      [
+        'claude-opus-5-5',
+        'claude-fable-5-2',
+        'gpt-6-astra',
+        'gemini-3-pro',
+        'grok-5-heavy',
+        'gpt-5.1-codex-max',
+      ].map(tier),
+    ).toEqual(['deep', 'deep', 'deep', 'deep', 'deep', 'deep']);
     expect(['claude-sonnet-5-5', 'gpt-6', 'grok-5', 'o3'].map(tier)).toEqual([
       'standard',
       'standard',
@@ -161,6 +170,15 @@ describe('the model a tier gets', () => {
       providerId: 'openai-key',
       modelId: 'gpt-6-mini',
     });
+  });
+
+  it('puts an unknown family priced like a deep model in deep, not in standard', async () => {
+    const picker = tiers([provider('openai-priced', 'openai', { authMode: 'api' })]);
+
+    // `gpt-6-sage` is the newest model and its name says no tier; by name alone it would take
+    // every standard subagent at eight times the price of the standard model.
+    expect(await picker.pick('standard')).toMatchObject({ modelId: 'gpt-6' });
+    expect(await picker.pick('deep')).toMatchObject({ modelId: 'gpt-6-sage' });
   });
 
   it('skips a revoked credential and answers nothing when no provider has the tier', async () => {

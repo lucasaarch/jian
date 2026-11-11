@@ -15,7 +15,7 @@ import type { ProviderAdmin } from './port.js';
  */
 const LIGHT = /haiku|\b(?:mini|nano|lite|flash|fast)\b/i;
 /** Model families named for the hardest work. `pro` and `max` alone, not inside a word. */
-const DEEP = /opus|\bpro\b|astra|heavy|\bmax\b/i;
+const DEEP = /opus|fable|mythos|\bpro\b|astra|heavy|\bmax\b/i;
 
 /** The tier a model's own name places it in. A family named for neither is the middle one. */
 export function modelTier(model: { id: string; displayName?: string }): SubagentTier {
@@ -24,6 +24,28 @@ export function modelTier(model: { id: string; displayName?: string }): Subagent
   if (LIGHT.test(name)) return 'light';
   if (DEEP.test(name)) return 'deep';
   return 'standard';
+}
+
+/**
+ * A family the names above do not know is placed by its list price too: priced at least like
+ * one of the same provider's deep-named models, it is deep. By name alone a new top family —
+ * Claude Fable 5.2, twice Opus 5.5's price — landed in the middle tier and, as its newest
+ * model, took every `standard` subagent there.
+ */
+function tierAmong(model: Candidate, siblings: Candidate[]): SubagentTier {
+  const named = modelTier(model);
+  const price = model.entry.price?.output;
+
+  if (named !== 'standard' || price === undefined) return named;
+
+  return siblings.some(
+    (sibling) =>
+      modelTier(sibling) === 'deep' &&
+      sibling.entry.price !== undefined &&
+      price >= sibling.entry.price.output,
+  )
+    ? 'deep'
+    : 'standard';
 }
 
 /**
@@ -71,8 +93,9 @@ export class TierModels {
       );
 
     for (const { provider } of live) {
-      const best = (await conversationalModels(provider, this.models, this.catalog))
-        .filter((model) => modelTier(model) === tier)
+      const candidates = await conversationalModels(provider, this.models, this.catalog);
+      const best = candidates
+        .filter((model) => tierAmong(model, candidates) === tier)
         .sort(newestFirst)[0];
 
       if (best) return selection(provider, best, tier);
