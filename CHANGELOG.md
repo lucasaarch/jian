@@ -4,6 +4,43 @@ Every release of Jian, newest first.
 
 <!-- Generated from docs/releases by scripts/changelog.mjs. Edit the release note, then run `make changelog`. -->
 
+## 1.9.2 — 2026-11-11
+
+Objectives stop looping while a subagent works, email gets answered only when someone waits for it, and you can rename people on WhatsApp and Telegram.
+
+### Objectives and subagents
+
+* **No more loop while a subagent works:** With an objective open, every finished turn queued another "Continue the open session objective", even when a subagent still owed its report. The agent could only say it was still waiting, over and over, until the cap of 25 blocked the objective. Now nothing is queued while a report is pending, and none of the 25 are spent. The report starts the next turn when it arrives. Subagents of a cancelled run don't hold the objective, since their report never comes.
+* **Your message no longer reopens a blocked objective:** Before, any message reopened it with a fresh count, so an "ok" or an unrelated question set auto-continue running again. Now a message is an ordinary turn and the objective stays blocked. The agent reopens it when your message brings what it was waiting for or asks it to go on. `/objective <text>`, `/done` and `/objective cancel` work as before, and the note at the cap now reads "Ask the agent to go on, or send /objective with the goal, to resume."
+
+### Conversations
+
+* **Rename people on WhatsApp and Telegram:** Right-click a person's conversation in the sidebar, or use **Rename contact** in the palette. The new name shows in the panel and in what the agent is told about them, never on their phone. The agent can rename someone too when you ask it. Groups keep the name their members gave them.
+* **Chats get their titles from the agent again:** The panel used to save the opening of your first message as the chat's name, and the agent leaves a chat that already has a name alone. Now the opening shows only until the agent titles the chat from that message. A chat you start with files and no text still keeps the opening as its name.
+* **A conversation catches up by itself:** When reading a conversation failed, a card said it might be out of date and offered **Try again**, which often seemed to do nothing. Now the panel reads again on its own after 1, 2, 5 and 10 seconds, then every 30 seconds until it works, and stops when you leave the conversation. The card just says "Catching up on its own…". A conversation that can't open at all still shows **Try again**, and retries by itself as well.
+
+### Email
+
+* **The agent answers email on purpose:** A turn in an email conversation no longer mails its final answer back. The agent replies in the thread only when the sender is waiting for an answer, and tells you in your own conversation what matters. Mail from noreply, no-reply, donotreply, mailer-daemon, postmaster and bounce addresses is kept without starting a turn, and the agent never writes to those addresses.
+
+### Models
+
+* **Claude Fable 5.2:** You can pick it when you use a Claude subscription.
+
+### Apps and MCP servers
+
+* **Sign-in errors you can read:** When an MCP server refused a sign-in, Jian showed "[object Response]". It now shows what the server said.
+* **Mercado Pago left Apps:** Mercado Pago accepts sign-ins only from its own list of redirect addresses, so a hosted gateway can't connect to it with OAuth. Add it under MCP servers with an access token in a header instead.
+
+### Windows
+
+* **Windows folders work in chats:** A chat given a folder on Windows, such as `C:\...`, was refused before its first message. It works now, and a subagent can read that folder's project instructions too.
+
+### Upgrading
+
+* The desktop app updates itself to this release.
+* **Servers:** Recreate the gateway and web containers with the 1.9.2 images, or follow the `latest` tags. There is no migration.
+
 ## 1.9.1 — 2026-11-08
 
 Forwarded emails reach the agent whole, and the way back to the latest message shows up as soon as you scroll.
