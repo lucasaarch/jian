@@ -5,7 +5,7 @@ import { ChatNotices } from '../components/notifications/chat-notices';
 import { Sessions } from '../components/sessions';
 import { Action } from '../kit';
 import type { Profile } from '../lib/api';
-import { agentPath } from '../lib/navigation';
+import { agentPath, onPulls } from '../lib/navigation';
 import { usePhone } from '../lib/phone';
 import { useProfiles } from '../lib/query/profile';
 import { useEventStream } from '../lib/query/stream';
@@ -28,6 +28,7 @@ import { Farewell } from './onboarding/farewell';
 import { StageHandoff } from './onboarding/handoff';
 import { rememberWelcome, Welcome, welcomed } from './onboarding/welcome';
 import { PhoneBar } from './phone-bar';
+import { PullsScreen } from './pulls/pulls-screen';
 import { LoadingMark } from './reload';
 
 /** How long the mark covers the window for a gateway that does not answer, in milliseconds. */
@@ -67,8 +68,8 @@ export function ChatsApp({
   const pathname = usePathname();
   const search = useSearchParams();
   const phone = usePhone();
-  // Something the sidebar opened: a chat, or a new one.
-  const opened = /\/sessions\/[^/]+/.test(pathname) || search.has('new');
+  // Something the sidebar opened: a chat, a new one, or the pull requests.
+  const opened = /\/sessions\/[^/]+/.test(pathname) || search.has('new') || onPulls(pathname);
   const sidebar = !phone || (known && !opened);
   const main = !phone || !sidebar;
   useSavedLayout();
@@ -217,6 +218,8 @@ function Chats({ phone, createAgent }: { phone: boolean; createAgent: () => void
 function AgentChats({ profileId, phone }: { profileId: string; phone: boolean }) {
   const actions = useActions();
   const remember = useLastProfile((state) => state.remember);
+  // The pull requests take the chat's place, as a chat would; the sidebar stays beside them.
+  const pulls = onPulls(usePathname());
   useEventStream(profileId);
   useEffect(() => remember(profileId), [profileId, remember]);
 
@@ -225,7 +228,7 @@ function AgentChats({ profileId, phone }: { profileId: string; phone: boolean })
       <ChatNotices profileId={profileId} />
       {phone && <PhoneBar profileId={profileId} />}
       <div className="min-h-0 flex-1">
-        <Sessions {...actions} />
+        {pulls ? <PullsScreen profileId={profileId} /> : <Sessions {...actions} />}
       </div>
       <ChatSearch profileId={profileId} />
       <ChatCommands profileId={profileId} />

@@ -18,6 +18,8 @@ const API_VERSION = '2022-11-28';
 const STATE_LIFETIME_MS = 10 * 60_000;
 const PAGE_SIZE = 100;
 const PAGE_LIMIT = 50;
+/** The vault entry of the secret GitHub signs the App's webhook deliveries with. */
+const WEBHOOK_SECRET = 'github-webhook-secret';
 /** An installation token lasts an hour; one is reused until this long before it expires. */
 const TOKEN_MARGIN_MS = 5 * 60_000;
 /**
@@ -276,7 +278,10 @@ export class GitHubIntegrations {
         public: true,
         request_oauth_on_install: true,
         default_permissions: GITHUB_MCP_PERMISSIONS,
-        default_events: [],
+        // Pull requests opened anywhere the App is installed, for automatic agent reviews. GitHub
+        // creates the webhook's secret and hands it over with the App's credentials.
+        hook_attributes: { url: this.webhookUrl(), active: true },
+        default_events: ['pull_request'],
       },
     };
   }
@@ -305,6 +310,7 @@ export class GitHubIntegrations {
           client_id: z.string().min(1),
           client_secret: z.string().min(1),
           pem: z.string().min(1),
+          webhook_secret: z.string().min(1).nullish(),
         })
         .parse(await response.json());
       await this.store.transaction('gateway', async (tx) => {
@@ -325,6 +331,9 @@ export class GitHubIntegrations {
           }),
           tx,
         );
+        if (app.webhook_secret) {
+          await this.vault.put(WEBHOOK_SECRET, app.webhook_secret, tx);
+        }
       });
       return `${stateRow.returnOrigin}?github=registered`;
     } catch {
@@ -662,6 +671,46 @@ export class GitHubIntegrations {
       },
       signal: init.signal ?? AbortSignal.timeout(15_000),
     });
+  }
+
+  /** Where GitHub delivers the App's webhook, on a gateway with a public address. */
+  webhookUrl(): string | undefined {
+    return this.publicUrl
+      ? new URL('/v1/integrations/github/webhook', this.publicUrl).toString()
+      : undefined;
+  }
+
+  /** The secret deliveries are signed with, once a webhook was set up through Jian. */
+  async webhookSecret(): Promise<string | undefined> {
+    return this.vault.read(WEBHOOK_SECRET);
+  }
+
+  /** The App's page on GitHub where its events and webhook are chosen. */
+  async appSettingsUrl(): Promise<string | undefined> {
+    const config = await this.config();
+    if (!config) return undefined;
+    return config.ownerType === 'Organization' && config.ownerLogin
+      ? `https://github.com/organizations/${config.ownerLogin}/settings/apps/${config.slug}`
+      : `https://github.com/settings/apps/${config.slug}`;
+  }
+
+  /**
+   * Points the App's webhook at this gateway with a new secret, for an App registered before
+   * Jian asked for one. GitHub's API sets the address and the secret; choosing the events and
+   * turning the webhook on stay on the App's settings page, which no API reaches. The secret is
+   * kept only after GitHub took it, so a refusal leaves the old one working.
+   */
+  async configureWebhook() {
+    const config = await this.requireConfig();
+    const url = this.webhookUrl();
+    if (!url) throw new GatewayError(503, 'Set JIAN_PUBLIC_URL before setting up the webhook.');
+    const secret = randomBytes(32).toString('hex');
+    await this.githubFetch(new URL(`${API}/app/hook/config`), this.appToken(config), {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ url, content_type: 'json', secret, insecure_ssl: '0' }),
+    });
+    await this.vault.put(WEBHOOK_SECRET, secret);
   }
 
   /** The App's own account, `<slug>[bot]`, which signs what the agent writes through it. */

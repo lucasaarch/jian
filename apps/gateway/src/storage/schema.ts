@@ -256,6 +256,34 @@ export const githubInstallationStates = pgTable('github_installation_states', {
 });
 
 /**
+ * A review an agent was asked for on a pull request, and the chat it works in. `repository` is
+ * GitHub's `owner/name` in lower case, as GitHub matches it. An automatic review is started once
+ * per head commit, which a redelivered webhook cannot start again. The chat is not a foreign
+ * key: deleting it leaves the record, and the panel only fails to open it.
+ */
+export const githubReviews = pgTable(
+  'github_reviews',
+  {
+    id: uuid('id').primaryKey(),
+    repository: text('repository').notNull(),
+    number: integer('number').notNull(),
+    headSha: text('head_sha').notNull(),
+    profileId: uuid('profile_id')
+      .notNull()
+      .references(() => profiles.id, { onDelete: 'cascade' }),
+    sessionId: uuid('session_id').notNull(),
+    trigger: text('trigger').$type<'manual' | 'auto'>().notNull(),
+    createdAt,
+  },
+  (table) => [
+    index('github_reviews_pull').on(table.repository, table.number, table.createdAt),
+    uniqueIndex('github_reviews_auto_once')
+      .on(table.repository, table.number, table.headSha)
+      .where(sql`${table.trigger} = 'auto'`),
+  ],
+);
+
+/**
  * An X account connected through the installation's own developer app. Tokens live in the gateway
  * vault, under the row's id: what is here is what the panel may show.
  */

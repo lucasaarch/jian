@@ -54,6 +54,14 @@ import {
   sessionPullSchema,
 } from './github-items.js';
 import {
+  githubAgentReviewSchema,
+  githubPullListQuerySchema,
+  githubPullListSchema,
+  githubReviewSettingsSchema,
+  githubReviewsStatusSchema,
+  githubStartReviewInputSchema,
+} from './github-reviews.js';
+import {
   githubConnectedRepositorySchema,
   githubInstallInputSchema,
   githubInstallSchema,
@@ -425,6 +433,59 @@ export const operations: Operation[] = [
     access: 'admin',
     body: githubLinksInputSchema,
     response: z.array(githubLinkSummarySchema),
+  },
+  {
+    method: 'GET',
+    path: '/v1/integrations/github/pulls',
+    operationId: 'listGithubPulls',
+    access: 'admin',
+    query: githubPullListQuerySchema,
+    response: githubPullListSchema,
+  },
+  {
+    method: 'POST',
+    path: '/v1/integrations/github/pulls/:owner/:repo/:number/review',
+    operationId: 'startGithubPullReview',
+    access: 'admin',
+    params: githubItemParamsSchema,
+    body: githubStartReviewInputSchema,
+    response: githubAgentReviewSchema,
+    status: 202,
+  },
+  {
+    method: 'GET',
+    path: '/v1/integrations/github/reviews',
+    operationId: 'githubReviews',
+    access: 'admin',
+    response: githubReviewsStatusSchema,
+  },
+  {
+    method: 'PUT',
+    path: '/v1/integrations/github/reviews',
+    operationId: 'saveGithubReviews',
+    access: 'admin',
+    body: githubReviewSettingsSchema,
+    response: githubReviewsStatusSchema,
+  },
+  {
+    method: 'POST',
+    path: '/v1/integrations/github/reviews/webhook',
+    operationId: 'setUpGithubWebhook',
+    access: 'admin',
+    response: githubReviewsStatusSchema,
+  },
+  {
+    method: 'POST',
+    path: '/v1/integrations/github/webhook',
+    operationId: 'githubWebhook',
+    access: 'webhook',
+    body: z
+      .unknown()
+      .describe(
+        "A GitHub App webhook delivery (JSON, at most 1 MiB), authenticated with X-Hub-Signature-256 over the original bytes and the secret this gateway gave the App's webhook.",
+      ),
+    response: z.strictObject({ accepted: z.boolean() }),
+    status: 202,
   },
   {
     method: 'GET',

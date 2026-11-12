@@ -1,6 +1,6 @@
 import type { Client } from './params';
 import { result } from './result';
-import type { GitHubMergeMethod, McpServer } from './types';
+import type { GitHubMergeMethod, GitHubPullFilter, GitHubReviewSettings, McpServer } from './types';
 
 export const integrationCalls = (client: Client) => ({
   githubIntegration: () => result(client.GET('/v1/integrations/github')),
@@ -79,6 +79,21 @@ export const integrationCalls = (client: Client) => ({
         body,
       }),
     ),
+  // One search per connected account, merged newest first; an account GitHub refused is named.
+  githubPulls: (query: { filter?: GitHubPullFilter; repository?: string; q?: string }) =>
+    result(client.GET('/v1/integrations/github/pulls', { params: { query } })),
+  startGithubPullReview: (owner: string, repo: string, number: number, profileId: string) =>
+    result(
+      client.POST('/v1/integrations/github/pulls/{owner}/{repo}/{number}/review', {
+        params: { path: { owner, repo, number } },
+        body: { profileId },
+      }),
+    ),
+  githubReviews: () => result(client.GET('/v1/integrations/github/reviews')),
+  saveGithubReviews: (body: GitHubReviewSettings) =>
+    result(client.PUT('/v1/integrations/github/reviews', { body })),
+  // Points the App's webhook here with a new secret; the events are chosen on GitHub.
+  setUpGithubWebhook: () => result(client.POST('/v1/integrations/github/reviews/webhook')),
   mcpServers: () => result(client.GET('/v1/mcp-servers')),
   // The whole list at once: a value left out of a header keeps the stored one.
   replaceMcpServers: (servers: McpServer[]) =>

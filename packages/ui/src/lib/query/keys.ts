@@ -16,6 +16,9 @@ export const keys = {
   xIntegration: ['integrations', 'x'] as const,
   githubIntegration: ['integrations', 'github'] as const,
   githubRepositories: ['integrations', 'github', 'repositories'] as const,
+  githubPulls: (filter: string, repository: string, q: string) =>
+    ['integrations', 'github', 'pulls', filter, repository, q] as const,
+  githubReviews: ['integrations', 'github', 'reviews'] as const,
   githubLink: (url: string) => ['integrations', 'github', 'links', url] as const,
   githubItem: (kind: 'pull' | 'issue', owner: string, repo: string, number: number) =>
     ['integrations', 'github', kind, owner.toLowerCase(), repo.toLowerCase(), number] as const,

@@ -2,9 +2,10 @@ import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, expect, it, vi } from 'vitest';
 import type { Project, Run, Session } from '../lib/api';
+import { keys } from '../lib/query/keys';
 import { MIN_CHAT_WIDTH, useLayout } from '../lib/stores/layout';
 import { memoryNavigation } from '../platform/navigation';
-import { AgentCache } from '../test/agent';
+import { AgentCache, agentClient } from '../test/agent';
 import { profile } from '../test/fixtures';
 import { ChatSidebar } from './chat-sidebar';
 
@@ -34,24 +35,38 @@ afterEach(() => {
   window.localStorage.clear();
 });
 
-async function render(activities: Run[] = []) {
+/** What the gateway says of itself and of GitHub, for what only a server with GitHub shows. */
+type Gateway = { mode: 'server' | 'local'; githubAccounts: number };
+
+async function render(activities: Run[] = [], gateway?: Gateway) {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
   const host = document.createElement('div');
   document.body.append(host);
   const root = createRoot(host);
   roots.push(() => root.unmount());
+  const client = agentClient({
+    profile,
+    slices: {
+      sessions: [chat('s-1', 'Release notes', project.id), chat('s-2', 'Groceries')],
+      projects: [project],
+      channels: [],
+      contacts: [],
+      activities,
+    },
+  });
+  if (gateway) {
+    client.setQueryData(keys.gateway, { mode: gateway.mode });
+    client.setQueryData(keys.githubIntegration, {
+      configured: true,
+      accounts: Array.from({ length: gateway.githubAccounts }, (_, index) => ({
+        login: `octo-example-${index}`,
+        type: 'User',
+      })),
+    });
+  }
   await act(async () =>
     root.render(
-      <AgentCache
-        profile={profile}
-        slices={{
-          sessions: [chat('s-1', 'Release notes', project.id), chat('s-2', 'Groceries')],
-          projects: [project],
-          channels: [],
-          contacts: [],
-          activities,
-        }}
-      >
+      <AgentCache profile={profile} client={client}>
         <ChatSidebar profileId={profile.id} />
       </AgentCache>,
     ),
@@ -98,6 +113,21 @@ it('opens a chat in the address', async () => {
   await act(async () => row?.click());
 
   expect(memoryNavigation.current()).toBe(`/agents/${profile.id}/sessions/s-2`);
+});
+
+it('offers the pull requests only on a server gateway with a GitHub account connected', async () => {
+  const button = (host: HTMLElement) =>
+    [...host.querySelectorAll<HTMLButtonElement>('button')].find(
+      (item) => item.textContent === 'Pull requests',
+    );
+
+  expect(button((await render([], { mode: 'local', githubAccounts: 1 })).host)).toBeUndefined();
+  expect(button((await render([], { mode: 'server', githubAccounts: 0 })).host)).toBeUndefined();
+
+  const view = await render([], { mode: 'server', githubAccounts: 1 });
+  await act(async () => button(view.host)?.click());
+  expect(memoryNavigation.current()).toBe(`/agents/${profile.id}/pulls`);
+  expect(button(view.host)?.getAttribute('aria-current')).toBe('page');
 });
 
 it('shows worker activity on the principal conversation instead of its hidden task session', async () => {
