@@ -66,6 +66,10 @@ One agent's own, from the agent chooser at the foot of the sidebar.
 ## In the conversation
 
 - **Schedules** open from the top of the sidebar.
+- **Pull requests**, below Schedules on a server gateway with GitHub connected, list the open
+  pull requests of every connected account in place of the chat. Review there hands one to an
+  agent; Review settings choose the reviewing agent, its instructions, and whether new pull
+  requests are reviewed on their own through the GitHub App's webhook.
 - **Renaming**: right-click a conversation in the sidebar, or use the palette, to rename a chat
   or a person on WhatsApp or Telegram. A chat is named by you from its first message until the
   owner renames it; a group keeps the name its members gave it.

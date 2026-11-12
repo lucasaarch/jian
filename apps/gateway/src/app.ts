@@ -31,6 +31,8 @@ import type { ProviderModels } from './providers/discovery.js';
 import { registerProviderRoutes } from './providers/routes.js';
 import { registerReleaseRoutes } from './releases/routes.js';
 import { registerRemoteRoutes } from './remote/routes.js';
+import { registerReviewRoutes } from './reviews/routes.js';
+import { PullReviews } from './reviews/service.js';
 import { registerRunRoutes } from './runs/routes.js';
 import { registerScheduleRoutes } from './schedules/routes.js';
 import { registerSecurityRoutes } from './security/routes.js';
@@ -155,6 +157,19 @@ export function createApp(
         options.github,
         new GitHubItems(options.github, options.store),
       );
+      // A webhook needs an address GitHub reaches: a desktop app's own gateway has none.
+      if (options.mode !== 'local') {
+        registerReviewRoutes(
+          routes,
+          new PullReviews(
+            options.github,
+            options.store,
+            options.profiles,
+            options.sessions,
+            options.runs,
+          ),
+        );
+      }
     }
     if (options.x) registerXRoutes(routes, options.x);
     registerMetaRoutes(routes, options.mode ?? 'server');
