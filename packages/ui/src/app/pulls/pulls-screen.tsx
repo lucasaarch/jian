@@ -1,12 +1,13 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import { RefreshCw, Settings2, X } from 'lucide-react';
+import { RefreshCw, Settings2 } from 'lucide-react';
 import { type ReactNode, useEffect, useState } from 'react';
 import { Action, FilterSelect, HoverTip, SearchField, Segmented, SkeletonLine } from '../../kit';
 import type { GitHubPullFilter, GitHubPullRow } from '../../lib/api';
 import { agentPath } from '../../lib/navigation';
 import { queries } from '../../lib/query/profile';
+import { useLayout } from '../../lib/stores/layout';
 import { useRouter } from '../../platform/navigation';
 import { pullKey } from './cells';
 import { PullTable } from './pull-table';
@@ -23,6 +24,8 @@ const SEARCH_PAUSE = 400;
  */
 export function PullsScreen({ profileId }: { profileId: string }) {
   const router = useRouter();
+  // With the sidebar away, its buttons float over this header's start.
+  const collapsed = useLayout((state) => state.chatList);
   const accounts = useQuery(queries.githubIntegration()).data?.accounts ?? [];
   const repositories = useQuery(queries.githubRepositories()).data ?? [];
   const [filter, setFilter] = useState<GitHubPullFilter>('open');
@@ -53,101 +56,100 @@ export function PullsScreen({ profileId }: { profileId: string }) {
 
   return (
     <section aria-label="Pull requests" className="flex h-full flex-col overflow-hidden">
-      <header className="flex items-center gap-2 border-b border-line px-5 pt-[max(0.75rem,var(--chrome-top,0px))] pb-3 phone:px-3">
-        <HoverTip tip="Back to chats">
-          <Action
-            tone="quiet"
-            size="icon"
-            aria-label="Close pull requests"
-            onClick={() => router.push(agentPath(profileId, 'sessions'))}
-          >
-            <X size={16} aria-hidden="true" />
-          </Action>
-        </HoverTip>
-        <h1 className="min-w-0 flex-1 truncate text-[15px] font-semibold text-ink">
+      {/* In the host's title bar, as tall as it is. Its end keeps clear of what a host draws
+          there: the desktop app sets --chrome-end for its Inspector and window buttons. */}
+      <header
+        className={`flex h-(--chrome-top) shrink-0 items-center gap-1.5 border-b border-line pr-[calc(var(--chrome-end,0px)+1.25rem)] ${collapsed ? 'pl-52' : 'pl-5'} phone:h-auto phone:py-2 phone:pr-3 phone:pl-3`}
+      >
+        {/* On a phone the bar above already names it. */}
+        <h1 className="min-w-0 flex-1 truncate text-sm font-semibold text-ink phone:invisible">
           Pull requests
         </h1>
         <HoverTip tip="Refresh">
           <Action
             tone="quiet"
-            size="icon"
+            size="small"
             aria-label="Refresh pull requests"
             onClick={() => void pulls.refetch()}
           >
             <RefreshCw
-              size={15}
+              size={13}
               className={pulls.isFetching ? 'animate-spin' : ''}
               aria-hidden="true"
             />
           </Action>
         </HoverTip>
-        <Action tone="glass" onClick={() => setSettingsOpen(true)}>
-          <Settings2 size={15} aria-hidden="true" />
+        <Action tone="outline" size="small" onClick={() => setSettingsOpen(true)}>
+          <Settings2 size={13} aria-hidden="true" />
           Review settings
         </Action>
       </header>
 
-      <div className="flex flex-wrap items-center gap-2 px-5 py-3 phone:px-3">
-        <Segmented
-          label="Pull requests to show"
-          value={filter}
-          options={filters}
-          onChange={setFilter}
-        />
-        <FilterSelect
-          label="Repository"
-          value={repository}
-          options={[
-            { value: '', label: 'All repositories' },
-            ...repositories.map((repo) => ({ value: repo.fullName, label: repo.fullName })),
-          ]}
-          onValueChange={setRepository}
-        />
-        <SearchField
-          label="Search pull requests"
-          value={typed}
-          onValueChange={setTyped}
-          className="min-w-48 flex-1"
-        />
-      </div>
-
-      <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-6 phone:px-3">
-        {list?.unreachable.length ? (
-          <p className="mb-3 text-xs text-warn">
-            GitHub did not answer for {list.unreachable.join(', ')}. Their pull requests are left
-            out.
-          </p>
-        ) : null}
-        {pulls.isError && !list ? (
-          <Empty
-            text="The pull requests could not be read from GitHub."
-            action={<Action onClick={() => void pulls.refetch()}>Try again</Action>}
+      {/* The filters scroll with the list, sticking to its top, so both are as wide as what
+          the scrollbar leaves and their right edges meet. */}
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        <div className="sticky top-0 z-10 flex flex-wrap items-center gap-2 bg-canvas px-5 py-3 phone:px-3">
+          <Segmented
+            label="Pull requests to show"
+            value={filter}
+            options={filters}
+            onChange={setFilter}
           />
-        ) : !list ? (
-          <div className="grid gap-4 pt-4" aria-busy="true">
-            {[0, 1, 2, 3, 4].map((row) => (
-              <SkeletonLine key={row} />
-            ))}
-          </div>
-        ) : list.pulls.length ? (
-          <div className="rounded-xl border border-line">
-            <PullTable
-              pulls={list.pulls}
-              starting={
-                start.isPending && start.variables ? pullKey(start.variables.pull) : undefined
-              }
-              review={review}
-              openChat={openChat}
+          <FilterSelect
+            label="Repository"
+            value={repository}
+            options={[
+              { value: '', label: 'All repositories' },
+              ...repositories.map((repo) => ({ value: repo.fullName, label: repo.fullName })),
+            ]}
+            onValueChange={setRepository}
+          />
+          <SearchField
+            label="Search pull requests"
+            value={typed}
+            onValueChange={setTyped}
+            className="min-w-48 flex-1"
+          />
+        </div>
+
+        <div className="px-5 pb-6 phone:px-3">
+          {list?.unreachable.length ? (
+            <p className="mb-3 text-xs text-warn">
+              GitHub did not answer for {list.unreachable.join(', ')}. Their pull requests are left
+              out.
+            </p>
+          ) : null}
+          {pulls.isError && !list ? (
+            <Empty
+              text="The pull requests could not be read from GitHub."
+              action={<Action onClick={() => void pulls.refetch()}>Try again</Action>}
             />
-          </div>
-        ) : (
-          <Empty text={q || repository ? 'No pull request matches.' : 'No open pull requests.'} />
-        )}
-        {list?.truncated && (
-          <p className="mt-3 text-xs text-muted">
-            Only the most recently updated are shown. Search or pick a repository to find others.
-          </p>
-        )}
+          ) : !list ? (
+            <div className="grid gap-4 pt-4" aria-busy="true">
+              {[0, 1, 2, 3, 4].map((row) => (
+                <SkeletonLine key={row} />
+              ))}
+            </div>
+          ) : list.pulls.length ? (
+            <div className="rounded-xl border border-line">
+              <PullTable
+                pulls={list.pulls}
+                starting={
+                  start.isPending && start.variables ? pullKey(start.variables.pull) : undefined
+                }
+                review={review}
+                openChat={openChat}
+              />
+            </div>
+          ) : (
+            <Empty text={q || repository ? 'No pull request matches.' : 'No open pull requests.'} />
+          )}
+          {list?.truncated && (
+            <p className="mt-3 text-xs text-muted">
+              Only the most recently updated are shown. Search or pick a repository to find others.
+            </p>
+          )}
+        </div>
       </div>
 
       <ReviewSettings open={settingsOpen} onOpenChange={setSettingsOpen} status={reviews.data} />

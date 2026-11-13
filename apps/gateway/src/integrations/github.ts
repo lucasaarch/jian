@@ -189,15 +189,13 @@ export class GitHubIntegrations {
   private readonly tokens = new Map<string, { token: string; expiresAt: number }>();
 
   async status() {
-    const config = await this.config();
+    let config = await this.config();
     let permissionsVerified = false;
     let missingPermissions = Object.keys(GITHUB_MCP_PERMISSIONS);
     if (config) {
       try {
-        const response = await this.githubFetch(new URL(`${API}/app`), this.appToken(config));
-        const app = z
-          .object({ permissions: z.record(z.string(), z.enum(['read', 'write', 'admin'])) })
-          .parse(await response.json());
+        const app = await this.liveApp(config);
+        config = app.config;
         missingPermissions = Object.entries(GITHUB_MCP_PERMISSIONS)
           .filter(([permission, access]) =>
             access === 'write'
@@ -375,7 +373,8 @@ export class GitHubIntegrations {
       });
     });
 
-    const url = new URL(`https://github.com/apps/${config.slug}/installations/new`);
+    const { slug } = await this.current(config);
+    const url = new URL(`https://github.com/apps/${slug}/installations/new`);
     url.searchParams.set('state', state);
     return { url: url.toString() };
   }
@@ -687,8 +686,9 @@ export class GitHubIntegrations {
 
   /** The App's page on GitHub where its events and webhook are chosen. */
   async appSettingsUrl(): Promise<string | undefined> {
-    const config = await this.config();
-    if (!config) return undefined;
+    const stored = await this.config();
+    if (!stored) return undefined;
+    const config = await this.current(stored);
     return config.ownerType === 'Organization' && config.ownerLogin
       ? `https://github.com/organizations/${config.ownerLogin}/settings/apps/${config.slug}`
       : `https://github.com/settings/apps/${config.slug}`;
@@ -717,6 +717,52 @@ export class GitHubIntegrations {
   async appLogin(): Promise<string | undefined> {
     const config = await this.config();
     return config ? `${config.slug}[bot]` : undefined;
+  }
+
+  /**
+   * The App as GitHub has it now. Renaming an App on GitHub changes its slug, and with it every
+   * address of the App and its bot's login, so the stored copy is brought up to date whenever
+   * GitHub is asked; the credentials in it never change.
+   */
+  private async liveApp(config: GitHubAppConfig) {
+    const response = await this.githubFetch(new URL(`${API}/app`), this.appToken(config));
+    const app = z
+      .object({
+        slug: z.string().regex(/^[A-Za-z0-9-]{1,100}$/),
+        name: z.string().min(1).optional(),
+        owner: z.object({ login: z.string().min(1), type: z.string() }).nullish(),
+        permissions: z.record(z.string(), z.enum(['read', 'write', 'admin'])),
+      })
+      .parse(await response.json());
+    const ownerType =
+      app.owner?.type === 'User' || app.owner?.type === 'Organization'
+        ? app.owner.type
+        : config.ownerType;
+    const current: GitHubAppConfig = {
+      ...config,
+      slug: app.slug,
+      ...(app.name ? { name: app.name } : {}),
+      ...(app.owner ? { ownerLogin: app.owner.login } : {}),
+      ...(ownerType ? { ownerType } : {}),
+    };
+    if (
+      current.slug !== config.slug ||
+      current.name !== config.name ||
+      current.ownerLogin !== config.ownerLogin ||
+      current.ownerType !== config.ownerType
+    ) {
+      await this.vault.put('github-app-config', JSON.stringify(current));
+    }
+    return { config: current, permissions: app.permissions };
+  }
+
+  /** The App as GitHub has it, or as stored when GitHub cannot be asked. */
+  private async current(config: GitHubAppConfig) {
+    try {
+      return (await this.liveApp(config)).config;
+    } catch {
+      return config;
+    }
   }
 
   async repository(accountId: string, repositoryId: number) {

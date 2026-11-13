@@ -2,9 +2,9 @@
 
 import { ChevronLeft, SquarePen } from 'lucide-react';
 import { conversationName } from '../lib/conversation-name';
-import { agentPath, newChatPath } from '../lib/navigation';
+import { agentPath, newChatPath, onPulls } from '../lib/navigation';
 import { useAgents, useContacts, useProjects, useSessions } from '../lib/query/agent';
-import { useParams, useRouter } from '../platform/navigation';
+import { useParams, usePathname, useRouter } from '../platform/navigation';
 
 const button =
   'grid size-10 shrink-0 place-items-center rounded-full text-ink transition-colors active:bg-glass-press';
@@ -21,7 +21,12 @@ export function PhoneBar({ profileId }: { profileId: string }) {
   const profiles = useAgents();
   const { sessionId } = useParams<{ sessionId?: string }>();
   const session = sessionId ? sessions.find((item) => item.id === sessionId) : undefined;
-  const title = session ? conversationName(session, { projects, contacts, profiles }) : 'New chat';
+  const pulls = onPulls(usePathname());
+  const title = session
+    ? conversationName(session, { projects, contacts, profiles })
+    : pulls
+      ? 'Pull requests'
+      : 'New chat';
 
   return (
     <header className="glass-bar flex shrink-0 items-center gap-1 border-b border-line px-1.5 pt-[env(safe-area-inset-top)]">

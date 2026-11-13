@@ -113,7 +113,14 @@ function Window() {
     <div
       className="relative flex h-dvh flex-col bg-canvas"
       // Windows and Linux draw the window's buttons over the top right: what sits there keeps clear.
-      style={{ '--window-controls': mac ? '0px' : '6rem' } as CSSProperties}
+      // --chrome-end adds the Inspector's button beside them, for a screen whose header is in the
+      // title bar.
+      style={
+        {
+          '--window-controls': mac ? '0px' : '6rem',
+          '--chrome-end': 'calc(var(--window-controls) + 2.5rem)',
+        } as CSSProperties
+      }
     >
       <TitleBar gateway={current} />
       {/* Layout containment makes this area the box the panel's fixed pieces are placed in. */}
