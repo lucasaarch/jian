@@ -111,11 +111,13 @@ function Window() {
 
   return (
     <div
-      className="relative flex h-dvh flex-col bg-canvas"
+      // An app, not a page: it never scrolls as a whole, not even to show something that spills
+      // out of a pane. Clip, unlike hidden, cannot be scrolled by focus or script either.
+      className="relative flex h-dvh flex-col overflow-clip bg-canvas"
       // Windows and Linux draw the window's buttons over the top right: what sits there keeps clear.
       // --chrome-end adds the Inspector's button beside them, for a screen whose header is in the
-      // title bar. The button is 2.5rem wide with its icon in the middle; a header adds its own
-      // 1.25rem, so 1.5rem here leaves about 1rem between the header's last button and the icon.
+      // title bar. The button is 1.75rem wide, 0.5rem from the edge; a header adds its own 1.25rem,
+      // so 1.5rem here leaves about 1rem between the header's last button and the icon.
       style={
         {
           '--window-controls': mac ? '0px' : '6rem',

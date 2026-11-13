@@ -3,6 +3,7 @@
 import { Square } from 'lucide-react';
 import { useContext, useRef, useState } from 'react';
 import { toast } from 'sonner';
+import { iconButton } from '../../kit/icon-button';
 import { HoverTip } from '../../kit/info-tip';
 import { SkeletonLine, SkeletonRegion } from '../../kit/skeleton';
 import type { GatewayApi, Message, Profile, ToolStep } from '../../lib/api';
@@ -11,7 +12,7 @@ import { useStepDetails } from './conversation/use-step-details';
 import { active, Elapsed, ModelNames, TierChip, useDrawerFocus } from './crew';
 import { useAgentRead } from './crew-reads';
 import { groupMessages } from './group-messages';
-import { barButton, InspectorBar, InspectorBody, InspectorHeader } from './inspector';
+import { InspectorBar, InspectorBody, InspectorHeader } from './inspector';
 import { InspectorContent } from './inspector-host';
 import { MessageMedia } from './media';
 import { ChatMessage } from './message';
@@ -99,7 +100,7 @@ export function CrewDrawer({
                   <button
                     type="button"
                     aria-label="Stop agent"
-                    className={`${barButton} disabled:opacity-40`}
+                    className={`${iconButton} disabled:opacity-40`}
                     disabled={stopping === agent.runId}
                     onClick={async () => {
                       const id = agent.runId;

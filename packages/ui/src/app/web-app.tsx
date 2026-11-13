@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { LogOut, Settings } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { Mark } from '../components/ui';
+import { iconButton } from '../kit/icon-button';
 import { useGatewayMode } from '../lib/gateway-mode';
 import { agentPath } from '../lib/navigation';
 import { queries, useProfiles } from '../lib/query/profile';
@@ -16,7 +17,7 @@ import { useAppCommands } from './commands/app-commands';
 import { type AppCommand, CommandsProvider, isMac, useCommands } from './commands/registry';
 import { ReleaseNotes } from './release-notes';
 import { ReloadCurtain } from './reload';
-import { barButton, SidebarBar } from './sidebar-bar';
+import { SidebarBar } from './sidebar-bar';
 import { settingsOf } from './web-addresses';
 
 const noSubscription = () => () => {};
@@ -126,7 +127,7 @@ function SignedIn() {
                 trailing={
                   <button
                     type="button"
-                    className={barButton}
+                    className={iconButton}
                     onClick={() => openSettings()}
                     aria-label="Settings"
                     title="Settings"

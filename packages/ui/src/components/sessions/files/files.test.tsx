@@ -221,7 +221,7 @@ describe('the Files tab', () => {
     expect(api.sessionFile).toHaveBeenCalledWith('profile', 'session', 'project-2', 'src/cart.ts');
   });
 
-  it('filters by any part of the path, and by what changed', async () => {
+  it('filters by any part of the path, with no filter of its own for changes', async () => {
     await shown(gateway());
     const filter = drawer().querySelector('input') as HTMLInputElement;
 
@@ -229,14 +229,12 @@ describe('the Files tab', () => {
     expect(rows()).toEqual(['cart.ts', 'old.ts', 'pricing.ts']);
     expect(drawer().textContent).toContain('3 files of 5');
 
-    await click(
-      [...drawer().querySelectorAll('button')].find((b) => b.textContent?.startsWith('Changed')),
-    );
-    expect(rows()).toEqual(['old.ts', 'pricing.ts']);
+    // Changes lists only what changed; the tree's bar has the filter alone.
+    expect(drawer().querySelector('[aria-pressed]')).toBeNull();
 
     await type(filter, 'nothing-like-this');
     expect(rows()).toEqual([]);
-    expect(drawer().textContent).toContain('No changed file matches “nothing-like-this”.');
+    expect(drawer().textContent).toContain('No file matches “nothing-like-this”.');
   });
 
   it('says a list is cut short', async () => {
@@ -268,8 +266,31 @@ describe('the Files tab', () => {
 describe('the file in the conversation’s place', () => {
   const button = (label: string) =>
     viewer()?.querySelector(`button[aria-label="${label}"]`) as HTMLButtonElement | null;
-  const mode = (label: string) =>
-    [...(viewer()?.querySelectorAll('button') ?? [])].find((b) => b.textContent === label);
+  /** The entries of the bar's one menu, opened from its button; the menu draws them in a portal. */
+  const entries = async () => {
+    await click(button('File options'));
+    await settled(() => document.querySelectorAll('[role=menuitem]').length > 0);
+    return [...document.querySelectorAll<HTMLElement>('[role=menuitem]')];
+  };
+  const choose = async (label: string) =>
+    click((await entries()).find((entry) => entry.textContent === label));
+  const closeMenu = () => key({ key: 'Escape' }, document.activeElement ?? document.body);
+
+  it('keeps the bar to the way back and one menu of everything else', async () => {
+    await opened('src/pricing.ts');
+    const labels = [...(viewer()?.querySelectorAll('header button') ?? [])].map((b) =>
+      b.getAttribute('aria-label'),
+    );
+
+    expect(labels).toEqual(['Back to conversation', 'File options']);
+    expect((await entries()).map((entry) => entry.textContent)).toEqual([
+      'Wrap lines',
+      'Find in file',
+      'Open diff',
+      'Copy path',
+      'Copy contents',
+    ]);
+  });
 
   it('shows code with its lines numbered, its change and the way to its diff', async () => {
     await opened('src/pricing.ts');
@@ -282,9 +303,7 @@ describe('the file in the conversation’s place', () => {
     // Nothing of it can be typed into: it is read only.
     expect(viewer()?.querySelector('textarea, [contenteditable]')).toBeNull();
 
-    await click(
-      [...(viewer()?.querySelectorAll('button') ?? [])].find((b) => b.textContent === 'Open diff'),
-    );
+    await choose('Open diff');
     expect(useCrew.getState().following).toBe('changes:session');
     expect(useCrew.getState().tabs.find((tab) => tab.kind === 'changes')).toMatchObject({
       path: 'src/pricing.ts',
@@ -299,10 +318,10 @@ describe('the file in the conversation’s place', () => {
     expect(viewer()?.querySelector('article strong')?.textContent).toBe('cents');
     expect(viewer()?.querySelector('.file-code')).toBeNull();
 
-    await click(mode('Code'));
+    await choose('Show code');
     expect(viewer()?.querySelector('.file-code-line')?.textContent).toBe('# Storefront\n');
 
-    await click(mode('Preview'));
+    await choose('Show preview');
     expect(viewer()?.querySelector('article h3')?.textContent).toBe('Storefront');
   });
 
@@ -361,7 +380,17 @@ describe('the file in the conversation’s place', () => {
 
     expect(viewer()?.textContent).toContain('This is a binary file. It is 2.0 KB.');
     expect(viewer()?.querySelector('.file-code')).toBeNull();
-    expect(button('Find in file')).toBeNull();
+    expect((await entries()).map((entry) => entry.textContent)).toEqual(['Copy path']);
+    await closeMenu();
+  });
+
+  it('finds from the menu, with the keyboard in the find field', async () => {
+    await opened('README.md');
+    await choose('Find in file');
+    await settled(() => document.activeElement?.getAttribute('aria-label') === 'Find');
+
+    expect(viewer()?.querySelector('.file-code')).not.toBeNull();
+    expect(document.activeElement?.getAttribute('aria-label')).toBe('Find');
   });
 
   it('shows the gateway’s sentence for a file that is gone, with nothing to press', async () => {

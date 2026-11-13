@@ -5,11 +5,12 @@ import { ArrowRight, Check, Copy, RefreshCw, Sparkles } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { Action, Segmented } from '../../../kit';
+import { iconButton } from '../../../kit/icon-button';
 import type { GatewayApi, GitHubMergeMethod, GitHubPull } from '../../../lib/api';
 import { date } from '../../../lib/format';
 import { keys } from '../../../lib/query/keys';
 import { FileFilter, WrapSwitch } from '../diff-controls';
-import { barButton, InspectorBody } from '../inspector';
+import { InspectorBody } from '../inspector';
 import { MergeButton, MergeConfirm } from './merge';
 import { CheckMark, Person, StatePill, Written } from './parts';
 import { Changes, Checks, checksStanding, Reviews } from './pull-sections';
@@ -226,7 +227,7 @@ export function PullView({
             <button
               type="button"
               aria-label="Copy link"
-              className={`${barButton} -mt-1`}
+              className={`${iconButton} -mt-1`}
               onClick={() => void copyLink()}
             >
               <Copy size={13} aria-hidden="true" />

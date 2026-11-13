@@ -2,12 +2,9 @@
 
 import { X } from 'lucide-react';
 import type { ReactNode, RefObject } from 'react';
+import { iconButton } from '../../kit/icon-button';
 import { useCrew } from '../../lib/stores/crew';
 import { useInspectorHosted } from './inspector-host';
-
-/** A button of the Inspector's top line: its options, its close. */
-export const barButton =
-  'grid size-7 shrink-0 place-items-center rounded-full text-muted transition-colors hover:bg-glass-hover hover:text-ink data-popup-open:bg-glass-press data-popup-open:text-ink';
 
 /**
  * The Inspector's first line, at the top of the window: what it follows, quietly, then its
@@ -42,7 +39,7 @@ export function InspectorBar({
               ref={closer}
               type="button"
               aria-label="Close"
-              className={barButton}
+              className={iconButton}
               onClick={close}
             >
               <X size={16} aria-hidden="true" />
@@ -69,7 +66,12 @@ export function InspectorHeader({ title, children }: { title: string; children: 
   );
 }
 
-/** Everything under the heading, the only part of the Inspector that scrolls. */
+/**
+ * Everything under the heading, the only part of the Inspector that scrolls. Positioned, so it is
+ * what places what is absolute inside it: a scroller clips only what it places, and a screen
+ * reader's label (`sr-only`) far down a long tree would otherwise be placed by the Inspector,
+ * below the window, where it let the whole app scroll.
+ */
 export function InspectorBody({
   children,
   className = '',
@@ -78,7 +80,7 @@ export function InspectorBody({
   className?: string;
 }) {
   return (
-    <div className={`min-h-0 flex-1 overflow-y-auto overscroll-contain pb-6 ${className}`}>
+    <div className={`relative min-h-0 flex-1 overflow-y-auto overscroll-contain pb-6 ${className}`}>
       {children}
     </div>
   );

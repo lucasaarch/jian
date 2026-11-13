@@ -1,16 +1,8 @@
 'use client';
 
-import { ArrowLeft, Check, Copy, Search, WrapText } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import {
-  Action,
-  HoverTip,
-  Segmented,
-  SkeletonLine,
-  SkeletonRegion,
-  StatusPill,
-} from '../../../kit';
-import { useCopy } from '../../../lib/copy';
+import { HoverTip, iconButton, SkeletonLine, SkeletonRegion, StatusPill } from '../../../kit';
 import { usePhone } from '../../../lib/phone';
 import { useCrew } from '../../../lib/stores/crew';
 import { useLayout } from '../../../lib/stores/layout';
@@ -18,6 +10,7 @@ import { highlightLines } from '../../ui/highlight';
 import { Markdown } from '../../ui/markdown';
 import { languageOf } from '../preview';
 import { CodeView } from './code-view';
+import { FileOptions } from './file-options';
 import { FindBar, useFind } from './find-bar';
 import { type OpenFile, useFiles } from './store';
 import { fileId, markOf } from './tree';
@@ -80,7 +73,6 @@ function Opened({
   const [mode, setMode] = useState<'preview' | 'code'>(markdown ? 'preview' : 'code');
   // Prose is written in long lines; code is read with its lines whole.
   const [wrap, setWrap] = useState(markdown);
-  const { copied, copy } = useCopy();
   useFilesFollow(profileId, sessionId);
 
   const roots = listing.data?.roots;
@@ -106,6 +98,11 @@ function Opened({
   // Only a refusal ends in an error (use-files.ts); what was read before it is then out of date.
   const readable = Boolean(body) && !read.isError;
   const back = () => useFiles.getState().back(sessionId);
+  // The rendered page has no lines to count matches on: the words are found in its source.
+  const findWords = () => {
+    setMode('code');
+    find.show();
+  };
 
   // No list of what it reads: the bar's state is new each render, and so is what a key does.
   useEffect(() => {
@@ -128,9 +125,7 @@ function Opened({
       ) {
         if (!readable) return;
         taken();
-        // The rendered page has no lines to count matches on: the words are found in its source.
-        setMode('code');
-        find.show();
+        findWords();
         return;
       }
       // A field elsewhere, as the Inspector's filter, keeps its own Escape.
@@ -154,14 +149,21 @@ function Opened({
   return (
     <section ref={view} tabIndex={-1} className="file-view" aria-label={`File ${file.path}`}>
       {/* In the host's title bar, as tall as it is. With the Inspector beside it the window's own
-          buttons are over the Inspector; alone, its end keeps clear of them (--chrome-end). */}
+          buttons are over the Inspector; alone, its end keeps clear of them (--chrome-end).
+          Its ends are about as far from its buttons as its top and bottom are: 0.5rem. */}
       <header
-        className={`flex h-(--chrome-top) shrink-0 items-center gap-1.5 border-b border-line ${beside ? 'pr-3' : 'pr-[calc(var(--chrome-end,0px)+1.25rem)]'} ${collapsed ? 'pl-52' : 'pl-3'} phone:h-auto phone:flex-wrap phone:py-2 phone:pr-3 phone:pl-3`}
+        className={`flex h-(--chrome-top) shrink-0 items-center gap-1.5 border-b border-line ${beside ? 'pr-2' : 'pr-[calc(var(--chrome-end,0px)+1.25rem)]'} ${collapsed ? 'pl-52' : 'pl-2'} phone:h-auto phone:flex-wrap phone:py-2 phone:px-2`}
       >
-        <Action tone="quiet" size="small" aria-label="Back to conversation" onClick={back}>
-          <ArrowLeft size={13} aria-hidden="true" />
-          <span className="phone:hidden">Back to conversation</span>
-        </Action>
+        <HoverTip tip="Back to conversation" hoverOnly side="bottom">
+          <button
+            type="button"
+            aria-label="Back to conversation"
+            className={iconButton}
+            onClick={back}
+          >
+            <ArrowLeft size={15} aria-hidden="true" />
+          </button>
+        </HoverTip>
         <h1 className="flex min-w-0 flex-1 items-baseline gap-1 font-mono text-xs phone:order-last phone:basis-full">
           <span className="min-w-0 truncate text-muted">
             {[root?.name, cut < 0 ? '' : file.path.slice(0, cut)].filter(Boolean).join('/')}
@@ -174,71 +176,23 @@ function Opened({
         {change && (
           <StatusPill tone={markOf(change.status).tone}>{markOf(change.status).label}</StatusPill>
         )}
-        {change && diffable && (
-          <Action
-            tone="outline"
-            size="small"
-            onClick={(event) =>
-              useCrew.getState().showChanges({ path: file.path, opener: event.currentTarget })
-            }
-          >
-            Open diff
-          </Action>
-        )}
-        {markdown && readable && (
-          <Segmented
-            label="How to read this file"
-            value={mode}
-            options={[
-              { value: 'preview', label: 'Preview' },
-              { value: 'code', label: 'Code' },
-            ]}
-            onChange={(next) => {
-              setMode(next);
-              if (next === 'preview') find.close();
-            }}
-          />
-        )}
-        {readable && mode === 'code' && (
-          <>
-            <HoverTip tip="Wrap lines" side="bottom">
-              <Action
-                tone={wrap ? 'outline' : 'quiet'}
-                size="small"
-                aria-label="Wrap lines"
-                aria-pressed={wrap}
-                onClick={() => setWrap((wrapped) => !wrapped)}
-              >
-                <WrapText size={13} aria-hidden="true" />
-              </Action>
-            </HoverTip>
-            <HoverTip tip="Find in file" side="bottom">
-              <Action
-                tone={find.open ? 'outline' : 'quiet'}
-                size="small"
-                aria-label="Find in file"
-                aria-pressed={find.open}
-                onClick={() => (find.open ? find.close() : find.show())}
-              >
-                <Search size={13} aria-hidden="true" />
-              </Action>
-            </HoverTip>
-          </>
-        )}
-        <HoverTip tip={copied ? 'Copied' : 'Copy path'} side="bottom" align="end">
-          <Action
-            tone="quiet"
-            size="small"
-            aria-label={copied ? 'Path copied' : 'Copy path'}
-            onClick={() => void copy(file.path, file.path)}
-          >
-            {copied ? (
-              <Check size={13} aria-hidden="true" />
-            ) : (
-              <Copy size={13} aria-hidden="true" />
-            )}
-          </Action>
-        </HoverTip>
+        <FileOptions
+          path={file.path}
+          text={readable ? text : undefined}
+          mode={markdown && readable ? mode : undefined}
+          onModeChange={(next) => {
+            setMode(next);
+            if (next === 'preview') find.close();
+          }}
+          wrap={readable && mode === 'code' ? wrap : undefined}
+          onWrapChange={setWrap}
+          onFind={readable ? findWords : undefined}
+          onDiff={
+            change && diffable
+              ? (opener) => useCrew.getState().showChanges({ path: file.path, opener })
+              : undefined
+          }
+        />
       </header>
 
       <div className="relative flex min-h-0 flex-1 flex-col">

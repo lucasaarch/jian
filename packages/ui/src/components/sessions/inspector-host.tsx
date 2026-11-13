@@ -24,7 +24,7 @@ import {
   useState,
 } from 'react';
 import { createPortal } from 'react-dom';
-import { HoverTip, MenuEntry, menuPopup } from '../../kit';
+import { HoverTip, iconButton, MenuEntry, menuPopup } from '../../kit';
 import { githubItemOf } from '../../lib/github-links';
 import { usePhone } from '../../lib/phone';
 import { type BrowserPageTab, type InspectorTab, useCrew } from '../../lib/stores/crew';
@@ -129,8 +129,6 @@ const savedWidth = () => {
     return null;
   }
 };
-const button =
-  'grid size-7 shrink-0 place-items-center rounded-full text-muted transition-colors hover:bg-glass-hover hover:text-ink';
 
 /** What the Inspector can open by itself, for its empty page and its plus button alike. */
 type InspectorAction = { label: string; description: string; icon: LucideIcon; run: () => void };
@@ -384,7 +382,7 @@ export function InspectorHost({
                 />
                 {tabs.length > 0 && (
                   <Menu.Root>
-                    <Menu.Trigger aria-label="Open in inspector" className={button}>
+                    <Menu.Trigger aria-label="Open in inspector" className={iconButton}>
                       <Plus size={15} />
                     </Menu.Trigger>
                     <Menu.Portal>
@@ -409,7 +407,7 @@ export function InspectorHost({
                     aria-pressed={full}
                     // Without room for the chat there is nothing to go back to.
                     disabled={room < MIN_WIDTH}
-                    className={`${button} disabled:pointer-events-none disabled:opacity-45`}
+                    className={iconButton}
                     onClick={() => useCrew.getState().toggleFull()}
                   >
                     {full ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
@@ -422,7 +420,7 @@ export function InspectorHost({
                   type="button"
                   aria-label="Close inspector"
                   ref={closer}
-                  className={button}
+                  className={iconButton}
                   onClick={close}
                 >
                   <PanelRight size={15} />

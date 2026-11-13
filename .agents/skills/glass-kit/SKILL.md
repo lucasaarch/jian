@@ -20,6 +20,7 @@ from the rest is a bug.
 | Need | Use |
 |---|---|
 | Button | `Action`, tones `primary`, `glass`, `quiet`, `outline`, `danger`; `size="icon"` for a round one holding only an icon, named by `aria-label` |
+| Icon-only button in a bar | `iconButton` classes: round, 1.75rem, no ground or border until hovered |
 | Field | `TextField`, `TextArea`, `SelectField`, `DateTimeField`, `RowInput` |
 | Search and filter a list | `SearchField`, with a `FilterSelect` beside it |
 | On and off, or one of a few | `SwitchControl`, `Toggle`, `Segmented` |
@@ -60,6 +61,14 @@ Use the kit's own phone width with the `phone:` variant, or `usePhone` in code.
   from right.
 - **Everything in a form or page lines up.** Pad its content with `p-7`, which is where the floating
   actions and the close button stand, and give its header `pr-10` to clear the close button.
+- **A bar's icon buttons are all one button.** The sidebar's, the title bar's, the Inspector's and
+  a screen's header use `iconButton` from the kit, never a square, outlined or filled one of their
+  own. An open and a close button for the same thing sit in the same place, in the same size. A
+  bar keeps to a few of them: what else it can do goes behind one `Ellipsis` button opening a
+  `menuPopup` of `MenuEntry`s, as the file viewer and the GitHub drawer do.
+- **A field inside a bar has no box of its own.** A find or filter bar that is itself the surface
+  holds a bare input (`bareInput` from `text-field.tsx`), not a `SearchField`, which would be a
+  frame inside a frame.
 - **Destructive actions are red and ask first.** `danger` on the `MenuEntry`, `danger` on the
   command, and `ConfirmDialog` before it happens. Pass `phrase` when what is lost matters most,
   which makes the owner type a name.

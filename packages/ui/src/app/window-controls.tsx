@@ -2,7 +2,7 @@
 
 import { Copy, Minus, Square, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { barButton } from './sidebar-bar';
+import { iconButton } from '../kit/icon-button';
 
 /** What a host does for the window's buttons; on the desktop, calls across its context bridge. */
 export type WindowActions = {
@@ -35,7 +35,7 @@ export function WindowControls({
     <div className={`flex h-(--title-bar) items-center gap-0.5 pr-1.5 ${className}`}>
       <button
         type="button"
-        className={barButton}
+        className={iconButton}
         onClick={() => actions.minimize()}
         aria-label="Minimize"
         title="Minimize"
@@ -44,7 +44,7 @@ export function WindowControls({
       </button>
       <button
         type="button"
-        className={barButton}
+        className={iconButton}
         onClick={() => actions.toggleMaximize()}
         aria-label={maximized ? 'Restore' : 'Maximize'}
         title={maximized ? 'Restore' : 'Maximize'}
@@ -53,7 +53,7 @@ export function WindowControls({
       </button>
       <button
         type="button"
-        className={barButton}
+        className={iconButton}
         onClick={() => actions.close()}
         aria-label="Close"
         title="Close"

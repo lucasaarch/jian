@@ -2,6 +2,7 @@
 
 import { ChevronLeft, ChevronRight, PanelLeft, Search } from 'lucide-react';
 import type { ReactNode } from 'react';
+import { iconButton } from '../kit/icon-button';
 import { useChatSearch } from '../lib/stores/chat-search';
 import { useLayout } from '../lib/stores/layout';
 import { shortcutOf } from './commands/keybindings';
@@ -17,10 +18,6 @@ export type History = {
 
 /** The keys the host binds to each, as its system writes them, for the buttons' titles. */
 export type SidebarShortcuts = Partial<Record<'sidebar' | 'search' | 'back' | 'forward', string>>;
-
-// A window dragged by its title bar must still let these buttons be pressed.
-export const barButton =
-  'grid size-7 place-items-center rounded-md text-muted transition-colors [-webkit-app-region:no-drag] hover:bg-glass-hover hover:text-ink disabled:pointer-events-none disabled:opacity-35';
 
 const titled = (label: string, keys?: string) => (keys ? `${label} (${keys})` : label);
 
@@ -61,7 +58,7 @@ export function SidebarBar({
       <button
         type="button"
         // A phone's sidebar is the screen itself; there is nothing to put it away beside.
-        className={`${barButton} phone:hidden`}
+        className={`${iconButton} phone:hidden`}
         onClick={() => toggle('chatList')}
         aria-label={collapsed ? 'Show the sidebar' : 'Hide the sidebar'}
         aria-expanded={!collapsed}
@@ -71,7 +68,7 @@ export function SidebarBar({
       </button>
       <button
         type="button"
-        className={barButton}
+        className={iconButton}
         onClick={() => search(true)}
         aria-label="Search chats"
         title={titled('Search chats', bound.search)}
@@ -83,7 +80,7 @@ export function SidebarBar({
           <span className="min-w-2 flex-1" />
           <button
             type="button"
-            className={barButton}
+            className={iconButton}
             onClick={history.back}
             disabled={!history.canBack}
             aria-label="Back"
@@ -93,7 +90,7 @@ export function SidebarBar({
           </button>
           <button
             type="button"
-            className={barButton}
+            className={iconButton}
             onClick={history.forward}
             disabled={!history.canForward}
             aria-label="Forward"

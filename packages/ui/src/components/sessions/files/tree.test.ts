@@ -178,8 +178,7 @@ describe('filtering', () => {
       ],
     }),
   ]);
-  const paths = (words: string, changed = false) =>
-    filterFiles(trees, { words, changed }).files.map((file) => file.path);
+  const paths = (words: string) => filterFiles(trees, words).files.map((file) => file.path);
 
   it('matches any part of the path, whatever its case', () => {
     expect(paths('  PRICING ')).toEqual(['docs/pricing.md', 'src/money.ts', 'src/Pricing.ts']);
@@ -191,16 +190,11 @@ describe('filtering', () => {
     expect(paths('helpers')).toEqual(['src/money.ts']);
   });
 
-  it('leaves only changed files when asked, with or without words', () => {
-    expect(paths('', true)).toEqual(['src/cart.ts', 'src/money.ts', 'src/old.ts']);
-    expect(paths('pricing', true)).toEqual(['src/money.ts']);
-  });
-
   it('draws up to the limit and counts the rest', () => {
     const many = buildTree([
       root({ files: Array.from({ length: 25 }, (_, index) => `file-${index}.ts`) }),
     ]);
-    const found = filterFiles(many, { words: 'file', changed: false }, 10);
+    const found = filterFiles(many, 'file', 10);
 
     expect(found.files).toHaveLength(10);
     expect(found.more).toBe(15);
