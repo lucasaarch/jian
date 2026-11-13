@@ -36,6 +36,8 @@ make release VERSION=1.2.3   # only when asked; needs docs/releases/1.2.3.md
 **UI**
 - The glass kit is the only visual language. Build with `packages/ui/src/kit` and its tokens; what
   it lacks is added to it, not drawn in place. Read the `glass-kit` skill before UI work.
+- Every icon-only button in a bar is the kit's `iconButton`: round, no ground or border until
+  hovered. More than a few go behind one `Ellipsis` menu.
 - All UI lives in `packages/ui`, with relative imports. A host only supplies what it alone has.
 - A change on desktop or web is a change on both. Adapt it to the other host in the same work, or
   say why it cannot apply. Read the `desktop-and-web` skill.

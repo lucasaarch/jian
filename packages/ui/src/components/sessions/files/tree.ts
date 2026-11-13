@@ -195,25 +195,22 @@ const FILTER_ROWS = 300;
 
 /**
  * The files a filter leaves, flat, in the tree's order: any part of the path or of the one it was
- * renamed from, whatever its case, and only changed ones when asked. `more` counts those past
- * `limit`.
+ * renamed from, whatever its case. `more` counts those past `limit`.
  */
 export function filterFiles(
   roots: TreeRoot[],
-  filter: { words: string; changed: boolean },
+  typed: string,
   limit = FILTER_ROWS,
 ): { files: TreeFile[]; more: number } {
-  const words = filter.words.trim().toLowerCase();
+  const words = typed.trim().toLowerCase();
   const files: TreeFile[] = [];
   let found = 0;
   const walk = (folder: TreeFolder) => {
     for (const node of folder.children) {
       if (node.kind === 'folder') {
-        // A folder with no change has none to offer when only changes are asked for.
-        if (!filter.changed || node.changed) walk(node);
+        walk(node);
         continue;
       }
-      if (filter.changed && !node.status) continue;
       if (
         words &&
         !node.path.toLowerCase().includes(words) &&

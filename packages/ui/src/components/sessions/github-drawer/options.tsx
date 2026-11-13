@@ -10,8 +10,8 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { iconButton } from '../../../kit/icon-button';
 import { MenuDivider, MenuEntry, menuPopup } from '../../../kit/menu';
-import { barButton } from '../inspector';
 
 /**
  * What can be done with the item the drawer follows, behind one button: its
@@ -40,7 +40,7 @@ export function DrawerOptions({
 
   return (
     <Menu.Root>
-      <Menu.Trigger aria-label="Options" className={barButton}>
+      <Menu.Trigger aria-label="Options" className={iconButton}>
         <Ellipsis size={16} aria-hidden="true" />
       </Menu.Trigger>
       <Menu.Portal>

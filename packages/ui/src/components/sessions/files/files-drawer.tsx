@@ -1,18 +1,8 @@
 'use client';
 
-import { useQueryClient } from '@tanstack/react-query';
-import { RefreshCw } from 'lucide-react';
 import { useMemo, useRef, useState } from 'react';
-import {
-  Action,
-  HoverTip,
-  SearchField,
-  Skeleton,
-  SkeletonLine,
-  SkeletonRegion,
-} from '../../../kit';
+import { SearchField, Skeleton, SkeletonLine, SkeletonRegion } from '../../../kit';
 import { usePhone } from '../../../lib/phone';
-import { keys } from '../../../lib/query/keys';
 import { useCrew } from '../../../lib/stores/crew';
 import { useDrawerFocus } from '../crew';
 import { InspectorBar, InspectorBody } from '../inspector';
@@ -57,16 +47,16 @@ function TreeSkeleton() {
 /**
  * The Inspector's Files tab: every file of the conversation's projects or worktrees, with what
  * changed marked. It only reads. A file opens in the conversation's place (file-view.tsx); a
- * deleted one has nothing to read, so it opens its diff in Changes.
+ * deleted one has nothing to read, so it opens its diff in Changes. The list follows the
+ * conversation's runs by itself (useFilesFollow), so nothing refreshes it by hand, and only
+ * Changes narrows it to what changed.
  */
 export function FilesDrawer({ api, profileId }: { api: FilesApi; profileId: string }) {
   const tabs = useCrew((state) => state.tabs);
   const following = useCrew((state) => state.following);
   const closer = useRef<HTMLButtonElement>(null);
-  const client = useQueryClient();
   const phone = usePhone();
   const [words, setWords] = useState('');
-  const [changedOnly, setChangedOnly] = useState(false);
   const tab = tabs.find((item) => item.kind === 'files' && item.key === following);
   const sessionId = tab?.kind === 'files' ? tab.sessionId : undefined;
   const listing = useSessionFiles(api, profileId, sessionId);
@@ -80,14 +70,14 @@ export function FilesDrawer({ api, profileId }: { api: FilesApi; profileId: stri
   const roots = useMemo(() => buildTree(listing.data?.roots ?? []), [listing.data]);
   const counts = useMemo(() => countFiles(roots), [roots]);
   const turned = useMemo(() => new Set(toggled), [toggled]);
-  const filtering = Boolean(words.trim()) || changedOnly;
+  const filtering = Boolean(words.trim());
   const rows = useMemo(
     () => (filtering ? [] : visibleRows(roots, turned)),
     [filtering, roots, turned],
   );
   const found = useMemo(
-    () => (filtering ? filterFiles(roots, { words, changed: changedOnly }) : undefined),
-    [filtering, roots, words, changedOnly],
+    () => (filtering ? filterFiles(roots, words) : undefined),
+    [filtering, roots, words],
   );
 
   if (tab?.kind !== 'files' || !sessionId) return null;
@@ -125,35 +115,6 @@ export function FilesDrawer({ api, profileId }: { api: FilesApi; profileId: stri
               }}
               className="h-7 flex-1"
             />
-            <Action
-              tone={changedOnly ? 'outline' : 'quiet'}
-              size="small"
-              aria-pressed={changedOnly}
-              onClick={() => setChangedOnly((only) => !only)}
-            >
-              Changed
-              {counts.changed > 0 && (
-                <span className="tabular-nums text-muted">{counts.changed}</span>
-              )}
-            </Action>
-            <HoverTip tip="Refresh" side="bottom">
-              <Action
-                tone="quiet"
-                size="small"
-                aria-label="Refresh files"
-                onClick={() =>
-                  void client.invalidateQueries({
-                    queryKey: keys.sessionFiles(profileId, sessionId),
-                  })
-                }
-              >
-                <RefreshCw
-                  size={13}
-                  aria-hidden="true"
-                  className={listing.isFetching ? 'animate-spin' : ''}
-                />
-              </Action>
-            </HoverTip>
           </div>
         </InspectorBar>
 
@@ -196,9 +157,7 @@ export function FilesDrawer({ api, profileId }: { api: FilesApi; profileId: stri
                   )}
                   {!found.files.length && (
                     <p className="px-1.5 pt-1 text-sm text-muted">
-                      {words.trim()
-                        ? `No ${changedOnly ? 'changed ' : ''}file matches “${words.trim()}”.`
-                        : 'No uncommitted changes.'}
+                      {`No file matches “${words.trim()}”.`}
                       {roots.some((root) => root.truncated)
                         ? ' It may be beyond what is listed, since the list is cut short.'
                         : ''}

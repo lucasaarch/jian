@@ -1,13 +1,12 @@
 'use client';
 
-import { ChevronDown, ChevronUp, X } from 'lucide-react';
+import { ChevronDown, ChevronUp, Search, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { SearchField } from '../../../kit';
+import { iconButton } from '../../../kit';
+import { bareInput } from '../../../kit/text-field';
 import { findMatches, hitsByLine, matchLabel, stepMatch } from './find';
 
 const NOTHING = { matches: [], capped: false };
-const button =
-  'grid size-6 shrink-0 place-items-center rounded-md text-muted transition-colors hover:bg-glass-hover hover:text-ink disabled:pointer-events-none disabled:opacity-45';
 
 /**
  * What the find bar knows of a file's lines: whether it is open, the words, the matches and the
@@ -68,19 +67,25 @@ export function FindBar({ find }: { find: ReturnType<typeof useFind> }) {
     <search
       ref={bar}
       aria-label="Find in file"
-      className="glass-strong absolute top-2 right-4 z-10 flex max-w-[calc(100%-1.5rem)] items-center gap-1 rounded-xl p-1 shadow-lg phone:right-2"
+      className="glass-strong absolute top-2 right-4 z-10 flex h-9 max-w-[calc(100%-1.5rem)] items-center gap-0.5 rounded-full py-1 pr-1 pl-3 shadow-lg phone:right-2"
     >
-      <SearchField
-        label="Find"
-        value={find.query}
-        onValueChange={find.type}
-        onKeyDown={(event) => {
-          if (event.key !== 'Enter') return;
-          event.preventDefault();
-          find.step(event.shiftKey ? -1 : 1);
-        }}
-        className="h-7 w-48 phone:w-32"
-      />
+      {/* The bar is the field: a box of its own inside it would be a frame in a frame. */}
+      <label className="flex h-full w-48 min-w-0 items-center gap-2 text-muted phone:w-32">
+        <Search size={14} className="shrink-0" aria-hidden="true" />
+        <input
+          type="search"
+          aria-label="Find"
+          placeholder="Find"
+          value={find.query}
+          onChange={(event) => find.type(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key !== 'Enter') return;
+            event.preventDefault();
+            find.step(event.shiftKey ? -1 : 1);
+          }}
+          className={`${bareInput} text-[13px]`}
+        />
+      </label>
       <span
         role="status"
         className="min-w-16 shrink-0 px-1 text-center text-xs tabular-nums text-muted"
@@ -90,7 +95,7 @@ export function FindBar({ find }: { find: ReturnType<typeof useFind> }) {
       <button
         type="button"
         aria-label="Previous match"
-        className={button}
+        className={iconButton}
         disabled={!find.count}
         onClick={() => find.step(-1)}
       >
@@ -99,13 +104,13 @@ export function FindBar({ find }: { find: ReturnType<typeof useFind> }) {
       <button
         type="button"
         aria-label="Next match"
-        className={button}
+        className={iconButton}
         disabled={!find.count}
         onClick={() => find.step(1)}
       >
         <ChevronDown size={14} aria-hidden="true" />
       </button>
-      <button type="button" aria-label="Close find" className={button} onClick={find.close}>
+      <button type="button" aria-label="Close find" className={iconButton} onClick={find.close}>
         <X size={14} aria-hidden="true" />
       </button>
     </search>

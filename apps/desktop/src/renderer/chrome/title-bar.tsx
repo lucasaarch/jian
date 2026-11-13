@@ -1,4 +1,5 @@
 import {
+  iconButton,
   openInspector,
   SidebarBar,
   useInspectorShowing,
@@ -80,13 +81,15 @@ export function TitleBar({ gateway }: { gateway?: GatewaySummary }) {
           />
         </header>
       )}
+      {/* Where the open Inspector keeps its close button, in its size and hover: the same button
+          whether the Inspector is open or not. Centred in the title bar, which is 2.5rem. */}
       {!staged && !inspecting && (
         <button
           type="button"
           aria-label="Open inspector"
           title="Open inspector"
           onClick={openInspector}
-          className="absolute top-0 right-(--window-controls) z-30 grid h-(--title-bar) w-10 place-items-center text-muted hover:text-ink [-webkit-app-region:no-drag]"
+          className={`absolute top-1.5 right-[calc(var(--window-controls)+var(--inspector-inset))] z-30 ${iconButton}`}
         >
           <PanelRight size={15} />
         </button>

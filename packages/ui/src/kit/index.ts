@@ -6,6 +6,7 @@ export { ConfirmDialog } from './confirm-dialog';
 export { DateTimeField, TimeField } from './date-time-field';
 export { AgentFace } from './face';
 export { Fold, FoldChevron } from './fold';
+export { iconButton } from './icon-button';
 export { HoverTip, InfoTip } from './info-tip';
 export { MenuDivider, MenuEntry, menuPopup } from './menu';
 export { Overlay, OverlayActions } from './overlay';
