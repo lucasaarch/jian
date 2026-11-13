@@ -1,6 +1,6 @@
 'use client';
 
-import { Bot, FileCode2, GitPullRequest, Globe, X } from 'lucide-react';
+import { Bot, FileCode2, FolderTree, GitPullRequest, Globe, SquareTerminal, X } from 'lucide-react';
 import { ScrollStrip } from '../../kit';
 import { type InspectorTab, useCrew } from '../../lib/stores/crew';
 
@@ -8,6 +8,8 @@ function TabIcon({ tab }: { tab: InspectorTab }) {
   if (tab.kind === 'browser') return <Globe size={13} />;
   if (tab.kind === 'github') return <GitPullRequest size={13} />;
   if (tab.kind === 'changes') return <FileCode2 size={13} />;
+  if (tab.kind === 'files') return <FolderTree size={13} />;
+  if (tab.kind === 'terminal') return <SquareTerminal size={13} />;
   return <Bot size={13} />;
 }
 

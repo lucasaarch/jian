@@ -155,8 +155,16 @@ import {
   scheduleRunSchema,
 } from './schedules.js';
 import { panelSessionEndSchema, panelSessionInputSchema, panelSessionSchema } from './security.js';
+import { sessionFileQuerySchema, sessionFileSchema, sessionFilesSchema } from './session-files.js';
 import { skillImportSchema } from './skills.js';
 import { sshKeyCreateSchema, sshKeySchema } from './ssh.js';
+import {
+  terminalInputSchema,
+  terminalParamsSchema,
+  terminalSchema,
+  terminalSizeSchema,
+  terminalWriteSchema,
+} from './terminals.js';
 import { webSearchInputSchema, webSearchStatusSchema } from './web.js';
 import { conversationSubagentSchema } from './work.js';
 import {
@@ -1459,6 +1467,75 @@ export const operations: Operation[] = [
     access: 'admin',
     query: sessionChangesQuerySchema,
     response: sessionChangesSchema,
+  },
+  {
+    method: 'GET',
+    path: `${session}/files`,
+    operationId: 'listSessionFiles',
+    access: 'admin',
+    response: sessionFilesSchema,
+  },
+  {
+    method: 'GET',
+    path: `${session}/files/content`,
+    operationId: 'readSessionFile',
+    access: 'admin',
+    query: sessionFileQuerySchema,
+    response: sessionFileSchema,
+  },
+  {
+    method: 'GET',
+    path: `${profile}/terminals`,
+    operationId: 'listTerminals',
+    access: 'admin',
+    response: z.array(terminalSchema),
+  },
+  {
+    method: 'POST',
+    path: `${profile}/terminals`,
+    operationId: 'openTerminal',
+    access: 'admin',
+    body: terminalInputSchema,
+    response: terminalSchema,
+    status: 201,
+  },
+  {
+    method: 'GET',
+    path: `${profile}/terminals/:terminalId/stream`,
+    operationId: 'streamTerminal',
+    access: 'admin',
+    params: terminalParamsSchema,
+    response: z.string(),
+    stream: true,
+  },
+  {
+    method: 'POST',
+    path: `${profile}/terminals/:terminalId/input`,
+    operationId: 'writeTerminal',
+    access: 'admin',
+    params: terminalParamsSchema,
+    body: terminalWriteSchema,
+    response: z.null(),
+    status: 204,
+  },
+  {
+    method: 'POST',
+    path: `${profile}/terminals/:terminalId/resize`,
+    operationId: 'resizeTerminal',
+    access: 'admin',
+    params: terminalParamsSchema,
+    body: terminalSizeSchema,
+    response: z.null(),
+    status: 204,
+  },
+  {
+    method: 'DELETE',
+    path: `${profile}/terminals/:terminalId`,
+    operationId: 'closeTerminal',
+    access: 'admin',
+    params: terminalParamsSchema,
+    response: z.null(),
+    status: 204,
   },
   {
     method: 'GET',

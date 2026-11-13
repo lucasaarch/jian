@@ -7,6 +7,8 @@ import type {
   ProtectionMode,
   RequestBody,
   SessionChanges,
+  SessionFile,
+  SessionFiles,
 } from './types';
 
 /**
@@ -285,6 +287,25 @@ export const sessionCalls = (client: Client, origin = '') => ({
               }
             : {}),
         },
+      }),
+    ),
+  /** Every file of the conversation's projects or worktrees on the gateway, to read only. */
+  sessionFiles: (profileId: string, sessionId: string): Promise<SessionFiles> =>
+    result(
+      client.GET('/v1/profiles/{profileId}/sessions/{sessionId}/files', {
+        params: { path: { profileId, sessionId } },
+      }),
+    ),
+  /** One of those files as it is on disk now; `root` is a root's id from the listing. */
+  sessionFile: (
+    profileId: string,
+    sessionId: string,
+    root: string,
+    path: string,
+  ): Promise<SessionFile> =>
+    result(
+      client.GET('/v1/profiles/{profileId}/sessions/{sessionId}/files/content', {
+        params: { path: { profileId, sessionId }, query: { root, path } },
       }),
     ),
   people: (profileId: string, sessionId: string) =>

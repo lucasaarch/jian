@@ -3,12 +3,14 @@
 import { Menu } from '@base-ui/react/menu';
 import {
   FileCode2,
+  FolderTree,
   Globe,
   type LucideIcon,
   Maximize2,
   Minimize2,
   PanelRight,
   Plus,
+  SquareTerminal,
 } from 'lucide-react';
 import {
   type CSSProperties,
@@ -29,6 +31,7 @@ import { type BrowserPageTab, type InspectorTab, useCrew } from '../../lib/store
 import { MIN_CHAT_WIDTH, useLayout } from '../../lib/stores/layout';
 import { watchSize } from '../../lib/watch-size';
 import { InspectorTabs } from './inspector-tabs';
+import { inTerminal, openTerminalTab, terminalLabel } from './terminal/tabs';
 
 /** The conversation's browser brought forward, or opened if it has none yet. */
 export const showBrowser = () => {
@@ -47,7 +50,6 @@ export const useBrowserOffer = () => ({
 export const toggleInspectorFull = () => {
   const crew = useCrew.getState();
   if (crew.opened) return crew.toggleFull();
-  if (!crew.tabs.length && !crew.openBrowser && !crew.projectId && !crew.worktrees) return;
   crew.reopen();
   if (!crew.full) crew.toggleFull();
 };
@@ -65,6 +67,11 @@ export function focusInspector(
   if (item) crew.open(item);
 }
 
+type Checkout = { projectId?: string; machineId?: string; worktrees: boolean; projects: boolean };
+/** Only the gateway's own disk is browsed: a conversation on a machine has no Files yet. */
+const hasFiles = (crew: Checkout) =>
+  !crew.machineId && Boolean(crew.projectId || crew.worktrees || crew.projects);
+
 const Portal = createContext<HTMLElement | null | undefined>(undefined);
 export const openBrowserInspector = (pageId: string) => useCrew.getState().browser(pageId);
 export const syncBrowserInspector = (pages: BrowserPageTab[]) =>
@@ -74,11 +81,11 @@ export const adoptInspector = (sessionId: string) => useCrew.getState().adopt(se
 /** Whether the Inspector already holds this browser tab, from before or saved. */
 export const inspectorHasBrowserPage = (pageId: string) =>
   useCrew.getState().tabs.some((tab) => tab.kind === 'browser' && tab.pageId === pageId);
-/** Open or closed, as a key does it. A host with nothing it could offer stays closed. */
+/** Open or closed, as a key does it. Every host has a terminal to offer in it, if nothing else. */
 export const toggleInspector = () => {
   const crew = useCrew.getState();
   if (crew.opened) crew.close();
-  else if (crew.tabs.length || crew.openBrowser || crew.projectId || crew.worktrees) crew.reopen();
+  else crew.reopen();
 };
 export const conversationOfInspector = () => useCrew.getState().sessionId;
 /** The browser tab the Inspector has in front, for a host to bring its page there. */
@@ -187,6 +194,7 @@ export function InspectorHost({
   const agents = useCrew((state) => state.agents);
   const projectId = useCrew((state) => state.projectId);
   const worktrees = useCrew((state) => state.worktrees);
+  const files = useCrew(hasFiles);
   const [target, setTarget] = useState<HTMLDivElement | null>(null);
   const [chosen, setChosen] = useState(savedWidth);
   const [area, setArea] = useState(0);
@@ -257,6 +265,22 @@ export function InspectorHost({
           },
         ]
       : []),
+    ...(files
+      ? [
+          {
+            label: 'Files',
+            description: 'Browse this project’s files',
+            icon: FolderTree,
+            run: () => useCrew.getState().showFiles(),
+          },
+        ]
+      : []),
+    {
+      label: 'Terminal',
+      description: 'Open a shell on the gateway’s machine',
+      icon: SquareTerminal,
+      run: () => void openTerminalTab(),
+    },
   ];
   const shown = tabs.find((tab) => tab.key === following);
   const label = (tab: InspectorTab) =>
@@ -266,13 +290,16 @@ export function InspectorHost({
         ? `${tab.item.kind === 'pull' ? 'PR' : 'Issue'} #${tab.item.number}`
         : tab.kind === 'changes'
           ? 'Changes'
-          : (agents.find((agent) => agent.runId === tab.runId)?.name ?? 'Subagent');
+          : tab.kind === 'files'
+            ? 'Files'
+            : tab.kind === 'terminal'
+              ? terminalLabel(tabs, tab)
+              : (agents.find((agent) => agent.runId === tab.runId)?.name ?? 'Subagent');
   const close = () => useCrew.getState().close();
   const closeTab = (tab: InspectorTab) => {
     if (tab.kind === 'browser') closeBrowser?.(tab.pageId);
+    // A terminal's shell ends with its tab: see terminal/tabs.ts.
     useCrew.getState().remove(tab.key);
-    // Where nothing can be opened, an empty Inspector would have nothing to offer.
-    if (!actions.length && tabs.length === 1) close();
   };
   useEffect(() => {
     if (opened && !wasOpen.current) closer.current?.focus({ preventScroll: true });
@@ -284,6 +311,8 @@ export function InspectorHost({
       if (
         event.key !== 'Escape' ||
         event.defaultPrevented ||
+        // A shell reads Escape itself: its editors and prompts are left with it.
+        inTerminal(event.target) ||
         document.querySelector('[role=dialog], [aria-modal=true]')
       )
         return;
@@ -353,7 +382,7 @@ export function InspectorHost({
                   label={label}
                   onClose={closeTab}
                 />
-                {actions.length > 0 && tabs.length > 0 && (
+                {tabs.length > 0 && (
                   <Menu.Root>
                     <Menu.Trigger aria-label="Open in inspector" className={button}>
                       <Plus size={15} />

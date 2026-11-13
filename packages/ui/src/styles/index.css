@@ -13,9 +13,11 @@
 @import "./conversation-map.css";
 @import "./model-menu.css";
 @import "./code-change.css";
+@import "./files.css";
 @import "./decision.css";
 @import "./github.css";
 @import "./refine-frame.css";
+@import "./terminal.css";
 @layer base {
   /* Scrollbars that belong to the panel: thin, no track, a rounded thumb in the ink at low
      contrast that firms up under the pointer. Chromium and Safari draw them from the
