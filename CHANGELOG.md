@@ -4,6 +4,37 @@ Every release of Jian, newest first.
 
 <!-- Generated from docs/releases by scripts/changelog.mjs. Edit the release note, then run `make changelog`. -->
 
+## 1.11.1 — 2026-11-13
+
+Changes shows each file's diff in the list, and a changed file can show that diff in place.
+
+### Changes
+
+* **Each file's diff is in the list:** Changes no longer opens one file from a row of buttons. Each changed file's diff sits in the list, folded. When three files or fewer changed, every diff starts open. The header shows how many files changed, and how many of those match while you filter. The added and removed counts appear once every diff has been read. **Filter files** narrows the list. **Wrap lines** wraps the lines. A checkbox marks a file reviewed, and checking it folds the diff. When there is more than one worktree, a **Worktree** picker switches which checkout the list reads. A conversation with no project, or one whose checkout can't be read, shows the diffs its turns saved, and says **Showing what this conversation saved.** A file opened from a run, or a deleted file, still opens on its own.
+* **Past 100 files, the rest stay as names:** The first 100 changed files get their diff. Past that, a file is still listed, and the row says **Not shown: more than 100 files changed**.
+
+### Files
+
+* **The open file's bar is a back arrow and a menu:** The arrow returns to the chat. Everything else is under **⋯** (**File options**): **Show code** or **Show preview** for Markdown, **View diff**, **Wrap lines**, **Find in file**, **Copy path** and **Copy contents**. An entry shows only where it applies. **View diff** and **Wrap lines** are switches, so the menu stays open while you flip them. **Find in file** puts the cursor in the search field.
+* **View diff shows the change in the file:** **Open diff** is gone. For a file that changed, **View diff** lays the change into the file you are already reading: every line as it is now, and the removed lines where they were. It starts off. It updates as the agent changes the file. Starting a search turns it off and goes back to the code. A file with no change doesn't offer it.
+* **Line numbers stay put:** With wrap off, the line number stays at the left edge while the code scrolls sideways. That is true in the file viewer and in every diff, including the ones in Changes and on a pull request.
+* **The file tree scrolls on its own:** A tall file tree scrolls inside the Inspector, on the desktop app and the web panel, instead of moving the whole panel. **Refresh** and **Changed** are gone from Files. The list reloads as the agent works, and Changes is where you see what changed. You can still filter by name.
+
+### The panel
+
+* **Icon-only buttons in a bar are round:** They stay plain until you hover. That covers the sidebar, the title bar, the window controls, the Inspector and the file viewer.
+
+### Pull requests
+
+* **The table fits beside the Inspector:** With the Inspector open, the title used to get squeezed and **Review** got cut off, because the columns were sized to the window. The table now sizes itself to the space it has, on a phone too. As it narrows, **Reviewers** drop first, then **Updated**, then **Merge**, then **Checks**. A dropped **Checks** or **Merge** pill sits under the title, next to the author and the repository. On the desktop app, with the Inspector open, the header ends with the content, so it doesn't run under the title-bar buttons.
+* **An older App can get its webhook set:** **Set up webhook** used to fail with GitHub's own error when the App had no webhook yet. GitHub's API can only change a webhook that already exists. Review settings says so, and shows the webhook URL with **Copy** (**Webhook URL**). In the App's settings on GitHub, check **Active** under **Webhook**, enter any URL (the one shown works), and save. Then set it up here again. Jian fills in its own address and secret. You still subscribe it to the **Pull request** event on GitHub, and it has to stay **Active**. The button reads **Set up webhook**, or **Set up again** once one is set. Without a public address, Jian says GitHub can only reach a gateway that has one, and asks you to set that first.
+* **Repositories stay on one line:** In Review settings the picker shows the first two you picked, and the rest as **+N more**, so the field stays one line however many you choose. The list stays open, so you can keep picking.
+
+### Upgrading
+
+* The desktop app updates itself to this release.
+* **Servers:** Recreate the gateway and web containers with the 1.11.1 images, or follow the `latest` tags. This release has no migration.
+
 ## 1.11.0 — 2026-11-13
 
 The Inspector gets terminals and a read-only view of your project's files, and the Pull requests screen is tidier.
