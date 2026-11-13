@@ -699,17 +699,38 @@ export class GitHubIntegrations {
    * Jian asked for one. GitHub's API sets the address and the secret; choosing the events and
    * turning the webhook on stay on the App's settings page, which no API reaches. The secret is
    * kept only after GitHub took it, so a refusal leaves the old one working.
+   *
+   * Trap: the API only changes a webhook the App already has. An App whose webhook was never
+   * turned on has none, and GitHub answers 404 for it. Turning it on, with any address, is done on
+   * the App's settings page; after that this call sets the address and the secret. Apps made by
+   * `registration` have one from the start (`hook_attributes`), so this is for older Apps.
    */
   async configureWebhook() {
     const config = await this.requireConfig();
     const url = this.webhookUrl();
     if (!url) throw new GatewayError(503, 'Set JIAN_PUBLIC_URL before setting up the webhook.');
     const secret = randomBytes(32).toString('hex');
-    await this.githubFetch(new URL(`${API}/app/hook/config`), this.appToken(config), {
+    const path = new URL(`${API}/app/hook/config`);
+    const response = await this.fetcher(path, {
       method: 'PATCH',
-      headers: { 'content-type': 'application/json' },
+      headers: {
+        accept: 'application/vnd.github+json',
+        authorization: `Bearer ${this.appToken(config)}`,
+        'x-github-api-version': API_VERSION,
+        'content-type': 'application/json',
+      },
       body: JSON.stringify({ url, content_type: 'json', secret, insecure_ssl: '0' }),
+      signal: AbortSignal.timeout(15_000),
     });
+    if (response.status === 404) {
+      throw new GatewayError(
+        409,
+        `This App has no webhook on GitHub yet, and GitHub's API can only change one it has. In the App's settings on GitHub, check Active under Webhook, enter any URL, such as ${url}, and save. Then set it up here again: Jian fills in its own address and secret.`,
+      );
+    }
+    if (!response.ok) {
+      throw new GatewayError(502, `GitHub answered ${response.status} to ${path.pathname}.`);
+    }
     await this.vault.put(WEBHOOK_SECRET, secret);
   }
 

@@ -89,3 +89,37 @@ it("names a new App without the installation's address", async () => {
   expect(first.manifest.name).toMatch(/^Jian - [0-9a-f]{8}$/);
   expect(first.manifest.name).not.toBe(second.manifest.name);
 });
+
+it('creates a new App with its webhook on and keeps the secret GitHub made for it', async () => {
+  const store = await TestStore.create();
+  const vault = new GatewayVault(
+    store,
+    new SecretBox({ activeKeyId: 'test', keys: { test: randomBytes(32) } }),
+  );
+  const github = async (input: string | URL | Request) =>
+    new URL(input instanceof Request ? input.url : input).pathname ===
+    '/app-manifests/synthetic-code/conversions'
+      ? Response.json({
+          id: 7,
+          slug: 'jian-example',
+          client_id: 'synthetic-client',
+          client_secret: 'synthetic-secret',
+          pem: 'synthetic-pem',
+          webhook_secret: 'synthetic-webhook-secret',
+        })
+      : new Response('not found', { status: 404 });
+  const integrations = new GitHubIntegrations(store, vault, panel, github as typeof fetch);
+
+  // GitHub's API only changes a webhook an App already has: one left out here can't be added.
+  const { state, manifest } = await integrations.registration(panel, returnPath);
+  expect(manifest.hook_attributes).toEqual({
+    url: `${panel}/v1/integrations/github/webhook`,
+    active: true,
+  });
+  expect(manifest.default_events).toEqual(['pull_request']);
+
+  expect(await integrations.registerFromManifest(state, 'synthetic-code')).toBe(
+    `${panel}${returnPath}?github=registered`,
+  );
+  expect(await vault.read('github-webhook-secret')).toBe('synthetic-webhook-secret');
+});
