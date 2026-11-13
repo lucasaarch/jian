@@ -10,6 +10,7 @@ import { highlightLines } from '../../ui/highlight';
 import { Markdown } from '../../ui/markdown';
 import { languageOf } from '../preview';
 import { CodeView } from './code-view';
+import { FileDiffView } from './file-diff';
 import { FileOptions } from './file-options';
 import { FindBar, useFind } from './find-bar';
 import { type OpenFile, useFiles } from './store';
@@ -73,12 +74,17 @@ function Opened({
   const [mode, setMode] = useState<'preview' | 'code'>(markdown ? 'preview' : 'code');
   // Prose is written in long lines; code is read with its lines whole.
   const [wrap, setWrap] = useState(markdown);
+  const [diffOn, setDiffOn] = useState(false);
   useFilesFollow(profileId, sessionId);
 
   const roots = listing.data?.roots;
   const root = roots?.find((item) => item.id === file.root);
   const change = root?.changes.find((item) => item.path === file.path);
   const diffable = useDiffable(roots?.[0]?.id)(file.root);
+  const changes = api.sessionChanges;
+  // Only while the file is changed: once it is committed or put back, it is shown as it is.
+  const canDiff = Boolean(change && diffable && changes);
+  const diffing = diffOn && canDiff;
 
   const text = read.data?.text;
   // Lines as an editor counts them: whatever ends them, and no empty one after the last.
@@ -101,6 +107,7 @@ function Opened({
   // The rendered page has no lines to count matches on: the words are found in its source.
   const findWords = () => {
     setMode('code');
+    setDiffOn(false);
     find.show();
   };
 
@@ -179,25 +186,35 @@ function Opened({
         <FileOptions
           path={file.path}
           text={readable ? text : undefined}
-          mode={markdown && readable ? mode : undefined}
+          mode={markdown && readable && !diffing ? mode : undefined}
           onModeChange={(next) => {
             setMode(next);
             if (next === 'preview') find.close();
           }}
-          wrap={readable && mode === 'code' ? wrap : undefined}
+          wrap={diffing || (readable && mode === 'code') ? wrap : undefined}
           onWrapChange={setWrap}
-          onFind={readable ? findWords : undefined}
-          onDiff={
-            change && diffable
-              ? (opener) => useCrew.getState().showChanges({ path: file.path, opener })
-              : undefined
-          }
+          onFind={readable && !diffing ? findWords : undefined}
+          diff={canDiff ? diffing : undefined}
+          onDiffChange={(next) => {
+            setDiffOn(next);
+            if (next) find.close();
+          }}
         />
       </header>
 
       <div className="relative flex min-h-0 flex-1 flex-col">
-        {find.open && mode === 'code' && readable && <FindBar find={find} />}
-        {held ? (
+        {find.open && mode === 'code' && readable && !diffing && <FindBar find={find} />}
+        {diffing && changes ? (
+          <FileDiffView
+            api={{ sessionChanges: changes }}
+            profileId={profileId}
+            sessionId={sessionId}
+            root={file.root}
+            path={file.path}
+            wrap={wrap}
+            version={read.dataUpdatedAt}
+          />
+        ) : held ? (
           <p role="status" className="px-6 pt-4 text-sm text-muted">
             Waiting for the gateway to answer.
           </p>

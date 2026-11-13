@@ -15,6 +15,8 @@
   .file-code {
     @apply min-h-0 flex-1 overflow-auto overscroll-contain;
     user-select: text;
+    /* A match brought into view stops clear of the numbers, which stay over the code's start. */
+    scroll-padding-left: calc(var(--file-gutter, 3ch) + 2rem);
   }
   .file-code-lines {
     @apply pt-2 pb-10;
@@ -23,9 +25,11 @@
     @apply block whitespace-pre pr-6;
   }
   /* Drawn, not text, so a hand copy takes only the code. `--file-gutter` is as wide as the last
-     line's number. */
+     line's number. It stays at the left edge while the code scrolls sideways, as an editor's
+     gutter does, on the page's own ground so the code passes under it unseen. Every line is as
+     wide as the longest (`min-w-max` on the lines), or the number would leave with a short one. */
   .file-code-line::before {
-    @apply inline-block select-none pr-4 text-right tabular-nums;
+    @apply sticky left-0 inline-block select-none bg-canvas pr-4 text-right tabular-nums;
     width: calc(var(--file-gutter, 3ch) + 2rem);
     content: attr(data-line);
     color: color-mix(in srgb, var(--muted) 65%, transparent);
@@ -40,6 +44,16 @@
   }
   .file-code[data-wrap] .file-code-line::before {
     @apply absolute left-0;
+  }
+  /* A changed file with its diff laid in, in the code's place: the diff's own rows on the page's
+     ground, with no card or rule, scrolling both ways as the code does. */
+  .code-diff.file-diff[data-flat] {
+    @apply min-h-0 flex-1 overflow-auto overscroll-contain rounded-none border-0;
+    --diff-ground: var(--canvas);
+    user-select: text;
+  }
+  .file-diff .code-diff-lines {
+    @apply pt-2 pb-10;
   }
   /* What the find bar found, and the one it is on. The words keep their own colour under the
      first; the current one is told by more than its tint. */

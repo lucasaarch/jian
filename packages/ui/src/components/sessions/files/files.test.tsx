@@ -43,6 +43,41 @@ function gateway(roots: SessionFileRoot[] = [storefront]) {
   };
 }
 
+/** The gateway as one that reads diffs: src/pricing.ts doubled its second line. */
+function withDiff() {
+  return {
+    ...gateway(),
+    sessionChanges: vi.fn(async (_profile: string, _session: string, path?: string) => ({
+      files: [
+        {
+          path: path ?? '',
+          status: 'modified' as const,
+          lines: texts[path ?? '']?.trimEnd().split('\n'),
+          diff: {
+            path: path ?? '',
+            language: 'typescript',
+            additions: 1,
+            deletions: 1,
+            hunks: [
+              {
+                oldStart: 2,
+                oldLines: 1,
+                newStart: 2,
+                newLines: 1,
+                lines: [
+                  { kind: 'del' as const, old: 2, text: 'export const Price = price;' },
+                  { kind: 'add' as const, new: 2, text: 'export const Price = price * 2;' },
+                ],
+              },
+            ],
+          },
+        },
+      ],
+      truncated: false,
+    })),
+  };
+}
+
 let container: HTMLDivElement;
 let root: ReturnType<typeof createRoot>;
 
@@ -269,30 +304,65 @@ describe('the file in the conversation’s place', () => {
   /** The entries of the bar's one menu, opened from its button; the menu draws them in a portal. */
   const entries = async () => {
     await click(button('File options'));
-    await settled(() => document.querySelectorAll('[role=menuitem]').length > 0);
-    return [...document.querySelectorAll<HTMLElement>('[role=menuitem]')];
+    const items = '[role=menuitem], [role=menuitemcheckbox]';
+    await settled(() => document.querySelectorAll(items).length > 0);
+    return [...document.querySelectorAll<HTMLElement>(items)];
   };
   const choose = async (label: string) =>
     click((await entries()).find((entry) => entry.textContent === label));
   const closeMenu = () => key({ key: 'Escape' }, document.activeElement ?? document.body);
 
   it('keeps the bar to the way back and one menu of everything else', async () => {
-    await opened('src/pricing.ts');
+    await opened('src/pricing.ts', withDiff());
     const labels = [...(viewer()?.querySelectorAll('header button') ?? [])].map((b) =>
       b.getAttribute('aria-label'),
     );
 
     expect(labels).toEqual(['Back to conversation', 'File options']);
-    expect((await entries()).map((entry) => entry.textContent)).toEqual([
+    const menu = await entries();
+    expect(menu.map((entry) => entry.textContent)).toEqual([
+      'View diff',
       'Wrap lines',
       'Find in file',
-      'Open diff',
       'Copy path',
       'Copy contents',
     ]);
+    // Turned on and off where they are, not run and gone.
+    expect(menu.slice(0, 2).map((entry) => entry.getAttribute('role'))).toEqual([
+      'menuitemcheckbox',
+      'menuitemcheckbox',
+    ]);
   });
 
-  it('shows code with its lines numbered, its change and the way to its diff', async () => {
+  it('lays the file’s diff into it with View diff, and takes it out again', async () => {
+    await opened('src/pricing.ts', withDiff());
+
+    await choose('View diff');
+    await settled(() => Boolean(viewer()?.querySelector('.file-diff .code-diff-line')));
+    const lines = [...(viewer()?.querySelectorAll('.file-diff .code-diff-line') ?? [])];
+    expect(lines.map((line) => line.getAttribute('data-kind'))).toEqual(['context', 'del', 'add']);
+    expect(lines[2]?.textContent).toContain('export const Price = price * 2;');
+    expect(viewer()?.querySelector('.file-code')).toBeNull();
+    // A switch keeps the menu open, to say where it stands; finding has no text to look in.
+    const menu = [
+      ...document.querySelectorAll<HTMLElement>('[role=menuitem], [role=menuitemcheckbox]'),
+    ];
+    const on = menu.find((entry) => entry.textContent === 'View diff');
+    expect(on?.getAttribute('aria-checked')).toBe('true');
+    expect(menu.some((entry) => entry.textContent === 'Find in file')).toBe(false);
+
+    await click(on);
+    expect(viewer()?.querySelector('.file-diff')).toBeNull();
+    expect(viewer()?.querySelectorAll('.file-code-line')).toHaveLength(2);
+  });
+
+  it('offers no diff for a file nothing changed', async () => {
+    await opened('src/cart.ts', withDiff());
+
+    expect((await entries()).some((entry) => entry.textContent === 'View diff')).toBe(false);
+  });
+
+  it('shows code with its lines numbered and its change', async () => {
     await opened('src/pricing.ts');
     const lines = [...(viewer()?.querySelectorAll('.file-code-line') ?? [])];
 
@@ -302,13 +372,6 @@ describe('the file in the conversation’s place', () => {
     expect(viewer()?.textContent).toContain('Modified');
     // Nothing of it can be typed into: it is read only.
     expect(viewer()?.querySelector('textarea, [contenteditable]')).toBeNull();
-
-    await choose('Open diff');
-    expect(useCrew.getState().following).toBe('changes:session');
-    expect(useCrew.getState().tabs.find((tab) => tab.kind === 'changes')).toMatchObject({
-      path: 'src/pricing.ts',
-    });
-    expect(viewer()).not.toBeNull();
   });
 
   it('reads Markdown as a page first, with its code one press away', async () => {
