@@ -242,6 +242,30 @@ it('follows an App renamed on GitHub to its new settings page and bot', async ()
   expect(stored).toMatchObject({ slug: 'atlas-example', clientId: 'synthetic-client' });
 });
 
+it('says how to turn on a webhook the App does not have, and keeps the old secret', async () => {
+  let hook = false;
+  const github = async (input: string | URL, init?: RequestInit) =>
+    new URL(String(input)).pathname === '/app/hook/config' && init?.method === 'PATCH' && hook
+      ? Response.json({ content_type: 'json' })
+      : Response.json({ message: 'Not Found' }, { status: 404 });
+  const { app, services } = await gateway({ github: github as typeof fetch });
+  const setUp = () =>
+    app.inject({ method: 'POST', url: '/v1/integrations/github/reviews/webhook', headers });
+
+  const missing = await setUp();
+  expect(missing.statusCode).toBe(409);
+  expect(missing.json().error).toContain(
+    'https://jian.example.test/v1/integrations/github/webhook',
+  );
+  expect(await services.gatewayVault.read('github-webhook-secret')).toBe(secret);
+
+  // Once it is turned on in the App's settings, the gateway gives it a secret of its own.
+  hook = true;
+  expect((await setUp()).statusCode).toBe(200);
+  const stored = await services.gatewayVault.read('github-webhook-secret');
+  expect(stored).toMatch(/^[0-9a-f]{64}$/);
+});
+
 it('searches open pull requests in the account, narrowed by the filter', () => {
   expect(searchQuery('user:octo-example', 'open', undefined, 'river')).toBe(
     'is:pr is:open archived:false sort:updated-desc user:octo-example',
