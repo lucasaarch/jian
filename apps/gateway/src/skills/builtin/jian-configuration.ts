@@ -1,4 +1,4 @@
-import type { Skill } from '@jian/contracts';
+import { type Skill, TERMINALS_MAX } from '@jian/contracts';
 
 export const jianConfiguration: Skill = {
   name: 'jian-configuration',
@@ -93,6 +93,11 @@ One agent's own, from the agent chooser at the foot of the sidebar.
   one in the conversation's place, with find and, for Markdown, a rendered page or its code. It
   only reads: nothing there edits a file, and the files of a conversation on a machine are not
   shown yet.
+  The owner can also open Terminal tabs there, on the web and in the desktop app: each is their
+  own shell on the machine the gateway runs on (never on a machine the conversation targets),
+  starting in the conversation's worktree or checkout when the gateway has it, and the gateway
+  keeps at most ${TERMINALS_MAX} open. You neither see nor type in them: ask the owner for what
+  one printed.
 - **The conversation's badges**, where it runs, show its objective and how many pull requests
   you created in it through GitHub's MCP server, your subagents' included; one you only linked or
   read is not counted. That one opens the list of them with how each stands — Watching while the

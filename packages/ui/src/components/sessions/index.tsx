@@ -42,6 +42,7 @@ import { SessionProtection } from './protection-menu';
 import { SessionAgents } from './session-agents';
 import { SessionPulls } from './session-pulls';
 import { SessionWorktrees, useChangesFlag } from './session-worktrees';
+import { TerminalDrawer } from './terminal/drawer';
 
 const isGateway = (session: Session) => session.channel === GATEWAY_SESSION_CHANNEL;
 /**
@@ -164,6 +165,8 @@ export function Sessions({ api, mutate, busy }: SectionActions) {
           sent={answered}
           refresh={() => void refresh()}
         />
+        {/* A new chat has an Inspector too where the host wraps the whole panel. */}
+        <TerminalDrawer api={api} profileId={profile.id} />
       </div>
     );
   }
@@ -361,6 +364,7 @@ export function Sessions({ api, mutate, busy }: SectionActions) {
                 <CrewDrawer api={api} profileId={profile.id} profile={profile} />
                 <ChangesDrawer api={api} profileId={profile.id} />
                 <FilesDrawer api={api} profileId={profile.id} />
+                <TerminalDrawer api={api} profileId={profile.id} />
                 {/* Any conversation can have its agent settle a pull request's conflicts; merging
                   belongs to the panel's own chat, as a channel's approvals are left to it. */}
                 <GitHubDrawer
