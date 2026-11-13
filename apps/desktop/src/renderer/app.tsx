@@ -114,11 +114,12 @@ function Window() {
       className="relative flex h-dvh flex-col bg-canvas"
       // Windows and Linux draw the window's buttons over the top right: what sits there keeps clear.
       // --chrome-end adds the Inspector's button beside them, for a screen whose header is in the
-      // title bar.
+      // title bar. The button is 2.5rem wide with its icon in the middle; a header adds its own
+      // 1.25rem, so 1.5rem here leaves about 1rem between the header's last button and the icon.
       style={
         {
           '--window-controls': mac ? '0px' : '6rem',
-          '--chrome-end': 'calc(var(--window-controls) + 2.5rem)',
+          '--chrome-end': 'calc(var(--window-controls) + 1.5rem)',
         } as CSSProperties
       }
     >
