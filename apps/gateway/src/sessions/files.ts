@@ -1,5 +1,5 @@
 import { realpath, stat } from 'node:fs/promises';
-import { isAbsolute, join, resolve } from 'node:path';
+import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 import {
   SESSION_FILE_MAX_BYTES,
   SESSION_FILES_MAX,
@@ -177,6 +177,13 @@ export async function readRootFile(root: FileRoot, path: string): Promise<Sessio
     unavailable: reason,
   });
   if (!inside(checkout, real)) return unavailable('This link points outside the checkout.', 0);
+  // A link inside the checkout may still lead into git's own folder, which holds its config.
+  if (
+    relative(checkout, real)
+      .split(sep)
+      .some((part) => part.toLowerCase() === '.git')
+  )
+    throw notFound();
   if (!info.isFile()) throw notFound();
   if (info.size > SESSION_FILE_MAX_BYTES) return unavailable('This file is too large to show.');
 

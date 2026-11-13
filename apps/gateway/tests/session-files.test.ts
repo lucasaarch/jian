@@ -177,8 +177,10 @@ describe("a conversation's files", () => {
       symlinkSync(outside, join(dir, 'link-out.txt'));
       symlinkSync(join(dir, 'README.md'), join(dir, 'link-in.md'));
       symlinkSync(root, join(dir, 'folder-out'));
+      symlinkSync(join(dir, '.git', 'config'), join(dir, 'git-config.txt'));
 
       for (const path of [
+        'git-config.txt',
         '../outside.txt',
         `src/../../${outside.split('/').pop()}`,
         outside,
