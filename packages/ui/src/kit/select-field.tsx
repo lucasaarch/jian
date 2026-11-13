@@ -18,6 +18,8 @@ export type FieldOption = {
 
 /** From this many options on, the list can be searched. */
 const SEARCH_FROM = 8;
+/** Chips a multiple choice shows in its field; the rest are counted, so the field keeps its height. */
+const CHIPS_SHOWN = 2;
 
 // The list is as wide as the field, so it never runs past the form it sits in, and rides above
 // the overlay the form is drawn in.
@@ -230,8 +232,10 @@ export function SelectField({
 }
 
 /**
- * Several choices that take a form's whole row: what is chosen sits in the field as chips, and
- * typing there searches the rest, in a list as wide as the field that stays open to pick more.
+ * Several choices that take a form's whole row: the first ones chosen sit in the field as chips,
+ * the rest as a count, so it stays one line tall however many there are. Anywhere but a chip's
+ * remove opens a list as wide as the field, with a search at its top, that stays open to pick
+ * more.
  */
 export function MultiSelectField({
   label,
@@ -239,7 +243,7 @@ export function MultiSelectField({
   values,
   options,
   onValuesChange,
-  placeholder = 'Search',
+  placeholder = 'Choose',
 }: {
   label: string;
   hint?: string;
@@ -252,6 +256,7 @@ export function MultiSelectField({
   const id = useId();
   const field = useRef<HTMLDivElement>(null);
   const chosen = options.filter((option) => values.includes(option.value));
+  const rest = chosen.length - CHIPS_SHOWN;
 
   return (
     <Labelled label={label} {...(hint ? { hint } : {})} id={id}>
@@ -263,37 +268,50 @@ export function MultiSelectField({
         isItemEqualToValue={(a: FieldOption, b: FieldOption) => a.value === b.value}
         filter={matches}
       >
-        <Combobox.Chips
+        {/* The trigger covers the whole field, under the chips; only their remove buttons take
+            a click of their own. */}
+        <div
           ref={field}
-          className={`${control} flex min-h-10 cursor-text flex-wrap items-center gap-1.5 py-1.5 pr-3 pl-1.5 focus-within:border-ink/25 focus-within:bg-glass-press`}
+          className={`${control} relative flex h-10 items-center pr-9 pl-1.5 has-focus-visible:border-ink/25 has-data-popup-open:border-ink/25 has-data-popup-open:bg-glass-press`}
         >
-          {chosen.map((option) => (
-            <Combobox.Chip
-              key={option.value}
-              aria-label={option.label}
-              className="flex h-7 min-w-0 max-w-full items-center gap-1.5 rounded-lg bg-glass-press pr-1 pl-2 text-[13px] text-ink outline-none data-highlighted:bg-ink/15"
-            >
-              {option.icon && (
-                <span className="grid size-4 shrink-0 place-items-center text-muted">
-                  {option.icon}
-                </span>
-              )}
-              <span className="min-w-0 truncate">{option.label}</span>
-              <Combobox.ChipRemove
-                aria-label={`Remove ${option.label}`}
-                className="grid size-5 shrink-0 place-items-center rounded-md text-muted transition-colors hover:bg-glass-hover hover:text-ink"
-              >
-                <X size={12} aria-hidden="true" />
-              </Combobox.ChipRemove>
-            </Combobox.Chip>
-          ))}
-          <Combobox.Input
+          <Combobox.Trigger
             id={id}
             aria-describedby={hint ? `${id}-hint` : undefined}
-            placeholder={chosen.length ? '' : placeholder}
-            className={`${bareInput} h-7 w-auto min-w-24 flex-1 px-1.5 text-sm`}
-          />
-        </Combobox.Chips>
+            className="absolute inset-0 flex cursor-pointer items-center justify-end rounded-xl pr-3 outline-none"
+          >
+            <ChevronDown size={15} aria-hidden="true" className="shrink-0 text-muted" />
+          </Combobox.Trigger>
+          <Combobox.Chips className="pointer-events-none relative flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden">
+            {!chosen.length && (
+              <span className="truncate px-2 text-sm text-muted/70">{placeholder}</span>
+            )}
+            {chosen.slice(0, CHIPS_SHOWN).map((option) => (
+              <Combobox.Chip
+                key={option.value}
+                aria-label={option.label}
+                className="flex h-7 min-w-0 shrink items-center gap-1.5 rounded-lg bg-glass-press pr-1 pl-2 text-[13px] text-ink outline-none data-highlighted:bg-ink/15"
+              >
+                {option.icon && (
+                  <span className="grid size-4 shrink-0 place-items-center text-muted">
+                    {option.icon}
+                  </span>
+                )}
+                <span className="min-w-0 truncate">{option.label}</span>
+                <Combobox.ChipRemove
+                  aria-label={`Remove ${option.label}`}
+                  className="pointer-events-auto grid size-5 shrink-0 place-items-center rounded-md text-muted transition-colors hover:bg-glass-hover hover:text-ink"
+                >
+                  <X size={12} aria-hidden="true" />
+                </Combobox.ChipRemove>
+              </Combobox.Chip>
+            ))}
+            {rest > 0 && (
+              <span className="shrink-0 px-1 text-xs whitespace-nowrap text-muted">
+                +{rest} more
+              </span>
+            )}
+          </Combobox.Chips>
+        </div>
         <Combobox.Portal>
           <Combobox.Positioner
             anchor={field}
@@ -302,7 +320,15 @@ export function MultiSelectField({
             sideOffset={6}
             className={`${positioner} w-(--anchor-width)`}
           >
-            <Combobox.Popup aria-label={label} className={popup}>
+            <Combobox.Popup aria-label={label} className={`${popup} grid-rows-[auto_1fr]`}>
+              <div className="flex h-10 items-center gap-2 border-b border-glass-edge px-3 text-muted">
+                <Search size={14} aria-hidden="true" />
+                <Combobox.Input
+                  aria-label={`Search ${label.toLowerCase()}`}
+                  placeholder="Search"
+                  className={`${bareInput} text-[13px]`}
+                />
+              </div>
               <Matches />
             </Combobox.Popup>
           </Combobox.Positioner>

@@ -18,6 +18,7 @@ import { AgentFace } from '../../kit/face';
 import type { GitHubReviewSettings, GitHubReviewsStatus } from '../../lib/api';
 import { useAgents } from '../../lib/query/agent';
 import { queries } from '../../lib/query/profile';
+import { CopyLine, listBox } from '../customize/channel-copy-line';
 import { useSaveReviewSettings, useSetUpWebhook } from './use-pulls';
 
 /**
@@ -170,8 +171,12 @@ function Webhook({ status }: { status: GitHubReviewsStatus }) {
           <p className="text-muted">
             {webhook.configured
               ? 'In the App’s settings on GitHub, the webhook must be Active and subscribed to the Pull request event.'
-              : 'Set the App’s webhook to this gateway, then subscribe it to the Pull request event on GitHub.'}
+              : 'An App without a webhook needs it turned on first: in its settings on GitHub, check Active under Webhook and paste this address. Then set it up here and subscribe it to the Pull request event.'}
           </p>
+          {/* GitHub's API can't add a webhook, so the address is pasted on GitHub by hand. */}
+          <div className={listBox}>
+            <CopyLine label="Webhook URL" value={webhook.url} />
+          </div>
           <div className="flex flex-wrap gap-2">
             <Action
               tone="outline"
