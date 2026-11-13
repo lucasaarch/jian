@@ -6,7 +6,7 @@ import { GatewayAnswer, result } from './result';
 type TerminalSize = Pick<TerminalInput, 'cols' | 'rows'>;
 
 /** What a terminal's stream tells its screen, in the order it happened. */
-export type TerminalStreamHandlers = {
+type TerminalStreamHandlers = {
   /** The gateway answered: what follows starts with everything the terminal kept so far. */
   opened(): void;
   output(data: string): void;

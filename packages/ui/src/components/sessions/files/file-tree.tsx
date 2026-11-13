@@ -11,7 +11,7 @@ import {
   type TreeRow,
 } from './tree';
 
-export const markTone: Record<ChangeMark['tone'], string> = {
+const markTone: Record<ChangeMark['tone'], string> = {
   good: 'text-good',
   warn: 'text-warn',
   bad: 'text-bad',
@@ -24,7 +24,7 @@ const row =
 const indent = (depth: number) => ({ paddingLeft: 6 + depth * 14 });
 
 /** The letter of a change, named in words for whoever cannot tell it by its colour. */
-export function ChangeLetter({ status }: { status: ChangeStatus }) {
+function ChangeLetter({ status }: { status: ChangeStatus }) {
   const mark = markOf(status);
   return (
     <span

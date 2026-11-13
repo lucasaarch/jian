@@ -34,7 +34,7 @@ const RETRY_CAP_MS = 15_000;
  * gone. Asking again at once would get the same answer, so its sentence is shown until the files
  * are read again. Anything else (the gateway away, a failed read) is tried again by itself.
  */
-export const refused = (error: unknown) =>
+const refused = (error: unknown) =>
   error instanceof GatewayAnswer &&
   error.status !== undefined &&
   error.status >= 400 &&

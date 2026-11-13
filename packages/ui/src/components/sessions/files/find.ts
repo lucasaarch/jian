@@ -7,7 +7,7 @@ export type Match = { line: number; start: number; end: number };
  * The most matches kept. A single letter in a large file matches a hundred thousand times, and
  * each one is a mark to draw; past this the count says there are more.
  */
-export const MAX_MATCHES = 5000;
+const MAX_MATCHES = 5000;
 
 /**
  * Every place `query` is in the lines, whatever its case, in reading order and never

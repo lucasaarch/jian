@@ -191,7 +191,7 @@ export function countFiles(roots: TreeRoot[]): { files: number; changed: number 
 }
 
 /** The most rows a filtered list draws; the rest are counted, not drawn. */
-export const FILTER_ROWS = 300;
+const FILTER_ROWS = 300;
 
 /**
  * The files a filter leaves, flat, in the tree's order: any part of the path or of the one it was
