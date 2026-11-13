@@ -9,7 +9,9 @@ import { keys } from '../../../lib/query/keys';
 import { useCrew } from '../../../lib/stores/crew';
 import type { OpenFile } from './store';
 
-export type FilesApi = Pick<GatewayApi, 'sessionFiles' | 'sessionFile'>;
+/** `sessionChanges` lays a changed file's diff into the viewer; without it the file only reads. */
+export type FilesApi = Pick<GatewayApi, 'sessionFiles' | 'sessionFile'> &
+  Partial<Pick<GatewayApi, 'sessionChanges'>>;
 
 /** How long after a turn ends or a worktree changes the files are read again, in ms. */
 const GATHER_MS = 1000;

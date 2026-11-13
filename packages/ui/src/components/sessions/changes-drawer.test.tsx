@@ -71,37 +71,41 @@ async function settled(done: () => boolean, limit = 100) {
   }
 }
 
-it('lists a project’s current changed files and opens the selected checkout diff', async () => {
+it('lays every changed file’s diff into the list, with the figures of them all', async () => {
   useCrew.getState().show('session', [], 'project');
   useCrew.getState().showChanges();
+  const other = 'src/cart.ts';
   const api = {
     sessionChanges: vi.fn(async (_profile: string, _session: string, selected?: string) => ({
       files: selected
-        ? [{ path, status: 'modified' as const, diff }]
-        : [{ path, status: 'modified' as const }],
+        ? [{ path: selected, status: 'modified' as const, diff: { ...diff, path: selected } }]
+        : [
+            { path, status: 'modified' as const },
+            { path: other, status: 'modified' as const },
+          ],
       truncated: false,
     })),
     timeline: vi.fn(async () => []),
   };
 
   await render(api);
-  await settled(() => Boolean(container.querySelector('button')?.textContent?.includes(path)));
-  expect(container.textContent).toContain('1 changed file');
-  const file = [...container.querySelectorAll('button')].find((button) =>
-    button.textContent?.includes(path),
-  );
-  await act(async () => file?.click());
-  await settled(() => Boolean(container.querySelector('.code-diff-path')));
+  await settled(() => container.querySelectorAll('.code-diff-head').length === 2);
 
-  expect(api.sessionChanges).toHaveBeenLastCalledWith(
+  expect(api.sessionChanges).toHaveBeenCalledWith('profile', 'session', path, undefined, undefined);
+  expect(api.sessionChanges).toHaveBeenCalledWith(
     'profile',
     'session',
-    path,
+    other,
     undefined,
     undefined,
   );
   expect(api.timeline).not.toHaveBeenCalled();
-  expect(container.querySelector('.code-diff-head')?.getAttribute('aria-expanded')).toBe('true');
+  expect(container.textContent).toContain('2 files');
+  expect(container.textContent).toContain('+2');
+  expect(container.textContent).toContain('−2');
+  // Few enough to read at once, so each starts open, as a pull request's do.
+  const heads = [...container.querySelectorAll('.code-diff-head')];
+  expect(heads.map((head) => head.getAttribute('aria-expanded'))).toEqual(['true', 'true']);
   expect(container.querySelector('.code-diff-line code')?.textContent).toBe('const price = 1;');
 });
 
@@ -327,7 +331,7 @@ it('wraps a file’s long lines at the owner’s word', async () => {
   expect(drawer()?.hasAttribute('data-wrap')).toBe(true);
 });
 
-it('offers wrapping only where there is a file to wrap', async () => {
+it('offers wrapping over the list of changed files', async () => {
   useCrew.getState().show('session', [], 'project');
   useCrew.getState().showChanges();
   await render({
@@ -337,9 +341,9 @@ it('offers wrapping only where there is a file to wrap', async () => {
     })),
     timeline: vi.fn(async () => []),
   });
-  await settled(() => Boolean(container.textContent?.includes('1 changed file')));
+  await settled(() => Boolean(container.textContent?.includes('1 file')));
 
-  expect(container.querySelector('[role="switch"]')).toBeNull();
+  expect(container.querySelector('[role="switch"]')).not.toBeNull();
 });
 
 const visible = () => {
@@ -419,7 +423,7 @@ it('reads the changes again when the conversation moves, and not for another one
   useCrew.getState().showChanges();
   const sessionChanges = vi.fn(async () => readOf());
   await render({ sessionChanges, timeline: vi.fn(async () => []) });
-  await settled(() => Boolean(container.textContent?.includes('1 changed file')));
+  await settled(() => Boolean(container.textContent?.includes('1 file')));
   const before = sessionChanges.mock.calls.length;
 
   await act(async () => {
@@ -523,7 +527,7 @@ const listed = async (files: ReturnType<typeof many>, truncated = false) => {
   const sessionChanges = vi.fn(async () => ({ files, truncated }));
   await render({ sessionChanges, timeline: vi.fn(async () => []) });
   // Not by its words: the outline says "Loading changed files…" to a screen reader.
-  await settled(() => Boolean(container.querySelector('ul button')));
+  await settled(() => rows() > 0);
   return sessionChanges;
 };
 
@@ -537,7 +541,8 @@ const type = (text: string) =>
     input.dispatchEvent(new Event('input', { bubbles: true }));
   });
 
-const rows = () => container.querySelectorAll('ul button').length;
+/** A file of the list: its diff's heading, or the line that says why it has none. */
+const rows = () => container.querySelectorAll('.code-diff-head, .code-diff-unshown').length;
 
 it('always offers the filter, however short the list', async () => {
   await listed(many(1));
@@ -574,25 +579,34 @@ it('lists what the conversation saved when it has no project, newest first, each
   ]);
   await settled(() => rows() > 0);
 
-  const listedPaths = [...container.querySelectorAll('ul button .font-mono')].map(
-    (item) => item.textContent,
+  const listedPaths = [...container.querySelectorAll('.code-diff-path')].map((item) =>
+    item.getAttribute('title'),
   );
   expect(listedPaths).toEqual(['src/both.ts', 'src/old.ts']);
-  expect(container.textContent).toContain('2 changed files');
+  expect(container.textContent).toContain('2 files');
 });
 
-it('opens a saved file from the turn that last changed it', async () => {
+it('shows a saved file as the turn that last changed it left it', async () => {
+  const later: CodeDiff = {
+    ...diff,
+    hunks: [
+      {
+        oldStart: 1,
+        oldLines: 0,
+        newStart: 1,
+        newLines: 1,
+        lines: [{ kind: 'add', new: 1, text: 'const price = 3;' }],
+      },
+    ],
+  };
   await withoutProject([
     { runId: 'earlier', steps: [savedStep('first', path, '2026-10-29T10:00:00.000Z')] },
-    { runId, steps: [savedStep(toolCallId, path, '2026-10-29T10:00:01.000Z')] },
+    { runId, steps: [{ ...savedStep(toolCallId, path, '2026-10-29T10:00:01.000Z'), diff: later }] },
   ]);
   await settled(() => rows() > 0);
 
-  await act(async () => container.querySelector<HTMLElement>('ul button')?.click());
-  await settled(() => Boolean(container.querySelector('.code-diff-path')));
-
-  const tab = useCrew.getState().tabs.find((item) => item.kind === 'changes');
-  expect(tab).toMatchObject({ path, runId, toolCallId });
+  expect(rows()).toBe(1);
+  expect(container.querySelector('.code-diff-line code')?.textContent).toBe('const price = 3;');
 });
 
 it('filters what was saved, and goes to that list from a file, with no project', async () => {
@@ -614,10 +628,10 @@ it('filters what was saved, and goes to that list from a file, with no project',
   expect(filter()?.disabled).toBe(false);
 
   await type('notes');
-  await settled(() => rows() > 0);
+  await settled(() => rows() === 1);
 
-  expect(container.querySelector('.code-diff-path')).toBeNull();
   expect(rows()).toBe(1);
+  expect(container.querySelector('.code-diff-path')?.getAttribute('title')).toBe('docs/notes.md');
   expect(container.textContent).toContain('docs/notes.md');
 });
 
@@ -644,30 +658,29 @@ it('filters by any part of the path, whatever its case, and says how many it lef
 
   // File1, File10 and File11.
   expect(rows()).toBe(3);
-  expect(container.textContent).toContain('3 of 12 changed files');
+  expect(container.textContent).toContain('3 of 12 files');
 });
 
-it('sits beside the wrap switch, which only a file has', async () => {
+it('sits beside the wrap switch, in the list and on a file alike', async () => {
   await listed(many(12));
-  expect(container.querySelector('[role="switch"]')).toBeNull();
+  expect(container.querySelector('[role="switch"]')).not.toBeNull();
 
   await act(async () => useCrew.getState().showChanges({ path: many(12)[0]?.path }));
-  await settled(() => Boolean(container.querySelector('[role="switch"]')));
 
+  expect(container.querySelector('[role="switch"]')).not.toBeNull();
   expect(filter()).not.toBeNull();
 });
 
 it('goes to the list when typing with a file open, keeping the keyboard in the field', async () => {
   await listed(many(12));
   await act(async () => useCrew.getState().showChanges({ path: many(12)[0]?.path }));
-  await settled(() => Boolean(container.querySelector('[role="switch"]')));
   const field = filter();
   field?.focus();
 
   await type('file1');
-  await settled(() => rows() > 0);
+  await settled(() => rows() === 3);
 
-  expect(container.querySelector('[role="switch"]')).toBeNull();
+  expect(useCrew.getState().tabs.find((item) => item.kind === 'changes')?.path).toBeUndefined();
   expect(rows()).toBe(3);
   expect(filter()).toBe(field);
   expect(document.activeElement).toBe(field);
@@ -696,7 +709,7 @@ it('keeps the filter on screen while it applies, however short the list becomes'
   useCrew.getState().showChanges();
   await render({ sessionChanges, timeline: vi.fn(async () => []) });
   // The filter is there before the list is, so wait for the files themselves.
-  await settled(() => container.textContent?.includes('12 changed files') === true);
+  await settled(() => container.textContent?.includes('12 files') === true);
   await type('file2');
   expect(rows()).toBe(1);
 
@@ -705,9 +718,9 @@ it('keeps the filter on screen while it applies, however short the list becomes'
   await act(async () => publish({ id: 1, type: 'run.step' }));
   // The refetch waits out a debounce, and a loaded machine can take well past it: wait for the
   // shorter list to be on screen (up to 3 s) rather than for a fixed time.
-  await settled(() => container.textContent?.includes('3 changed files') === true, 300);
+  await settled(() => container.textContent?.includes('3 files') === true, 300);
   expect(sessionChanges.mock.calls.length).toBeGreaterThan(before);
-  expect(container.textContent).toContain('3 changed files');
+  expect(container.textContent).toContain('3 files');
 
   // Otherwise the list would stay narrowed by words the owner can no longer see or clear.
   expect(filter()?.value).toBe('file2');
@@ -777,7 +790,7 @@ describe('a gateway that cannot read the checkout at all', () => {
     };
 
     await render(api);
-    await settled(() => Boolean(container.textContent?.includes('1 changed file')));
+    await settled(() => Boolean(container.textContent?.includes('1 file')));
 
     expect(container.textContent).toContain(path);
     expect(container.textContent).toContain(gone.message);
@@ -898,7 +911,7 @@ describe('with worktrees', () => {
     await act(async () => choice?.click());
     await settled(() => Boolean(container.textContent?.includes('src/heron.ts')));
 
-    expect(api.sessionChanges).toHaveBeenLastCalledWith(
+    expect(api.sessionChanges).toHaveBeenCalledWith(
       'profile',
       'session',
       undefined,
@@ -985,13 +998,14 @@ describe('with worktrees', () => {
     );
     await act(async () => choice?.click());
     await settled(() => Boolean(container.textContent?.includes('src/heron.ts')));
-    expect(api.sessionChanges).toHaveBeenLastCalledWith(
+    expect(api.sessionChanges).toHaveBeenCalledWith(
       'profile',
       'session',
       undefined,
       undefined,
       'old-heron',
     );
+    const before = api.sessionChanges.mock.calls.length;
 
     // And the clone can be chosen again.
     await act(async () => container.querySelector<HTMLElement>('[aria-label="Worktree"]')?.click());
@@ -1001,13 +1015,13 @@ describe('with worktrees', () => {
     expect(back).toBeDefined();
     await act(async () => back?.click());
     await settled(() => Boolean(container.textContent?.includes(path)));
-    expect(api.sessionChanges).toHaveBeenLastCalledWith(
+    expect(api.sessionChanges.mock.calls.slice(before)).toContainEqual([
       'profile',
       'session',
       undefined,
       undefined,
       undefined,
-    );
+    ]);
   });
 
   it('keeps the timeline for a worktree on a machine the conversation does not work on', async () => {

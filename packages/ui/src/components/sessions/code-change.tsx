@@ -16,7 +16,7 @@ type Line = CodeDiff['hunks'][number]['lines'][number];
  * context and added lines, the old side from its context and removed ones — and dealt back out
  * line by line, so a token that spans lines keeps its colour across them.
  */
-function coloured(lines: Line[], language?: string): Segment[][] {
+export function coloured(lines: Line[], language?: string): Segment[][] {
   const after = lines.filter((line) => line.kind !== 'del');
   const before = lines.filter((line) => line.kind !== 'add');
   const newSide = highlightLines(after.map((line) => line.text).join('\n'), language);

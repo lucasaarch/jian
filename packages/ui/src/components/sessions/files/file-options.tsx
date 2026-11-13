@@ -4,7 +4,7 @@ import { Menu } from '@base-ui/react/menu';
 import { Code, Copy, Ellipsis, Eye, FileDiff, Search, WrapText } from 'lucide-react';
 import { useRef } from 'react';
 import { toast } from 'sonner';
-import { iconButton, MenuDivider, MenuEntry, menuPopup } from '../../../kit';
+import { iconButton, MenuDivider, MenuEntry, MenuSwitch, menuPopup } from '../../../kit';
 
 async function copy(text: string, what: string) {
   try {
@@ -18,7 +18,8 @@ async function copy(text: string, what: string) {
 /**
  * Everything the open file's bar can do, behind its one button. An entry shows only where it
  * applies: the way to read a Markdown page, wrapping and finding where there is text, the diff
- * where the file changed and Changes can show it.
+ * where the file changed and its checkout can be compared. The ways of showing it are switches,
+ * and the menu stays open over them so the change shows at once.
  */
 export function FileOptions({
   path,
@@ -28,7 +29,8 @@ export function FileOptions({
   wrap,
   onWrapChange,
   onFind,
-  onDiff,
+  diff,
+  onDiffChange,
 }: {
   path: string;
   /** The file's text, once it is read and can be shown. */
@@ -40,9 +42,10 @@ export function FileOptions({
   wrap?: boolean | undefined;
   onWrapChange: (wrap: boolean) => void;
   onFind?: (() => void) | undefined;
-  onDiff?: ((opener: HTMLElement) => void) | undefined;
+  /** Whether the file's change is laid into it; absent where it has none to show. */
+  diff?: boolean | undefined;
+  onDiffChange: (diff: boolean) => void;
 }) {
-  const trigger = useRef<HTMLButtonElement>(null);
   // Find takes the keyboard to its own field; the menu would hand it back to its button.
   const finding = useRef(false);
 
@@ -52,7 +55,7 @@ export function FileOptions({
         if (open) finding.current = false;
       }}
     >
-      <Menu.Trigger ref={trigger} aria-label="File options" className={iconButton}>
+      <Menu.Trigger aria-label="File options" className={iconButton}>
         <Ellipsis size={16} aria-hidden="true" />
       </Menu.Trigger>
       <Menu.Portal>
@@ -68,10 +71,23 @@ export function FileOptions({
                 Show preview
               </MenuEntry>
             )}
+            {diff !== undefined && (
+              <MenuSwitch
+                icon={<FileDiff size={14} />}
+                checked={diff}
+                onCheckedChange={onDiffChange}
+              >
+                View diff
+              </MenuSwitch>
+            )}
             {wrap !== undefined && (
-              <MenuEntry icon={<WrapText size={14} />} onClick={() => onWrapChange(!wrap)}>
-                {wrap ? 'Stop wrapping lines' : 'Wrap lines'}
-              </MenuEntry>
+              <MenuSwitch
+                icon={<WrapText size={14} />}
+                checked={wrap}
+                onCheckedChange={onWrapChange}
+              >
+                Wrap lines
+              </MenuSwitch>
             )}
             {onFind && (
               <MenuEntry
@@ -84,15 +100,7 @@ export function FileOptions({
                 Find in file
               </MenuEntry>
             )}
-            {onDiff && (
-              <MenuEntry
-                icon={<FileDiff size={14} />}
-                onClick={() => trigger.current && onDiff(trigger.current)}
-              >
-                Open diff
-              </MenuEntry>
-            )}
-            {(mode || wrap !== undefined || onFind || onDiff) && <MenuDivider />}
+            {(mode || wrap !== undefined || onFind || diff !== undefined) && <MenuDivider />}
             <MenuEntry icon={<Copy size={14} />} onClick={() => void copy(path, 'Path')}>
               Copy path
             </MenuEntry>

@@ -88,11 +88,13 @@ One agent's own, from the agent chooser at the foot of the sidebar.
   they change; nested instruction files are listed for you to read when you work there.
 - **The Inspector**, beside the conversation, holds Changes, Files, pull requests, subagents and,
   in the desktop app, the browser. Changes reads the checkout or worktree the conversation works
-  in, on its machine too when it targets one. Files lists every file of the conversation's
-  projects, or of its worktrees, with the changed ones marked; the owner filters them and opens
-  one in the conversation's place, with find and, for Markdown, a rendered page or its code. It
-  only reads: nothing there edits a file, and the files of a conversation on a machine are not
-  shown yet.
+  in, on its machine too when it targets one, and lays every changed file's diff in one list,
+  as a pull request's Changes does, with the totals, a filter and line wrapping. Files lists
+  every file of the conversation's projects, or of its worktrees, with the changed ones marked;
+  the owner filters them and opens one in the conversation's place, with find, for Markdown a
+  rendered page or its code, and for a changed file its diff laid into it (View diff). It only
+  reads: nothing there edits a file, and the files of a conversation on a machine are not shown
+  yet.
   The owner can also open Terminal tabs there, on the web and in the desktop app: each is their
   own shell on the machine the gateway runs on (never on a machine the conversation targets),
   starting in the conversation's worktree or checkout when the gateway has it, and the gateway

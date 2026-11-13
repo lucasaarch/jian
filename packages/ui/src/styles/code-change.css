@@ -61,6 +61,10 @@
     --diff-ink: #e6edf3;
     --diff-dim: #8b949e;
     --diff-rule: color-mix(in srgb, var(--ink) 9%, transparent);
+    /* What a line number is drawn on when the code scrolls under it: the page beneath and the
+       glass over it, as a card and the Inspector both are, made solid. A place with no glass,
+       as the file viewer, sets its own. */
+    --diff-ground: linear-gradient(var(--glass), var(--glass)), var(--canvas);
     @apply glass min-w-0 overflow-hidden rounded-2xl;
     color: var(--diff-ink);
   }
@@ -138,14 +142,23 @@
     @apply shrink-0 text-[10px] font-semibold tracking-wide;
     color: var(--diff-dim);
   }
+  /* A line's band and the mark at its edge are set as `--diff-band` and `--diff-mark`, not
+     painted on the line alone, because its number draws them again over its own solid ground. */
   .code-diff-line {
     @apply grid;
     /* Room for five digits and the gap to the code, so every file's code starts at the same place. */
     grid-template-columns: 3.25rem minmax(0, 1fr);
+    background: var(--diff-band, transparent);
   }
+  /* The number stays at the left edge while the code scrolls sideways, as an editor's gutter, so a
+     long line never loses which line it is. Solid, or the code would show through it. */
   .code-diff-number {
-    @apply select-none pr-3 text-right tabular-nums;
+    @apply sticky left-0 z-[1] select-none pr-3 text-right tabular-nums;
     color: #6e7681;
+    background:
+      linear-gradient(var(--diff-band, transparent), var(--diff-band, transparent)),
+      var(--diff-ground);
+    box-shadow: inset 3px 0 0 var(--diff-mark, transparent);
   }
   /* The row's size, not the page's for inline code: it would sit higher than its line number. */
   .code-diff-line code {
@@ -197,12 +210,12 @@
     @apply ml-0;
   }
   .code-diff[data-flat] .code-diff-line[data-kind="add"] {
-    background: color-mix(in srgb, var(--good) 13%, transparent);
-    box-shadow: inset 3px 0 0 var(--good);
+    --diff-band: color-mix(in srgb, var(--good) 13%, transparent);
+    --diff-mark: var(--good);
   }
   .code-diff[data-flat] .code-diff-line[data-kind="del"] {
-    background: color-mix(in srgb, var(--bad) 13%, transparent);
-    box-shadow: inset 3px 0 0 var(--bad);
+    --diff-band: color-mix(in srgb, var(--bad) 13%, transparent);
+    --diff-mark: var(--bad);
   }
   .code-diff[data-flat] .code-diff-line[data-kind="del"] code {
     @apply opacity-100;
@@ -214,7 +227,7 @@
   }
   /* Added lines sit on a lighter band; removed ones fade, so the new code reads first. */
   .code-diff-line[data-kind="add"] {
-    background: rgb(255 255 255 / 0.07);
+    --diff-band: rgb(255 255 255 / 0.07);
   }
   .code-diff-line[data-kind="add"] .code-diff-number {
     color: #7ee787;
@@ -239,7 +252,7 @@
       color: #8c959f;
     }
     &:not([data-flat]) .code-diff-line[data-kind="add"] {
-      background: rgb(0 0 0 / 0.045);
+      --diff-band: rgb(0 0 0 / 0.045);
     }
     & :is(.code-diff-line[data-kind="add"] .code-diff-number, .code-change-counts .added) {
       color: #1a7f37;

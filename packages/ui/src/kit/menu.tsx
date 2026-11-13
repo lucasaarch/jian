@@ -36,6 +36,42 @@ export function MenuEntry({
   );
 }
 
+/**
+ * A way of showing something, turned on and off from the menu, which stays open so the change can
+ * be seen. The switch is drawn, not a control of its own: the whole line is the one thing pressed,
+ * and a menu reads it as a checkbox item.
+ */
+export function MenuSwitch({
+  icon,
+  children,
+  checked,
+  onCheckedChange,
+}: {
+  icon?: ReactNode;
+  children: ReactNode;
+  checked: boolean;
+  onCheckedChange: (checked: boolean) => void;
+}) {
+  return (
+    <Menu.CheckboxItem
+      checked={checked}
+      onCheckedChange={(next) => onCheckedChange(next)}
+      closeOnClick={false}
+      className="group flex h-8 cursor-pointer items-center gap-2.5 rounded-lg px-2.5 outline-none select-none data-highlighted:bg-glass-press"
+    >
+      {icon && <span className="grid size-4 place-items-center text-current">{icon}</span>}
+      <span className="flex-1">{children}</span>
+      {/* SwitchControl's track and thumb, a size down to fit the line. */}
+      <span
+        aria-hidden="true"
+        className="inline-flex h-4 w-6.5 shrink-0 items-center rounded-full bg-ink/20 p-0.5 transition-colors duration-200 group-data-checked:bg-ink"
+      >
+        <span className="block size-3 rounded-full bg-ink shadow-sm transition-[translate,background-color] duration-200 group-data-checked:translate-x-2.5 group-data-checked:bg-canvas" />
+      </span>
+    </Menu.CheckboxItem>
+  );
+}
+
 /** A line between groups of a menu's entries. */
 export function MenuDivider() {
   return <Menu.Separator className="mx-2 my-1 h-px bg-glass-edge" />;

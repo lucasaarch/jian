@@ -1,7 +1,7 @@
 'use client';
 
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { FileCode2, GitBranch } from 'lucide-react';
+import { GitBranch } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Action, Picker, PickerRow, Skeleton, SkeletonLine, SkeletonRegion } from '../../kit';
 import type { GatewayApi, SessionChange } from '../../lib/api';
@@ -9,6 +9,7 @@ import { GatewayAnswer } from '../../lib/api/result';
 import { subscribe } from '../../lib/events';
 import { keys } from '../../lib/query/keys';
 import { useCrew } from '../../lib/stores/crew';
+import { ChangedFiles, type ListedFile, useFileDiffs } from './changes-list';
 import { DiffSkeleton, FileDiff } from './code-change';
 import { useDrawerFocus } from './crew';
 import { FileFilter, WrapSwitch } from './diff-controls';
@@ -25,12 +26,9 @@ type DrawerApi = Pick<GatewayApi, 'sessionChanges' | 'timeline'> &
 const READ_AGAIN_MS = 10_000;
 /** How long a burst of events is gathered into one read, in ms. */
 const GATHER_MS = 500;
-/** A row of the list: where it was saved too, when it is a run's diff and not the checkout's. */
-type ListedFile = SessionChange & { runId?: string; toolCallId?: string };
-
 /**
  * The files a conversation with no project changed, from the diffs its turns saved: each file
- * once, as its last change left it, the latest first. Only what went through has a diff to open.
+ * once, with its latest change, the latest first. Only what went through has a diff to show.
  */
 function savedFiles(timeline: Awaited<ReturnType<DrawerApi['timeline']>>): ListedFile[] {
   const files = new Map<string, ListedFile>();
@@ -43,6 +41,7 @@ function savedFiles(timeline: Awaited<ReturnType<DrawerApi['timeline']>>): Liste
       files.set(step.diff.path, {
         path: step.diff.path,
         status: step.diff.created ? 'added' : 'modified',
+        diff: step.diff,
         runId,
         toolCallId: step.toolCallId,
       });
@@ -88,14 +87,6 @@ function Trouble({ query }: { query: { error: unknown; refetch: () => unknown } 
   );
 }
 
-function Status({ file }: { file: SessionChange }) {
-  return (
-    <span className="shrink-0 rounded-full border border-glass-edge px-2 py-0.5 text-[10px] uppercase tracking-wide text-muted">
-      {file.status}
-    </span>
-  );
-}
-
 /** The rows of changed files, with their widths varied so they read as paths. */
 function ListSkeleton() {
   return (
@@ -114,8 +105,10 @@ function ListSkeleton() {
 }
 
 /**
- * The Inspector's Changes tab. A project reads its current checkout; without one, a file opened
- * from a run summary reads that run's saved tool diff instead. The list never stores diff contents.
+ * The Inspector's Changes tab, laid out as a pull request's Changes: every changed file's diff in
+ * one list, with the figures, a filter and wrapping above it. A project reads its current
+ * checkout; without one, the diffs are those the conversation's turns saved. One file opened from
+ * a run summary, or one deleted, shows alone, the way its link asked for it.
  */
 export function ChangesDrawer({ api, profileId }: { api: DrawerApi; profileId: string }) {
   const tabs = useCrew((state) => state.tabs);
@@ -224,6 +217,15 @@ export function ChangesDrawer({ api, profileId }: { api: DrawerApi; profileId: s
   const files: ListedFile[] = live ? (listing.data?.files ?? []) : savedFiles(saved.data ?? []);
   const words = filter.trim().toLowerCase();
   const shown = words ? files.filter((item) => matches(item, words)) : files;
+  const { diffs, totals } = useFileDiffs({
+    api,
+    profileId,
+    sessionId: sessionId ?? '',
+    worktree,
+    files,
+    // A file opened alone reads only its own diff, as before the list was asked for.
+    live: live && !path,
+  });
 
   useDrawerFocus(opened ? following : undefined, closer);
 
@@ -268,26 +270,23 @@ export function ChangesDrawer({ api, profileId }: { api: DrawerApi; profileId: s
         : 'No file changes were saved in this conversation.'}
     </p>
   ) : (
-    <div className="grid gap-2 pt-2">
-      <ul className="grid gap-1.5">
-        {shown.map((item) => (
-          <li key={item.path}>
-            <button
-              type="button"
-              className="flex w-full min-w-0 items-center gap-2 rounded-xl border border-transparent px-2.5 py-2 text-left transition-colors hover:bg-glass-hover focus-visible:outline focus-visible:outline-1 focus-visible:outline-ink/30"
-              onClick={(event) => choose(item, event.currentTarget)}
-            >
-              <FileCode2 size={14} aria-hidden="true" className="shrink-0 text-muted" />
-              <span className="min-w-0 flex-1 truncate font-mono text-xs text-ink">
-                {item.path}
-              </span>
-              <Status file={item} />
-            </button>
-          </li>
-        ))}
-      </ul>
+    <div className="grid gap-2">
+      <ChangedFiles
+        files={shown}
+        total={files.length}
+        diffs={diffs}
+        reviewScope={`session:${sessionId}`}
+        readLines={
+          live
+            ? (file) =>
+                api
+                  .sessionChanges(profileId, sessionId, file, true, worktree)
+                  .then((read) => read.files[0]?.lines ?? [])
+            : undefined
+        }
+      />
       {!shown.length && (
-        <p className="pt-1 text-sm text-muted">
+        <p className="pt-3 text-sm text-muted">
           No changed file matches “{filter.trim()}”.
           {truncated ? ' It may be beyond what is listed, since this list is cut short.' : ''}
         </p>
@@ -302,9 +301,15 @@ export function ChangesDrawer({ api, profileId }: { api: DrawerApi; profileId: s
         <InspectorBar closer={closer} spread>
           <div className="flex min-w-0 flex-1 items-center gap-2">
             {!path && listed.data && (
-              <span className="changes-fade shrink-0 text-xs whitespace-nowrap text-muted">
+              <span className="changes-fade flex shrink-0 gap-1.5 text-xs whitespace-nowrap text-muted">
                 {words ? `${shown.length} of ` : ''}
-                {files.length} {files.length === 1 ? 'changed file' : 'changed files'}
+                {files.length} {files.length === 1 ? 'file' : 'files'}
+                {totals && (
+                  <>
+                    <span className="font-mono text-good">+{totals.additions}</span>
+                    <span className="font-mono text-bad">−{totals.deletions}</span>
+                  </>
+                )}
                 {truncated ? ' · list truncated' : ''}
               </span>
             )}
@@ -357,7 +362,7 @@ export function ChangesDrawer({ api, profileId }: { api: DrawerApi; profileId: s
                 if (path && next) choose();
               }}
             />
-            {path && <WrapSwitch wrap={wrap} setWrap={setWrap} />}
+            <WrapSwitch wrap={wrap} setWrap={setWrap} />
           </div>
         </InspectorBar>
 
