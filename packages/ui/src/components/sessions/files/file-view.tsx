@@ -6,6 +6,7 @@ import { HoverTip, iconButton, SkeletonLine, SkeletonRegion, StatusPill } from '
 import { usePhone } from '../../../lib/phone';
 import { useCrew } from '../../../lib/stores/crew';
 import { useLayout } from '../../../lib/stores/layout';
+import { useReading } from '../../../lib/stores/reading';
 import { highlightLines } from '../../ui/highlight';
 import { Markdown } from '../../ui/markdown';
 import { languageOf } from '../preview';
@@ -72,9 +73,12 @@ function Opened({
   const read = useSessionFile(api, profileId, sessionId, file);
   const markdown = MARKDOWN.test(file.path);
   const [mode, setMode] = useState<'preview' | 'code'>(markdown ? 'preview' : 'code');
-  // Prose is written in long lines; code is read with its lines whole.
-  const [wrap, setWrap] = useState(markdown);
-  const [diffOn, setDiffOn] = useState(false);
+  // Prose is written in long lines; code is read with its lines whole. Both are kept apart, and
+  // with the diff switch, so the next file opens as the owner last left one of its kind.
+  const wrap = useReading((state) => (markdown ? state.wrapProse : state.wrap));
+  const setWrap = useReading((state) => (markdown ? state.setWrapProse : state.setWrap));
+  const diffOn = useReading((state) => state.diff);
+  const setDiffOn = useReading((state) => state.setDiff);
   useFilesFollow(profileId, sessionId);
 
   const roots = listing.data?.roots;
@@ -106,8 +110,8 @@ function Opened({
   const back = () => useFiles.getState().back(sessionId);
   // The rendered page has no lines to count matches on: the words are found in its source.
   const findWords = () => {
+    // Find is offered only with no diff on screen; the saved switch is left as it is.
     setMode('code');
-    setDiffOn(false);
     find.show();
   };
 

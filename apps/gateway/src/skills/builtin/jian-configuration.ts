@@ -100,7 +100,8 @@ Schedules, it takes the whole window: its pages are listed where the sidebar was
   as a pull request's Changes does, with the totals, a filter and line wrapping. Files lists
   every file of the conversation's projects, or of its worktrees, with the changed ones marked;
   the owner filters them and opens one in the conversation's place, with find, for Markdown a
-  rendered page or its code, and for a changed file its diff laid into it (View diff). It only
+  rendered page or its code, and for a changed file its diff laid into it (View diff). View diff
+  and line wrapping stay as the owner last left them, kept by that browser or app. It only
   reads: nothing there edits a file, and the files of a conversation on a machine are not shown
   yet.
   The owner can also open Terminal tabs there, on the web and in the desktop app: each is their

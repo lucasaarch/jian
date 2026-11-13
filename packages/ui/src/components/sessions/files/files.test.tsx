@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SessionFile, SessionFileRoot } from '../../../lib/api';
 import { GatewayAnswer } from '../../../lib/api/result';
 import { useCrew } from '../../../lib/stores/crew';
+import { useReading } from '../../../lib/stores/reading';
 import { FileView } from './file-view';
 import { FilesDrawer } from './files-drawer';
 import { useFiles } from './store';
@@ -85,6 +86,7 @@ beforeEach(() => {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
   localStorage.clear();
   useFiles.setState({ open: {}, toggled: {} });
+  useReading.setState({ wrap: false, wrapProse: true, diff: false });
   container = document.createElement('div');
   document.body.append(container);
   root = createRoot(container);
@@ -354,6 +356,35 @@ describe('the file in the conversation’s place', () => {
     await click(on);
     expect(viewer()?.querySelector('.file-diff')).toBeNull();
     expect(viewer()?.querySelectorAll('.file-code-line')).toHaveLength(2);
+  });
+
+  it('opens the next time as it was left, with View diff and Wrap lines kept', async () => {
+    await opened('src/pricing.ts', withDiff());
+    await choose('Wrap lines');
+    const menu = () => [...document.querySelectorAll<HTMLElement>('[role=menuitemcheckbox]')];
+    await click(menu().find((entry) => entry.textContent === 'View diff'));
+    await closeMenu();
+
+    // The app opened again: nothing in memory, only what this browser kept.
+    await act(async () => root.unmount());
+    root = createRoot(container);
+    useFiles.setState({ open: {}, toggled: {} });
+    const kept = localStorage.getItem('jian:reading') ?? '';
+    useReading.setState({ wrap: false, wrapProse: true, diff: false });
+    localStorage.setItem('jian:reading', kept);
+    await act(async () => useReading.persist.rehydrate());
+    await opened('src/pricing.ts', withDiff());
+
+    await settled(() => Boolean(viewer()?.querySelector('.file-diff .code-diff-line')));
+    expect(viewer()?.querySelector('.file-diff')).not.toBeNull();
+    const checked = (await entries()).map((entry) => [
+      entry.textContent,
+      entry.getAttribute('aria-checked'),
+    ]);
+    expect(checked.slice(0, 2)).toEqual([
+      ['View diff', 'true'],
+      ['Wrap lines', 'true'],
+    ]);
   });
 
   it('offers no diff for a file nothing changed', async () => {
