@@ -9,6 +9,7 @@ import { GatewayAnswer } from '../../lib/api/result';
 import { subscribe } from '../../lib/events';
 import { keys } from '../../lib/query/keys';
 import { useCrew } from '../../lib/stores/crew';
+import { useReading } from '../../lib/stores/reading';
 import { ChangedFiles, type ListedFile, useFileDiffs } from './changes-list';
 import { DiffSkeleton, FileDiff } from './code-change';
 import { useDrawerFocus } from './crew';
@@ -115,7 +116,8 @@ export function ChangesDrawer({ api, profileId }: { api: DrawerApi; profileId: s
   const following = useCrew((state) => state.following);
   const machineId = useCrew((state) => state.machineId);
   const closer = useRef<HTMLButtonElement>(null);
-  const [wrap, setWrap] = useState(false);
+  const wrap = useReading((state) => state.wrap);
+  const setWrap = useReading((state) => state.setWrap);
   const [filter, setFilter] = useState('');
   const [picked, setPicked] = useState<string>();
   const [picking, setPicking] = useState(false);

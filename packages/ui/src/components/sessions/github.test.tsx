@@ -5,6 +5,7 @@ import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { GatewayApi, GitHubIssue, GitHubLinkSummary, GitHubPull } from '../../lib/api';
 import { useCrew } from '../../lib/stores/crew';
+import { useReading } from '../../lib/stores/reading';
 import { Markdown } from '../ui/markdown';
 import { GitHubDrawer, GitHubLinks } from './github';
 import { ChatMessage } from './message';
@@ -137,6 +138,7 @@ let root: ReturnType<typeof createRoot>;
 
 beforeEach(() => {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+  useReading.setState({ wrap: false });
   element = document.createElement('div');
   document.body.append(element);
   root = createRoot(element);

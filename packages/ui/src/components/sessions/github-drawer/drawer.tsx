@@ -8,6 +8,7 @@ import type { GatewayApi, GitHubLinkSummary } from '../../../lib/api';
 import { GITHUB_PULL_STALE_MS } from '../../../lib/github-links';
 import { keys } from '../../../lib/query/keys';
 import { useCrew } from '../../../lib/stores/crew';
+import { useReading } from '../../../lib/stores/reading';
 import { GitHubLogo } from '../../ui';
 import { useDrawerFocus } from '../crew';
 import { type FoldAll, FoldAllContext } from '../fold-all';
@@ -56,8 +57,9 @@ export function GitHubDrawer({
   const item = useCrew((state) => state.item);
   const following = useCrew((state) => state.following);
   const closer = useRef<HTMLButtonElement>(null);
-  // How its diffs read and whether its parts were last folded together: for this drawer only.
-  const [wrap, setWrap] = useState(false);
+  // Whether its parts were last folded together is for this drawer only; wrapping is the owner's.
+  const wrap = useReading((state) => state.wrap);
+  const setWrap = useReading((state) => state.setWrap);
   const [fold, setFold] = useState<FoldAll | null>(null);
   const issue = useQuery({
     queryKey: item ? keys.githubItem('issue', item.owner, item.repo, item.number) : ['none'],

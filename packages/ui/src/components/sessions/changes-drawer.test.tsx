@@ -6,6 +6,7 @@ import type { CodeDiff, GatewayApi, ToolStep } from '../../lib/api';
 import { GatewayAnswer } from '../../lib/api/result';
 import { publish } from '../../lib/events';
 import { useCrew } from '../../lib/stores/crew';
+import { useReading } from '../../lib/stores/reading';
 import { ChangesDrawer } from './changes-drawer';
 
 const path = 'src/pricing.ts';
@@ -43,6 +44,7 @@ let root: ReturnType<typeof createRoot>;
 
 beforeEach(() => {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+  useReading.setState({ wrap: false });
   container = document.createElement('div');
   document.body.append(container);
   root = createRoot(container);
