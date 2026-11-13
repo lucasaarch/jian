@@ -30,6 +30,9 @@ import { ModelNames, prettyModel } from './crew';
 import { CrewDrawer } from './crew-drawer';
 import { ConversationDock } from './dock';
 import { DraftPane } from './draft-pane';
+import { FileView } from './files/file-view';
+import { FilesDrawer } from './files/files-drawer';
+import { useFiles } from './files/store';
 import { GitHubDrawer, GitHubLinks } from './github';
 import { History } from './history';
 import { InspectorLayout } from './inspector-host';
@@ -115,6 +118,8 @@ export function Sessions({ api, mutate, busy }: SectionActions) {
   const place = active?.remoteMachineId ?? 'gateway';
   const hasWorktree = Boolean(worktrees?.some((item) => item.place === place));
   useChangesFlag(active?.id, hasWorktree);
+  // A project file read in the chat's place: the chat stays beneath it, out of reach meanwhile.
+  const reading = useFiles((state) => Boolean(active && state.open[active.id]));
   const answered = () => {
     setSent((value) => value + 1);
     void refresh();
@@ -212,7 +217,7 @@ export function Sessions({ api, mutate, busy }: SectionActions) {
                 <div className="conversation-column">
                   {/* A conversation without a bar at the bottom keeps its badges in the corner. */}
                   {!docked(active) && <div className="pane-badges">{badges()}</div>}
-                  <div className="conversation-chat">
+                  <div className="conversation-chat" inert={reading}>
                     <div className="conversation-glass-top" aria-hidden="true">
                       <i />
                       <i />
@@ -227,6 +232,7 @@ export function Sessions({ api, mutate, busy }: SectionActions) {
                       profileId={profile.id}
                       projectId={active.projectId ?? undefined}
                       machineId={active.remoteMachineId ?? undefined}
+                      severalProjects={Boolean(active.projectIds?.length)}
                       sessionId={active.id}
                       revision={sent}
                       group={active.scope === 'group' || contact?.scope === 'group'}
@@ -350,9 +356,11 @@ export function Sessions({ api, mutate, busy }: SectionActions) {
                       </ConversationDock>
                     )}
                   </div>
+                  <FileView api={api} profileId={profile.id} sessionId={active.id} />
                 </div>
                 <CrewDrawer api={api} profileId={profile.id} profile={profile} />
                 <ChangesDrawer api={api} profileId={profile.id} />
+                <FilesDrawer api={api} profileId={profile.id} />
                 {/* Any conversation can have its agent settle a pull request's conflicts; merging
                   belongs to the panel's own chat, as a channel's approvals are left to it. */}
                 <GitHubDrawer

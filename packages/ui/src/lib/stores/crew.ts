@@ -20,7 +20,8 @@ export type InspectorTab =
       runId?: string;
       toolCallId?: string;
       path?: string;
-    };
+    }
+  | { key: string; kind: 'files'; sessionId: string };
 export type BrowserPageTab = { id: string; title: string; url: string };
 type Crew = {
   sessionId?: string;
@@ -32,6 +33,8 @@ type Crew = {
    * Changes can read with no project.
    */
   worktrees: boolean;
+  /** The conversation works on several projects: no one checkout to diff, but files to browse. */
+  projects: boolean;
   agents: Subagent[];
   /** Whether the Inspector is on screen, which it can be with nothing in it. */
   opened: boolean;
@@ -46,13 +49,21 @@ type Crew = {
   tabs: InspectorTab[];
   /** The host's way to open its browser; absent where there is none. */
   openBrowser?: () => void;
-  show: (sessionId: string, agents: Subagent[], projectId?: string, machineId?: string) => void;
+  show: (
+    sessionId: string,
+    agents: Subagent[],
+    projectId?: string,
+    machineId?: string,
+    projects?: boolean,
+  ) => void;
   showChanges: (target?: {
     runId?: string;
     toolCallId?: string;
     path?: string;
     opener?: HTMLElement | null;
   }) => void;
+  /** The conversation's files, to browse and read only. */
+  showFiles: () => void;
   follow: (runId: string, opener?: HTMLElement | null) => void;
   open: (item: GitHubItem, opener?: HTMLElement | null) => void;
   /** Brings a browser tab to the front, the Inspector open around it. */
@@ -87,7 +98,7 @@ const KEPT_CONVERSATIONS = 50;
 const isTab = (tab: unknown) =>
   Boolean(tab) &&
   typeof (tab as InspectorTab).key === 'string' &&
-  ['agent', 'github', 'browser', 'changes'].includes((tab as InspectorTab).kind);
+  ['agent', 'github', 'browser', 'changes', 'files'].includes((tab as InspectorTab).kind);
 
 /** Storage is the owner's but may hold an older shape: what does not read is left out. */
 function readKept(): Map<string, Kept> {
@@ -152,6 +163,7 @@ const restored = (sessionId: string): Kept => kept().get(sessionId) ?? EMPTY;
 const browserTabKey = (pageId: string) => `browser:${pageId}`;
 export const useCrew = create<Crew>()((set, get) => ({
   worktrees: false,
+  projects: false,
   agents: [],
   tabs: [],
   opened: false,
@@ -163,15 +175,36 @@ export const useCrew = create<Crew>()((set, get) => ({
     keep(sessionId, state);
     state.adoptBrowser?.(sessionId);
   },
-  show: (sessionId, agents, projectId, machineId) => {
+  show: (sessionId, agents, projectId, machineId, projects = false) => {
     const state = get();
     if (state.sessionId === sessionId) {
-      set({ agents, projectId, machineId });
+      set({ agents, projectId, machineId, projects });
       return;
     }
     keep(state.sessionId, state);
-    set({ ...restored(sessionId), sessionId, agents, projectId, machineId, opener: undefined });
+    set({
+      ...restored(sessionId),
+      sessionId,
+      agents,
+      projectId,
+      machineId,
+      projects,
+      opener: undefined,
+    });
   },
+  showFiles: () =>
+    set((state) => {
+      if (!state.sessionId) return state;
+      const key = `files:${state.sessionId}`;
+      return {
+        opened: true,
+        following: key,
+        item: undefined,
+        tabs: state.tabs.some((tab) => tab.key === key)
+          ? state.tabs
+          : [...state.tabs, { key, kind: 'files', sessionId: state.sessionId }],
+      };
+    }),
   showChanges: (target = {}) =>
     set((state) => {
       if (!state.sessionId) return state;
@@ -300,6 +333,7 @@ export const useCrew = create<Crew>()((set, get) => ({
       projectId: undefined,
       machineId: undefined,
       worktrees: false,
+      projects: false,
       agents: [],
       opener: undefined,
       ...EMPTY,
