@@ -11,7 +11,7 @@ const OPEN_FILES = 3;
  * The most files whose diffs are read, each its own request: a checkout with more lists the rest
  * by name. Up to 2000 can be listed, and reading all of them would hold the gateway for each.
  */
-export const MAX_DIFFS = 100;
+const MAX_DIFFS = 100;
 
 /** A row of the list: where it was saved too, when it is a run's diff and not the checkout's. */
 export type ListedFile = SessionChange & { runId?: string; toolCallId?: string };
