@@ -17,8 +17,13 @@ afterEach(async () => {
   await Promise.all(apps.splice(0).map((app) => app.close()));
 });
 
-/** A server gateway with one connected account, `octo-example`, and a GitHub that says 404. */
-async function gateway(options: { mode?: 'server' | 'local'; webhook?: boolean } = {}) {
+/**
+ * A server gateway with one connected account, `octo-example`, and a GitHub that says 404 unless
+ * the test answers for it.
+ */
+async function gateway(
+  options: { mode?: 'server' | 'local'; webhook?: boolean; github?: typeof fetch } = {},
+) {
   const services = await testServices();
   const { privateKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
   await services.gatewayVault.put(
@@ -39,7 +44,8 @@ async function gateway(options: { mode?: 'server' | 'local'; webhook?: boolean }
     login: 'octo-example',
     type: 'User',
   });
-  const github = async () => Response.json({ message: 'Not Found' }, { status: 404 });
+  const github =
+    options.github ?? (async () => Response.json({ message: 'Not Found' }, { status: 404 }));
   const integrations = new GitHubIntegrations(
     services.store,
     services.gatewayVault,
@@ -209,6 +215,31 @@ it('says when the App cannot see a pull request the owner asked to review', asyn
     payload: { profileId: profile.id },
   });
   expect(response.statusCode).toBe(404);
+});
+
+it('follows an App renamed on GitHub to its new settings page and bot', async () => {
+  const github = async (input: string | URL) =>
+    new URL(String(input)).pathname === '/app'
+      ? Response.json({
+          slug: 'atlas-example',
+          name: 'Atlas Example',
+          owner: { login: 'octo-example', type: 'User' },
+          permissions: { pull_requests: 'write' },
+        })
+      : Response.json({ message: 'Not Found' }, { status: 404 });
+  const { app, services } = await gateway({ github: github as typeof fetch });
+
+  const status = await app.inject({
+    method: 'GET',
+    url: '/v1/integrations/github/reviews',
+    headers,
+  });
+  expect(status.json().webhook.appSettingsUrl).toBe(
+    'https://github.com/settings/apps/atlas-example',
+  );
+  // Kept, so the bot's own comments are still known as its own when GitHub is not asked.
+  const stored = JSON.parse((await services.gatewayVault.read('github-app-config')) ?? '{}');
+  expect(stored).toMatchObject({ slug: 'atlas-example', clientId: 'synthetic-client' });
 });
 
 it('searches open pull requests in the account, narrowed by the filter', () => {

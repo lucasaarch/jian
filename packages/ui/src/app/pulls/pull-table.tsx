@@ -14,8 +14,10 @@ const since = (value: string) => {
   return when === 'now' ? 'just now' : `${when} ago`;
 };
 
-const head = 'px-3 py-2.5 text-left text-[11px] font-medium tracking-wide text-muted uppercase';
-const cell = 'px-3 py-3 align-middle';
+// The outer cells sit further in, clear of the table's rounded corners.
+const edges = 'px-3 first:pl-4 last:pr-4';
+const head = `${edges} py-2.5 text-left text-[11px] font-medium tracking-wide text-muted uppercase`;
+const cell = `${edges} py-3 align-middle`;
 
 /** The open pull requests, one row each, in the order GitHub last saw them change. */
 export function PullTable({
@@ -34,13 +36,13 @@ export function PullTable({
     <table className="w-full table-fixed border-collapse text-[13px]">
       <thead className="border-b border-line">
         <tr>
-          <th className={`${head} w-24`}>ID</th>
+          <th className={`${head} w-24 phone:w-20`}>ID</th>
           <th className={head}>Title</th>
-          <th className={`${head} w-32 phone:hidden`}>Reviewers</th>
+          <th className={`${head} w-28 phone:hidden`}>Reviewers</th>
           <th className={`${head} w-32 phone:hidden`}>Checks</th>
           <th className={`${head} w-28 phone:hidden`}>Merge</th>
           <th className={`${head} w-24 phone:hidden`}>Updated</th>
-          <th className={`${head} w-40 text-right`}>
+          <th className={`${head} w-36 text-right`}>
             <span className="sr-only">Agent review</span>
           </th>
         </tr>

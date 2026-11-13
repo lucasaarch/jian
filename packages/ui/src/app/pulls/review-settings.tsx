@@ -3,9 +3,10 @@
 import { useQuery } from '@tanstack/react-query';
 import { ExternalLink } from 'lucide-react';
 import { type FormEvent, useState } from 'react';
+import { GitHubLogo } from '../../components/ui';
 import {
   Action,
-  CheckBox,
+  MultiSelectField,
   Overlay,
   OverlayActions,
   SelectField,
@@ -13,6 +14,7 @@ import {
   TextArea,
   Toggle,
 } from '../../kit';
+import { AgentFace } from '../../kit/face';
 import type { GitHubReviewSettings, GitHubReviewsStatus } from '../../lib/api';
 import { useAgents } from '../../lib/query/agent';
 import { queries } from '../../lib/query/profile';
@@ -53,13 +55,6 @@ function SettingsForm({ status, close }: { status: GitHubReviewsStatus; close: (
   const save = useSaveReviewSettings();
   const [draft, setDraft] = useState<GitHubReviewSettings>(status.settings);
   const change = (patch: Partial<GitHubReviewSettings>) => setDraft({ ...draft, ...patch });
-  const chosen = new Set(draft.repositories);
-  const pick = (name: string, on: boolean) => {
-    const next = new Set(chosen);
-    if (on) next.add(name);
-    else next.delete(name);
-    change({ repositories: [...next] });
-  };
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
@@ -80,7 +75,11 @@ function SettingsForm({ status, close }: { status: GitHubReviewsStatus; close: (
         hint="Reviews started automatically use this agent. Unset, Review uses the agent open."
         value={draft.profileId ?? ''}
         placeholder="The agent open"
-        options={agents.map((agent) => ({ value: agent.id, label: agent.name }))}
+        options={agents.map((agent) => ({
+          value: agent.id,
+          label: agent.name,
+          icon: <AgentFace name={agent.name} avatar={agent.avatar} size={1} />,
+        }))}
         onValueChange={(profileId) => change({ profileId })}
       />
       <TextArea
@@ -92,7 +91,8 @@ function SettingsForm({ status, close }: { status: GitHubReviewsStatus; close: (
         onChange={(event) => change({ instructions: event.target.value })}
       />
 
-      <div className="grid gap-1">
+      {/* Bordered like the webhook card below, so the rows' own inset lines up with it. */}
+      <div className="grid divide-y divide-line rounded-xl border border-line">
         <Toggle
           label="Review new pull requests"
           detail="When one is opened, reopened or marked ready on GitHub."
@@ -114,27 +114,19 @@ function SettingsForm({ status, close }: { status: GitHubReviewsStatus; close: (
       {draft.auto && <Webhook status={status} />}
 
       {repositories.length > 0 && (
-        <fieldset className="grid gap-2">
-          <legend className="mb-2 text-sm font-medium text-ink">Repositories</legend>
-          <p className="text-xs text-muted">
-            None ticked reviews new pull requests in every repository the App can see.
-          </p>
-          <div className="grid max-h-48 gap-1.5 overflow-y-auto rounded-lg border border-line p-2.5">
-            {repositories.map((repository) => {
-              const name = repository.fullName.toLowerCase();
-              return (
-                <span key={repository.id} className="flex items-center gap-2.5 text-[13px]">
-                  <CheckBox
-                    label={repository.fullName}
-                    checked={chosen.has(name)}
-                    onCheckedChange={(on) => pick(name, on)}
-                  />
-                  <span className="truncate text-ink">{repository.fullName}</span>
-                </span>
-              );
-            })}
-          </div>
-        </fieldset>
+        <MultiSelectField
+          label="Repositories"
+          hint="With none chosen, new pull requests are reviewed in every repository the App can see."
+          placeholder="Every repository"
+          values={draft.repositories}
+          options={repositories.map((repository) => ({
+            // Saved lowercased by the gateway, so a choice is matched however GitHub cases it.
+            value: repository.fullName.toLowerCase(),
+            label: repository.fullName,
+            icon: <GitHubLogo size={13} />,
+          }))}
+          onValuesChange={(names) => change({ repositories: names })}
+        />
       )}
 
       <OverlayActions>

@@ -2,8 +2,8 @@
 
 import { Combobox } from '@base-ui/react/combobox';
 import { Select } from '@base-ui/react/select';
-import { Check, ChevronDown, Search } from 'lucide-react';
-import { type ReactNode, useId } from 'react';
+import { Check, ChevronDown, Search, X } from 'lucide-react';
+import { type ReactNode, useId, useRef } from 'react';
 import { matchesQuery } from '../lib/search';
 import { searchBox } from './search-field';
 import { bareInput, control, Labelled } from './text-field';
@@ -45,6 +45,30 @@ function Option({ option }: { option: FieldOption }) {
     </>
   );
 }
+
+/** The options a search leaves, ticked when chosen: what both searchable lists draw. */
+function Matches() {
+  return (
+    <div className="grid min-h-0">
+      <Combobox.Empty className="px-3 py-3 text-[13px] text-muted empty:hidden">
+        Nothing matches.
+      </Combobox.Empty>
+      <Combobox.List className={list}>
+        {(option: FieldOption) => (
+          <Combobox.Item key={option.value} value={option} className={item}>
+            <Option option={option} />
+            <Combobox.ItemIndicator className="shrink-0">
+              <Check size={14} aria-hidden="true" />
+            </Combobox.ItemIndicator>
+          </Combobox.Item>
+        )}
+      </Combobox.List>
+    </div>
+  );
+}
+
+const matches = (option: FieldOption, query: string) =>
+  matchesQuery(`${option.label} ${option.detail ?? ''}`, query);
 
 function Shown({ option, placeholder }: { option?: FieldOption; placeholder: string }) {
   return (
@@ -98,9 +122,7 @@ function Choice({
         value={chosen ?? null}
         onValueChange={(next: FieldOption | null) => next && onValueChange(next.value)}
         isItemEqualToValue={(a: FieldOption, b: FieldOption) => a.value === b.value}
-        filter={(option: FieldOption, query: string) =>
-          matchesQuery(`${option.label} ${option.detail ?? ''}`, query)
-        }
+        filter={matches}
         disabled={disabled}
       >
         <Combobox.Trigger {...triggerProps} className={triggerClass}>
@@ -117,21 +139,7 @@ function Choice({
                   className={`${bareInput} text-[13px]`}
                 />
               </div>
-              <div className="grid min-h-0">
-                <Combobox.Empty className="px-3 py-3 text-[13px] text-muted empty:hidden">
-                  Nothing matches.
-                </Combobox.Empty>
-                <Combobox.List className={list}>
-                  {(option: FieldOption) => (
-                    <Combobox.Item key={option.value} value={option} className={item}>
-                      <Option option={option} />
-                      <Combobox.ItemIndicator className="shrink-0">
-                        <Check size={14} aria-hidden="true" />
-                      </Combobox.ItemIndicator>
-                    </Combobox.Item>
-                  )}
-                </Combobox.List>
-              </div>
+              <Matches />
             </Combobox.Popup>
           </Combobox.Positioner>
         </Combobox.Portal>
@@ -217,6 +225,89 @@ export function SelectField({
         shown={<Shown placeholder={placeholder} {...(chosen ? { option: chosen } : {})} />}
         triggerProps={{ id, 'aria-describedby': hint ? `${id}-hint` : undefined }}
       />
+    </Labelled>
+  );
+}
+
+/**
+ * Several choices that take a form's whole row: what is chosen sits in the field as chips, and
+ * typing there searches the rest, in a list as wide as the field that stays open to pick more.
+ */
+export function MultiSelectField({
+  label,
+  hint,
+  values,
+  options,
+  onValuesChange,
+  placeholder = 'Search',
+}: {
+  label: string;
+  hint?: string;
+  values: string[];
+  options: FieldOption[];
+  onValuesChange: (values: string[]) => void;
+  /** What the empty field says, before anything is chosen. */
+  placeholder?: string;
+}) {
+  const id = useId();
+  const field = useRef<HTMLDivElement>(null);
+  const chosen = options.filter((option) => values.includes(option.value));
+
+  return (
+    <Labelled label={label} {...(hint ? { hint } : {})} id={id}>
+      <Combobox.Root
+        multiple
+        items={options}
+        value={chosen}
+        onValueChange={(next: FieldOption[]) => onValuesChange(next.map((option) => option.value))}
+        isItemEqualToValue={(a: FieldOption, b: FieldOption) => a.value === b.value}
+        filter={matches}
+      >
+        <Combobox.Chips
+          ref={field}
+          className={`${control} flex min-h-10 cursor-text flex-wrap items-center gap-1.5 py-1.5 pr-3 pl-1.5 focus-within:border-ink/25 focus-within:bg-glass-press`}
+        >
+          {chosen.map((option) => (
+            <Combobox.Chip
+              key={option.value}
+              aria-label={option.label}
+              className="flex h-7 min-w-0 max-w-full items-center gap-1.5 rounded-lg bg-glass-press pr-1 pl-2 text-[13px] text-ink outline-none data-highlighted:bg-ink/15"
+            >
+              {option.icon && (
+                <span className="grid size-4 shrink-0 place-items-center text-muted">
+                  {option.icon}
+                </span>
+              )}
+              <span className="min-w-0 truncate">{option.label}</span>
+              <Combobox.ChipRemove
+                aria-label={`Remove ${option.label}`}
+                className="grid size-5 shrink-0 place-items-center rounded-md text-muted transition-colors hover:bg-glass-hover hover:text-ink"
+              >
+                <X size={12} aria-hidden="true" />
+              </Combobox.ChipRemove>
+            </Combobox.Chip>
+          ))}
+          <Combobox.Input
+            id={id}
+            aria-describedby={hint ? `${id}-hint` : undefined}
+            placeholder={chosen.length ? '' : placeholder}
+            className={`${bareInput} h-7 w-auto min-w-24 flex-1 px-1.5 text-sm`}
+          />
+        </Combobox.Chips>
+        <Combobox.Portal>
+          <Combobox.Positioner
+            anchor={field}
+            side="bottom"
+            align="start"
+            sideOffset={6}
+            className={`${positioner} w-(--anchor-width)`}
+          >
+            <Combobox.Popup aria-label={label} className={popup}>
+              <Matches />
+            </Combobox.Popup>
+          </Combobox.Positioner>
+        </Combobox.Portal>
+      </Combobox.Root>
     </Labelled>
   );
 }

@@ -15,7 +15,13 @@ export { RowInput, RowTextArea } from './row-field';
 export { ScrollStrip } from './scroll-strip';
 export { SearchField } from './search-field';
 export { Segmented } from './segmented';
-export { type FieldOption, FilterSelect, SelectButton, SelectField } from './select-field';
+export {
+  type FieldOption,
+  FilterSelect,
+  MultiSelectField,
+  SelectButton,
+  SelectField,
+} from './select-field';
 export { SettingsCard, SettingsCards } from './settings-card';
 export {
   SettingsGroup,
