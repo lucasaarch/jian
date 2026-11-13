@@ -4,6 +4,34 @@ Every release of Jian, newest first.
 
 <!-- Generated from docs/releases by scripts/changelog.mjs. Edit the release note, then run `make changelog`. -->
 
+## 1.11.0 — 2026-11-13
+
+The Inspector gets terminals and a read-only view of your project's files, and the Pull requests screen is tidier.
+
+### Terminals
+
+* **A shell next to the chat:** The **+** in the Inspector opens a terminal tab, on the web and in the desktop app. The shell runs on the machine the gateway runs on, never on a machine the conversation targets. It starts in the conversation's worktree or checkout. Without one, it starts in the folder the agents share on a server, or in your home folder in the desktop app. You can keep up to 12 open.
+* **It survives a reconnect:** Close the panel or lose the connection and the terminal comes back with what it printed, up to the last 256,000 characters. When the shell exits, **Restart** opens a new one in its place.
+* **Same limits as the agent's commands:** On a server gateway the shell is confined to the folder the agents share, as the agent's own commands are, and gets only the environment they get, so the gateway's database address and keys stay out of it. In the desktop app it is your own shell, still without the gateway's secrets. The agent can't see or type in your terminals.
+
+### Files
+
+* **Your project's files in the Inspector:** **Files** lists every file of the conversation's project, of each of its projects (one folder per project), or of its worktrees. New files that git doesn't ignore are there too. Changed files carry the letter and color of their change, and a folder with changes in it gets a dot. Filter by name, show only what changed, or refresh. Up to 20,000 files per folder are listed.
+* **Open a file where the chat was:** Click a file and it takes the conversation's place, with syntax highlighting, line numbers and optional line wrap. Cmd/Ctrl+F finds text, with a match count and next and previous. Markdown opens rendered, and you can switch to its source. A changed file has **Open diff**, and **Back to conversation** returns to the chat. Files up to 1 MB are shown; a binary file just says so.
+* **Read only:** Nothing in Files edits a file. It refuses absolute paths, `..`, anything inside `.git`, and links that lead out of the checkout or into `.git`. Files of a conversation on a connected machine aren't shown yet.
+
+### Pull requests
+
+* **A tidier screen:** The header now sits in the title bar and the close button is gone, since the sidebar switches screens anyway. The filters and the table scroll together, so their edges line up.
+* **Review settings:** Reviewing agents show their picture next to their name, the toggles line up with the rest, and you pick repositories from a multi-select with search.
+* **A renamed GitHub App works again:** Jian reads the App's details from GitHub, so after you rename it the settings link, the install link and the reviewer's login point at the new name instead of a 404.
+
+### Upgrading
+
+* The desktop app updates itself to this release.
+* **Servers:** Recreate the gateway and web containers with the 1.11.0 images, or follow the `latest` tags. This release has no migration.
+* **API:** `GET /v1/profiles/{profileId}/sessions/{sessionId}/files` lists a conversation's files and changes, and `GET /v1/profiles/{profileId}/sessions/{sessionId}/files/content` reads one. `GET` and `POST /v1/profiles/{profileId}/terminals` list and open terminals. `GET /v1/profiles/{profileId}/terminals/{terminalId}/stream` streams one as server-sent events, `POST .../input` and `POST .../resize` write to it and resize it, and `DELETE /v1/profiles/{profileId}/terminals/{terminalId}` closes it.
+
 ## 1.10.0 — 2026-11-12
 
 Your pull requests get a screen of their own, and an agent can review them, on request or as soon as one is opened.
