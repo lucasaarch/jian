@@ -6,7 +6,9 @@ import { type ReactNode, useEffect, useState } from 'react';
 import { Action, FilterSelect, HoverTip, SearchField, Segmented, SkeletonLine } from '../../kit';
 import type { GitHubPullFilter, GitHubPullRow } from '../../lib/api';
 import { agentPath } from '../../lib/navigation';
+import { usePhone } from '../../lib/phone';
 import { queries } from '../../lib/query/profile';
+import { useCrew } from '../../lib/stores/crew';
 import { useLayout } from '../../lib/stores/layout';
 import { useRouter } from '../../platform/navigation';
 import { pullKey } from './cells';
@@ -26,6 +28,9 @@ export function PullsScreen({ profileId }: { profileId: string }) {
   const router = useRouter();
   // With the sidebar away, its buttons float over this header's start.
   const collapsed = useLayout((state) => state.chatList);
+  // With the Inspector beside it, the host's buttons are over the Inspector, not this header.
+  const phone = usePhone();
+  const beside = useCrew((state) => state.opened) && !phone;
   const accounts = useQuery(queries.githubIntegration()).data?.accounts ?? [];
   const repositories = useQuery(queries.githubRepositories()).data ?? [];
   const [filter, setFilter] = useState<GitHubPullFilter>('open');
@@ -56,10 +61,10 @@ export function PullsScreen({ profileId }: { profileId: string }) {
 
   return (
     <section aria-label="Pull requests" className="flex h-full flex-col overflow-hidden">
-      {/* In the host's title bar, as tall as it is. Its end keeps clear of what a host draws
-          there: the desktop app sets --chrome-end for its Inspector and window buttons. */}
+      {/* In the host's title bar, as tall as it is. Alone, its end keeps clear of what a host
+          draws there: the desktop app sets --chrome-end for its Inspector and window buttons. */}
       <header
-        className={`flex h-(--chrome-top) shrink-0 items-center gap-1.5 border-b border-line pr-[calc(var(--chrome-end,0px)+1.25rem)] ${collapsed ? 'pl-52' : 'pl-5'} phone:h-auto phone:py-2 phone:pr-3 phone:pl-3`}
+        className={`flex h-(--chrome-top) shrink-0 items-center gap-1.5 border-b border-line ${beside ? 'pr-5' : 'pr-[calc(var(--chrome-end,0px)+1.25rem)]'} ${collapsed ? 'pl-52' : 'pl-5'} phone:h-auto phone:py-2 phone:pr-3 phone:pl-3`}
       >
         {/* On a phone the bar above already names it. */}
         <h1 className="min-w-0 flex-1 truncate text-sm font-semibold text-ink phone:invisible">
@@ -131,7 +136,7 @@ export function PullsScreen({ profileId }: { profileId: string }) {
               ))}
             </div>
           ) : list.pulls.length ? (
-            <div className="rounded-xl border border-line">
+            <div className="@container rounded-xl border border-line">
               <PullTable
                 pulls={list.pulls}
                 starting={

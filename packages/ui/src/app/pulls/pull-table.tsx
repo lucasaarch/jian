@@ -19,6 +19,17 @@ const edges = 'px-3 first:pl-4 last:pr-4';
 const head = `${edges} py-2.5 text-left text-[11px] font-medium tracking-wide text-muted uppercase`;
 const cell = `${edges} py-3 align-middle`;
 
+/*
+ * The table goes by its own width, which the Inspector beside it can halve, not the window's:
+ * the wrapper holding it is the container. Every fixed column together is 43rem, so past each
+ * width one goes, the least needed first, and the title keeps its room. Checks and merge then
+ * move under the title.
+ */
+const reviewersCol = '@max-[56rem]:hidden';
+const updatedCol = '@max-[50rem]:hidden';
+const mergeCol = '@max-[44rem]:hidden';
+const checksCol = '@max-[38rem]:hidden';
+
 /** The open pull requests, one row each, in the order GitHub last saw them change. */
 export function PullTable({
   pulls,
@@ -38,10 +49,10 @@ export function PullTable({
         <tr>
           <th className={`${head} w-24 phone:w-20`}>ID</th>
           <th className={head}>Title</th>
-          <th className={`${head} w-28 phone:hidden`}>Reviewers</th>
-          <th className={`${head} w-32 phone:hidden`}>Checks</th>
-          <th className={`${head} w-28 phone:hidden`}>Merge</th>
-          <th className={`${head} w-24 phone:hidden`}>Updated</th>
+          <th className={`${head} w-28 ${reviewersCol}`}>Reviewers</th>
+          <th className={`${head} w-32 ${checksCol}`}>Checks</th>
+          <th className={`${head} w-28 ${mergeCol}`}>Merge</th>
+          <th className={`${head} w-24 ${updatedCol}`}>Updated</th>
           <th className={`${head} w-36 text-right`}>
             <span className="sr-only">Agent review</span>
           </th>
@@ -98,22 +109,30 @@ function PullRow({
         <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted">
           {pull.author && <span className="truncate">{pull.author.login}</span>}
           <span className="truncate">{pull.repo}</span>
+          {checks && (
+            <span className="hidden @max-[38rem]:inline-flex">
+              <StatusPill tone={checks.tone}>{checks.text}</StatusPill>
+            </span>
+          )}
+          <span className="hidden @max-[44rem]:inline-flex">
+            <StatusPill tone={merge.tone}>{merge.text}</StatusPill>
+          </span>
           {decision && <StatusPill tone={decision.tone}>{decision.text}</StatusPill>}
           {pull.labels.slice(0, 3).map((label) => (
             <StatusPill key={label.name}>{label.name}</StatusPill>
           ))}
         </div>
       </td>
-      <td className={`${cell} phone:hidden`}>
+      <td className={`${cell} ${reviewersCol}`}>
         <Reviewers reviewers={pull.reviewers} />
       </td>
-      <td className={`${cell} phone:hidden`}>
+      <td className={`${cell} ${checksCol}`}>
         {checks ? <StatusPill tone={checks.tone}>{checks.text}</StatusPill> : <Dash />}
       </td>
-      <td className={`${cell} phone:hidden`}>
+      <td className={`${cell} ${mergeCol}`}>
         <StatusPill tone={merge.tone}>{merge.text}</StatusPill>
       </td>
-      <td className={`${cell} text-xs text-muted phone:hidden`}>
+      <td className={`${cell} text-xs text-muted ${updatedCol}`}>
         <time dateTime={pull.updatedAt}>{ago(pull.updatedAt)}</time>
       </td>
       <td className={`${cell} text-right`}>
