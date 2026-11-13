@@ -55,6 +55,15 @@ export const keys = {
       ...(worktree ? [{ worktree }] : []),
       ...(path ? [path] : []),
     ] as const,
+  /** The listing alone, or with a root and a path one file of it; the listing's key heads both. */
+  sessionFiles: (profileId: string, sessionId: string, root?: string, path?: string) =>
+    [
+      'profile',
+      profileId,
+      'files',
+      sessionId,
+      ...(root !== undefined && path !== undefined ? [root, path] : []),
+    ] as const,
   schedules: (profileId: string) => ['profile', profileId, 'schedules'] as const,
   scheduleHistory: (profileId: string, scheduleId: string) =>
     ['profile', profileId, 'schedules', scheduleId, 'history'] as const,

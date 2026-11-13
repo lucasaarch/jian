@@ -34,6 +34,8 @@ type SessionRouteServices = {
       | 'toolStep'
       | 'pullRequests'
       | 'changes'
+      | 'files'
+      | 'file'
       | 'context'
       | 'markRead'
     >;
@@ -233,6 +235,18 @@ export function registerSessionRoutes(app: FastifyInstance, deps: SessionRouteSe
     '/v1/profiles/:profileId/sessions/:sessionId/changes',
     async (request) =>
       deps.sessions.changes(request.params.profileId, request.params.sessionId, request.query),
+  );
+
+  // Read only, both of them: no route under /files writes, renames or deletes.
+  app.get<{ Params: SessionParams }>(
+    '/v1/profiles/:profileId/sessions/:sessionId/files',
+    async (request) => deps.sessions.files(request.params.profileId, request.params.sessionId),
+  );
+
+  app.get<{ Params: SessionParams }>(
+    '/v1/profiles/:profileId/sessions/:sessionId/files/content',
+    async (request) =>
+      deps.sessions.file(request.params.profileId, request.params.sessionId, request.query),
   );
 
   app.get<{ Params: SessionParams }>(

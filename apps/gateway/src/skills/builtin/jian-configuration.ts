@@ -86,9 +86,13 @@ One agent's own, from the agent chooser at the foot of the sidebar.
   AGENTS.md of each (CLAUDE.md where there is none) is in your instructions, and the skills in
   their .agents/skills and .claude/skills folders are in your catalog. They are read again when
   they change; nested instruction files are listed for you to read when you work there.
-- **The Inspector**, beside the conversation, holds Changes, pull requests, subagents and, in the
-  desktop app, the browser. Changes reads the checkout or worktree the conversation works in, on
-  its machine too when it targets one.
+- **The Inspector**, beside the conversation, holds Changes, Files, pull requests, subagents and,
+  in the desktop app, the browser. Changes reads the checkout or worktree the conversation works
+  in, on its machine too when it targets one. Files lists every file of the conversation's
+  projects, or of its worktrees, with the changed ones marked; the owner filters them and opens
+  one in the conversation's place, with find and, for Markdown, a rendered page or its code. It
+  only reads: nothing there edits a file, and the files of a conversation on a machine are not
+  shown yet.
 - **The conversation's badges**, where it runs, show its objective and how many pull requests
   you created in it through GitHub's MCP server, your subagents' included; one you only linked or
   read is not counted. That one opens the list of them with how each stands — Watching while the

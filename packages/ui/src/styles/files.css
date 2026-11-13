@@ -1,0 +1,59 @@
+@reference "tailwindcss";
+@reference "./themes.css";
+@reference "./kit.css";
+
+/* A project file read in the conversation's place (components/sessions/files). */
+@layer components {
+  /* Over the chat rather than instead of it: the conversation stays mounted beneath, with its
+     place, its draft and the Inspector it feeds. Above the chat's own layers and its badges,
+     below what a host draws in the title bar. */
+  .file-view {
+    @apply absolute inset-0 z-20 flex min-h-0 min-w-0 flex-col bg-canvas text-ink outline-none;
+  }
+  /* The code, the only part that scrolls, both ways unless its lines wrap. The colours of its
+     tokens are the code blocks' (surfaces-content.css), which know both themes. */
+  .file-code {
+    @apply min-h-0 flex-1 overflow-auto overscroll-contain;
+    user-select: text;
+  }
+  .file-code-lines {
+    @apply pt-2 pb-10;
+  }
+  .file-code-line {
+    @apply block whitespace-pre pr-6;
+  }
+  /* Drawn, not text, so a hand copy takes only the code. `--file-gutter` is as wide as the last
+     line's number. */
+  .file-code-line::before {
+    @apply inline-block select-none pr-4 text-right tabular-nums;
+    width: calc(var(--file-gutter, 3ch) + 2rem);
+    content: attr(data-line);
+    color: color-mix(in srgb, var(--muted) 65%, transparent);
+  }
+  .file-code[data-wrap] .file-code-lines {
+    @apply min-w-0;
+  }
+  .file-code[data-wrap] .file-code-line {
+    @apply relative whitespace-pre-wrap;
+    padding-left: calc(var(--file-gutter, 3ch) + 2rem);
+    overflow-wrap: anywhere;
+  }
+  .file-code[data-wrap] .file-code-line::before {
+    @apply absolute left-0;
+  }
+  /* What the find bar found, and the one it is on. The words keep their own colour under the
+     first; the current one is told by more than its tint. */
+  .file-code mark {
+    @apply rounded-xs;
+    background: color-mix(in srgb, var(--warn) 28%, transparent);
+    color: inherit;
+  }
+  .file-code mark[data-current] {
+    background: var(--warn);
+    color: var(--canvas);
+    outline: 1px solid var(--warn);
+  }
+  .file-code mark[data-current] * {
+    color: inherit;
+  }
+}

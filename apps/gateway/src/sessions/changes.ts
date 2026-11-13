@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { lstat, readlink, realpath } from 'node:fs/promises';
+import { lstat, readlink, realpath, stat } from 'node:fs/promises';
 import { isAbsolute, relative, resolve, sep } from 'node:path';
 import type { SessionChange, SessionChanges } from '@jian/contracts';
 import { fileDiff, fileLines } from '../agent/diff.js';
@@ -13,7 +13,7 @@ const MAX_FILE_BYTES = 500_000;
 const MAX_GIT_BYTES = 2_000_000;
 const TIMEOUT_MS = 10_000;
 
-const inside = (root: string, path: string) => {
+export const inside = (root: string, path: string) => {
   const part = relative(root, path);
   return part !== '..' && !part.startsWith(`..${sep}`) && !isAbsolute(part);
 };
@@ -96,7 +96,7 @@ function diffFiles(output: string): SessionChange[] {
  * hooks, filters or diff drivers. Every read of a checkout, including the merge base below, goes
  * through here so none of them can be run with looser settings.
  */
-async function openCheckout(checkout: string) {
+export async function openCheckout(checkout: string) {
   const root = await realpath(await confine(checkout, 'read')).catch(() => {
     throw new GatewayError(409, 'This conversation has no checkout yet.');
   });
@@ -167,7 +167,15 @@ export type CheckoutReader = {
 
 /** A checkout on the gateway's own disk, read with the settings of `openCheckout`. */
 export async function localReader(checkout: string): Promise<CheckoutReader> {
-  const { root, git, settings } = await openCheckout(checkout);
+  return checkoutReader(await openCheckout(checkout));
+}
+
+/** The reader of a checkout already opened, for a caller that also runs its own git reads there. */
+export function checkoutReader({
+  root,
+  git,
+  settings,
+}: Awaited<ReturnType<typeof openCheckout>>): CheckoutReader {
   return {
     async status(against) {
       // Even `status` can invoke a clean filter while comparing files. Override every local
@@ -220,6 +228,50 @@ export async function localReader(checkout: string): Promise<CheckoutReader> {
 
 type Git = Awaited<ReturnType<typeof openCheckout>>['git'];
 
+/**
+ * The bytes of a file under `root`, or why not: it resolves `outside` the checkout, it `moved`
+ * while being opened, it is no regular file (`special`), or it is `large`r than `max` bytes.
+ * `real` is `target` already resolved by the caller, which decides what a symlink means to it.
+ * The check is made on the open descriptor, so a link swapped in after it cannot be read.
+ */
+export async function readInside(
+  root: string,
+  target: string,
+  real: string,
+  max: number,
+): Promise<{ bytes: Buffer } | { refused: 'outside' | 'moved' | 'special' | 'large' }> {
+  if (!inside(root, real)) return { refused: 'outside' };
+  const handle = await openToRead(real);
+  try {
+    const held = await handle.stat();
+    // openToRead protects the workspace; this endpoint is narrower, only this checkout.
+    const opened = await readlink(`/proc/self/fd/${handle.fd}`).catch(() => undefined);
+    if (opened !== undefined) {
+      if (!inside(root, opened)) return { refused: 'outside' };
+    } else {
+      const again = await realpath(target).catch(() => undefined);
+      const there = await stat(real).catch(() => undefined);
+      if (again !== real || held.dev !== there?.dev || held.ino !== there?.ino) {
+        return { refused: 'moved' };
+      }
+    }
+    if (!held.isFile()) return { refused: 'special' };
+    if (held.size > max) return { refused: 'large' };
+    // A fixed-size read also bounds a file that grows after stat.
+    const buffer = Buffer.alloc(max + 1);
+    let length = 0;
+    while (length < buffer.length) {
+      const read = await handle.read(buffer, length, buffer.length - length, length);
+      if (!read.bytesRead) break;
+      length += read.bytesRead;
+    }
+    if (length > max) return { refused: 'large' };
+    return { bytes: buffer.subarray(0, length) };
+  } finally {
+    await handle.close();
+  }
+}
+
 async function localSides(
   root: string,
   git: Git,
@@ -233,39 +285,18 @@ async function localSides(
     const info = await lstat(target).catch(() => undefined);
     if (!info) return unavailable('The file changed while reading; refresh the changes.');
     if (!info.isFile()) return unavailable('Symlinks and submodules have no text diff.');
-    const real = await realpath(target);
-    if (!inside(root, real)) return unavailable('The file resolves outside this checkout.');
-    const handle = await openToRead(real);
-    try {
-      const held = await handle.stat();
-      // openToRead protects the workspace; this endpoint is narrower, only this checkout.
-      const opened = await readlink(`/proc/self/fd/${handle.fd}`).catch(() => undefined);
-      if (opened !== undefined) {
-        if (!inside(root, opened)) return unavailable('The file resolves outside this checkout.');
-      } else {
-        const again = await realpath(target).catch(() => undefined);
-        const there = await lstat(target).catch(() => undefined);
-        if (again !== real || held.dev !== there?.dev || held.ino !== there?.ino) {
-          return unavailable('The file changed while reading; refresh the changes.');
-        }
-      }
-      if (!held.isFile() || held.size > MAX_FILE_BYTES)
-        return unavailable('The file is too large to display.');
-      // A fixed-size read also bounds a file that grows after stat.
-      const buffer = Buffer.alloc(MAX_FILE_BYTES + 1);
-      let length = 0;
-      while (length < buffer.length) {
-        const read = await handle.read(buffer, length, buffer.length - length, length);
-        if (!read.bytesRead) break;
-        length += read.bytesRead;
-      }
-      if (length > MAX_FILE_BYTES) return unavailable('The file is too large to display.');
-      if (buffer.subarray(0, length).includes(0))
-        return unavailable('Binary files have no text diff.');
-      after = buffer.subarray(0, length).toString('utf8');
-    } finally {
-      await handle.close();
+    const read = await readInside(root, target, await realpath(target), MAX_FILE_BYTES);
+    if ('refused' in read) {
+      return unavailable(
+        read.refused === 'outside'
+          ? 'The file resolves outside this checkout.'
+          : read.refused === 'moved'
+            ? 'The file changed while reading; refresh the changes.'
+            : 'The file is too large to display.',
+      );
     }
+    if (read.bytes.includes(0)) return unavailable('Binary files have no text diff.');
+    after = read.bytes.toString('utf8');
   }
 
   if (file.status === 'untracked' || file.status === 'added') return { after };

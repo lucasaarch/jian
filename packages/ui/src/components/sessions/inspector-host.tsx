@@ -3,6 +3,7 @@
 import { Menu } from '@base-ui/react/menu';
 import {
   FileCode2,
+  FolderTree,
   Globe,
   type LucideIcon,
   Maximize2,
@@ -47,7 +48,7 @@ export const useBrowserOffer = () => ({
 export const toggleInspectorFull = () => {
   const crew = useCrew.getState();
   if (crew.opened) return crew.toggleFull();
-  if (!crew.tabs.length && !crew.openBrowser && !crew.projectId && !crew.worktrees) return;
+  if (!crew.tabs.length && !crew.openBrowser && !hasCheckout(crew)) return;
   crew.reopen();
   if (!crew.full) crew.toggleFull();
 };
@@ -65,6 +66,13 @@ export function focusInspector(
   if (item) crew.open(item);
 }
 
+type Checkout = { projectId?: string; machineId?: string; worktrees: boolean; projects: boolean };
+/** Only the gateway's own disk is browsed: a conversation on a machine has no Files yet. */
+const hasFiles = (crew: Checkout) =>
+  !crew.machineId && Boolean(crew.projectId || crew.worktrees || crew.projects);
+/** Something of the conversation's the Inspector can open by itself: its changes, its files. */
+const hasCheckout = (crew: Checkout) => Boolean(crew.projectId || crew.worktrees) || hasFiles(crew);
+
 const Portal = createContext<HTMLElement | null | undefined>(undefined);
 export const openBrowserInspector = (pageId: string) => useCrew.getState().browser(pageId);
 export const syncBrowserInspector = (pages: BrowserPageTab[]) =>
@@ -78,7 +86,7 @@ export const inspectorHasBrowserPage = (pageId: string) =>
 export const toggleInspector = () => {
   const crew = useCrew.getState();
   if (crew.opened) crew.close();
-  else if (crew.tabs.length || crew.openBrowser || crew.projectId || crew.worktrees) crew.reopen();
+  else if (crew.tabs.length || crew.openBrowser || hasCheckout(crew)) crew.reopen();
 };
 export const conversationOfInspector = () => useCrew.getState().sessionId;
 /** The browser tab the Inspector has in front, for a host to bring its page there. */
@@ -187,6 +195,7 @@ export function InspectorHost({
   const agents = useCrew((state) => state.agents);
   const projectId = useCrew((state) => state.projectId);
   const worktrees = useCrew((state) => state.worktrees);
+  const files = useCrew(hasFiles);
   const [target, setTarget] = useState<HTMLDivElement | null>(null);
   const [chosen, setChosen] = useState(savedWidth);
   const [area, setArea] = useState(0);
@@ -257,6 +266,16 @@ export function InspectorHost({
           },
         ]
       : []),
+    ...(files
+      ? [
+          {
+            label: 'Files',
+            description: 'Browse this project’s files',
+            icon: FolderTree,
+            run: () => useCrew.getState().showFiles(),
+          },
+        ]
+      : []),
   ];
   const shown = tabs.find((tab) => tab.key === following);
   const label = (tab: InspectorTab) =>
@@ -266,7 +285,9 @@ export function InspectorHost({
         ? `${tab.item.kind === 'pull' ? 'PR' : 'Issue'} #${tab.item.number}`
         : tab.kind === 'changes'
           ? 'Changes'
-          : (agents.find((agent) => agent.runId === tab.runId)?.name ?? 'Subagent');
+          : tab.kind === 'files'
+            ? 'Files'
+            : (agents.find((agent) => agent.runId === tab.runId)?.name ?? 'Subagent');
   const close = () => useCrew.getState().close();
   const closeTab = (tab: InspectorTab) => {
     if (tab.kind === 'browser') closeBrowser?.(tab.pageId);

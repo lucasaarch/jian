@@ -425,6 +425,37 @@ it('closes rather than empties where nothing can be opened in it', async () => {
   expect(crew().opened).toBe(false);
 });
 
+it('offers Files for projects the gateway holds, several included, and not on a machine', async () => {
+  const offer = (name: string) =>
+    [...element.querySelectorAll('button')].find((button) => button.textContent?.startsWith(name));
+  useCrew.setState({
+    tabs: [],
+    following: undefined,
+    opened: true,
+    projectId: undefined,
+    machineId: undefined,
+    worktrees: false,
+    projects: true,
+  });
+  await shownWith();
+
+  // Several projects have no one checkout to diff, and still have files to read.
+  expect(offer('Changes')).toBeUndefined();
+  await act(async () => offer('Files')?.click());
+  expect(crew().following).toBe('files:atlas');
+  expect(inTabs()).toEqual(['Files']);
+
+  await act(async () =>
+    useCrew.setState({ tabs: [], following: undefined, machineId: 'machine-1' }),
+  );
+  expect(offer('Files')).toBeUndefined();
+  crew().close();
+  toggleInspector();
+  expect(crew().opened).toBe(false);
+
+  useCrew.setState({ machineId: undefined, projects: false });
+});
+
 it('hands a new chat its Inspector as it stood, browser included', () => {
   clean();
   const adoptBrowser = vi.fn();

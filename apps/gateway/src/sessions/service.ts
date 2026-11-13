@@ -13,8 +13,10 @@ import {
   type RemoteFilesAnswer,
   type RemoteFilesOp,
   type Session,
+  type SessionFiles,
   type SessionObjective,
   sessionChangesQuerySchema,
+  sessionFileQuerySchema,
   sessionModelSchema,
   sessionObjectiveInputSchema,
   sessionPinSchema,
@@ -36,6 +38,7 @@ import { messages, projects, remoteMachines, runs } from '../storage/schema.js';
 import { settledRuns } from '../worktrees/repository.js';
 import { checkoutChanges, readChanges, worktreeMergeBase } from './changes.js';
 import { listCreatedPullAnswers } from './created-pulls.js';
+import { listRootFiles, readRootFile, sessionFileRoots } from './files.js';
 import { compactLoads } from './loads.js';
 import { cloneOnMachine, MachineAnswers, machineReader } from './machine-checkout.js';
 import { objectiveAt, sanitizeObjectiveText } from './objective.js';
@@ -809,6 +812,32 @@ export class Sessions {
       await projectCheckout(profileId, session.projectId, sessionId),
       query.path,
       whole,
+    );
+  }
+
+  /** Every file of the conversation's worktrees or projects, with the changed ones, to read. */
+  async files(profileId: string, sessionId: string): Promise<SessionFiles> {
+    const roots = await this.fileRoots(profileId, sessionId);
+    return { roots: await Promise.all(roots.map(listRootFiles)) };
+  }
+
+  /** One of those files as it is on disk. The root is looked up, never taken as a path. */
+  async file(profileId: string, sessionId: string, input: unknown) {
+    const query = sessionFileQuerySchema.parse(input);
+    const root = (await this.fileRoots(profileId, sessionId)).find(
+      (item) => item.id === query.root,
+    );
+    if (!root) throw new GatewayError(404, 'That folder is not part of this conversation.');
+    return readRootFile(root, query.path);
+  }
+
+  private async fileRoots(profileId: string, sessionId: string) {
+    const session = await this.session(profileId, sessionId);
+    return sessionFileRoots(
+      this.store.db,
+      profileId,
+      session,
+      await this.worktreeRecords(profileId, sessionId),
     );
   }
 
