@@ -24,7 +24,7 @@ export function CopyCommand({ value, label }: { value: string; label: string }) 
         </Action>
       </div>
       {failed !== undefined && (
-        <p role="alert" className="px-1 text-xs text-bad">
+        <p role="alert" className="text-xs text-bad">
           Select the text and copy it by hand.
         </p>
       )}

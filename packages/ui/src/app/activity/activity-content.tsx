@@ -69,7 +69,7 @@ export function ActivityContent({ api = panelApi() }: { api?: GatewayApi }) {
   const { stats, failed, retry } = useStats(api, profile.id, Number(days));
 
   return (
-    <div className="grid grid-cols-1 gap-6">
+    <div className="grid grid-cols-1 gap-7 phone:gap-5">
       <Figures stats={stats} failed={failed} retry={retry} days={days} onDays={setDays} />
       <ActivityHeatmap profile={profile} api={api} />
     </div>
@@ -117,7 +117,7 @@ function Figures({
           </Action>
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-6" aria-busy={!stats}>
+        <div className="grid grid-cols-1 gap-7 phone:gap-5" aria-busy={!stats}>
           <Part
             title="Since it was made"
             action={

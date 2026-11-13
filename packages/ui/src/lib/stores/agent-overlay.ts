@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-export type AgentSettingsPage = 'identity' | 'skills' | 'memories' | 'channels' | 'activity';
+export type AgentSettingsPage = 'identity' | 'skills' | 'memories' | 'channels';
 /** The schedule open in its overlay, or a new one being written. */
 type OpenSchedule = string | 'new';
 

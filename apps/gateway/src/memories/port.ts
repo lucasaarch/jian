@@ -7,5 +7,6 @@ export interface MemoryWriter {
   search(profileId: string, query: string, limit?: number): Promise<Memory[]>;
   edit(profileId: string, key: unknown, input: unknown): Promise<Memory>;
   link(profileId: string, key: unknown, linkedKey: unknown): Promise<Memory>;
+  setProjects(profileId: string, key: unknown, input: unknown): Promise<Memory>;
   unlink(profileId: string, key: unknown, linkedKey: unknown): Promise<Memory>;
 }

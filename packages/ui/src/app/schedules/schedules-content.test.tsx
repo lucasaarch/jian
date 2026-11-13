@@ -89,7 +89,8 @@ async function render(api: Record<string, unknown>) {
   return { button, type };
 }
 
-const lastDialog = () => [...document.querySelectorAll('[role="dialog"]')].at(-1);
+// The schedules' page, or a dialog open over it.
+const lastDialog = () => [...document.querySelectorAll('[data-app-page], [role="dialog"]')].at(-1);
 
 it('removes a schedule only once its name is typed', async () => {
   const deleteSchedule = vi.fn(async () => undefined);
@@ -162,7 +163,7 @@ it('lists the schedules down the side, with the one open in full beside them', a
   const dialog = lastDialog();
 
   expect(view.button('Morning summary', dialog)?.getAttribute('aria-current')).toBe('page');
-  expect(dialog?.querySelector('section h2')?.textContent).toBe('Morning summary');
+  expect(dialog?.querySelector('section h1')?.textContent).toBe('Morning summary');
   expect(dialog?.querySelector<HTMLTextAreaElement>('textarea')?.value).toBe(summary.instruction);
 });
 

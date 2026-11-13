@@ -2,46 +2,77 @@
 
 import { Plus } from 'lucide-react';
 import { useState } from 'react';
-import { sourceOf } from '../../components/skills/origin';
+import { useBuiltinSkills, useBuiltinSwitches } from '../../components/skills/built-in-skills';
+import {
+  filterSkills,
+  type SkillFilter,
+  type SkillItem,
+  skillFilters,
+  skillItems,
+} from '../../components/skills/skill-items';
 import { SKILL_LIMIT, type SkillEditing, useSkillList } from '../../components/skills/skill-list';
 import {
   Action,
   ConfirmDialog,
-  SettingsGroup,
-  SettingsRow,
-  SettingsRowsSkeleton,
+  FilterSelect,
+  PageHeading,
+  PageToolbar,
+  SearchField,
+  Skeleton,
   SkeletonRegion,
-  StatusPill,
+  surfaceCard,
 } from '../../kit';
-import type { Skill } from '../../lib/api';
 import { useActions } from '../../lib/workspace';
-import { SkillBuiltinGroup, SkillBuiltinWaiting } from './skill-builtin-group';
+import { SkillCard } from './skill-card';
 import { SkillDialog } from './skill-dialog';
 import { SkillImportDialog } from './skill-import-dialog';
+import { SkillReading } from './skill-reading';
 
-/**
- * The skills while the agent is read: a few of its own, the rows that write and import another,
- * and the built-in list under them.
- */
+/** Cards as wide as 16rem and no narrower, so a phone gets one column and a wide page four. */
+const grid = 'grid grid-cols-[repeat(auto-fill,minmax(min(100%,16rem),1fr))] gap-3';
+
+const CardWaiting = () => (
+  <div className={`flex flex-col gap-2 p-4 ${surfaceCard}`}>
+    <div className="flex h-7 items-center">
+      <Skeleton className="h-3.5 w-28" />
+    </div>
+    <Skeleton className="h-3 w-full" />
+    <Skeleton className="h-3 w-2/3" />
+    <Skeleton className="mt-2 h-5 w-16 rounded-full" />
+  </div>
+);
+
+/** The skills while the agent is read: the toolbar's place, and cards to stand for the list. */
 export function SkillsWaiting() {
   return (
-    <SkeletonRegion label="Loading skills…" className="grid grid-cols-1 gap-6">
-      <SettingsGroup title="Installed">
-        <SettingsRowsSkeleton count={4} />
-      </SettingsGroup>
-      <SkillBuiltinWaiting />
+    <SkeletonRegion label="Loading skills…" className="grid grid-cols-1 gap-4">
+      <PageHeading title="Skills" />
+      <Skeleton className="h-8 w-full rounded-lg" />
+      <div className={grid}>
+        {Array.from({ length: 6 }, (_, index) => (
+          // biome-ignore lint/suspicious/noArrayIndexKey: identical placeholders, never reordered.
+          <CardWaiting key={index} />
+        ))}
+      </div>
     </SkeletonRegion>
   );
 }
 
 /**
- * The agent's skills: its own — written here, imported, or written by itself — a line each with
- * Configure, and the ways to write or import another; then those the gateway ships, switched on
- * and off. Removing one asks for its name first.
+ * The agent's skills as cards, its own and those the gateway ships, searched and filtered by
+ * where they came from. Opening one reads it, rendered, in place of the cards; the agent's own
+ * are edited in a form, and removing one asks for its name first. A built-in skill is switched
+ * on and off.
  */
 export function SkillsPage() {
   const { api, mutate, busy } = useActions();
   const { profile, skills, save, remove, importFrom } = useSkillList({ api, mutate });
+  const builtIn = useBuiltinSkills(profile, api);
+  const { enabled, flip } = useBuiltinSwitches(profile, { api, mutate });
+  const [query, setQuery] = useState('');
+  const [filter, setFilter] = useState<SkillFilter>('all');
+  // By key, not the item: a switch or a save redraws the card the reading is showing.
+  const [reading, setReading] = useState<string>();
   // What the form edits stays set while it closes, so it fades out as it was.
   const [editing, setEditing] = useState<SkillEditing>('new');
   const [formOpen, setFormOpen] = useState(false);
@@ -52,68 +83,109 @@ export function SkillsPage() {
   const [asking, setAsking] = useState(false);
   const full = skills.length >= SKILL_LIMIT;
   const configured = editing === 'new' ? undefined : skills[editing];
-  // A skill written here is the usual case; only another source is worth a word.
-  const source = (skill: Skill) => {
-    const { label } = sourceOf(skill, profile.name);
-    return label === 'Written here' ? undefined : label;
-  };
+  const items = skillItems(skills, builtIn.skills, profile.name, enabled);
+  const shown = filterSkills(items, query, filter);
+  const open = items.find((item) => item.key === reading);
 
   const edit = (target: SkillEditing) => {
     setEditing(target);
     setRound((count) => count + 1);
     setFormOpen(true);
   };
+  const controls = {
+    onEdit: (item: SkillItem) => item.index !== undefined && edit(item.index),
+    onRemove: (item: SkillItem) => {
+      setRemoving(item.name);
+      setAsking(true);
+    },
+    onSwitch: (item: SkillItem, on: boolean) => void flip(item.name, on),
+  };
 
   return (
     <>
-      <SettingsGroup title="Installed">
-        {skills.map((skill, index) => (
-          <SettingsRow
-            key={skill.name}
-            title={
-              <span className="flex items-center gap-2">
-                <span className="truncate">{skill.name}</span>
-                {source(skill) && <StatusPill>{source(skill)}</StatusPill>}
-              </span>
+      {open ? (
+        <SkillReading
+          item={open}
+          onBack={() => setReading(undefined)}
+          onEdit={controls.onEdit}
+          onSwitch={controls.onSwitch}
+        />
+      ) : (
+        <div className="grid grid-cols-1 gap-4">
+          <PageHeading
+            title="Skills"
+            actions={
+              <>
+                <Action
+                  tone="outline"
+                  size="small"
+                  className="h-8"
+                  onClick={() => setImporting(true)}
+                >
+                  <Plus size={13} />
+                  Import
+                </Action>
+                <Action
+                  tone="outline"
+                  size="small"
+                  className="h-8"
+                  disabled={full}
+                  title={full ? `An agent keeps up to ${SKILL_LIMIT}.` : undefined}
+                  onClick={() => edit('new')}
+                >
+                  <Plus size={13} />
+                  Create
+                </Action>
+              </>
             }
-          >
-            <Action
-              tone="outline"
-              size="small"
-              aria-label={`Configure ${skill.name}`}
-              onClick={() => edit(index)}
-            >
-              Configure
-            </Action>
-          </SettingsRow>
-        ))}
-        <SettingsRow
-          title="Create a skill"
-          {...(full
-            ? { description: `An agent keeps up to ${SKILL_LIMIT}.` }
-            : skills.length
-              ? {}
-              : { description: 'None yet.' })}
-        >
-          <Action tone="outline" size="small" disabled={full} onClick={() => edit('new')}>
-            <Plus size={13} />
-            Add
-          </Action>
-        </SettingsRow>
-        <SettingsRow title="Import from GitHub">
-          <Action tone="outline" size="small" onClick={() => setImporting(true)}>
-            <Plus size={13} />
-            Import
-          </Action>
-        </SettingsRow>
-      </SettingsGroup>
-      <SkillBuiltinGroup profile={profile} api={api} mutate={mutate} />
+          />
+          <PageToolbar>
+            <SearchField
+              label="Search skills"
+              value={query}
+              onValueChange={setQuery}
+              className="min-w-48 flex-1"
+            />
+            <FilterSelect
+              label="Show skills"
+              value={filter}
+              options={skillFilters}
+              onValueChange={(next) => setFilter(next as SkillFilter)}
+            />
+          </PageToolbar>
+          {builtIn.error && (
+            <p role="alert" className="text-xs text-bad">
+              {builtIn.error}
+            </p>
+          )}
+          <div className={grid}>
+            {shown.map((item) => (
+              <SkillCard
+                key={item.key}
+                item={item}
+                onOpen={(next) => setReading(next.key)}
+                {...controls}
+              />
+            ))}
+            {builtIn.loading &&
+              !builtIn.error &&
+              (filter === 'all' || filter === 'built-in') &&
+              Array.from({ length: 3 }, (_, index) => (
+                // biome-ignore lint/suspicious/noArrayIndexKey: identical placeholders, never reordered.
+                <CardWaiting key={index} />
+              ))}
+          </div>
+          {!builtIn.loading && shown.length === 0 && (
+            <p className="text-sm text-muted">{items.length ? 'No skill matches.' : 'None yet.'}</p>
+          )}
+        </div>
+      )}
       <SkillDialog
         open={formOpen}
         onOpenChange={setFormOpen}
         round={round}
         skill={configured}
-        source={configured && source(configured)}
+        source={configured && items.find((item) => item.index === editing)?.source}
         busy={busy}
         onSave={(next) =>
           void save(next, editing).then((ok) => {
@@ -149,6 +221,7 @@ export function SkillsPage() {
             if (!ok) return;
             setAsking(false);
             setFormOpen(false);
+            setReading(undefined);
           });
         }}
       >

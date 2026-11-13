@@ -64,6 +64,13 @@ export const resourceCalls = (client: Client) => ({
         params: { path: { profileId, memoryKey, linkedKey } },
       }),
     ),
+  setMemoryProjects: (profileId: string, memoryKey: string, projectIds: string[]) =>
+    result(
+      client.PUT('/v1/profiles/{profileId}/memories/{memoryKey}/projects', {
+        params: { path: { profileId, memoryKey } },
+        body: { projectIds },
+      }),
+    ),
   unlinkMemories: (profileId: string, memoryKey: string, linkedKey: string) =>
     result(
       client.DELETE('/v1/profiles/{profileId}/memories/{memoryKey}/links/{linkedKey}', {

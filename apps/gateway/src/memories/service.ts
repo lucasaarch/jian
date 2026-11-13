@@ -1,8 +1,10 @@
 import {
   MEMORY_LINK_LIMIT,
+  MEMORY_PROJECT_LIMIT,
   type Memory,
   memoryEditSchema,
   memoryKeySchema,
+  memoryProjectsSchema,
   memorySchema,
 } from '@jian/contracts';
 import { type Clock, nowIso } from '../core/clock.js';
@@ -13,6 +15,7 @@ import type { SessionReader } from '../sessions/port.js';
 import type { Store } from '../storage/database.js';
 import {
   addLink,
+  countProjects,
   deleteMemory,
   findMemory,
   linksOf,
@@ -20,6 +23,7 @@ import {
   memoryId,
   removeLink,
   searchMemories,
+  setProjects,
   withLinks,
   writeMemory,
 } from './repository.js';
@@ -107,6 +111,35 @@ export class Memories {
 
       await removeLink(tx, profileId, a, b);
       await recordEvent(tx, this.clock, profileId, 'memory.unlinked', { keys: [a, b] });
+
+      return (await withLinks(tx, profileId, [memory]))[0] as Memory;
+    });
+  }
+
+  /**
+   * Pins a memory to exactly these projects: conversations in them recall it first. Every
+   * project must belong to this profile, so one profile can never name another's.
+   */
+  async setProjects(profileId: string, key: unknown, input: unknown) {
+    const memoryKey = memoryKeySchema.parse(key);
+    const ids = [...new Set(memoryProjectsSchema.parse(input).projectIds)].slice(
+      0,
+      MEMORY_PROJECT_LIMIT,
+    );
+
+    return this.store.transaction(profileId, async (tx) => {
+      await this.profiles.profile(profileId, tx);
+      const memory = assertFound(await findMemory(tx, profileId, memoryKey), 'Memory');
+
+      if ((await countProjects(tx, profileId, ids)) !== ids.length) {
+        throw new GatewayError(404, 'Project not found');
+      }
+
+      await setProjects(tx, profileId, memoryKey, ids);
+      await recordEvent(tx, this.clock, profileId, 'memory.projects', {
+        key: memoryKey,
+        projectIds: ids,
+      });
 
       return (await withLinks(tx, profileId, [memory]))[0] as Memory;
     });

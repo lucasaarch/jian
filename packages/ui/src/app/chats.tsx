@@ -5,16 +5,18 @@ import { ChatNotices } from '../components/notifications/chat-notices';
 import { Sessions } from '../components/sessions';
 import { Action } from '../kit';
 import type { Profile } from '../lib/api';
-import { agentPath, onPulls } from '../lib/navigation';
+import { agentPath, onActivity, onPulls } from '../lib/navigation';
 import { usePhone } from '../lib/phone';
 import { useProfiles } from '../lib/query/profile';
 import { useEventStream } from '../lib/query/stream';
 import { useLastProfile } from '../lib/stores/last-profile';
 import { useSavedLayout } from '../lib/stores/layout';
 import { useOnboarding } from '../lib/stores/onboarding';
+import { usePageCovering } from '../lib/stores/screen';
 import { type ThisMachine, ThisMachineProvider } from '../lib/this-machine';
 import { useActions, useAdoptProfile, useProfileId } from '../lib/workspace';
 import { usePathname, useRouter, useSearchParams } from '../platform/navigation';
+import { ActivityScreen } from './activity/activity-screen';
 import { AgentOverlays } from './agent-overlays';
 import { AgentPicker } from './agent-picker';
 import { ChatSearch } from './chat-search';
@@ -69,7 +71,11 @@ export function ChatsApp({
   const search = useSearchParams();
   const phone = usePhone();
   // Something the sidebar opened: a chat, a new one, or the pull requests.
-  const opened = /\/sessions\/[^/]+/.test(pathname) || search.has('new') || onPulls(pathname);
+  const opened =
+    /\/sessions\/[^/]+/.test(pathname) ||
+    search.has('new') ||
+    onPulls(pathname) ||
+    onActivity(pathname);
   const sidebar = !phone || (known && !opened);
   const main = !phone || !sidebar;
   useSavedLayout();
@@ -121,6 +127,7 @@ export function ChatsApp({
   const staged = onboardingUp || booting || Boolean(welcomeBack) || Boolean(departed);
   const setShowing = onboarding.setShowing;
   const createAgent = onboarding.create;
+  const covered = usePageCovering();
   useAgentCommands({
     profiles: staged ? undefined : profiles,
     current: profiles?.find((profile) => profile.id === profileId),
@@ -157,18 +164,22 @@ export function ChatsApp({
         <div className="relative flex h-(--app-height) overflow-clip">
           {sidebar && header}
           <ReadFailed>
-            {sidebar && (
-              <ChatSidebar
-                {...(profileId && known ? { profileId } : {})}
-                loading={loading}
-                footer={<AgentPicker createAgent={createAgent} />}
-              />
-            )}
-            {main && (
-              <div data-app-main className="min-w-0 flex-1">
-                <Chats phone={phone} createAgent={createAgent} />
-              </div>
-            )}
+            {/* Under a page over the whole app, kept as they are but out of the keyboard's and a
+                screen reader's way, as what a dialog covers is. */}
+            <div className="contents" inert={covered}>
+              {sidebar && (
+                <ChatSidebar
+                  {...(profileId && known ? { profileId } : {})}
+                  loading={loading}
+                  footer={<AgentPicker createAgent={createAgent} />}
+                />
+              )}
+              {main && (
+                <div data-app-main className="min-w-0 flex-1">
+                  <Chats phone={phone} createAgent={createAgent} />
+                </div>
+              )}
+            </div>
             {/* Beside both: on a phone the sidebar opens them with no conversation on screen. */}
             {profileId && known && (
               <Suspense fallback={null}>
@@ -220,7 +231,7 @@ function AgentChats({ profileId, phone }: { profileId: string; phone: boolean })
   const actions = useActions();
   const remember = useLastProfile((state) => state.remember);
   // The pull requests take the chat's place, as a chat would; the sidebar stays beside them.
-  const pulls = onPulls(usePathname());
+  const pathname = usePathname();
   useEventStream(profileId);
   useEffect(() => remember(profileId), [profileId, remember]);
 
@@ -229,7 +240,13 @@ function AgentChats({ profileId, phone }: { profileId: string; phone: boolean })
       <ChatNotices profileId={profileId} />
       {phone && <PhoneBar profileId={profileId} />}
       <div className="min-h-0 flex-1">
-        {pulls ? <PullsScreen profileId={profileId} /> : <Sessions {...actions} />}
+        {onPulls(pathname) ? (
+          <PullsScreen profileId={profileId} />
+        ) : onActivity(pathname) ? (
+          <ActivityScreen />
+        ) : (
+          <Sessions {...actions} />
+        )}
       </div>
       <ChatSearch profileId={profileId} />
       <ChatCommands profileId={profileId} />

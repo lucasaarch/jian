@@ -1,10 +1,10 @@
 'use client';
 
 import type { ReactNode } from 'react';
-import { Skeleton } from '../../kit';
+import { SectionHeading, Skeleton, surfaceCard } from '../../kit';
 
-/** A card of the page: flat, as a settings card is. */
-export const card = 'rounded-xl border border-glass-edge bg-glass-hover';
+/** A card of the page: the kit's, as a settings card is. */
+export const card = surfaceCard;
 
 /**
  * A number with its label and a mark, as the tiles across the top of each part show it. Without
@@ -52,10 +52,7 @@ export function Part({
 }) {
   return (
     <section className="grid grid-cols-1 gap-3" aria-label={title}>
-      <header className="flex min-h-7 items-center justify-between gap-4 px-1">
-        <h2 className="font-sans text-sm font-semibold tracking-tight text-ink">{title}</h2>
-        {action}
-      </header>
+      <SectionHeading title={title}>{action}</SectionHeading>
       {children}
     </section>
   );

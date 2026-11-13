@@ -1,8 +1,10 @@
 'use client';
 
-import { Dialog } from '@base-ui/react/dialog';
 import { ArrowLeft, ChevronLeft } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
+import { usePhone } from '../lib/phone';
+import { useLayout } from '../lib/stores/layout';
+import { PageBody, PageHeading, SectionHeading, surfaceCard } from './page-layout';
 import { SearchField } from './search-field';
 
 export type SettingsPage = {
@@ -26,13 +28,15 @@ const found = (page: SettingsPage, query: string) => {
 };
 
 /**
- * The inside of a settings overlay: back out of it, search its pages and pick one down the left,
- * the open one on the right in a column of cards. `heading`, when given, says whose settings
- * these are: an agent's, a gateway's. On a phone the list and the open page take turns: it
- * starts on the list, or on the page when `startOnPage` says it was asked for by name.
+ * The inside of a page of settings (kit `Page`): where the app's sidebar was, the way back out of
+ * it, a search of its pages and the list to pick one from; where the conversation was, the open
+ * one in a column of cards. The list is the sidebar's width and ground, keeps `--chrome-top`
+ * clear for the host's title bar as the sidebar does, and goes away with it. On a phone the list and the open
+ * page take turns: it starts on the list, or on the page when `startOnPage` says it was asked for
+ * by name.
  */
 export function SettingsLayout({
-  heading,
+  onBack,
   pages,
   current,
   onSelect,
@@ -42,8 +46,12 @@ export function SettingsLayout({
   emptyLabel = 'No setting matches.',
   backLabel = 'Settings',
   action,
+  wide = false,
+  ownHeading = false,
   children,
 }: {
+  /** Out of the page, back to the conversation. */
+  onBack: () => void;
   /** What the open page is called, for a page the list does not hold, such as a new one. */
   title?: string;
   searchLabel?: string;
@@ -52,7 +60,10 @@ export function SettingsLayout({
   backLabel?: string;
   /** Across from the way back, for what can be added to the list. */
   action?: ReactNode;
-  heading?: ReactNode;
+  /** For a page that lays things side by side (cards, a map) instead of one column of rows. */
+  wide?: boolean;
+  /** The open page draws its own `PageHeading`, for actions or a way back of its own. */
+  ownHeading?: boolean;
   pages: SettingsPage[];
   current: string;
   onSelect: (id: string) => void;
@@ -61,6 +72,9 @@ export function SettingsLayout({
 }) {
   const [query, setQuery] = useState('');
   const [reading, setReading] = useState(startOnPage);
+  const phone = usePhone();
+  // Put away as the sidebar is, by the same button: a phone has no room beside it to do so.
+  const collapsed = useLayout((state) => state.chatList) && !phone;
   const shown = pages.filter((page) => found(page, query));
   const groups = [...new Set(shown.map((page) => page.group ?? ''))];
   const open = pages.find((page) => page.id === current);
@@ -70,22 +84,23 @@ export function SettingsLayout({
   };
 
   return (
-    <div
-      data-reading={reading}
-      className="group/settings grid size-full grid-cols-[15rem_minmax(0,1fr)] phone:grid-cols-1"
-    >
+    <div data-reading={reading} className="group/settings flex size-full min-w-0">
       <nav
         aria-label={backLabel}
-        className="flex min-h-0 flex-col gap-3 border-r border-glass-edge bg-canvas/25 p-2.5 pt-3 phone:border-0 phone:group-data-[reading=true]/settings:hidden"
+        hidden={collapsed}
+        className="flex min-h-0 w-(--sidebar-width) shrink-0 flex-col gap-3 border-r border-line bg-sidebar px-2 pt-[calc(var(--chrome-top,0px)+0.5rem)] pb-2.5 phone:w-full phone:border-r-0 phone:bg-canvas phone:group-data-[reading=true]/settings:hidden"
       >
         <div className="flex items-center justify-between gap-2">
-          <Dialog.Close className="flex h-8 w-fit items-center gap-2 px-2 text-[13px] text-muted transition-colors hover:text-ink">
+          <button
+            type="button"
+            onClick={onBack}
+            className="flex h-8 w-fit items-center gap-2 px-2.5 text-[13px] text-muted transition-colors hover:text-ink"
+          >
             <ArrowLeft size={15} />
             Back
-          </Dialog.Close>
+          </button>
           {action}
         </div>
-        {heading && <div className="px-2 text-sm font-semibold">{heading}</div>}
         <SearchField
           label={searchLabel}
           value={query}
@@ -127,23 +142,22 @@ export function SettingsLayout({
           )}
         </div>
       </nav>
-      <section
-        aria-label={title ?? open?.label}
-        className="scroll-inset min-h-0 overflow-y-auto px-10 pt-9 pb-14 phone:px-4 phone:pt-3 phone:group-data-[reading=false]/settings:hidden"
+      <PageBody
+        wide={wide}
+        label={title ?? open?.label}
+        className="phone:group-data-[reading=false]/settings:hidden"
       >
-        <div className="mx-auto grid max-w-[40rem] grid-cols-1 gap-7 phone:gap-5">
-          <button
-            type="button"
-            onClick={() => setReading(false)}
-            className="-ml-1 hidden h-8 w-fit items-center gap-1 text-[13px] text-muted transition-colors hover:text-ink phone:flex"
-          >
-            <ChevronLeft size={16} />
-            {backLabel}
-          </button>
-          <h2 className="px-1 text-base font-semibold tracking-tight">{title ?? open?.label}</h2>
-          {children}
-        </div>
-      </section>
+        <button
+          type="button"
+          onClick={() => setReading(false)}
+          className="-ml-1 hidden h-8 w-fit items-center gap-1 text-[13px] text-muted transition-colors hover:text-ink phone:flex"
+        >
+          <ChevronLeft size={16} />
+          {backLabel}
+        </button>
+        {!ownHeading && <PageHeading title={title ?? open?.label} />}
+        {children}
+      </PageBody>
     </div>
   );
 }
@@ -178,14 +192,13 @@ export function SettingsGroup({
         </p>
       )}
       {(title || note) && (
-        <header className="flex items-baseline justify-between gap-4 px-1">
-          {title && <h3 className="text-xs font-medium text-muted">{title}</h3>}
+        <SectionHeading title={title}>
           {note && <span className="text-xs text-muted">{note}</span>}
-        </header>
+        </SectionHeading>
       )}
       <div
         aria-busy={loading ? true : undefined}
-        className="divide-y divide-glass-edge rounded-xl border border-glass-edge bg-glass-hover"
+        className={`divide-y divide-glass-edge ${surfaceCard}`}
       >
         {children}
       </div>

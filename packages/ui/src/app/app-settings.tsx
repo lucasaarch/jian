@@ -14,7 +14,7 @@ import {
   Smartphone,
 } from 'lucide-react';
 import { Suspense, useState } from 'react';
-import { Overlay, SettingsLayout, type SettingsPage } from '../kit';
+import { Page as Screen, SettingsLayout, type SettingsPage } from '../kit';
 import { useOnboarding } from '../lib/stores/onboarding';
 import { Appearance } from './appearance';
 import { type GatewayActions, GatewayConnection, type GatewayInfo } from './gateway-connection';
@@ -56,7 +56,7 @@ export function AppSettings({
   gateway?: GatewaySettings;
   /**
    * The page open, for a host that keeps it itself — the web, in its address — with what to do
-   * when another is picked. Without it the overlay keeps its own, starting on General.
+   * when another is picked. Without it the page keeps its own, starting on General.
    */
   page?: string;
   onPageChange?: (page: string) => void;
@@ -75,8 +75,9 @@ export function AppSettings({
   const current = (pages.some((item) => item.id === page) ? page : 'general') as Page;
 
   return (
-    <Overlay open={open} onOpenChange={onOpenChange} title="Settings" closeButton={false}>
+    <Screen open={open} onClose={() => onOpenChange(false)} title="Settings">
       <SettingsLayout
+        onBack={() => onOpenChange(false)}
         pages={pages}
         current={current}
         onSelect={onPageChange ?? setOwn}
@@ -93,7 +94,7 @@ export function AppSettings({
           }}
         />
       </SettingsLayout>
-    </Overlay>
+    </Screen>
   );
 }
 

@@ -23,7 +23,7 @@ import {
 import { AgentFace } from '../../kit/face';
 import type { Profile } from '../../lib/api';
 import { useGatewayMode } from '../../lib/gateway-mode';
-import { agentPath, newChatPath } from '../../lib/navigation';
+import { activityPath, agentPath, newChatPath } from '../../lib/navigation';
 import { useAgentOverlay } from '../../lib/stores/agent-overlay';
 import { useOnboarding } from '../../lib/stores/onboarding';
 import { useRouter } from '../../platform/navigation';
@@ -120,7 +120,7 @@ export function useAgentCommands({
         detail: current.name,
         keywords: ['overview', 'usage', 'stats', 'dashboard', 'costs', 'tokens'],
         icon: <Activity size={15} />,
-        run: () => useAgentOverlay.getState().openSettings('activity'),
+        run: place(activityPath(current.id)),
       },
       {
         id: 'schedules',

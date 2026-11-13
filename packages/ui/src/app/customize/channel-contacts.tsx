@@ -63,13 +63,13 @@ export function ChannelContacts({
     <>
       {groups.length > 0 && (
         <section className="grid gap-2">
-          <h3 className="px-1 text-xs font-medium text-muted">Groups</h3>
+          <h3 className="text-xs font-medium text-muted">Groups</h3>
           <div className={listBox}>{groups.map(line)}</div>
         </section>
       )}
       {people.length > 0 && (
         <section className="grid gap-2">
-          <h3 className="px-1 text-xs font-medium text-muted">
+          <h3 className="text-xs font-medium text-muted">
             {channel.type === 'api' ? 'Senders' : 'Contacts'}
           </h3>
           <div className={listBox}>{people.map(line)}</div>

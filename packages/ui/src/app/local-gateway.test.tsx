@@ -52,15 +52,15 @@ for (const mode of ['local', 'server'] as const) {
   it(`offers channels in the agent's settings only on a server (${mode})`, async () => {
     useAgentOverlay.getState().openSettings('channels');
     await render(<AgentOverlays profileId={profile.id} />, mode);
-    const dialog = [...document.querySelectorAll('[role="dialog"]')].at(-1);
+    const dialog = document.querySelector('[data-app-page]');
 
     if (mode === 'server') {
       expect(labels('nav button')).toContain('Channels');
-      expect(dialog?.querySelector('section h2')?.textContent).toBe('Channels');
+      expect(dialog?.querySelector('section h1')?.textContent).toBe('Channels');
     } else {
       // Asked for by name, it lands on Identity on this computer's gateway, which has none.
       expect(labels('nav button')).not.toContain('Channels');
-      expect(dialog?.querySelector('section h2')?.textContent).toBe('Identity');
+      expect(dialog?.querySelector('section h1')?.textContent).toBe('Identity');
     }
     act(() => useAgentOverlay.getState().closeSettings());
   });

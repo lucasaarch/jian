@@ -21,6 +21,6 @@ five-hour and weekly usage only with its answers, so it stays unavailable until 
 since the gateway started. When a window says unavailable, do not present it as zero or infer it
 from local tokens.
 
-The owner sees this under Activity in your agent settings; use the tools when the question needs the full
-figures or a specific run. State the period and distinguish unknown prices from zero cost.`,
+The owner sees this under Activity, the last entry at the top of the sidebar; use the tools when the
+question needs the full figures or a specific run. State the period and distinguish unknown prices from zero cost.`,
 };

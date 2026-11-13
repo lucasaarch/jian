@@ -44,13 +44,19 @@ Shared by the whole installation.
 
 ## Agent settings
 
-One agent's own, from the agent chooser at the foot of the sidebar.
+One agent's own, from the agent chooser at the foot of the sidebar. Like the app's Settings and
+Schedules, it takes the whole window: its pages are listed where the sidebar was, under Back.
 
-- **Activity**: tokens, runs and estimated cost. For your own full figures, see \`activity\`.
 - **Identity**: name, picture, instructions, summary for the team and boundaries, and Compact
   conversations: whether its conversations are summarised near the model's limit, the default,
   or at a size the owner sets. See \`managing-context\`.
-- **Skills** and **Memories**: this agent's.
+- **Skills**: this agent's own and the built-in ones as cards, with a search and a filter by
+  where they came from (written here, imported, built-in). A card opens the skill to read, its
+  instructions rendered; the menu on one of its own edits or removes it, and a built-in one has
+  a switch. Create and Import (from GitHub) are in the bar above the cards.
+- **Memories**: this agent's, as a map (a node each, a line for each link) or a list, with a
+  search and a filter by project. Opening one lets the owner rewrite it, link it to others or
+  pin it to projects, and forget it.
 - **Channels**: on a server gateway, WhatsApp, Telegram, Email and API Server, with contact
   approvals and groups. Email goes through Resend or Cloudflare, chosen when it is connected,
   with JIAN_PUBLIC_URL set so the provider can reach the gateway. Resend takes an API key with
@@ -70,6 +76,8 @@ One agent's own, from the agent chooser at the foot of the sidebar.
   pull requests of every connected account in place of the chat. Review there hands one to an
   agent; Review settings choose the reviewing agent, its instructions, and whether new pull
   requests are reviewed on their own through the GitHub App's webhook.
+- **Activity**, always last at the top of the sidebar, in place of the chat: tokens, runs and
+  estimated cost. For your own full figures, see \`activity\`.
 - **Renaming**: right-click a conversation in the sidebar, or use the palette, to rename a chat
   or a person on WhatsApp or Telegram. A chat is named by you from its first message until the
   owner renames it; a group keeps the name its members gave it.

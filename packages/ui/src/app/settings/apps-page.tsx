@@ -130,7 +130,7 @@ export function AppsPage() {
           ))}
         </SettingsCards>
       ) : (
-        <p className="px-1 text-sm text-muted">No app matches.</p>
+        <p className="text-sm text-muted">No app matches.</p>
       )}
     </div>
   );

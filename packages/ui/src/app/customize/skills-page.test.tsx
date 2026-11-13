@@ -90,8 +90,12 @@ it('removes a skill of its own only once its name is typed', async () => {
   const updateProfile = vi.fn(async () => profile);
   const view = await render({ updateProfile });
 
-  await act(async () => view.button('Configure concise')?.click());
-  await act(async () => view.button('Remove')?.click());
+  await act(async () => view.button('Actions for concise')?.click());
+  await act(async () =>
+    [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')]
+      .find((item) => item.textContent === 'Remove')
+      ?.click(),
+  );
   const confirm = view.button('Remove skill') as HTMLButtonElement | undefined;
   expect(confirm?.disabled).toBe(true);
 
@@ -104,9 +108,12 @@ it('removes a skill of its own only once its name is typed', async () => {
   });
 });
 
-it('finds a built-in skill by what it says, accents and case aside', async () => {
-  const skill = (name: string, description: string) =>
-    ({ name, description, instructions: `# ${name}`, enabled: true }) as BuiltinSkill;
+const skill = (name: string, description: string) =>
+  ({ name, description, instructions: `# ${name}`, enabled: true }) as BuiltinSkill;
+const shownNames = () =>
+  [...document.querySelectorAll('article h3')].map((item) => item.textContent);
+
+it('finds a skill by what it says, accents and case aside', async () => {
   const view = await render({
     builtinSkills: async () => [
       skill('schedules', 'Do something later, once or on a repetition.'),
@@ -114,16 +121,58 @@ it('finds a built-in skill by what it says, accents and case aside', async () =>
       skill('ssh-keys', 'Keys for Git over SSH, shared by every agent.'),
     ],
   });
-  const shown = () =>
-    [...document.querySelectorAll('[role="switch"]')].map((item) =>
-      item.getAttribute('aria-label'),
-    );
-  expect(shown()).toEqual(['schedules', 'web-research', 'ssh-keys']);
+  expect(shownNames()).toEqual(['concise', 'schedules', 'web-research', 'ssh-keys']);
 
   await view.type(
-    document.querySelector<HTMLInputElement>('[aria-label="Search built-in skills"]'),
+    document.querySelector<HTMLInputElement>('[aria-label="Search skills"]'),
     'RESUME web',
   );
 
-  expect(shown()).toEqual(['web-research']);
+  expect(shownNames()).toEqual(['web-research']);
+
+  await view.type(document.querySelector<HTMLInputElement>('[aria-label="Search skills"]'), 'zzz');
+  expect(document.body.textContent).toContain('No skill matches.');
+});
+
+it('narrows the cards by where the skills came from', async () => {
+  const view = await render({});
+  const choose = async (label: string) => {
+    await act(async () => view.button('Show skills')?.click());
+    await act(async () =>
+      [...document.querySelectorAll<HTMLElement>('[role="option"]')]
+        .find((item) => item.textContent === label)
+        ?.click(),
+    );
+  };
+
+  await choose('Built-in');
+  expect(shownNames()).toEqual(['web-research']);
+
+  // The fixture's own skill carries an address: it was copied, not written here.
+  await choose('Imported');
+  expect(shownNames()).toEqual(['concise']);
+
+  await choose('Written here');
+  expect(shownNames()).toEqual([]);
+});
+
+it('opens a skill rendered as Markdown, and goes back to the cards', async () => {
+  const view = await render({
+    builtinSkills: async () => [
+      { ...research, instructions: '# Find it\n\nUse **the web** first.\n\n- one\n- two' },
+    ],
+  });
+
+  await act(async () => view.button('Read web-research')?.click());
+
+  const reading = document.querySelector('section[aria-label="web-research"]');
+  // The page's own title is an h3 as well; the heading written in the skill is inside `.markdown`.
+  expect(reading?.querySelector('.markdown h3')?.textContent).toBe('Find it');
+  expect(reading?.querySelector('strong')?.textContent).toBe('the web');
+  expect(reading?.querySelectorAll('li')).toHaveLength(2);
+  // The raw syntax is not what is read.
+  expect(reading?.textContent).not.toContain('**');
+
+  await act(async () => view.button('Back to skills')?.click());
+  expect(shownNames()).toEqual(['concise', 'web-research']);
 });

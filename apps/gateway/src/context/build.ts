@@ -31,6 +31,8 @@ export interface ContextSources {
   memories: Memory[];
   /** The memories linked to those, recalled with them when there is room. */
   linked?: Memory[];
+  /** Memories the owner pinned to this chat's project: recalled before the ones words matched. */
+  pinned?: Memory[];
   activities: Run[];
   /** This chat and the approved channel ones: whom it talks to, and where. */
   conversations?: Array<{ sessionId: string; channel: string; with: string; group?: boolean }>;
@@ -166,7 +168,10 @@ export function buildContext(
     }
   };
 
-  // What the request matched comes first; then, one step out, what is linked to it, in the
+  // A project chat reads what the owner pinned to that project before anything else.
+  for (const memory of sources.pinned ?? []) take(memory);
+
+  // What the request matched comes next; then, one step out, what is linked to it, in the
   // order of what matched best. A link recalls its neighbours, never theirs.
   for (const { memory } of ranked) take(memory);
 
