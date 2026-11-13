@@ -6,15 +6,16 @@ import { build } from 'esbuild';
 
 /**
  * The local gateway the packaged app runs, in .gateway/, which after-pack copies into the app's
- * resources: the gateway bundled into one file with everything it uses, beside the two
- * dependencies a bundle cannot hold — sharp is native code, PGlite loads its WebAssembly from its
- * own files — installed for this machine. Each platform and CPU is packaged on one of its own.
+ * resources: the gateway bundled into one file with everything it uses, beside the
+ * dependencies a bundle cannot hold — sharp and the terminals' node-pty are native code, PGlite
+ * loads its WebAssembly from its own files — installed for this machine. Each platform and CPU
+ * is packaged on one of its own.
  */
 const root = fileURLToPath(new URL('../../../', import.meta.url));
 const gateway = join(root, 'apps', 'gateway');
 const target = fileURLToPath(new URL('../.gateway/', import.meta.url));
 /** Kept out of the bundle and installed beside it. */
-const native = ['sharp', '@electric-sql/pglite'];
+const native = ['sharp', '@electric-sql/pglite', '@lydell/node-pty'];
 /** Kept out and not installed: only a server's store and queue import them. */
 const unreached = ['pg', 'pg-boss', 'playwright'];
 /**

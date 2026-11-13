@@ -12,6 +12,7 @@ export type InspectorTab =
   | { key: string; kind: 'agent'; runId: string }
   | { key: string; kind: 'github'; item: GitHubItem }
   | { key: string; kind: 'browser'; pageId: string; title: string; url: string }
+  | { key: string; kind: 'terminal'; terminalId: string }
   | {
       key: string;
       kind: 'changes';
@@ -57,6 +58,11 @@ type Crew = {
   open: (item: GitHubItem, opener?: HTMLElement | null) => void;
   /** Brings a browser tab to the front, the Inspector open around it. */
   browser: (pageId: string) => void;
+  /**
+   * Brings in the tab of a terminal the gateway opened. `replaces` is the key of the tab it
+   * takes the place of: an ended shell started again stays where it was.
+   */
+  openTerminal: (terminalId: string, replaces?: string) => void;
   /** Takes the host's tabs as they stand: names, new ones and those no longer there. */
   syncBrowser: (pages: BrowserPageTab[]) => void;
   reopen: () => void;
@@ -87,7 +93,7 @@ const KEPT_CONVERSATIONS = 50;
 const isTab = (tab: unknown) =>
   Boolean(tab) &&
   typeof (tab as InspectorTab).key === 'string' &&
-  ['agent', 'github', 'browser', 'changes'].includes((tab as InspectorTab).kind);
+  ['agent', 'github', 'browser', 'changes', 'terminal'].includes((tab as InspectorTab).kind);
 
 /** Storage is the owner's but may hold an older shape: what does not read is left out. */
 function readKept(): Map<string, Kept> {
@@ -226,6 +232,18 @@ export const useCrew = create<Crew>()((set, get) => ({
         tabs: state.tabs.some((tab) => tab.key === key)
           ? state.tabs
           : [...state.tabs, { key, kind: 'browser', pageId, title: '', url: '' }],
+      };
+    }),
+  openTerminal: (terminalId, replaces) =>
+    set((state) => {
+      const tab: InspectorTab = { key: `terminal:${terminalId}`, kind: 'terminal', terminalId };
+      return {
+        opened: true,
+        following: tab.key,
+        item: undefined,
+        tabs: state.tabs.some((item) => item.key === replaces)
+          ? state.tabs.map((item) => (item.key === replaces ? tab : item))
+          : [...state.tabs, tab],
       };
     }),
   syncBrowser: (pages) =>

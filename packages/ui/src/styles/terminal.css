@@ -1,0 +1,48 @@
+@import "@xterm/xterm/css/xterm.css" layer(components);
+
+/* A terminal in the Inspector. The sixteen colours a shell asks for by number, as the kit has
+   them: its own tokens where one fits, and a blue and a cyan it has no other use for. xterm
+   takes them as values, read off the page, so each is a plain colour it can parse (`rgba()`
+   with commas for the one that is see-through). */
+:root {
+  --terminal-selection: rgba(245, 245, 243, 0.22);
+  --terminal-black: #1c1c1c;
+  --terminal-red: var(--bad);
+  --terminal-green: var(--good);
+  --terminal-yellow: var(--warn);
+  --terminal-blue: #8fb8f6;
+  --terminal-magenta: var(--merged);
+  --terminal-cyan: #7fd3e0;
+  --terminal-white: #d2d2ce;
+  --terminal-bright-black: #7d7d79;
+  --terminal-bright-white: var(--ink);
+}
+
+/* On a light ground "white" cannot be white: it is the quiet ink, as light terminals have it. */
+:root[data-theme="light"] {
+  --terminal-selection: rgba(23, 23, 22, 0.16);
+  --terminal-black: var(--ink);
+  --terminal-blue: #1f5fbf;
+  --terminal-cyan: #0f7482;
+  --terminal-white: var(--muted);
+  --terminal-bright-black: #55554f;
+  --terminal-bright-white: #8a8a84;
+}
+
+@layer components {
+  /* The terminal fills what the tab leaves it and never sizes it: xterm is measured against
+     this box, and a box that grew with its rows would never settle. It has no padding of its
+     own, which that measuring would not count. */
+  .terminal-screen {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    color: var(--muted);
+    font-size: 0.8125rem;
+  }
+  /* 16px across and down in all, which screen.ts counts on when it sizes a new terminal. */
+  .terminal-screen .xterm {
+    height: 100%;
+    padding: 8px 4px 8px 12px;
+  }
+}

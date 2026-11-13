@@ -326,13 +326,9 @@ it('closes without losing its tabs, and opens again where it was', () => {
   expect(crew().item?.number).toBe(7);
 });
 
-it('opens and closes from its key, and stays closed where it has nothing to show', () => {
+it('opens and closes from its key, on a host with no browser too: a terminal is always offered', () => {
   clean();
   useCrew.setState({ openBrowser: undefined });
-  toggleInspector();
-  expect(crew().opened).toBe(false);
-
-  useCrew.setState({ openBrowser: () => {} });
   toggleInspector();
   expect(crew().opened).toBe(true);
   toggleInspector();
@@ -414,7 +410,7 @@ it('opens empty with what it can open, and the last tab closed comes back to tha
   expect(element.textContent).toContain('Keep something open');
 });
 
-it('closes rather than empties where nothing can be opened in it', async () => {
+it('offers a terminal on a host with no browser, where its last tab closed leaves that', async () => {
   useCrew.setState({ tabs: [page('one', 'Atlas')], following: 'browser:one' });
   await shownWith();
 
@@ -422,7 +418,10 @@ it('closes rather than empties where nothing can be opened in it', async () => {
     element.querySelector<HTMLButtonElement>('[aria-label="Close Atlas tab"]')?.click(),
   );
 
-  expect(crew().opened).toBe(false);
+  expect(crew().opened).toBe(true);
+  expect(
+    [...element.querySelectorAll('button')].map((button) => button.textContent?.slice(0, 8)),
+  ).toContain('Terminal');
 });
 
 it('hands a new chat its Inspector as it stood, browser included', () => {

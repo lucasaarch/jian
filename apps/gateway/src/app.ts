@@ -45,6 +45,9 @@ import { registerSshRoutes } from './ssh/routes.js';
 import { registerStatsRoutes } from './stats/routes.js';
 import type { Store } from './storage/database.js';
 import { registerWorkRoutes } from './tasks/routes.js';
+import type { SpawnPty } from './terminals/pty.js';
+import { registerTerminalRoutes } from './terminals/routes.js';
+import { Terminals } from './terminals/service.js';
 import { registerWebRoutes } from './web/routes.js';
 import { registerWorktreeRoutes } from './worktrees/routes.js';
 
@@ -67,6 +70,8 @@ export function createApp(
     maxStreams?: number;
     /** How long a quiet event stream waits before a heartbeat, in ms; tests shorten it. */
     heartbeatMs?: number;
+    /** What starts a terminal's shell; tests pass one that starts no process. */
+    spawnTerminal?: SpawnPty;
     /**
      * Who may set X-Forwarded-For and -Proto. The rate limits key on the address they name, and
      * the panel cookie is marked Secure from the scheme; trusting anyone else would let a client
@@ -86,6 +91,7 @@ export function createApp(
   }
 
   const coordination = new Coordination(options);
+  const terminals = new Terminals(options.spawnTerminal);
 
   const app = Fastify({
     logger:
@@ -146,6 +152,11 @@ export function createApp(
 
   configureSecurity(app, options);
 
+  // A shell belongs to the gateway that shows it: none is left running behind a closed one.
+  // Before the server stops taking requests, not after: a terminal's open stream is a request
+  // in flight, and ending the shells is what ends it.
+  app.addHook('preClose', async () => terminals.closeAll());
+
   // The limiter attaches itself to each route as the route is added, and a plugin only loads
   // once the queue reaches it. Routes declared directly on `app` here would all be added before
   // it, unlimited; registering them as the next plugin puts them after it.
@@ -184,6 +195,7 @@ export function createApp(
     registerProjectRoutes(routes, options.projects);
     registerSessionRoutes(routes, { ...options, coordination });
     registerWorktreeRoutes(routes, options);
+    registerTerminalRoutes(routes, { ...options, terminals });
     registerMemoryRoutes(routes, options);
     registerStatsRoutes(routes, options);
     registerScheduleRoutes(routes, options);
