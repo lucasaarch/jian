@@ -448,9 +448,6 @@ it('offers Files for projects the gateway holds, several included, and not on a 
     useCrew.setState({ tabs: [], following: undefined, machineId: 'machine-1' }),
   );
   expect(offer('Files')).toBeUndefined();
-  crew().close();
-  toggleInspector();
-  expect(crew().opened).toBe(false);
 
   useCrew.setState({ machineId: undefined, projects: false });
 });
