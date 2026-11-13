@@ -2376,6 +2376,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/profiles/{profileId}/memories/{memoryKey}/projects": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** @description Required permission: admin. */
+        put: operations["setMemoryProjects"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/profiles/{profileId}/stats": {
         parameters: {
             query?: never;
@@ -25736,6 +25753,7 @@ export interface operations {
                         /** Format: uuid */
                         sourceSessionId?: string;
                         links?: string[];
+                        projectIds?: string[];
                         /** Format: date-time */
                         updatedAt: string;
                     }[];
@@ -25859,6 +25877,7 @@ export interface operations {
                         /** Format: uuid */
                         sourceSessionId?: string;
                         links?: string[];
+                        projectIds?: string[];
                         /** Format: date-time */
                         updatedAt: string;
                     };
@@ -25975,6 +25994,7 @@ export interface operations {
                         /** Format: uuid */
                         sourceSessionId?: string;
                         links?: string[];
+                        projectIds?: string[];
                         /** Format: date-time */
                         updatedAt: string;
                     };
@@ -26092,6 +26112,7 @@ export interface operations {
                         /** Format: uuid */
                         sourceSessionId?: string;
                         links?: string[];
+                        projectIds?: string[];
                         /** Format: date-time */
                         updatedAt: string;
                     };
@@ -26209,6 +26230,130 @@ export interface operations {
                         /** Format: uuid */
                         sourceSessionId?: string;
                         links?: string[];
+                        projectIds?: string[];
+                        /** Format: date-time */
+                        updatedAt: string;
+                    };
+                };
+            };
+            /** @description Error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    setMemoryProjects: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                profileId: string;
+                memoryKey: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    projectIds: string[];
+                };
+            };
+        };
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        id: string;
+                        /** Format: uuid */
+                        profileId: string;
+                        key: string;
+                        content: string;
+                        version: number;
+                        /** Format: uuid */
+                        sourceSessionId?: string;
+                        links?: string[];
+                        projectIds?: string[];
                         /** Format: date-time */
                         updatedAt: string;
                     };

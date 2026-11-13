@@ -1,7 +1,7 @@
 'use client';
 
 import { ArrowRight, GitPullRequest, GitPullRequestDraft, MessageSquare, Zap } from 'lucide-react';
-import { Action, HoverTip, StatusPill } from '../../kit';
+import { Action, HoverTip, iconButton, StatusPill } from '../../kit';
 import type { GitHubPullRow } from '../../lib/api';
 import { ago } from '../../lib/format';
 import { checksPill, decisionPill, mergePill, pullKey } from './cells';
@@ -14,14 +14,15 @@ const since = (value: string) => {
   return when === 'now' ? 'just now' : `${when} ago`;
 };
 
-// The outer cells sit further in, clear of the table's rounded corners.
-const edges = 'px-3 first:pl-4 last:pr-4';
+// The table lies on the page, edge to edge: its outer cells keep the page's own margin, so the
+// rows line up with the filters above them.
+const edges = 'px-3 first:pl-5 last:pr-5 phone:first:pl-3 phone:last:pr-3';
 const head = `${edges} py-2.5 text-left text-[11px] font-medium tracking-wide text-muted uppercase`;
 const cell = `${edges} py-3 align-middle`;
 
 /*
  * The table goes by its own width, which the Inspector beside it can halve, not the window's:
- * the wrapper holding it is the container. Every fixed column together is 43rem, so past each
+ * the wrapper holding it is the container. Every fixed column together is 44rem, so past each
  * width one goes, the least needed first, and the title keeps its room. Checks and merge then
  * move under the title.
  */
@@ -53,7 +54,7 @@ export function PullTable({
           <th className={`${head} w-32 ${checksCol}`}>Checks</th>
           <th className={`${head} w-28 ${mergeCol}`}>Merge</th>
           <th className={`${head} w-24 ${updatedCol}`}>Updated</th>
-          <th className={`${head} w-36 text-right`}>
+          <th className={`${head} w-40 text-right`}>
             <span className="sr-only">Agent review</span>
           </th>
         </tr>
@@ -137,23 +138,27 @@ function PullRow({
       </td>
       <td className={`${cell} text-right`}>
         <span className="inline-flex items-center justify-end gap-1">
-          {pull.review && (
+          {/* The review's chat holds a place of its own, there or not, so every Review button
+              ends and starts on the same line down the table. */}
+          {pull.review ? (
             <HoverTip
               tip={`${pull.review.trigger === 'auto' ? 'Reviewed automatically' : 'Reviewed'} ${since(pull.review.createdAt)}. Open the chat.`}
             >
-              <Action
-                tone="quiet"
-                size="small"
+              <button
+                type="button"
+                className={iconButton}
                 aria-label="Open the review chat"
                 onClick={() => pull.review && openChat(pull.review)}
               >
                 {pull.review.trigger === 'auto' ? (
-                  <Zap size={13} aria-hidden="true" />
+                  <Zap size={14} aria-hidden="true" />
                 ) : (
-                  <MessageSquare size={13} aria-hidden="true" />
+                  <MessageSquare size={14} aria-hidden="true" />
                 )}
-              </Action>
+              </button>
             </HoverTip>
+          ) : (
+            <span className="size-7 shrink-0" aria-hidden="true" />
           )}
           <Action tone="outline" size="small" busy={starting} onClick={review}>
             Review

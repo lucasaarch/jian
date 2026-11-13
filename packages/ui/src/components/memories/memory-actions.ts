@@ -7,12 +7,17 @@ import type { SectionActions } from '../props';
 export const MEMORY_CONTENT_LIMIT = 4000;
 export const MEMORY_LINK_LIMIT = 12;
 
-/** The memories whose key or text holds what was typed; all of them when nothing was. */
-export function matchingMemories(memories: Memory[], query: string): Memory[] {
+/**
+ * The memories whose key or text holds what was typed and, when a project is chosen, that are
+ * pinned to it; all of them when neither was.
+ */
+export function matchingMemories(memories: Memory[], query: string, projectId = ''): Memory[] {
   const terms = query.trim().toLowerCase();
 
-  return memories.filter((item) =>
-    terms ? `${item.key} ${item.content}`.toLowerCase().includes(terms) : true,
+  return memories.filter(
+    (item) =>
+      (terms ? `${item.key} ${item.content}`.toLowerCase().includes(terms) : true) &&
+      (projectId ? (item.projectIds ?? []).includes(projectId) : true),
   );
 }
 
@@ -44,6 +49,8 @@ export function memoryActions(
       mutate(() => api.editMemory(profileId, memory.key, content, memory.version), 'Memory saved.'),
     link: (memory: Memory, key: string) =>
       mutate(() => api.linkMemories(profileId, memory.key, key), `Linked to ${key}.`),
+    setProjects: (memory: Memory, projectIds: string[]) =>
+      mutate(() => api.setMemoryProjects(profileId, memory.key, projectIds), 'Projects updated.'),
     unlink: (memory: Memory, key: string) =>
       mutate(() => api.unlinkMemories(profileId, memory.key, key), `Unlinked from ${key}.`),
     forget: (memory: Memory) => mutate(() => api.forget(profileId, memory.key), 'Memory deleted.'),

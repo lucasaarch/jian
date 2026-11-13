@@ -3,6 +3,7 @@
 import { GATEWAY_SESSION_CHANNEL } from '@jian/contracts';
 import { useQuery } from '@tanstack/react-query';
 import {
+  Activity,
   AlarmClock,
   Bot,
   GitPullRequest,
@@ -17,7 +18,14 @@ import { TelegramLogo, WhatsAppLogo } from '../components/ui';
 import type { Session } from '../lib/api';
 import { conversationName } from '../lib/conversation-name';
 import { useGatewayMode } from '../lib/gateway-mode';
-import { agentPath, newChatPath, onPulls, pullsPath } from '../lib/navigation';
+import {
+  activityPath,
+  agentPath,
+  newChatPath,
+  onActivity,
+  onPulls,
+  pullsPath,
+} from '../lib/navigation';
 import { usePhone } from '../lib/phone';
 import {
   useActivities,
@@ -175,8 +183,9 @@ const action =
 
 /**
  * The top of the sidebar: a new chat — an action, never shown as the one open — and the agent's
- * Schedules, which open over its chats. On a server with GitHub connected, the pull requests,
- * which take the chat's place: GitHub can only reach a gateway with a public address.
+ * Schedules, a page over the app. On a server with GitHub connected, the pull requests, which
+ * take the chat's place: GitHub can only reach a gateway with a public address. Its Activity,
+ * also in the chat's place, is always last.
  */
 function NewChat({ profileId }: { profileId?: string }) {
   const router = useRouter();
@@ -184,7 +193,7 @@ function NewChat({ profileId }: { profileId?: string }) {
   const server = useGatewayMode() === 'server';
   const github = useQuery({ ...queries.githubIntegration(), enabled: server });
   const pulls = server && Boolean(github.data?.accounts.length);
-  const onPullsNow = onPulls(usePathname());
+  const pathname = usePathname();
   const go = (path: string) => () => router.push(path);
   return (
     <div className="grid gap-px px-2 pt-2 pb-5">
@@ -210,13 +219,23 @@ function NewChat({ profileId }: { profileId?: string }) {
         <button
           type="button"
           onClick={go(pullsPath(profileId))}
-          aria-current={onPullsNow ? 'page' : undefined}
+          aria-current={onPulls(pathname) ? 'page' : undefined}
           className={action}
         >
           <GitPullRequest size={15} className="text-muted" aria-hidden="true" />
           Pull requests
         </button>
       )}
+      <button
+        type="button"
+        onClick={profileId ? go(activityPath(profileId)) : undefined}
+        disabled={!profileId}
+        aria-current={onActivity(pathname) ? 'page' : undefined}
+        className={action}
+      >
+        <Activity size={15} className="text-muted" aria-hidden="true" />
+        Activity
+      </button>
     </div>
   );
 }

@@ -2,6 +2,7 @@ import {
   iconButton,
   openInspector,
   SidebarBar,
+  useInspectorAway,
   useInspectorShowing,
   useStageShowing,
   WindowControls,
@@ -27,6 +28,8 @@ export function TitleBar({ gateway }: { gateway?: GatewaySummary }) {
   const mac = desktop().platform === 'darwin';
   const staged = useStageShowing();
   const inspecting = useInspectorShowing();
+  // A screen in the conversation's place, as the pull requests or settings, has no Inspector.
+  const away = useInspectorAway();
   const memory = gateway ? navigationFor(gateway.id) : undefined;
   // Read to follow the navigation, so back and forward come alive as it moves.
   useSyncExternalStore(memory?.subscribe ?? idle, memory?.current ?? (() => ''));
@@ -83,7 +86,7 @@ export function TitleBar({ gateway }: { gateway?: GatewaySummary }) {
       )}
       {/* Where the open Inspector keeps its close button, in its size and hover: the same button
           whether the Inspector is open or not. Centred in the title bar, which is 2.5rem. */}
-      {!staged && !inspecting && (
+      {!staged && !inspecting && !away && (
         <button
           type="button"
           aria-label="Open inspector"

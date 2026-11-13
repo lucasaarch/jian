@@ -29,6 +29,7 @@ import { githubItemOf } from '../../lib/github-links';
 import { usePhone } from '../../lib/phone';
 import { type BrowserPageTab, type InspectorTab, useCrew } from '../../lib/stores/crew';
 import { MIN_CHAT_WIDTH, useLayout } from '../../lib/stores/layout';
+import { useInspectorAway } from '../../lib/stores/screen';
 import { watchSize } from '../../lib/watch-size';
 import { InspectorTabs } from './inspector-tabs';
 import { inTerminal, openTerminalTab, terminalLabel } from './terminal/tabs';
@@ -186,7 +187,9 @@ export function InspectorHost({
   /** Closes the page behind a browser tab. */
   closeBrowser?: (pageId: string) => void;
 }) {
-  const opened = useCrew((state) => state.opened);
+  // A screen in the conversation's place has none: it stays as it was, for the return.
+  const away = useInspectorAway();
+  const opened = useCrew((state) => state.opened) && !away;
   const following = useCrew((state) => state.following);
   const tabs = useCrew((state) => state.tabs);
   const agents = useCrew((state) => state.agents);

@@ -3,8 +3,7 @@
 import { Square } from 'lucide-react';
 import { useContext, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { iconButton } from '../../kit/icon-button';
-import { HoverTip } from '../../kit/info-tip';
+import { Action } from '../../kit/action';
 import { SkeletonLine, SkeletonRegion } from '../../kit/skeleton';
 import type { GatewayApi, Message, Profile, ToolStep } from '../../lib/api';
 import { useCrew } from '../../lib/stores/crew';
@@ -13,7 +12,7 @@ import { active, Elapsed, ModelNames, TierChip, useDrawerFocus } from './crew';
 import { useAgentRead } from './crew-reads';
 import { groupMessages } from './group-messages';
 import { InspectorBar, InspectorBody, InspectorHeader } from './inspector';
-import { InspectorContent } from './inspector-host';
+import { InspectorContent, useInspectorHosted } from './inspector-host';
 import { MessageMedia } from './media';
 import { ChatMessage } from './message';
 import { LiveTurn, placeSteps, statusOf } from './progress';
@@ -25,8 +24,8 @@ const chip =
   'inline-flex h-5 shrink-0 items-center rounded-full bg-ink/8 px-2 text-[11px] font-medium whitespace-nowrap text-muted';
 
 /**
- * One agent followed beside the conversation, in the Inspector: its kind and how long it has
- * worked on the top line; its name, tier, model and why it got them above; then what it did and
+ * One agent followed beside the conversation, in the Inspector: its name, its kind, tier and
+ * model, how long it has worked and the way to stop it above; then what it did and
  * said, which alone scrolls. The chat and the composer stay usable beside it; on a phone it is a
  * sheet from below.
  */
@@ -45,6 +44,7 @@ export function CrewDrawer({
   const modelName = useContext(ModelNames);
   const [stopping, setStopping] = useState<string>();
   const closer = useRef<HTMLButtonElement>(null);
+  const hosted = useInspectorHosted();
   const working = agent ? active(agent) : false;
   const runId = agent?.runId;
   const place = agent?.sessionId;
@@ -82,6 +82,26 @@ export function CrewDrawer({
     items.length > 0 ? (
       <ThoughtLine working={false} steps={traceOf(items, agent.runId)} />
     ) : undefined;
+  const stop = async () => {
+    const id = agent.runId;
+    setStopping(id);
+    try {
+      const result = await api.cancelRun?.(profileId, id);
+      if (result?.status === 'cancelled') {
+        useCrew.setState((state) => ({
+          agents: state.agents.map((item) =>
+            item.runId === id
+              ? { ...item, status: 'cancelled', updatedAt: result.updatedAt }
+              : item,
+          ),
+        }));
+      }
+    } catch (failure) {
+      toast.error(failure instanceof Error ? failure.message : 'Could not stop this agent.');
+    } finally {
+      setStopping(undefined);
+    }
+  };
   const alreadySaid =
     agent.progress?.phase === 'writing' &&
     said.some((message) => message.content.trim() === agent.progress?.text.trim());
@@ -91,70 +111,52 @@ export function CrewDrawer({
       <StepDetailsContext.Provider value={details}>
         {/* One element per agent: turning to another starts its scroll and live turn afresh. */}
         <aside key={agent.runId} className="crew-drawer subagent-drawer" aria-label={agent.name}>
-          <InspectorBar
-            closer={closer}
-            options={
-              working &&
-              api.cancelRun && (
-                <HoverTip tip="Stop agent">
-                  <button
-                    type="button"
-                    aria-label="Stop agent"
-                    className={`${iconButton} disabled:opacity-40`}
-                    disabled={stopping === agent.runId}
-                    onClick={async () => {
-                      const id = agent.runId;
-                      setStopping(id);
-                      try {
-                        const result = await api.cancelRun?.(profileId, id);
-                        if (result?.status === 'cancelled') {
-                          useCrew.setState((state) => ({
-                            agents: state.agents.map((item) =>
-                              item.runId === id
-                                ? { ...item, status: 'cancelled', updatedAt: result.updatedAt }
-                                : item,
-                            ),
-                          }));
-                        }
-                      } catch (failure) {
-                        toast.error(
-                          failure instanceof Error ? failure.message : 'Could not stop this agent.',
-                        );
-                      } finally {
-                        setStopping(undefined);
-                      }
-                    }}
-                  >
-                    <Square size={13} aria-hidden="true" />
-                  </button>
-                </HoverTip>
-              )
-            }
-          >
-            <span className="text-xs">
-              {agent.role === 'review' ? 'Review agent' : 'Execute agent'}
-            </span>
-          </InspectorBar>
-          <InspectorHeader title={agent.name}>
+          {/* Only the way out lives up here, where no Inspector's bar holds one already. */}
+          {!hosted && (
+            <InspectorBar closer={closer}>
+              <span />
+            </InspectorBar>
+          )}
+          <InspectorHeader title={agent.name} flush={hosted}>
             <p className="flex flex-wrap items-center gap-1.5">
+              <span className={chip}>{agent.role === 'review' ? 'Review' : 'Execute'}</span>
               <TierChip tier={agent.tier} />
               {agent.modelSelection && (
                 <span className={chip}>{modelName(agent.modelSelection)}</span>
               )}
             </p>
-            <p className="flex min-h-5 items-center gap-2 text-xs text-muted" role="status">
-              <WorkMark working={working} failed={failed} orb={statusOf(agent).state} />
-              <span>
-                {stopping === agent.runId
-                  ? 'Stopping…'
-                  : working
-                    ? 'Working'
-                    : agent.status === 'completed'
-                      ? 'Completed in'
-                      : 'Stopped after'}
-              </span>
-              <Elapsed agent={agent} className="font-mono text-xs tabular-nums" />
-            </p>
+            <div className="flex min-h-7 items-center gap-2">
+              <p
+                className="flex min-w-0 flex-1 items-center gap-2 text-xs text-muted"
+                role="status"
+              >
+                <WorkMark working={working} failed={failed} orb={statusOf(agent).state} />
+                <span>
+                  {stopping === agent.runId
+                    ? 'Stopping…'
+                    : working
+                      ? 'Working'
+                      : agent.status === 'completed'
+                        ? 'Completed in'
+                        : 'Stopped after'}
+                </span>
+                <Elapsed agent={agent} className="font-mono text-xs tabular-nums" />
+              </p>
+              {/* Named, not a bare square: stopping work is not to be found by hovering. */}
+              {working && api.cancelRun && (
+                <Action
+                  tone="outline"
+                  size="small"
+                  className="text-bad"
+                  aria-label="Stop agent"
+                  busy={stopping === agent.runId}
+                  onClick={stop}
+                >
+                  <Square size={10} fill="currentColor" aria-hidden="true" />
+                  Stop
+                </Action>
+              )}
+            </div>
           </InspectorHeader>
           <InspectorBody className="grid content-start gap-3 px-[var(--inspector-content-inset,var(--inspector-inset))] pt-4 [&_.chat-line]:mb-0">
             {error && <p className="text-[13px] text-bad">{error}</p>}

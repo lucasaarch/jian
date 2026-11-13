@@ -38,6 +38,9 @@ make release VERSION=1.2.3   # only when asked; needs docs/releases/1.2.3.md
   it lacks is added to it, not drawn in place. Read the `glass-kit` skill before UI work.
 - Every icon-only button in a bar is the kit's `iconButton`: round, no ground or border until
   hovered. More than a few go behind one `Ellipsis` menu.
+- Settings, schedules, activity, skills, memories and every screen like them share one anatomy
+  (`kit/page-layout.tsx`): column, heading, toolbar, sections, `surfaceCard`, all on one edge.
+  A page, never an overlay. Pull requests alone differ. See the `glass-kit` skill.
 - All UI lives in `packages/ui`, with relative imports. A host only supplies what it alone has.
 - A change on desktop or web is a change on both. Adapt it to the other host in the same work, or
   say why it cannot apply. Read the `desktop-and-web` skill.

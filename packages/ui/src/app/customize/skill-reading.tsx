@@ -1,55 +1,63 @@
 'use client';
 
+import { Pencil } from 'lucide-react';
+import type { SkillItem } from '../../components/skills/skill-items';
 import { Markdown } from '../../components/ui/markdown';
-import { Action, Overlay, OverlayActions, StatusPill } from '../../kit';
-import type { BuiltinSkill } from '../../lib/api';
+import { Action, PageHeading, StatusPill, SwitchControl, surfaceCard } from '../../kit';
+import type { SkillControls } from './skill-card';
 
 /** A skill's instructions as the agent reads them, rendered. */
-export function SkillInstructions({ text }: { text: string }) {
+export function SkillInstructions({ text, tall = false }: { text: string; tall?: boolean }) {
   return (
-    <div className="markdown max-h-[50dvh] overflow-y-auto rounded-xl border border-glass-edge bg-glass-hover px-3.5 py-3 text-sm leading-relaxed">
+    <div
+      className={`markdown overflow-y-auto ${surfaceCard} px-4 py-3.5 text-sm leading-relaxed ${tall ? '' : 'max-h-[50dvh]'}`}
+    >
       <Markdown text={text} />
     </div>
   );
 }
 
 /**
- * A built-in skill, to read. The owner cannot edit one, so its instructions are shown in full:
- * what an agent was told has to be readable by the person answering for it.
+ * One skill to read, in place of the cards: what the agent is told, rendered as Markdown. The
+ * owner cannot edit a built-in skill, so its instructions are shown in full: what an agent was
+ * told has to be readable by the person answering for it. One of the agent's own is edited from
+ * here, in the form it always had.
  */
 export function SkillReading({
-  skill,
-  enabled,
-  open,
-  onOpenChange,
-}: {
-  /** Kept while the dialog fades out, so it closes as it was. */
-  skill: BuiltinSkill | undefined;
-  enabled: boolean;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-}) {
+  item,
+  onBack,
+  onEdit,
+  onSwitch,
+}: Pick<SkillControls, 'onEdit' | 'onSwitch'> & { item: SkillItem; onBack: () => void }) {
   return (
-    <Overlay open={open} onOpenChange={onOpenChange} title={skill?.name ?? 'Skill'} size="page">
-      {skill && (
-        <div className="grid w-full gap-5 p-7">
-          <header className="grid gap-1.5 pr-10">
-            <h2 className="flex items-center gap-2.5 text-lg font-semibold tracking-tight">
-              {skill.name}
-              <StatusPill>Built-in</StatusPill>
-              {!enabled && <StatusPill>Off</StatusPill>}
-            </h2>
-            <p className="text-sm leading-relaxed text-muted">{skill.description}</p>
-          </header>
-          <SkillInstructions text={skill.instructions} />
-          <OverlayActions>
-            <span className="flex-1" />
-            <Action tone="quiet" onClick={() => onOpenChange(false)}>
-              Close
+    <section aria-label={item.name} className="grid min-w-0 grid-cols-1 gap-4">
+      <PageHeading
+        onBack={onBack}
+        backLabel="Back to skills"
+        title={
+          <>
+            <span className="truncate">{item.name}</span>
+            <StatusPill>{item.source}</StatusPill>
+            {!item.enabled && <StatusPill tone="warn">Off</StatusPill>}
+          </>
+        }
+        description={item.description}
+        actions={
+          item.kind === 'built-in' ? (
+            <SwitchControl
+              label={item.name}
+              checked={item.enabled}
+              onCheckedChange={(on) => onSwitch(item, on)}
+            />
+          ) : (
+            <Action tone="outline" size="small" className="h-8" onClick={() => onEdit(item)}>
+              <Pencil size={13} />
+              Edit
             </Action>
-          </OverlayActions>
-        </div>
-      )}
-    </Overlay>
+          )
+        }
+      />
+      <SkillInstructions text={item.instructions} tall />
+    </section>
   );
 }

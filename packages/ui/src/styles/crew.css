@@ -170,11 +170,11 @@
   --inspector-inset: 0.5rem;
 }
 
-/* A subagent's conversation, read as the conversation's own is: its text as far in as the
-   conversation's sits, 1.25rem, where the shared edge would leave it against the pane's side.
+/* A subagent's conversation, read as prose: its heading and its text on one edge, 1rem in, where
+   the tabs' own labels start, so nothing in it stands further in than the rest.
    Set on the drawer, so it holds wherever the drawer is drawn, the desktop's portal included. */
 .subagent-drawer {
-  --inspector-content-inset: 1.25rem;
+  --inspector-content-inset: 1rem;
 }
 /* On a phone the sheet keeps the conversation's own side padding there. */
 @media (max-width: 760px) {

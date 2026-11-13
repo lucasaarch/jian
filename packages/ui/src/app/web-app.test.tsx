@@ -86,7 +86,8 @@ async function render(at: string, client?: QueryClient) {
   return host;
 }
 
-const dialog = () => document.querySelector('[role="dialog"]');
+// Settings are a page over the app now, not a dialog over it.
+const dialog = () => document.querySelector('[data-app-page]');
 const press = async (name: string) => {
   const target = [...document.querySelectorAll('button')].find(
     (item) => item.getAttribute('aria-label') === name || item.textContent?.trim() === name,
@@ -227,6 +228,10 @@ it('shows a phone the chats first, and the conversation once one is opened', asy
 it('opens the agent’s Activity at its own address, which was its Overview', async () => {
   await render(`/agents/${profile.id}`);
 
-  expect(dialog()?.querySelector('section h2')?.textContent).toBe('Activity');
-  expect(memoryNavigation.current()).toBe(`/agents/${profile.id}/sessions`);
+  // A screen in the chat's place now, with an address of its own, not a page of settings.
+  expect(memoryNavigation.current()).toBe(`/agents/${profile.id}/activity`);
+  expect(dialog()).toBeNull();
+  expect(document.querySelector('section[aria-labelledby="activity-title"] h1')?.textContent).toBe(
+    'Activity',
+  );
 });

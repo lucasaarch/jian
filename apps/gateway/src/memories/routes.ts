@@ -33,6 +33,12 @@ export function registerMemoryRoutes(app: FastifyInstance, deps: { memories: Mem
       ),
   );
 
+  app.put<{ Params: MemoryParams }>(
+    '/v1/profiles/:profileId/memories/:memoryKey/projects',
+    async (request) =>
+      deps.memories.setProjects(request.params.profileId, request.params.memoryKey, request.body),
+  );
+
   app.delete<{ Params: MemoryParams }>(
     '/v1/profiles/:profileId/memories/:memoryKey',
     async (request) => deps.memories.forget(request.params.profileId, request.params.memoryKey),

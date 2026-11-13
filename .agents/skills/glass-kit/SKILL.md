@@ -27,7 +27,8 @@ from the rest is a bug.
 | List that opens | `Picker`, `MenuEntry`, `MenuDivider`, `menuPopup` |
 | Row of tabs that can outgrow its bar | `ScrollStrip`: no scrollbar, wheel and fades |
 | Anything over the page | `Overlay`, `OverlayActions`, `ConfirmDialog` |
-| Room of pages with a list | `Overlay` with `SettingsLayout`, `SettingsGroup`, `SettingsRow` |
+| Room of pages with a list | `Page` with `SettingsLayout`, `SettingsGroup`, `SettingsRow` |
+| A screen's column, heading and cards | `PageBody`, `PageHeading`, `PageToolbar`, `SectionHeading`, `surfaceCard` |
 | Things to connect, side by side | `SettingsCards` holding a `SettingsCard` each |
 | Waiting | `Skeleton`, `SkeletonRegion`, `SettingsPageSkeleton`, `SettingsCardSkeleton`, `Progress` |
 | State or a hint | `StatusPill`, `InfoTip`, `HoverTip` |
@@ -51,9 +52,29 @@ Use the kit's own phone width with the `phone:` variant, or `usePhone` in code.
 
 ## Patterns
 
-- **New screens are overlays.** The conversation is the only thing in the main area. Settings,
-  agent settings and schedules are all an `Overlay` with `SettingsLayout`: copy that, and keep its
-  `closeButton={false}`, since the layout has its own way back.
+- **A room of pages takes the app's place.** Settings, agent settings and schedules are a kit
+  `Page` holding a `SettingsLayout`: its list stands where the sidebar was, under a Back button,
+  and the open page where the conversation was. The conversation stays mounted beneath, inert,
+  and Escape goes back. Copy that for a new one, never an `Overlay`.
+- **Every screen has one anatomy.** Settings, agent settings and each of their pages, schedules,
+  activity, skills and memories, and any new screen of the kind, are built from `page-layout.tsx`:
+  - `PageBody`: the column, 40rem for rows and forms, `wide` (72rem) for cards, a map or figures.
+  - `PageHeading`: an `h1` in `text-xl`, what acts on the whole screen (Create, Import, Edit) at
+    its right as `outline` `small` actions 2rem tall, and an arrow `iconButton` back only on a
+    screen opened from a list inside it (one skill).
+  - `PageToolbar` under it: the search taking the room left, then its `Segmented` and
+    `FilterSelect`s. No bar of its own at the top: a screen that is only read has none.
+  - Sections: `SettingsGroup`, or a `SectionHeading` (`text-xs` muted) over the content.
+  - Cards: `surfaceCard` with `p-4`, never another radius, ground or border.
+  - Spacing: `gap-7` between sections (`gap-5` on a phone), `gap-4` from heading to toolbar to
+    content. A page with its own toolbar renders its own `PageHeading` (`ownHeading` on
+    `SettingsLayout`), so the gap stays the same as on one that does not.
+  - Every edge is the column's: no `px-1` or other nudge on a title, a note or a card. Text that
+    stands a few pixels in from the card under it is the misalignment this rule exists to stop.
+  Pull requests is the one exception: a table edge to edge under a `ScreenHeader` of tools.
+- **A screen with no conversation has no Inspector.** A `Page` hides it by itself; a screen in the
+  conversation's place, as Pull requests, calls `useNoInspector()`. Neither closes it: it comes
+  back as it was with the conversation.
 - **Overlay sizes.** `settings` for a room of pages, `form` for one form, `page` for a page to read.
 - **An overlay's actions float.** Put a form's or page's buttons in `OverlayActions`, never in a row
   at the end of the content: they stay at the pane's bottom corners however it scrolls, a submit button

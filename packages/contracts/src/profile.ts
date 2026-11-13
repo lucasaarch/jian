@@ -473,6 +473,14 @@ export const memorySchema = z.strictObject({
 /** How many memories one can be linked to: enough for a topic, few enough to stay a topic. */
 export const MEMORY_LINK_LIMIT = 12;
 
+/** How many projects one memory can be pinned to. */
+export const MEMORY_PROJECT_LIMIT = 20;
+
+/** The whole set of projects a memory is pinned to; an empty one unpins it everywhere. */
+export const memoryProjectsSchema = z.strictObject({
+  projectIds: z.array(z.uuid()).max(MEMORY_PROJECT_LIMIT),
+});
+
 /** The owner rewriting a memory from the panel, against the version they read. */
 export const memoryEditSchema = z.strictObject({
   content: z.string().trim().min(1).max(4_000),

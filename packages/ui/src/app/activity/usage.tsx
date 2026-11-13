@@ -52,7 +52,7 @@ export function UsageSummary({ stats }: { stats?: ProfileStats }) {
       <Mix tokens={period?.tokens} />
       {!stats ? <ModelCardsWaiting /> : stats.models.length > 0 && <ModelCards stats={stats} />}
       {stats && <SubscriptionLimits subscriptions={stats.subscriptions} />}
-      <p className="px-1 text-xs leading-relaxed text-muted">
+      <p className="text-xs leading-relaxed text-muted">
         Cost is estimated from list prices in the models.dev catalog, not from a provider's bill.
         {period &&
           period.unpricedTokens > 0 &&
@@ -186,7 +186,7 @@ export function ModelCards({ stats }: { stats: ProfileStats }) {
           type="button"
           aria-expanded={expanded}
           onClick={() => setExpanded((current) => !current)}
-          className="w-fit px-1 text-xs font-medium text-muted transition-colors hover:text-ink"
+          className="w-fit text-xs font-medium text-muted transition-colors hover:text-ink"
         >
           {expanded ? 'Show fewer models' : `Show all ${stats.models.length} models`}
         </button>

@@ -13,7 +13,12 @@ import type { ContactRecord } from '../channels/contacts.js';
 import { CHANNEL_NAMES } from '../channels/contacts.js';
 import { listConversations, listLiveChannelsOfType } from '../channels/repository.js';
 import type { Judge } from '../decisions/service.js';
-import { findMemories, searchMemories, withLinks } from '../memories/repository.js';
+import {
+  findMemories,
+  memoriesOfProject,
+  searchMemories,
+  withLinks,
+} from '../memories/repository.js';
 import { lastPromptScale } from '../runs/context-usage.js';
 import type { RunReader } from '../runs/port.js';
 import { keptBeside, listContextToolCheckpoints } from '../runs/repository.js';
@@ -277,6 +282,15 @@ export class Contexts {
     // One step out from what matched: the memories linked to it, which the request may not
     // mention at all.
     const memories = worker ? [] : await withLinks(this.store.db, run.profileId, matched);
+    // Outside a project nothing is pinned, and recall is exactly what the words matched.
+    const pinned =
+      !worker && session.projectId
+        ? await withLinks(
+            this.store.db,
+            run.profileId,
+            await memoriesOfProject(this.store.db, run.profileId, session.projectId),
+          )
+        : [];
     const matchedKeys = new Set(memories.map((memory) => memory.key));
     const linked = await findMemories(
       this.store.db,
@@ -379,6 +393,7 @@ export class Contexts {
       ...(this.settings ? { timeZone: await this.settings.timeZone() } : {}),
       memories,
       linked,
+      pinned,
       activities,
       // Name this conversation directly; there is no longer a profile-wide default chat.
       conversations: [

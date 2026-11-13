@@ -3,14 +3,21 @@
 import { useQuery } from '@tanstack/react-query';
 import { RefreshCw, Settings2 } from 'lucide-react';
 import { type ReactNode, useEffect, useState } from 'react';
-import { Action, FilterSelect, HoverTip, SearchField, Segmented, SkeletonLine } from '../../kit';
+import {
+  Action,
+  FilterSelect,
+  HoverTip,
+  iconButton,
+  SearchField,
+  Segmented,
+  SkeletonLine,
+} from '../../kit';
 import type { GitHubPullFilter, GitHubPullRow } from '../../lib/api';
 import { agentPath } from '../../lib/navigation';
-import { usePhone } from '../../lib/phone';
 import { queries } from '../../lib/query/profile';
-import { useCrew } from '../../lib/stores/crew';
-import { useLayout } from '../../lib/stores/layout';
+import { useNoInspector } from '../../lib/stores/screen';
 import { useRouter } from '../../platform/navigation';
+import { ScreenHeader } from '../screen-header';
 import { pullKey } from './cells';
 import { PullTable } from './pull-table';
 import { ReviewSettings } from './review-settings';
@@ -26,11 +33,8 @@ const SEARCH_PAUSE = 400;
  */
 export function PullsScreen({ profileId }: { profileId: string }) {
   const router = useRouter();
-  // With the sidebar away, its buttons float over this header's start.
-  const collapsed = useLayout((state) => state.chatList);
-  // With the Inspector beside it, the host's buttons are over the Inspector, not this header.
-  const phone = usePhone();
-  const beside = useCrew((state) => state.opened) && !phone;
+  // A list of every pull request has no conversation for an Inspector to go with.
+  useNoInspector();
   const accounts = useQuery(queries.githubIntegration()).data?.accounts ?? [];
   const repositories = useQuery(queries.githubRepositories()).data ?? [];
   const [filter, setFilter] = useState<GitHubPullFilter>('open');
@@ -61,39 +65,39 @@ export function PullsScreen({ profileId }: { profileId: string }) {
 
   return (
     <section aria-label="Pull requests" className="flex h-full flex-col overflow-hidden">
-      {/* In the host's title bar, as tall as it is. Alone, its end keeps clear of what a host
-          draws there: the desktop app sets --chrome-end for its Inspector and window buttons. */}
-      <header
-        className={`flex h-(--chrome-top) shrink-0 items-center gap-1.5 border-b border-line ${beside ? 'pr-5' : 'pr-[calc(var(--chrome-end,0px)+1.25rem)]'} ${collapsed ? 'pl-52' : 'pl-5'} phone:h-auto phone:py-2 phone:pr-3 phone:pl-3`}
-      >
-        {/* On a phone the bar above already names it. */}
-        <h1 className="min-w-0 flex-1 truncate text-sm font-semibold text-ink phone:invisible">
-          Pull requests
-        </h1>
-        <HoverTip tip="Refresh">
-          <Action
-            tone="quiet"
-            size="small"
+      <ScreenHeader title="Pull requests">
+        <HoverTip tip="Refresh" side="bottom">
+          <button
+            type="button"
             aria-label="Refresh pull requests"
+            className={iconButton}
             onClick={() => void pulls.refetch()}
           >
             <RefreshCw
-              size={13}
+              size={15}
               className={pulls.isFetching ? 'animate-spin' : ''}
               aria-hidden="true"
             />
-          </Action>
+          </button>
         </HoverTip>
-        <Action tone="outline" size="small" onClick={() => setSettingsOpen(true)}>
-          <Settings2 size={13} aria-hidden="true" />
-          Review settings
-        </Action>
-      </header>
+        <HoverTip tip="Review settings" side="bottom" align="end">
+          <button
+            type="button"
+            aria-label="Review settings"
+            className={iconButton}
+            onClick={() => setSettingsOpen(true)}
+          >
+            <Settings2 size={15} aria-hidden="true" />
+          </button>
+        </HoverTip>
+      </ScreenHeader>
 
       {/* The filters scroll with the list, sticking to its top, so both are as wide as what
-          the scrollbar leaves and their right edges meet. */}
+          the scrollbar leaves and their right edges meet. A rule parts them from the list, which
+          lies on the page itself, edge to edge, as a pull request's Changes lies in the
+          Inspector: no card, only the lines between its rows. */}
       <div className="min-h-0 flex-1 overflow-y-auto">
-        <div className="sticky top-0 z-10 flex flex-wrap items-center gap-2 bg-canvas px-5 py-3 phone:px-3">
+        <div className="sticky top-0 z-10 flex flex-wrap items-center gap-2 border-b border-line bg-canvas px-5 py-3 phone:px-3">
           <Segmented
             label="Pull requests to show"
             value={filter}
@@ -117,9 +121,9 @@ export function PullsScreen({ profileId }: { profileId: string }) {
           />
         </div>
 
-        <div className="px-5 pb-6 phone:px-3">
+        <div className="pb-6">
           {list?.unreachable.length ? (
-            <p className="mb-3 text-xs text-warn">
+            <p className="border-b border-line px-5 py-2.5 text-xs text-warn phone:px-3">
               GitHub did not answer for {list.unreachable.join(', ')}. Their pull requests are left
               out.
             </p>
@@ -130,13 +134,13 @@ export function PullsScreen({ profileId }: { profileId: string }) {
               action={<Action onClick={() => void pulls.refetch()}>Try again</Action>}
             />
           ) : !list ? (
-            <div className="grid gap-4 pt-4" aria-busy="true">
+            <div className="grid gap-4 px-5 pt-4 phone:px-3" aria-busy="true">
               {[0, 1, 2, 3, 4].map((row) => (
                 <SkeletonLine key={row} />
               ))}
             </div>
           ) : list.pulls.length ? (
-            <div className="@container rounded-xl border border-line">
+            <div className="@container">
               <PullTable
                 pulls={list.pulls}
                 starting={
@@ -150,7 +154,7 @@ export function PullsScreen({ profileId }: { profileId: string }) {
             <Empty text={q || repository ? 'No pull request matches.' : 'No open pull requests.'} />
           )}
           {list?.truncated && (
-            <p className="mt-3 text-xs text-muted">
+            <p className="mt-3 px-5 text-xs text-muted phone:px-3">
               Only the most recently updated are shown. Search or pick a repository to find others.
             </p>
           )}

@@ -793,6 +793,34 @@ export const memoryLinks = pgTable(
   ],
 );
 
+/**
+ * A memory the owner pinned to a project. Conversations in that project recall these first.
+ * Both sides cascade: forgetting a memory or removing a project drops the pin, never the other.
+ */
+export const memoryProjects = pgTable(
+  'memory_projects',
+  {
+    profileId: uuid('profile_id').notNull(),
+    memoryKey: text('memory_key').notNull(),
+    projectId: uuid('project_id').notNull(),
+    createdAt,
+  },
+  (table) => [
+    primaryKey({ columns: [table.profileId, table.memoryKey, table.projectId] }),
+    index('memory_projects_project').on(table.profileId, table.projectId),
+    foreignKey({
+      columns: [table.profileId, table.memoryKey],
+      foreignColumns: [memories.profileId, memories.key],
+      name: 'memory_projects_memory_fk',
+    }).onDelete('cascade'),
+    foreignKey({
+      columns: [table.profileId, table.projectId],
+      foreignColumns: [projects.profileId, projects.id],
+      name: 'memory_projects_project_fk',
+    }).onDelete('cascade'),
+  ],
+);
+
 export const checkpoints = pgTable(
   'checkpoints',
   {

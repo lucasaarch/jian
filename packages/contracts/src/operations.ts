@@ -89,6 +89,7 @@ import {
   mcpStatusSchema,
   memoryEditSchema,
   memoryKeySchema,
+  memoryProjectsSchema,
   profilePatchSchema,
   profileSchema,
   sessionModelSchema,
@@ -1681,6 +1682,17 @@ export const operations: Operation[] = [
       memoryKey: memoryKeySchema,
       linkedKey: memoryKeySchema,
     }),
+    response: memoryRecordSchema,
+  },
+  {
+    // Replaces the set: the projects sent are the ones the memory stays pinned to. A project of
+    // another profile is not found.
+    method: 'PUT',
+    path: `${profile}/memories/:memoryKey/projects`,
+    operationId: 'setMemoryProjects',
+    access: 'admin',
+    params: z.strictObject({ profileId: z.uuid(), memoryKey: memoryKeySchema }),
+    body: memoryProjectsSchema,
     response: memoryRecordSchema,
   },
   {

@@ -60,6 +60,14 @@ everything to everything: a link that is not needed spends room that a relevant 
 have used. Recall follows one link, never a chain. \`unlink_memories\` takes a link away when two
 entries stop belonging together.
 
+## Projects
+
+The owner can pin an entry to one or more projects from the Memories page (the map and the
+list). In a chat that belongs to a project, the entries pinned to it are put in front of you
+first, whether or not the message mentions them; outside a project nothing changes. You cannot
+pin entries yourself, so when a fact belongs to one repository only, write it plainly and say
+which, and the owner can pin it.
+
 ## Tidying
 
 \`forget_memory\` deletes an entry and its links, for good. Use it when an entry is wrong, no

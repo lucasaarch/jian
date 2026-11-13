@@ -1,15 +1,13 @@
 'use client';
 
-import { Activity, Brain, MessagesSquare, Sparkles, UserRound } from 'lucide-react';
+import { Brain, MessagesSquare, Sparkles, UserRound } from 'lucide-react';
 import { Suspense, useEffect } from 'react';
-import { AgentFace, Overlay, SettingsLayout, type SettingsPage } from '../kit';
+import { Page, SettingsLayout, type SettingsPage } from '../kit';
 import { useGatewayMode } from '../lib/gateway-mode';
-import { agentPath } from '../lib/navigation';
+import { activityPath, agentPath } from '../lib/navigation';
 import { useContacts } from '../lib/query/agent';
-import { useProfiles } from '../lib/query/profile';
 import { type AgentSettingsPage, useAgentOverlay } from '../lib/stores/agent-overlay';
 import { usePathname, useRouter } from '../platform/navigation';
-import { ActivityContent, ActivityWaiting } from './activity/activity-content';
 import { AgentSettingsContent } from './agent-settings';
 import { ChannelsPage, ChannelsWaiting } from './customize/channels-page';
 import { MemoriesPage, MemoriesWaiting } from './customize/memories-page';
@@ -20,8 +18,8 @@ import { SchedulesOverlay } from './schedules/schedules-content';
  * What an address from before these were overlays asks to open. Links and bookmarks keep working:
  * the overlay opens, and the address goes on to the agent's chats.
  */
-function askedAt(pathname: string): AgentSettingsPage | 'schedules' | undefined {
-  // The agent's own address was its Overview.
+function askedAt(pathname: string): AgentSettingsPage | 'schedules' | 'activity' | undefined {
+  // The agent's own address was its Overview, which is its Activity now.
   if (/^\/agents\/[^/]+\/?$/.test(pathname)) return 'activity';
   if (/^\/agents\/[^/]+\/settings\/?$/.test(pathname)) return 'identity';
   if (/^\/agents\/[^/]+\/schedules\/?$/.test(pathname)) return 'schedules';
@@ -44,19 +42,12 @@ function AgentSettingsOverlay({ profileId }: { profileId: string }) {
   const asked = useAgentOverlay((state) => state.settings);
   const select = useAgentOverlay((state) => state.openSettings);
   const close = useAgentOverlay((state) => state.closeSettings);
-  const profile = useProfiles().data?.find((item) => item.id === profileId);
   const contacts = useContacts();
   // Channels are a server's alone; on this computer's gateway there is no such page.
   const server = useGatewayMode() === 'server';
   const pending = contacts.filter((contact) => contact.status === 'pending').length;
   const page = asked === 'channels' && !server ? 'identity' : (asked ?? 'identity');
   const pages: SettingsPage[] = [
-    {
-      id: 'activity',
-      label: 'Activity',
-      icon: <Activity size={15} />,
-      keywords: ['overview', 'usage', 'stats', 'costs', 'tokens', 'runs'],
-    },
     {
       id: 'identity',
       label: 'Identity',
@@ -89,25 +80,15 @@ function AgentSettingsOverlay({ profileId }: { profileId: string }) {
   ];
 
   return (
-    <Overlay
-      open={Boolean(asked)}
-      onOpenChange={(open) => !open && close()}
-      title="Agent settings"
-      closeButton={false}
-    >
+    <Page open={Boolean(asked)} onClose={close} title="Agent settings">
       <SettingsLayout
-        heading={
-          profile && (
-            <span className="flex min-w-0 items-center gap-2">
-              <AgentFace name={profile.name} avatar={profile.avatar} size={1.5} />
-              <span className="truncate">{profile.name}</span>
-            </span>
-          )
-        }
+        onBack={close}
         pages={pages}
         current={page}
         onSelect={(next) => select(next as AgentSettingsPage)}
         startOnPage={page !== 'identity'}
+        wide={page === 'skills' || page === 'memories'}
+        ownHeading={page === 'skills' || page === 'memories'}
         searchLabel="Search agent settings"
         backLabel="Agent settings"
       >
@@ -121,17 +102,13 @@ function AgentSettingsOverlay({ profileId }: { profileId: string }) {
           <Suspense key={page} fallback={<MemoriesWaiting />}>
             <MemoriesPage />
           </Suspense>
-        ) : page === 'channels' ? (
+        ) : (
           <Suspense key={page} fallback={<ChannelsWaiting />}>
             <ChannelsPage />
           </Suspense>
-        ) : (
-          <Suspense key={page} fallback={<ActivityWaiting />}>
-            <ActivityContent />
-          </Suspense>
         )}
       </SettingsLayout>
-    </Overlay>
+    </Page>
   );
 }
 
@@ -144,6 +121,10 @@ export function AgentOverlays({ profileId }: { profileId: string }) {
   const asked = askedAt(pathname);
   useEffect(() => {
     if (!asked) return;
+    if (asked === 'activity') {
+      router.replace(activityPath(profileId));
+      return;
+    }
     if (asked === 'schedules') openSchedules();
     else openSettings(asked);
     router.replace(agentPath(profileId, 'sessions'));

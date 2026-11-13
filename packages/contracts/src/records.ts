@@ -128,6 +128,8 @@ export const memoryRecordSchema = z.strictObject({
   sourceSessionId: uuid.optional(),
   // The keys of the memories recalled together with this one.
   links: z.array(z.string()).optional(),
+  // The projects the owner pinned this memory to; conversations in them recall it first.
+  projectIds: z.array(z.uuid()).optional(),
   updatedAt: timestamp,
 });
 

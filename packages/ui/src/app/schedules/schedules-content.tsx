@@ -6,7 +6,7 @@ import { choices } from '../../components/schedules/conversations';
 import { ranOnce, scheduleActions, useScheduleList } from '../../components/schedules/list';
 import {
   ConfirmDialog,
-  Overlay,
+  Page,
   SettingsLayout,
   type SettingsPage,
   Skeleton,
@@ -58,10 +58,18 @@ const shared = {
   backLabel: 'Schedules',
 } as const;
 
-/** The schedules while the agent is read: the same overlay, its list and form still to come. */
+/** The schedules while the agent is read: the same page, its list and form still to come. */
 function SchedulesWaiting() {
+  const close = useAgentOverlay((state) => state.closeSchedules);
   return (
-    <SettingsLayout {...shared} pages={[]} current="" onSelect={() => undefined} title="Schedules">
+    <SettingsLayout
+      {...shared}
+      onBack={close}
+      pages={[]}
+      current=""
+      onSelect={() => undefined}
+      title="Schedules"
+    >
       <SkeletonRegion label="Loading schedules…" className="grid gap-4">
         <Skeleton className="h-10 rounded-lg" />
         <Skeleton className="h-24 rounded-lg" />
@@ -108,6 +116,7 @@ function Schedules() {
     <>
       <SettingsLayout
         {...shared}
+        onBack={close}
         pages={pages}
         current={schedule?.id ?? 'new'}
         onSelect={select}
@@ -163,21 +172,16 @@ function Schedules() {
   );
 }
 
-/** The agent's schedules, over its conversation, as settings are. */
+/** The agent's schedules, in the place of the app's sidebar and conversation, as settings are. */
 export function SchedulesOverlay() {
   const open = useAgentOverlay((state) => state.schedules);
   const close = useAgentOverlay((state) => state.closeSchedules);
 
   return (
-    <Overlay
-      open={open}
-      onOpenChange={(next) => !next && close()}
-      title="Schedules"
-      closeButton={false}
-    >
+    <Page open={open} onClose={close} title="Schedules">
       <Suspense fallback={<SchedulesWaiting />}>
         <Schedules />
       </Suspense>
-    </Overlay>
+    </Page>
   );
 }
