@@ -143,9 +143,10 @@ function SettingsForm({ status, close }: { status: GitHubReviewsStatus; close: (
 }
 
 /**
- * GitHub tells the gateway a pull request was opened through the App's webhook. An App made
- * before this gateway reviewed pull requests has none: the button sets its address and secret,
- * and the owner subscribes it to pull requests on GitHub, which no API can do for them.
+ * GitHub tells the gateway a pull request was opened through the App's webhook. An App Jian
+ * makes now has one from the start; an older one has none, and GitHub's API only changes a
+ * webhook that exists. Once the owner turns it on, with any address, the button sets its address
+ * and secret, and the owner subscribes it to pull requests on GitHub, which no API can do.
  */
 function Webhook({ status }: { status: GitHubReviewsStatus }) {
   const setUp = useSetUpWebhook();
@@ -171,9 +172,9 @@ function Webhook({ status }: { status: GitHubReviewsStatus }) {
           <p className="text-muted">
             {webhook.configured
               ? 'In the App’s settings on GitHub, the webhook must be Active and subscribed to the Pull request event.'
-              : 'An App without a webhook needs it turned on first: in its settings on GitHub, check Active under Webhook and paste this address. Then set it up here and subscribe it to the Pull request event.'}
+              : 'GitHub’s API can only change a webhook the App has. If Set up webhook says it has none, check Active under Webhook in the App’s settings on GitHub, enter any URL, such as this one, and save. Then set it up here and subscribe it to the Pull request event.'}
           </p>
-          {/* GitHub's API can't add a webhook, so the address is pasted on GitHub by hand. */}
+          {/* Turning an older App's webhook on takes an address typed on GitHub: this one is at hand. */}
           <div className={listBox}>
             <CopyLine label="Webhook URL" value={webhook.url} />
           </div>

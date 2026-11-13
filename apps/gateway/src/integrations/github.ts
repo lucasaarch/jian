@@ -701,8 +701,9 @@ export class GitHubIntegrations {
    * kept only after GitHub took it, so a refusal leaves the old one working.
    *
    * Trap: the API only changes a webhook the App already has. An App whose webhook was never
-   * turned on has none, and GitHub answers 404 for it. Turning it on, with an address, is done on
-   * the App's settings page; after that this call can set the secret.
+   * turned on has none, and GitHub answers 404 for it. Turning it on, with any address, is done on
+   * the App's settings page; after that this call sets the address and the secret. Apps made by
+   * `registration` have one from the start (`hook_attributes`), so this is for older Apps.
    */
   async configureWebhook() {
     const config = await this.requireConfig();
@@ -724,7 +725,7 @@ export class GitHubIntegrations {
     if (response.status === 404) {
       throw new GatewayError(
         409,
-        `This App has no webhook on GitHub yet, and GitHub's API can't add one. In the App's settings on GitHub, check Active under Webhook, paste ${url} as its URL and save. Then set it up here again.`,
+        `This App has no webhook on GitHub yet, and GitHub's API can only change one it has. In the App's settings on GitHub, check Active under Webhook, enter any URL, such as ${url}, and save. Then set it up here again: Jian fills in its own address and secret.`,
       );
     }
     if (!response.ok) {
