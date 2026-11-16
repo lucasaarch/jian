@@ -177,7 +177,6 @@ async function render(
   children: ReactNode,
   api: ReturnType<typeof fakeApi>,
   options: {
-    merges?: boolean;
     fixConflicts?: (pull: { owner: string; repo: string; number: number }) => Promise<unknown>;
   } = {},
 ) {
@@ -191,7 +190,6 @@ async function render(
           <GitHubDrawer
             api={api as unknown as GatewayApi}
             profileId="profile"
-            merges={options.merges}
             fixConflicts={options.fixConflicts}
           />
         </GitHubLinks>
@@ -281,7 +279,7 @@ const dialog = () => document.querySelector('[role="dialog"]');
 it('opens the pull request in folding sections, and merges with the chosen method and the head seen', async () => {
   const api = fakeApi();
 
-  await render(<Markdown text={pullUrl} />, api, { merges: true, fixConflicts: vi.fn() });
+  await render(<Markdown text={pullUrl} />, api, { fixConflicts: vi.fn() });
   await openCard();
 
   expect(drawer()?.getAttribute('aria-label')).toBe('octo-example/site #7');
@@ -351,22 +349,27 @@ it('opens the pull request in folding sections, and merges with the chosen metho
   expect(api.githubPull).toHaveBeenCalledTimes(1);
 });
 
-it('keeps the merge action on its own line and marks a draft ready for review', async () => {
+it('marks a draft ready for review, then offers the merge button in the place of a ready line', async () => {
   const api = fakeApi({ draft: true });
-  await render(<Markdown text={pullUrl} />, api, { merges: true });
+  await render(<Markdown text={pullUrl} />, api);
   await openCard();
 
   expect(button('Mark as Ready')).toBeDefined();
   expect(button('Squash and merge')).toBeUndefined();
+  expect(drawer()?.textContent).toContain('A draft does not merge until it is marked ready.');
   await act(async () => button('Mark as Ready')?.click());
   expect(api.markGithubPullReady).toHaveBeenCalledWith('octo-example', 'site', 7, head);
   expect(button('Mark as Ready')).toBeUndefined();
   expect(button('Squash and merge')).toBeDefined();
-  expect(drawer()?.textContent).toContain('Ready to merge.');
-  const note = [...(drawer()?.querySelectorAll('p') ?? [])].find(
-    (item) => item.textContent === 'Ready to merge.',
-  );
-  expect(button('Squash and merge')?.parentElement).not.toBe(note?.parentElement);
+  expect(drawer()?.textContent).not.toContain('Ready to merge');
+});
+
+it('keeps the line saying why a blocked branch may not merge above its merge button', async () => {
+  await render(<Markdown text={pullUrl} />, fakeApi({ mergeable: 'blocked' }));
+  await openCard();
+
+  expect(drawer()?.textContent).toContain('Merging is blocked');
+  expect(button('Squash and merge')).toBeDefined();
 });
 
 it.each([
@@ -375,7 +378,6 @@ it.each([
 ])('offers Mark as Ready alongside $action for a draft', async ({ mergeable, action }) => {
   const api = fakeApi({ draft: true, mergeable });
   await render(<Markdown text={pullUrl} />, api, {
-    merges: true,
     fixConflicts: vi.fn(async () => ({})),
   });
   await openCard();
@@ -432,7 +434,6 @@ it('offers to fix conflicts in the place of merging and of the line about them',
   const fixConflicts = vi.fn(async () => ({}));
 
   await render(<Markdown text={pullUrl} />, fakeApi({ mergeable: 'conflicts' }), {
-    merges: true,
     fixConflicts,
   });
   await openCard();
@@ -450,7 +451,7 @@ it('offers to fix conflicts in the place of merging and of the line about them',
 it('offers to update a branch that is behind its base and refreshes its status', async () => {
   const api = fakeApi({ mergeable: 'behind' });
 
-  await render(<Markdown text={pullUrl} />, api, { merges: true });
+  await render(<Markdown text={pullUrl} />, api);
   await openCard();
 
   expect(element.textContent).not.toContain('This branch is behind the base branch.');
@@ -469,12 +470,12 @@ it('fixes conflicts in a conversation answered in a messaging app', async () => 
   expect(button('Fix merge conflicts')).not.toBeUndefined();
 });
 
-it('does not merge in a conversation answered in a messaging app', async () => {
+it('merges from a conversation answered in a messaging app too', async () => {
   await render(<Markdown text={pullUrl} />, fakeApi(), { fixConflicts: vi.fn(async () => ({})) });
   await openCard();
 
-  expect(button('Squash and merge')).toBeUndefined();
-  expect(element.textContent).toContain('Ready to merge.');
+  expect(button('Squash and merge')).toBeDefined();
+  expect(element.textContent).not.toContain('Ready to merge');
 });
 
 it('opens an issue with its labels, assignees and comments', async () => {

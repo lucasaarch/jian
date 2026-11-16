@@ -365,12 +365,11 @@ export function Sessions({ api, mutate, busy }: SectionActions) {
                 <ChangesDrawer api={api} profileId={profile.id} />
                 <FilesDrawer api={api} profileId={profile.id} />
                 <TerminalDrawer api={api} profileId={profile.id} />
-                {/* Any conversation can have its agent settle a pull request's conflicts; merging
-                  belongs to the panel's own chat, as a channel's approvals are left to it. */}
+                {/* Any conversation can have its agent settle a pull request's conflicts, and the
+                  owner merges from it whichever channel it came on. */}
                 <GitHubDrawer
                   api={api}
                   profileId={profile.id}
-                  merges={isGateway(active)}
                   fixConflicts={async (pull) => {
                     await api.fixGithubConflicts(profile.id, active.id, pull);
                     answered();
