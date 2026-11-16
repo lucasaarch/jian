@@ -21,8 +21,11 @@ type PullApi = Pick<
   'githubPullFile' | 'markGithubPullReady' | 'mergeGithubPull' | 'updateGithubPullBranch'
 >;
 
-const mergeable: Record<GitHubPull['mergeable'], { note: string; colour: string }> = {
-  clean: { note: 'Ready to merge.', colour: 'text-good' },
+/** What stands in the way of merging. A clean branch needs no line: its merge button says it. */
+const mergeable: Record<
+  Exclude<GitHubPull['mergeable'], 'clean'>,
+  { note: string; colour: string }
+> = {
   conflicts: { note: 'This branch has conflicts with the base branch.', colour: 'text-bad' },
   blocked: {
     note: 'Merging is blocked by the repository’s rules or pending reviews.',
@@ -68,7 +71,8 @@ const checksNames = {
  * A pull request: where it stands and its branches in one line, its title, whether it can merge
  * and what to do about it, then its changes, description, checks and reviews. Its head is kept
  * short, since everything it takes comes off the diffs under it. A branch in conflict offers the
- * agent's way to settle it in the place of merging and of the line saying so.
+ * agent's way to settle it in the place of merging and of the line saying so. The owner merges
+ * from any conversation, since only the owner reads the panel.
  */
 export function PullView({
   api,
@@ -77,7 +81,6 @@ export function PullView({
   wrap,
   setWrap,
   profileId,
-  merges,
   fixConflicts,
 }: {
   api: PullApi;
@@ -87,8 +90,6 @@ export function PullView({
   wrap: boolean;
   setWrap: (wrap: boolean) => void;
   profileId: string;
-  /** The panel answers this chat itself, so it merges from here. */
-  merges: boolean;
   fixConflicts?: (pull: Pull) => Promise<unknown>;
 }) {
   const client = useQueryClient();
@@ -124,10 +125,12 @@ export function PullView({
   const behind = open && pull.mergeable === 'behind';
   const fixable = open && pull.mergeable === 'conflicts' && Boolean(fixConflicts);
   const readyForReview = open && pull.draft;
-  const merging = open && !pull.draft && merges && pull.mergeable !== 'conflicts';
+  const merging = open && !pull.draft && pull.mergeable !== 'conflicts';
   const state = pull.draft
     ? { note: 'A draft does not merge until it is marked ready.', colour: 'text-muted' }
-    : mergeable[pull.mergeable];
+    : pull.mergeable === 'clean'
+      ? undefined
+      : mergeable[pull.mergeable];
 
   const merge = async (method: GitHubMergeMethod) => {
     setBusy(true);
@@ -235,7 +238,9 @@ export function PullView({
           </div>
           {open && (
             <div className="grid gap-2.5">
-              {!fixable && !behind && <p className={`text-xs ${state.colour}`}>{state.note}</p>}
+              {state && !fixable && !behind && (
+                <p className={`text-xs ${state.colour}`}>{state.note}</p>
+              )}
               {(fixable || merging || behind || readyForReview) && (
                 <div className="flex flex-wrap gap-2">
                   {fixable ? (

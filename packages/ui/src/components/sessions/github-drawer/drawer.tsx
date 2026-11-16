@@ -38,19 +38,16 @@ const MERGEABLE_RETRY_MS = 3_000;
  * A pull request or an issue followed beside the conversation, in the Inspector. It runs from the
  * top of the window: its first line says where the item lives and opens it on GitHub, with its
  * options and its close at the end. It reads itself again while it can change; its close, Escape
- * or the reference that opened it puts it away. Any conversation can have its agent
- * settle a pull request's conflicts; only one the panel answers itself merges from here, as a
- * chat on WhatsApp or Telegram decides its approvals there.
+ * or the reference that opened it puts it away. Whichever conversation it opened from, the owner
+ * merges here, and that conversation's agent settles a pull request's conflicts.
  */
 export function GitHubDrawer({
   api,
   profileId,
-  merges = false,
   fixConflicts,
 }: {
   api: DrawerApi;
   profileId: string;
-  merges?: boolean;
   fixConflicts?: (pull: Pull) => Promise<unknown>;
 }) {
   const client = useQueryClient();
@@ -156,7 +153,6 @@ export function GitHubDrawer({
                 wrap={wrap}
                 setWrap={setWrap}
                 profileId={profileId}
-                merges={merges}
                 fixConflicts={fixConflicts}
               />
             ) : !isPull && issue.data ? (
