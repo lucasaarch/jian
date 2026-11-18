@@ -158,7 +158,9 @@ import {
 import { panelSessionEndSchema, panelSessionInputSchema, panelSessionSchema } from './security.js';
 import {
   artifactFrameParamsSchema,
+  artifactFrameQuerySchema,
   publicArtifactParamsSchema,
+  sessionArtifactEditSchema,
   sessionArtifactSchema,
   sessionArtifactUpdateSchema,
   sessionArtifactVersionParamsSchema,
@@ -1508,6 +1510,17 @@ export const operations: Operation[] = [
     response: sessionArtifactVersionSchema,
   },
   {
+    // The owner's own edit of a page or of one slide, saved from the panel as a new version.
+    // Nothing reaches it through a public link, which only ever reads.
+    method: 'POST',
+    path: `${session}/artifacts/:artifactId/versions`,
+    operationId: 'editSessionArtifact',
+    access: 'admin',
+    status: 201,
+    body: sessionArtifactEditSchema,
+    response: sessionArtifactSchema,
+  },
+  {
     // Only a server gateway makes one public; a desktop app's own refuses with a 409.
     method: 'PATCH',
     path: `${session}/artifacts/:artifactId`,
@@ -1524,6 +1537,7 @@ export const operations: Operation[] = [
     operationId: 'artifactFrame',
     access: 'public',
     params: artifactFrameParamsSchema,
+    query: artifactFrameQuerySchema,
     response: z.string(),
   },
   {

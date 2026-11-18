@@ -13,7 +13,8 @@ import { type ArtifactsApi, useArtifactsFollow, useSessionArtifacts } from './us
 /**
  * The Inspector's Artifacts tab: what the agent made in this conversation for the owner to see,
  * as a list, and one of them drawn (artifact-view.tsx). The agent making or updating one opens
- * it here by itself (useArtifactsFollow). Nothing here edits one: a new version is the agent's.
+ * it here by itself (useArtifactsFollow). A new version is the agent's, or the owner's own when
+ * they edit a page or a slide by hand there.
  */
 export function ArtifactsDrawer({ api, profileId }: { api: ArtifactsApi; profileId: string }) {
   const tabs = useCrew((state) => state.tabs);
@@ -64,8 +65,8 @@ export function ArtifactsDrawer({ api, profileId }: { api: ArtifactsApi; profile
               ) : listing.data.length === 0 ? (
                 <p className="pt-3 text-sm leading-relaxed text-muted">
                   Nothing here yet. When the agent makes something to look at, such as a page, a
-                  component, a document, a picture or a diagram, it is drawn here and kept with
-                  every version.
+                  component, a document, a picture, a diagram or a deck of slides, it is drawn here
+                  and kept with every version.
                 </p>
               ) : (
                 <ul className="grid grid-cols-1 gap-px pt-1">

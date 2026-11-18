@@ -343,6 +343,22 @@ export const sessionCalls = (client: Client, origin = '') => ({
         body: { visibility },
       }),
     ),
+  /**
+   * What the owner edited by hand, kept as a new version of theirs made from the version they
+   * were editing: a page whole, or the one slide of a deck that `slide` numbers from 1.
+   */
+  editSessionArtifact: (
+    profileId: string,
+    sessionId: string,
+    artifactId: string,
+    edit: { version: number; content: string; slide?: number },
+  ): Promise<SessionArtifact> =>
+    result(
+      client.POST('/v1/profiles/{profileId}/sessions/{sessionId}/artifacts/{artifactId}/versions', {
+        params: { path: { profileId, sessionId, artifactId } },
+        body: edit,
+      }),
+    ),
   people: (profileId: string, sessionId: string) =>
     result(
       client.GET('/v1/profiles/{profileId}/sessions/{sessionId}/people', {

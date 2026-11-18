@@ -157,6 +157,7 @@ import {
   MACHINE_FILES_SUMMARY,
   profileTools,
   skillFor,
+  TOOL_GROUPS,
   type ToolServices,
 } from './tools.js';
 import type { ModelResolver, RuntimeOptions } from './types.js';
@@ -1013,8 +1014,7 @@ export class AgentRuntime {
       // Only the panel has an Inspector to bring something to; a channel's chat does not.
       if (session.channel !== GATEWAY_SESSION_CHANNEL) {
         delete tools.open_in_inspector;
-        delete tools.create_artifact;
-        delete tools.update_artifact;
+        for (const name of TOOL_GROUPS.artifacts.tools) delete tools[name];
       }
       if (defaults?.image === 'disabled') delete tools.generate_image;
       if (defaults?.speech === 'disabled') {

@@ -3,6 +3,10 @@ import {
   contactNameSchema,
   conversationSubagentInputSchema,
   decisionUseSchema,
+  deckSlideAddSchema,
+  deckSlideDeleteSchema,
+  deckSlideMoveSchema,
+  deckSlideUpdateSchema,
   inspectorFocusInputSchema,
   MAX_OBJECTIVE_TEXT,
   type McpServer,
@@ -13,6 +17,7 @@ import {
   type SessionArtifact,
   type Skill,
   sessionArtifactCreateSchema,
+  sessionArtifactReadSchema,
   sessionArtifactRevisionSchema,
 } from '@jian/contracts';
 import { type ToolSet, tool } from 'ai';
@@ -127,7 +132,7 @@ export type ToolServices = {
     'spawnInConversation' | 'awaitReport' | 'cancelInConversation' | 'focusInspector'
   >;
   sshKeys: Pick<SshKeys, 'list' | 'create' | 'remove' | 'sync'>;
-  artifacts?: Pick<SessionArtifacts, 'create' | 'revise'>;
+  artifacts?: Pick<SessionArtifacts, 'create' | 'revise' | 'read' | 'changeSlide'>;
   remote?: Pick<
     Remote,
     'list' | 'execute' | 'executeComputer' | 'update' | 'executeFiles' | 'offersFiles'
@@ -198,12 +203,14 @@ export function skillFor(
 }
 
 /** What the agent needs of an Artifact it made. Never its link: making one public is the owner's. */
-const madeArtifact = (artifact: SessionArtifact | undefined) =>
+const madeArtifact = (artifact: (SessionArtifact & { slides?: number }) | undefined) =>
   artifact && {
     artifactId: artifact.id,
     title: artifact.title,
     type: artifact.type,
     version: artifact.version,
+    // After a change to a deck: how many slides it now has.
+    ...(artifact.slides === undefined ? {} : { slides: artifact.slides }),
   };
 
 export function profileTools(
@@ -442,17 +449,69 @@ export function profileTools(
       ? {
           create_artifact: tool({
             description:
-              'Make an Artifact: something the owner sees drawn in the Inspector beside this conversation, under its Artifacts tab, instead of reading its source in your reply. Worth it for what is looked at, used or kept — a page, an interactive component, a document, a picture, a diagram — not for a short answer or a snippet. `type` says how `content` is drawn: html is a whole page with its own styles and scripts; react is one component, the default export, importing only react and react-dom and styled with its own CSS or inline styles; markdown is a document; svg is one svg element; mermaid is a diagram’s source. It runs sealed: nothing loads from the network (no CDN script, stylesheet, font or remote image, and no fetch — embed a picture as a data: address), and it cannot call your tools or Jian. Returns the artifactId update_artifact takes.',
+              'Make an Artifact: something the owner sees drawn in the Inspector beside this conversation, under its Artifacts tab, instead of reading its source in your reply. Worth it for what is looked at, used or kept — a page, an interactive component, a document, a picture, a diagram, a presentation — not for a short answer or a snippet. `type` says how `content` is drawn: html is a whole page with its own styles and scripts; react is one component, the default export, importing only react and react-dom and styled with its own CSS or inline styles; markdown is a document; svg is one svg element; mermaid is a diagram’s source. deck is a presentation and takes `slides` instead of `content`: each slide a whole HTML page of its own, styles included, laid out for a fixed 1280x720 canvas that is scaled to fit. It runs sealed: nothing loads from the network (no CDN script, stylesheet, font or remote image, and no fetch — embed a picture as a data: address), and it cannot call your tools or Jian. Returns the artifactId the other Artifact tools take.',
             inputSchema: sessionArtifactCreateSchema,
             execute: async (input) =>
               madeArtifact(await services.artifacts?.create(run.profileId, run.sessionId, input)),
           }),
           update_artifact: tool({
             description:
-              'Give an Artifact of this conversation a new version: the whole content again, not a patch. The owner sees the new one and can go back to any earlier version. Its type stays; make another Artifact for another type.',
+              'Give an Artifact of this conversation a new version: the whole content again, not a patch (for a deck every slide again, as `slides`; to change one slide use update_slide). The owner sees the new one and can go back to any earlier version. The owner may have edited it by hand since you wrote it, and this replaces their edit too: read_artifact_source first when that is possible. Its type stays; make another Artifact for another type.',
             inputSchema: sessionArtifactRevisionSchema,
             execute: async (input) =>
               madeArtifact(await services.artifacts?.revise(run.profileId, run.sessionId, input)),
+          }),
+          read_artifact_source: tool({
+            description:
+              'Read an Artifact of this conversation back: its source as it now stands, or as a version of it was, and whether you or the owner wrote that version. The owner edits a web page and a deck’s slides by hand in the panel, which makes a version you have never seen, so read before you update one you did not just write. A deck answers its slides, numbered from 1, or with `slide` that one alone.',
+            inputSchema: sessionArtifactReadSchema,
+            execute: async (input) => services.artifacts?.read(run.profileId, run.sessionId, input),
+          }),
+          add_slide: tool({
+            description:
+              'Add one slide to a deck, at the end or at `position`, without writing the others again. Like every change to a deck it makes a new version of the whole deck, which the owner can go back from. Returns how many slides the deck then has.',
+            inputSchema: deckSlideAddSchema,
+            execute: async (input) =>
+              madeArtifact(
+                await services.artifacts?.changeSlide(run.profileId, run.sessionId, 'add', input),
+              ),
+          }),
+          update_slide: tool({
+            description:
+              'Write one slide of a deck again, leaving the others as they are. `html` replaces that slide whole, so start from what read_artifact_source answers for it when the owner may have edited it.',
+            inputSchema: deckSlideUpdateSchema,
+            execute: async (input) =>
+              madeArtifact(
+                await services.artifacts?.changeSlide(
+                  run.profileId,
+                  run.sessionId,
+                  'update',
+                  input,
+                ),
+              ),
+          }),
+          delete_slide: tool({
+            description:
+              'Take one slide out of a deck; those after it move one up. The version before still holds it. A deck keeps at least one slide.',
+            inputSchema: deckSlideDeleteSchema,
+            execute: async (input) =>
+              madeArtifact(
+                await services.artifacts?.changeSlide(
+                  run.profileId,
+                  run.sessionId,
+                  'delete',
+                  input,
+                ),
+              ),
+          }),
+          move_slide: tool({
+            description:
+              'Move one slide of a deck to another place in its order: `slide` is its number now and `to` the number it has afterwards.',
+            inputSchema: deckSlideMoveSchema,
+            execute: async (input) =>
+              madeArtifact(
+                await services.artifacts?.changeSlide(run.profileId, run.sessionId, 'move', input),
+              ),
           }),
         }
       : {}),
@@ -1207,8 +1266,16 @@ export const TOOL_GROUPS = {
   },
   artifacts: {
     summary:
-      'make something the owner sees drawn beside this conversation — a web page, a React component, a Markdown document, an SVG or a Mermaid diagram — and give it new versions',
-    tools: ['create_artifact', 'update_artifact'],
+      'make something the owner sees drawn beside this conversation — a web page, a React component, a Markdown document, an SVG, a Mermaid diagram or a deck of slides — read it back, give it new versions, and add, rewrite, remove or move one slide of a deck',
+    tools: [
+      'create_artifact',
+      'update_artifact',
+      'read_artifact_source',
+      'add_slide',
+      'update_slide',
+      'delete_slide',
+      'move_slide',
+    ],
   },
   self: {
     summary: 'read and version your own identity, and create profiles',
