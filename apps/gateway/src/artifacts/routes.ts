@@ -103,13 +103,12 @@ export function registerArtifactRoutes(
     },
   );
 
-  // Who reads one is changed from a paired phone too, as it always was. Its name, its pin and
-  // its folder are how the owner keeps their page of them, which a phone does not change.
+  // Making one public publishes it to anyone with the link, and its name, its pin and its folder
+  // are how the owner keeps their page of them: all the owner's alone, from the panel.
   app.patch<{ Params: ArtifactParams }>(
     '/v1/profiles/:profileId/sessions/:sessionId/artifacts/:artifactId',
     async (request) => {
-      const asked = Object.keys((request.body ?? {}) as object);
-      if (asked.some((key) => key !== 'visibility')) ownerOnly(request, 'organise Artifacts');
+      ownerOnly(request, 'change an Artifact');
 
       return deps.artifacts.update(
         request.params.profileId,
