@@ -5,7 +5,14 @@ import { ChatNotices } from '../components/notifications/chat-notices';
 import { Sessions } from '../components/sessions';
 import { Action } from '../kit';
 import type { Profile } from '../lib/api';
-import { agentPath, onActivity, onArtifacts, onPulls } from '../lib/navigation';
+import {
+  agentPath,
+  onActivity,
+  onArtifacts,
+  onPlugins,
+  onPulls,
+  pluginsPath,
+} from '../lib/navigation';
 import { usePhone } from '../lib/phone';
 import { useProfiles } from '../lib/query/profile';
 import { useEventStream } from '../lib/query/stream';
@@ -31,8 +38,10 @@ import { Farewell } from './onboarding/farewell';
 import { StageHandoff } from './onboarding/handoff';
 import { rememberWelcome, Welcome, welcomed } from './onboarding/welcome';
 import { PhoneBar } from './phone-bar';
+import { PluginsScreen } from './plugins/plugins-screen';
 import { PullsScreen } from './pulls/pulls-screen';
 import { LoadingMark } from './reload';
+import { movedToPlugins } from './web-addresses';
 
 /** How long the mark covers the window for a gateway that does not answer, in milliseconds. */
 const LOADING_PATIENCE = 15_000;
@@ -77,6 +86,7 @@ export function ChatsApp({
     search.has('new') ||
     onPulls(pathname) ||
     onArtifacts(pathname) ||
+    onPlugins(pathname) ||
     onActivity(pathname);
   const sidebar = !phone || (known && !opened);
   const main = !phone || !sidebar;
@@ -200,13 +210,21 @@ function Chats({ phone, createAgent }: { phone: boolean; createAgent: () => void
   const profileId = useProfileId();
   const last = useLastProfile((state) => state.profileId);
   const router = useRouter();
+  const pathname = usePathname();
+  const search = useSearchParams().toString();
   const known = profiles?.some((profile) => profile.id === profileId) ?? false;
 
   useEffect(() => {
     if (!profiles?.length || known) return;
     const next = profiles.find((profile) => profile.id === last) ?? profiles[0];
-    if (next) router.replace(agentPath(next.id, 'sessions'));
-  }, [profiles, known, last, router]);
+    if (!next) return;
+    // Apps and MCP servers left Settings for Plugins. Their old addresses name no agent, and
+    // GitHub and X still send the owner back to them with the outcome in the query, which goes
+    // along to be said there.
+    if (movedToPlugins(pathname)) {
+      router.replace(`${pluginsPath(next.id)}${search ? `?${search}` : ''}`);
+    } else router.replace(agentPath(next.id, 'sessions'));
+  }, [profiles, known, last, router, pathname, search]);
 
   if (!profiles) return <ChatsLoading label="Loading agents" />;
   if (!profiles.length)
@@ -246,6 +264,8 @@ function AgentChats({ profileId, phone }: { profileId: string; phone: boolean })
           <PullsScreen profileId={profileId} />
         ) : onArtifacts(pathname) ? (
           <ArtifactsScreen profileId={profileId} />
+        ) : onPlugins(pathname) ? (
+          <PluginsScreen />
         ) : onActivity(pathname) ? (
           <ActivityScreen />
         ) : (

@@ -64,8 +64,9 @@ function Window() {
         }
         if ('path' in target) {
           openIn(target.gatewayId, target.path);
-          // A settings address, as GitHub's and X's sign-ins link back with, opens that page over
-          // the panel too; the query stays with the panel, where the page reads its outcome.
+          // A settings address opens that page over the panel too. The ones GitHub's and X's
+          // sign-ins link back with are not Settings' any more: the panel sends them on to
+          // Plugins itself, query and all, where the connector reads its outcome.
           const page = settingsOf(target.path.split(/[?#]/)[0] ?? '');
           if (page !== undefined) openSettings(page || undefined);
         } else if (target.panel === 'new-chat') openNewChat(target.gatewayId);

@@ -76,7 +76,7 @@ export function useAccountChecks(names: string[]) {
 /**
  * One app of the catalog, as a card. Connect saves the service's own MCP server and opens its
  * sign-in; once one account is in, Configure holds every account, their sign-ins, and the way to
- * add another. The card is all there is of them: the MCP servers page leaves them out.
+ * add another. The card is all there is of them: Plugins never lists them as custom connectors.
  */
 export function McpAppCard({ app }: { app: McpApp }) {
   const { mutate, api } = useActions();

@@ -2,7 +2,14 @@
 
 import { ChevronLeft, SquarePen } from 'lucide-react';
 import { conversationName } from '../lib/conversation-name';
-import { agentPath, newChatPath, onActivity, onArtifacts, onPulls } from '../lib/navigation';
+import {
+  agentPath,
+  newChatPath,
+  onActivity,
+  onArtifacts,
+  onPlugins,
+  onPulls,
+} from '../lib/navigation';
 import { useAgents, useContacts, useProjects, useSessions } from '../lib/query/agent';
 import { useParams, usePathname, useRouter } from '../platform/navigation';
 
@@ -28,9 +35,11 @@ export function PhoneBar({ profileId }: { profileId: string }) {
       ? 'Pull requests'
       : onArtifacts(pathname)
         ? 'Artifacts'
-        : onActivity(pathname)
-          ? 'Activity'
-          : 'New chat';
+        : onPlugins(pathname)
+          ? 'Plugins'
+          : onActivity(pathname)
+            ? 'Activity'
+            : 'New chat';
 
   return (
     <header className="glass-bar flex shrink-0 items-center gap-1 border-b border-line px-1.5 pt-[env(safe-area-inset-top)]">

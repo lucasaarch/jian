@@ -1,20 +1,25 @@
 /**
- * Settings pages that moved, by their old address: one bookmarked, or sent back by a gateway,
- * still opens them. `integrations` became Apps, and stays readable for good: it is the return
- * address GitHub and X send the owner back to, which every gateway, old or new, accepts.
+ * Settings pages that left for Plugins, by their old addresses: Apps, MCP servers, and
+ * Integrations before them. The last stays readable for good: it is the return address GitHub
+ * and X send the owner back to, which every gateway, old or new, accepts.
  */
-const MOVED: Record<string, string> = { integrations: 'apps' };
+const PLUGINS = ['apps', 'mcp-servers', 'integrations'];
+
+/**
+ * Whether an address is one of the settings pages that became Plugins, with anything under it,
+ * such as the GitHub details address `/settings/integrations/github`. It names no agent: the
+ * chats send it on to the Plugins of the agent in use, query and all.
+ */
+export const movedToPlugins = (pathname: string) =>
+  PLUGINS.includes(/^\/settings\/([^/]+)(?:\/|$)/.exec(pathname)?.[1] ?? '');
 
 /**
  * The settings page an address opens: `''` for `/settings` alone, the page's id for
- * `/settings/:page`, undefined anywhere else. A moved page opens where it is now, and so does
- * the GitHub details address under it, `/settings/integrations/github`.
+ * `/settings/:page`, undefined anywhere else. A page that moved to Plugins is no longer one of
+ * Settings', so its address opens nothing here.
  */
 export function settingsOf(pathname: string): string | undefined {
-  const match = /^\/settings(?:\/([^/]+)(?:\/([^/]+))?)?\/?$/.exec(pathname);
-  if (!match) return undefined;
-  const [, page = '', below] = match;
-  const moved = MOVED[page];
-  if (moved) return moved;
-  return below === undefined ? page : undefined;
+  const match = /^\/settings(?:\/([^/]+))?\/?$/.exec(pathname);
+  if (!match || movedToPlugins(pathname)) return undefined;
+  return match[1] ?? '';
 }

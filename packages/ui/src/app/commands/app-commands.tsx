@@ -1,8 +1,6 @@
 'use client';
 
 import {
-  Blocks,
-  Cable,
   Cpu,
   Keyboard,
   KeyRound,
@@ -52,18 +50,6 @@ const pages: { id: string; title: string; keywords: string[]; icon: ReactNode }[
     title: 'Capabilities',
     keywords: ['model', 'effort', 'default'],
     icon: <Cpu size={15} />,
-  },
-  {
-    id: 'apps',
-    title: 'Apps',
-    keywords: ['github', 'x', 'twitter', 'account', 'connect', 'integrations'],
-    icon: <Blocks size={15} />,
-  },
-  {
-    id: 'mcp-servers',
-    title: 'MCP servers',
-    keywords: ['mcp', 'server', 'tools', 'connect', 'integrations'],
-    icon: <Cable size={15} />,
   },
   {
     id: 'ssh-keys',

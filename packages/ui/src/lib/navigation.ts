@@ -26,6 +26,12 @@ export const artifactsPath = (profileId: string) => agentPath(profileId, 'artifa
 /** Whether a pathname is an agent's Artifacts. */
 export const onArtifacts = (pathname: string) => /^\/agents\/[^/]+\/artifacts\/?$/.test(pathname);
 
+/** What the agent can use, in place of its chat: the connectors every agent shares, and skills. */
+export const pluginsPath = (profileId: string) => agentPath(profileId, 'plugins');
+
+/** Whether a pathname is an agent's Plugins. */
+export const onPlugins = (pathname: string) => /^\/agents\/[^/]+\/plugins\/?$/.test(pathname);
+
 /** Where an agent's new chat opens: its chats, asked to start one, in a project when given. */
 export function newChatPath(profileId: string, projectId?: string): string {
   const project = projectId ? `&project=${encodeURIComponent(projectId)}` : '';

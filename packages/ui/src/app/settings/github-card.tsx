@@ -28,11 +28,11 @@ type App = NonNullable<GithubIntegration['app']>;
 export const githubOffered = (integration: GithubIntegration | undefined) =>
   Boolean((integration?.configured && integration.app) || integration?.callbackUrl);
 
-/** What the app gives, on its card and for the Apps search. */
+/** What the connector gives, on its card and its row in Plugins, and for the search there. */
 export const GITHUB_DESCRIPTION = 'Repositories, issues and pull requests for every agent.';
 
 /**
- * GitHub's card among the apps, connected or not, on a gateway that offers it.
+ * GitHub's card, behind its row in Plugins, connected or not, on a gateway that offers it.
  * Connecting GitHub registers Jian's App the first time and an account after; once one is in,
  * Configure holds the accounts, the way to add another and anything GitHub still has to grant.
  */
@@ -45,7 +45,7 @@ export function GitHubCard({ api }: { api: GatewayApi }) {
   const installations = useGithubInstallations(api);
   const [open, setOpen] = useState(false);
 
-  // Mounted with the card, which the old Integrations addresses also reach, so the outcome GitHub
+  // Mounted with the card, which Plugins opens when GitHub sends the owner back, so the outcome GitHub
   // sends back is said whichever address it came to.
   useGithubOutcome();
 

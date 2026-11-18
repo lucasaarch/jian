@@ -13,7 +13,7 @@ import { awsMark } from './mcp-apps';
 
 const AWS = { name: 'AWS', icon: awsMark };
 
-/** What the app gives, on its card and for the Apps search. */
+/** What the connector gives, on its card and its row in Plugins, and for the search there. */
 export const AWS_DESCRIPTION =
   'AWS services through their APIs, as your IAM permissions allow, one account at a time.';
 
@@ -136,7 +136,7 @@ function AwsForm({
 }
 
 /**
- * AWS's card among the apps. Each account is its own command server, so it keeps its own keys and
+ * AWS's card, behind its row in Plugins. Each account is its own command server, so it keeps its own keys and
  * region and agents reach it by its name; they live in the MCP server list like the rest and this
  * card is all there is of them.
  */

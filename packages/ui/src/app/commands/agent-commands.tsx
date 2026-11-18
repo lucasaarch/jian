@@ -3,6 +3,7 @@
 import {
   Activity,
   AlarmClock,
+  Blocks,
   Brain,
   Compass,
   Globe,
@@ -24,7 +25,13 @@ import {
 import { AgentFace } from '../../kit/face';
 import type { Profile } from '../../lib/api';
 import { useGatewayMode } from '../../lib/gateway-mode';
-import { activityPath, agentPath, artifactsPath, newChatPath } from '../../lib/navigation';
+import {
+  activityPath,
+  agentPath,
+  artifactsPath,
+  newChatPath,
+  pluginsPath,
+} from '../../lib/navigation';
 import { useAgentOverlay } from '../../lib/stores/agent-overlay';
 import { useOnboarding } from '../../lib/stores/onboarding';
 import { useRouter } from '../../platform/navigation';
@@ -141,6 +148,28 @@ export function useAgentCommands({
         keywords: ['artifact', 'page', 'document', 'deck', 'slides', 'diagram', 'file', 'made'],
         icon: <Shapes size={15} />,
         run: place(artifactsPath(current.id)),
+      },
+      {
+        id: 'plugins',
+        group: 'Agent',
+        title: 'Plugins',
+        detail: current.name,
+        keywords: [
+          'connector',
+          'app',
+          'mcp',
+          'server',
+          'tools',
+          'github',
+          'x',
+          'twitter',
+          'aws',
+          'account',
+          'connect',
+          'integrations',
+        ],
+        icon: <Blocks size={15} />,
+        run: place(pluginsPath(current.id)),
       },
       {
         id: 'skills',

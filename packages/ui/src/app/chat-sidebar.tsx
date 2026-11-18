@@ -5,6 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import {
   Activity,
   AlarmClock,
+  Blocks,
   Bot,
   GitPullRequest,
   Mail,
@@ -26,7 +27,9 @@ import {
   newChatPath,
   onActivity,
   onArtifacts,
+  onPlugins,
   onPulls,
+  pluginsPath,
   pullsPath,
 } from '../lib/navigation';
 import { usePhone } from '../lib/phone';
@@ -186,9 +189,10 @@ const action =
 
 /**
  * The top of the sidebar: a new chat — an action, never shown as the one open — and the agent's
- * Schedules, a page over the app, then every Artifact it made, in the chat's place. On a server
- * with GitHub connected, the pull requests, which take the chat's place too: GitHub can only
- * reach a gateway with a public address. Its Activity, also in the chat's place, is always last.
+ * Schedules, a page over the app, then every Artifact it made and the Plugins it can use, both in
+ * the chat's place. On a server with GitHub connected, the pull requests, which take the chat's
+ * place too: GitHub can only reach a gateway with a public address. Its Activity, also in the
+ * chat's place, is always last.
  */
 function NewChat({ profileId }: { profileId?: string }) {
   const router = useRouter();
@@ -227,6 +231,16 @@ function NewChat({ profileId }: { profileId?: string }) {
       >
         <Shapes size={15} className="text-muted" aria-hidden="true" />
         Artifacts
+      </button>
+      <button
+        type="button"
+        onClick={profileId ? go(pluginsPath(profileId)) : undefined}
+        disabled={!profileId}
+        aria-current={onPlugins(pathname) ? 'page' : undefined}
+        className={action}
+      >
+        <Blocks size={15} className="text-muted" aria-hidden="true" />
+        Plugins
       </button>
       {pulls && profileId && (
         <button

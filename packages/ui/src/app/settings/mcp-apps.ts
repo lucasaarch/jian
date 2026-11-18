@@ -40,7 +40,7 @@ import {
   siZapier,
 } from 'simple-icons';
 
-/** What an app is filed under, in the category list; the order here is the list's. */
+/** What a connector is filed under, in the Plugins filter; the order here is the list's. */
 export const CATEGORIES = {
   development: 'Development',
   projects: 'Projects',
@@ -56,8 +56,8 @@ export type Category = keyof typeof CATEGORIES;
  * An app that is the service's own hosted MCP server under a card: Connect saves it as an MCP
  * server and signs in with OAuth. Every one here was checked to offer dynamic client
  * registration (RFC 7591), which is what lets the gateway sign in with no client id to paste;
- * one that needs a pre-registered client (Asana, HubSpot, Box) belongs on the MCP servers page.
- * So does one whose registration takes only its own list of redirect addresses: Mercado Pago
+ * one that needs a pre-registered client (Asana, HubSpot, Box) is added as a custom connector.
+ * So is one whose registration takes only its own list of redirect addresses: Mercado Pago
  * refuses any callback outside localhost and a few vendors' hosts, so a hosted gateway cannot
  * sign in there; it connects with an access token in a header instead.
  */
@@ -65,12 +65,14 @@ export type McpApp = {
   /** Also the MCP server's name, so it follows that name's rule. */
   id: McpAppId;
   name: string;
+  /** Who makes the service, said under its name in Plugins. */
+  by: string;
   description: string;
   category: Category;
   url: string;
   /**
    * Where the app's server used to be. A server saved there before the app moved is still this
-   * app, or it would drop out of its card and back onto the MCP servers page as a stranger.
+   * app, or it would drop out of its card and be listed as a custom connector, a stranger.
    */
   formerUrls?: string[];
   icon: AppMark;
@@ -104,7 +106,8 @@ const attioMark: AppMark = {
   path: 'm31.669 19.175l-2.673-4.279l-.016-.026l-.211-.336a2.16 2.16 0 0 0-1.838-1.022l-4.306-.014l-.3.481l-5.146 8.235l-.284.456l2.156 3.444a2.15 2.15 0 0 0 1.843 1.023h6.035a2.19 2.19 0 0 0 1.842-1.02l.213-.34s.008-.01.01-.015l2.677-4.284c.44-.7.44-1.605 0-2.303zm-.816 1.792l-2.677 4.284l-.037.052a.363.363 0 0 1-.579-.054l-2.678-4.284a1.2 1.2 0 0 1-.137-.969c.03-.105.076-.21.135-.306l2.674-4.28l.006-.01a.34.34 0 0 1 .213-.154q.04-.01.071-.014h.03c.062 0 .215.02.31.176l2.674 4.278c.244.39.244.891 0 1.28zM23.758 8.823a2.19 2.19 0 0 0 0-2.303l-2.673-4.278l-.223-.36a2.16 2.16 0 0 0-1.844-1.02h-6.034c-.754 0-1.442.381-1.844 1.022L.333 19.178a2.16 2.16 0 0 0-.002 2.301L3.23 26.12c.4.64 1.088 1.02 1.842 1.02h6.035c.758 0 1.446-.381 1.844-1.022l.22-.35v-.004s.005-.006.005-.008l2.154-3.445l6.384-10.218l2.041-3.268zm-.63-1.151c0 .22-.062.443-.187.64L12.355 25.255a.36.36 0 0 1-.31.17a.36.36 0 0 1-.31-.17l-2.676-4.286a1.22 1.22 0 0 1 0-1.28L19.645 2.752a.36.36 0 0 1 .31-.173c.062 0 .215.018.313.175L22.94 7.03c.125.197.187.42.187.64',
 };
 
-const CATALOG: Array<Omit<McpApp, 'url' | 'formerUrls'>> = [
+/** `by` is written only where the maker is not called what the app is. */
+const CATALOG: Array<Omit<McpApp, 'url' | 'formerUrls' | 'by'> & { by?: string }> = [
   {
     id: 'linear',
     name: 'Linear',
@@ -122,6 +125,7 @@ const CATALOG: Array<Omit<McpApp, 'url' | 'formerUrls'>> = [
   {
     id: 'trello',
     name: 'Trello',
+    by: 'Atlassian',
     description: 'Boards, lists and cards in your Trello workspaces.',
     category: 'projects',
     icon: siTrello,
@@ -318,6 +322,7 @@ const CATALOG: Array<Omit<McpApp, 'url' | 'formerUrls'>> = [
   {
     id: 'prisma',
     name: 'Prisma Postgres',
+    by: 'Prisma',
     description: 'Prisma Postgres databases, their schema and backups.',
     category: 'development',
     icon: siPrisma,
@@ -390,7 +395,12 @@ const CATALOG: Array<Omit<McpApp, 'url' | 'formerUrls'>> = [
 /** The cards, each with the addresses its server is known by, which the gateway reads too. */
 export const MCP_APPS: McpApp[] = CATALOG.map((app) => {
   const [url, ...formerUrls] = MCP_APP_ADDRESSES[app.id];
-  return { ...app, url, ...(formerUrls.length ? { formerUrls } : {}) };
+  return {
+    ...app,
+    by: app.by ?? app.name,
+    url,
+    ...(formerUrls.length ? { formerUrls } : {}),
+  };
 });
 
 /** Whether an address is this app's, now or before it moved. */
@@ -405,8 +415,8 @@ export function serversOf<T extends { url?: string | undefined }>(app: McpApp, s
 }
 
 /**
- * Whether a saved server is one of these apps, or an AWS account. Its card in Apps is all there
- * is of it: the MCP servers page leaves it out.
+ * Whether a saved server is one of these apps, or an AWS account. Its card is all there is of
+ * it: Plugins never lists it again as a custom connector.
  */
 export const isAppServer = (server: {
   url?: string | undefined;

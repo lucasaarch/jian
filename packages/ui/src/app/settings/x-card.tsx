@@ -35,11 +35,11 @@ const needsAttention = (account: XAccount) =>
 export const xOffered = (integration: XIntegration | undefined) =>
   Boolean(integration?.callbackUrl);
 
-/** What the app gives, on its card and for the Apps search. */
+/** What the connector gives, on its card and its row in Plugins, and for the search there. */
 export const X_DESCRIPTION = 'Post, read and search on X with your own developer app.';
 
 /**
- * X's card among the apps, on either kind of gateway: a desktop's own gets its address from the
+ * X's card, behind its row in Plugins, on either kind of gateway: a desktop's own gets its address from the
  * app.
  */
 export function XCard({ api }: { api: GatewayApi }) {
