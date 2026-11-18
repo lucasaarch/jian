@@ -142,6 +142,26 @@ const button = (label: string) =>
     (item) => item.getAttribute('aria-label') === label,
   );
 
+describe('the list of Artifacts', () => {
+  it('names each file by its format, with an icon of its kind, under no heading of its own', async () => {
+    await shown();
+
+    const rows = [...(drawer()?.querySelectorAll('li') ?? [])];
+    expect(rows.map((row) => row.textContent)).toEqual([
+      'reportPDF · Version 1',
+      'guideMarkdown · Version 1',
+      'scriptCode · Version 1',
+      'bundleZIP archive · Version 1',
+    ]);
+    // An icon a row, and each kind its own.
+    const icons = rows.map((row) => row.querySelector('svg')?.getAttribute('class') ?? '');
+    expect(icons.every(Boolean)).toBe(true);
+    expect(new Set([icons[0], icons[2], icons[3]]).size).toBe(3);
+    // The tab already says Artifacts.
+    expect(drawer()?.querySelector('h2')).toBeNull();
+  });
+});
+
 describe('a file in the Artifacts tab', () => {
   beforeEach(() => {
     Object.assign(URL, {

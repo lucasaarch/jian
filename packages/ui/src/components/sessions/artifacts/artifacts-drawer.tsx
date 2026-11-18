@@ -5,9 +5,9 @@ import { SkeletonLine, SkeletonRegion, StatusPill } from '../../../kit';
 import { useCrew } from '../../../lib/stores/crew';
 import { useDrawerFocus } from '../crew';
 import { InspectorBar, InspectorBody } from '../inspector';
-import { InspectorContent } from '../inspector-host';
+import { InspectorContent, useInspectorHosted } from '../inspector-host';
 import { ArtifactView } from './artifact-view';
-import { TYPE_NAME } from './source';
+import { KindIcon, kindName } from './kind';
 import { type ArtifactsApi, useArtifactsFollow, useSessionArtifacts } from './use-artifacts';
 
 /**
@@ -21,6 +21,7 @@ export function ArtifactsDrawer({ api, profileId }: { api: ArtifactsApi; profile
   const following = useCrew((state) => state.following);
   const conversation = useCrew((state) => state.sessionId);
   const closer = useRef<HTMLButtonElement>(null);
+  const hosted = useInspectorHosted();
   const found = tabs.find((item) => item.kind === 'artifacts' && item.key === following);
   const tab = found?.kind === 'artifacts' ? found : undefined;
   const listing = useSessionArtifacts(api, profileId, tab?.sessionId);
@@ -46,9 +47,13 @@ export function ArtifactsDrawer({ api, profileId }: { api: ArtifactsApi; profile
           />
         ) : (
           <>
-            <InspectorBar closer={closer}>
-              <h2 className="text-[13px] font-medium text-ink">Artifacts</h2>
-            </InspectorBar>
+            {/* The tab already says what this is. Only the way out lives up here, where no
+                Inspector's bar holds one already. */}
+            {!hosted && (
+              <InspectorBar closer={closer}>
+                <span />
+              </InspectorBar>
+            )}
             <InspectorBody className="px-(--inspector-inset)">
               {listing.isError ? (
                 <p role="alert" className="pt-3 text-sm text-muted">
@@ -65,8 +70,8 @@ export function ArtifactsDrawer({ api, profileId }: { api: ArtifactsApi; profile
               ) : listing.data.length === 0 ? (
                 <p className="pt-3 text-sm leading-relaxed text-muted">
                   Nothing here yet. When the agent makes something to look at, such as a page, a
-                  component, a document, a picture, a diagram or a deck of slides, it is drawn here
-                  and kept with every version.
+                  component, a document, a picture, a diagram, a deck of slides or a file, it is
+                  shown here and kept with every version.
                 </p>
               ) : (
                 <ul className="grid grid-cols-1 gap-px pt-1">
@@ -77,12 +82,13 @@ export function ArtifactsDrawer({ api, profileId }: { api: ArtifactsApi; profile
                         className="flex w-full items-center gap-2.5 rounded-lg px-2 py-2 text-left transition-colors hover:bg-glass-hover"
                         onClick={() => useCrew.getState().showArtifacts(item.id)}
                       >
+                        <KindIcon artifact={item} />
                         <span className="grid min-w-0 flex-1 grid-cols-1 gap-0.5">
                           <span className="truncate text-[13px] font-medium text-ink">
                             {item.title}
                           </span>
                           <span className="truncate text-xs text-muted">
-                            {TYPE_NAME[item.type]} · Version {item.version}
+                            {kindName(item)} · Version {item.version}
                           </span>
                         </span>
                         {item.visibility === 'public' && (
