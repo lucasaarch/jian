@@ -6,8 +6,9 @@ import { create } from 'zustand';
 /**
  * What is on show in the conversation's place. Counts, not flags, so one screen leaving as
  * another arrives never brings back what the second keeps away.
- * - `covers`: screens with no Inspector beside them (pull requests, settings, schedules). Its
- *   tabs and whether it was open stay as they were, for the conversation to find on its return.
+ * - `covers`: screens with no Inspector beside them (schedules, Artifacts, pull requests,
+ *   activity, settings). Its tabs and whether it was open stay as they were, for the
+ *   conversation to find on its return.
  * - `pages`: of those, the ones drawn over the whole app (kit `Page`), with the app's panes left
  *   mounted underneath and out of reach.
  */

@@ -145,6 +145,17 @@ it('opens the agent’s Artifacts from right under Schedules, on any gateway', a
   expect(top[2]?.getAttribute('aria-current')).toBe('page');
 });
 
+it('opens the agent’s Schedules in the chat’s place, the sidebar staying beside them', async () => {
+  const view = await render([], { mode: 'local', githubAccounts: 0 });
+  const schedules = [...view.host.querySelectorAll<HTMLButtonElement>('button')].find(
+    (item) => item.textContent === 'Schedules',
+  );
+
+  await act(async () => schedules?.click());
+  expect(memoryNavigation.current()).toBe(`/agents/${profile.id}/schedules`);
+  expect(schedules?.getAttribute('aria-current')).toBe('page');
+});
+
 it('shows worker activity on the principal conversation instead of its hidden task session', async () => {
   const view = await render([
     { id: 'parent', sessionId: 's-1', status: 'completed' },

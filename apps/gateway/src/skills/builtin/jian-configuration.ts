@@ -44,8 +44,8 @@ Shared by the whole installation.
 
 ## Agent settings
 
-One agent's own, from the agent chooser at the foot of the sidebar. Like the app's Settings and
-Schedules, it takes the whole window: its pages are listed where the sidebar was, under Back.
+One agent's own, from the agent chooser at the foot of the sidebar. Like the app's Settings, it
+takes the whole window: its pages are listed where the sidebar was, under Back.
 
 - **Identity**: name, picture, instructions, summary for the team and boundaries, and Compact
   conversations: whether its conversations are summarised near the model's limit, the default,
@@ -71,7 +71,9 @@ Schedules, it takes the whole window: its pages are listed where the sidebar was
 
 ## In the conversation
 
-- **Schedules** open from the top of the sidebar.
+- **Schedules**, at the top of the sidebar, in place of the chat: the repeating ones and the
+  single times, searched by name or instruction. New schedule writes one; a line opens it in
+  full, to change, pause, run now or remove.
 - **Artifacts**, below Schedules, in place of the chat: every Artifact you made, whatever the
   conversation, as cards, pinned ones first, searched by title or narrowed to a type; one opens
   as the Inspector's Artifacts tab shows it. Each is kept under its conversation's project, or

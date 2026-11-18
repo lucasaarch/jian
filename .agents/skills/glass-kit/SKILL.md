@@ -52,18 +52,21 @@ Use the kit's own phone width with the `phone:` variant, or `usePhone` in code.
 
 ## Patterns
 
-- **A room of pages takes the app's place.** Settings, agent settings and schedules are a kit
+- **A room of pages takes the app's place.** Settings and agent settings, and only they, are a kit
   `Page` holding a `SettingsLayout`: its list stands where the sidebar was, under a Back button,
   and the open page where the conversation was. The conversation stays mounted beneath, inert,
-  and Escape goes back. Copy that for a new one, never an `Overlay`.
+  and Escape goes back. Anything else of the agent's (schedules, Artifacts, pull requests,
+  activity) is a screen in the chat's place, with the sidebar beside it; never an `Overlay`.
 - **Every screen has one anatomy.** Settings, agent settings and each of their pages, schedules,
-  activity, skills and memories, and any new screen of the kind, are built from `page-layout.tsx`:
-  - `PageBody`: the column, 40rem for rows and forms, `wide` (72rem) for cards, a map or figures.
+  Artifacts, pull requests, activity, skills and memories, and any new screen of the kind, are
+  built from `page-layout.tsx`. The `page-anatomy` skill says how to build a new one:
+  - `PageBody`: the column, 60rem at most on every screen alike, rows, cards or a table.
   - `PageHeading`: an `h1` in `text-xl`, what acts on the whole screen (Create, Import, Edit) at
     its right as `outline` `small` actions 2rem tall, and an arrow `iconButton` back only on a
     screen opened from a list inside it (one skill).
   - `PageToolbar` under it: the search taking the room left, then its `Segmented` and
-    `FilterSelect`s. No bar of its own at the top: a screen that is only read has none.
+    `FilterSelect`s. It sticks under the title bar while the page scrolls. No bar of tools of its
+    own at the window's top: what acts on the screen sits in the heading.
   - Sections: `SettingsGroup`, or a `SectionHeading` (`text-xs` muted) over the content.
   - Cards: `surfaceCard` with `p-4`, never another radius, ground or border.
   - Spacing: `gap-7` between sections (`gap-5` on a phone), `gap-4` from heading to toolbar to
@@ -71,9 +74,10 @@ Use the kit's own phone width with the `phone:` variant, or `usePhone` in code.
     `SettingsLayout`), so the gap stays the same as on one that does not.
   - Every edge is the column's: no `px-1` or other nudge on a title, a note or a card. Text that
     stands a few pixels in from the card under it is the misalignment this rule exists to stop.
-  Pull requests is the one exception: a table edge to edge under a `ScreenHeader` of tools.
+  - A table lies in a card as a list does (Pull requests). `ScreenHeader` is only for one
+    document open full size, as an Artifact is.
 - **A screen with no conversation has no Inspector.** A `Page` hides it by itself; a screen in the
-  conversation's place, as Pull requests, calls `useNoInspector()`. Neither closes it: it comes
+  conversation's place calls `useNoInspector()`. Neither closes it: it comes
   back as it was with the conversation.
 - **Overlay sizes.** `settings` for a room of pages, `form` for one form, `page` for a page to read.
 - **An overlay's actions float.** Put a form's or page's buttons in `OverlayActions`, never in a row

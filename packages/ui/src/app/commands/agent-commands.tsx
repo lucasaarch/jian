@@ -24,7 +24,13 @@ import {
 import { AgentFace } from '../../kit/face';
 import type { Profile } from '../../lib/api';
 import { useGatewayMode } from '../../lib/gateway-mode';
-import { activityPath, agentPath, artifactsPath, newChatPath } from '../../lib/navigation';
+import {
+  activityPath,
+  agentPath,
+  artifactsPath,
+  newChatPath,
+  schedulesPath,
+} from '../../lib/navigation';
 import { useAgentOverlay } from '../../lib/stores/agent-overlay';
 import { useOnboarding } from '../../lib/stores/onboarding';
 import { useRouter } from '../../platform/navigation';
@@ -131,7 +137,7 @@ export function useAgentCommands({
         detail: current.name,
         keywords: ['schedule', 'reminder', 'recurring', 'cron', 'later'],
         icon: <AlarmClock size={15} />,
-        run: () => useAgentOverlay.getState().openSchedules(),
+        run: place(schedulesPath(current.id)),
       },
       {
         id: 'artifacts',

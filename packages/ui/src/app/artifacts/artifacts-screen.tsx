@@ -165,7 +165,7 @@ export function ArtifactsScreen({
 
   return (
     <div className="flex h-full min-h-0">
-      <PageBody wide labelledBy="artifacts-title">
+      <PageBody labelledBy="artifacts-title">
         <PageHeading
           id="artifacts-title"
           title="Artifacts"

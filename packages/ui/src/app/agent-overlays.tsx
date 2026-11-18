@@ -12,17 +12,15 @@ import { AgentSettingsContent } from './agent-settings';
 import { ChannelsPage, ChannelsWaiting } from './customize/channels-page';
 import { MemoriesPage, MemoriesWaiting } from './customize/memories-page';
 import { SkillsPage, SkillsWaiting } from './customize/skills-page';
-import { SchedulesOverlay } from './schedules/schedules-content';
 
 /**
  * What an address from before these were overlays asks to open. Links and bookmarks keep working:
  * the overlay opens, and the address goes on to the agent's chats.
  */
-function askedAt(pathname: string): AgentSettingsPage | 'schedules' | 'activity' | undefined {
+function askedAt(pathname: string): AgentSettingsPage | 'activity' | undefined {
   // The agent's own address was its Overview, which is its Activity now.
   if (/^\/agents\/[^/]+\/?$/.test(pathname)) return 'activity';
   if (/^\/agents\/[^/]+\/settings\/?$/.test(pathname)) return 'identity';
-  if (/^\/agents\/[^/]+\/schedules\/?$/.test(pathname)) return 'schedules';
   const customize = /^\/agents\/[^/]+\/customize(?:\/([^/]+))?\/?$/.exec(pathname);
   if (!customize) return undefined;
   return customize[1] === 'memories' || customize[1] === 'channels' ? customize[1] : 'skills';
@@ -87,7 +85,6 @@ function AgentSettingsOverlay({ profileId }: { profileId: string }) {
         current={page}
         onSelect={(next) => select(next as AgentSettingsPage)}
         startOnPage={page !== 'identity'}
-        wide={page === 'skills' || page === 'memories'}
         ownHeading={page === 'skills' || page === 'memories'}
         searchLabel="Search agent settings"
         backLabel="Agent settings"
@@ -117,7 +114,6 @@ export function AgentOverlays({ profileId }: { profileId: string }) {
   const pathname = usePathname();
   const router = useRouter();
   const openSettings = useAgentOverlay((state) => state.openSettings);
-  const openSchedules = useAgentOverlay((state) => state.openSchedules);
   const asked = askedAt(pathname);
   useEffect(() => {
     if (!asked) return;
@@ -125,15 +121,9 @@ export function AgentOverlays({ profileId }: { profileId: string }) {
       router.replace(activityPath(profileId));
       return;
     }
-    if (asked === 'schedules') openSchedules();
-    else openSettings(asked);
+    openSettings(asked);
     router.replace(agentPath(profileId, 'sessions'));
-  }, [asked, openSchedules, openSettings, profileId, router]);
+  }, [asked, openSettings, profileId, router]);
 
-  return (
-    <>
-      <AgentSettingsOverlay profileId={profileId} />
-      <SchedulesOverlay />
-    </>
-  );
+  return <AgentSettingsOverlay profileId={profileId} />;
 }
