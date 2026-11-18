@@ -704,6 +704,18 @@ describe('what the owner edits by hand', () => {
     expect((await app.inject({ method: 'POST', url, headers: device, payload })).statusCode).toBe(
       403,
     );
+    // Nor publishes one: a public link is the owner's call, from the panel.
+    const share = { visibility: 'public' };
+    expect(
+      (
+        await app.inject({
+          method: 'PATCH',
+          url: at(`/${html.id}`),
+          headers: device,
+          payload: share,
+        })
+      ).statusCode,
+    ).toBe(403);
 
     // Nor through another conversation or another profile, with the credential.
     const elsewhere = await services.sessions.createSession(owner.id, { channel: 'api' });
