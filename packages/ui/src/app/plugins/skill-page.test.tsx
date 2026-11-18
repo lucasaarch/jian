@@ -168,8 +168,11 @@ it('shows where an imported skill came from, its version and that it is up to da
   expect(detail('Version')?.textContent).toBe('v3 · updated 17 Sept · from main');
   expect(detail('License')?.textContent).toBe('MIT');
   expect(detail('Imported')?.textContent).toBe('17 Sept 2026');
-  expect(skillUpstream).toHaveBeenCalledWith('concise');
-  await vi.waitFor(() => expect(detail('Updates')?.textContent).toBe('Up to date'));
+  // Up to date is the usual case, and says nothing: the version line stays as it was.
+  await vi.waitFor(() => expect(skillUpstream).toHaveBeenCalledWith('concise'));
+  expect(detail('Version')?.textContent).toBe('v3 · updated 17 Sept · from main');
+  expect(button('Update to the latest version', host)).toBeUndefined();
+  expect(detail('Updates')).toBeUndefined();
 
   await press('More', host);
   expect(button('Open on GitHub')).toBeDefined();
@@ -182,14 +185,25 @@ it('copies an imported skill from its source again when that changed', async () 
     skillUpstream: async () => ({ changed: true, checkedAt: concise.updatedAt }),
     updateSkillFromSource,
   });
-  await vi.waitFor(() => expect(detail('Updates')?.textContent).toContain('Update available'));
+  // On the version's own line, with the button that takes it: no row of its own.
+  await vi.waitFor(() =>
+    expect(detail('Version')?.textContent).toBe(
+      'v3 · updated 17 Sept · from main · Update available',
+    ),
+  );
+  expect(detail('Updates')).toBeUndefined();
+  expect(button('Update to the latest version', host)?.getAttribute('title')).toBe(
+    'Update to the latest version',
+  );
 
-  await press('Update', host);
+  await press('Update to the latest version', host);
 
   // Never edited here, so there is nothing to ask about.
   expect(updateSkillFromSource).toHaveBeenCalledWith('concise');
   expect(document.querySelector('[role="dialog"]')).toBeNull();
-  await vi.waitFor(() => expect(detail('Updates')?.textContent).toBe('Up to date'));
+  await vi.waitFor(() =>
+    expect(detail('Version')?.textContent).toBe('v3 · updated 17 Sept · from main'),
+  );
 });
 
 it('asks before an update replaces what was edited here since the import', async () => {
@@ -203,10 +217,13 @@ it('asks before an update replaces what was edited here since the import', async
     skillUpstream: async () => ({ changed: true, checkedAt: edited.updatedAt }),
     updateSkillFromSource,
   });
-  await vi.waitFor(() => expect(detail('Updates')?.textContent).toContain('Edited here'));
+  await vi.waitFor(() => expect(detail('Version')?.textContent).toContain('Update available'));
 
-  await press('Update', host);
+  await press('Update to the latest version', host);
   expect(updateSkillFromSource).not.toHaveBeenCalled();
+  expect(document.querySelector('[role="dialog"]')?.textContent).toContain(
+    'It was edited here after it was imported.',
+  );
 
   await press('Update skill');
   expect(updateSkillFromSource).toHaveBeenCalledWith('concise');
@@ -218,10 +235,12 @@ it('says when the source could not be asked, and leaves the skill as it is', asy
   });
 
   await vi.waitFor(() =>
-    expect(detail('Updates')?.textContent).toContain('Could not reach GitHub'),
+    expect(detail('Version')?.textContent).toBe(
+      'v3 · updated 17 Sept · from main · Couldn’t check',
+    ),
   );
-  expect(button('Update', host)).toBeUndefined();
-  expect(button('Try again', host)).toBeDefined();
+  expect(button('Update to the latest version', host)).toBeUndefined();
+  expect(button('Check again', host)).toBeDefined();
   expect(host.querySelector('.markdown')?.textContent).toContain('Lead with the answer.');
 });
 

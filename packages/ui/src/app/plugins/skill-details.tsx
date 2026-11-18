@@ -9,6 +9,7 @@ import { InfoTip } from '../../kit';
 import { LOCALE } from '../../lib/format';
 import { queries } from '../../lib/query/profile';
 import { VerifiedBadge } from './plugin-list';
+import { Detail, PluginDetails } from './plugin-page';
 
 const day = new Intl.DateTimeFormat(LOCALE, { day: 'numeric', month: 'short' });
 const dayOfYear = new Intl.DateTimeFormat(LOCALE, {
@@ -18,24 +19,13 @@ const dayOfYear = new Intl.DateTimeFormat(LOCALE, {
 });
 const month = new Intl.DateTimeFormat(LOCALE, { month: 'long', year: 'numeric' });
 
-function Detail({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div className="grid min-w-0 grid-cols-1 content-start gap-1">
-      <dt className="text-xs text-muted">{label}</dt>
-      <dd className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1 text-[13px] text-ink">
-        {children}
-      </dd>
-    </div>
-  );
-}
-
 /**
  * What is known about a skill beside what it says: who made it, whether the agents are offered
  * it, where it was copied from, which version the library holds and since when. A column at the
- * right of the page, and two under it where the page is narrow. `updates` is drawn for a skill
- * with a source, by the page, which holds what updating needs.
+ * right of the page, and two under it where the page is narrow. `update` ends the version's
+ * line for a skill with a source: drawn by the page, which holds what updating needs.
  */
-export function SkillDetails({ item, updates }: { item: SkillItem; updates?: ReactNode }) {
+export function SkillDetails({ item, update }: { item: SkillItem; update?: ReactNode }) {
   const builtIn = item.kind === 'built-in';
   // A built-in skill is as old as the Jian that ships it. A development build has no version.
   const jian = useQuery({ ...queries.gateway(), enabled: builtIn }).data?.version;
@@ -43,10 +33,7 @@ export function SkillDetails({ item, updates }: { item: SkillItem; updates?: Rea
   const origin = held?.origin;
 
   return (
-    <dl
-      aria-label="Details"
-      className="grid grid-cols-1 content-start gap-x-8 gap-y-5 @max-[44rem]:grid-cols-2 @max-[26rem]:grid-cols-1"
-    >
+    <PluginDetails>
       <Detail label="Made by">
         {item.maker}
         {builtIn && <VerifiedBadge />}
@@ -82,18 +69,18 @@ export function SkillDetails({ item, updates }: { item: SkillItem; updates?: Rea
               · updated {day.format(new Date(held.updatedAt))}
               {origin?.ref && ` · from ${origin.ref}`}
             </span>
+            {update}
           </span>
         </Detail>
       ) : (
         jian && <Detail label="Version">Jian {jian}</Detail>
       )}
-      {updates && <Detail label="Updates">{updates}</Detail>}
       {origin?.license && <Detail label="License">{origin.license}</Detail>}
       {origin ? (
         <Detail label="Imported">{dayOfYear.format(new Date(origin.importedAt))}</Detail>
       ) : (
         held && <Detail label="Added">{month.format(new Date(held.createdAt))}</Detail>
       )}
-    </dl>
+    </PluginDetails>
   );
 }

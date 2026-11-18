@@ -1,5 +1,6 @@
 'use client';
 
+import { ScrollText } from 'lucide-react';
 import { useId, useState } from 'react';
 import {
   BackLink,
@@ -14,11 +15,12 @@ import { pluginsPath } from '../../lib/navigation';
 import { useNoInspector } from '../../lib/stores/screen';
 import { useProfileId } from '../../lib/workspace';
 import { useRouter } from '../../platform/navigation';
+import { PluginEditActions, PluginHeader, pluginColumns } from './plugin-page';
 import { useSkills } from './plugin-skills';
 import { SkillEditForm, SkillOverview, SkillSource } from './skill-body';
 import { SkillDetails } from './skill-details';
-import { SkillActions, SkillEditActions, SkillHeader } from './skill-header';
-import { SkillUpdates } from './skill-updates';
+import { SkillActions } from './skill-header';
+import { SkillUpdate } from './skill-updates';
 
 type Tab = 'overview' | 'document';
 
@@ -55,9 +57,16 @@ export function SkillPage({ name }: { name: string }) {
         <div className="grid grid-cols-1 gap-3">
           <BackLink onClick={() => router.push(plugins)}>Plugins</BackLink>
           {item && (
-            <SkillHeader item={item}>
+            // Its mark is the row's glyph, a size up.
+            <PluginHeader
+              titleId="skill-title"
+              icon={<ScrollText size={20} />}
+              name={item.name}
+              verified={item.kind === 'built-in'}
+              subline={`${item.by} · ${item.description}`}
+            >
               {editing ? (
-                <SkillEditActions form={form} busy={busy} onCancel={() => setEditing(false)} />
+                <PluginEditActions form={form} busy={busy} onCancel={() => setEditing(false)} />
               ) : (
                 <SkillActions
                   item={item}
@@ -67,7 +76,7 @@ export function SkillPage({ name }: { name: string }) {
                   onDelete={() => setAsking(true)}
                 />
               )}
-            </SkillHeader>
+            </PluginHeader>
           )}
         </div>
         {item ? (
@@ -77,7 +86,7 @@ export function SkillPage({ name }: { name: string }) {
                 <Segmented flat label="Show" value={tab} options={TABS} onChange={setTab} />
               </div>
             )}
-            <div className="grid grid-cols-[minmax(0,1fr)_15rem] items-start gap-x-12 gap-y-8 @max-[44rem]:grid-cols-1">
+            <div className={pluginColumns}>
               {editing && held ? (
                 <SkillEditForm
                   id={form}
@@ -95,14 +104,13 @@ export function SkillPage({ name }: { name: string }) {
               )}
               <SkillDetails
                 item={item}
-                updates={
+                update={
                   held &&
                   origin && (
-                    <SkillUpdates
+                    <SkillUpdate
                       skill={held}
                       importedAt={origin.importedAt}
                       api={api}
-                      busy={busy}
                       update={() => library.updateFromSource(held.name)}
                     />
                   )

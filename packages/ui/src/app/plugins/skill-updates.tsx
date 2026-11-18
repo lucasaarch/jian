@@ -1,68 +1,108 @@
 'use client';
 
-import { useState } from 'react';
+import { ArrowDownToLine, LoaderCircle, RefreshCw } from 'lucide-react';
+import { type ReactNode, useState } from 'react';
 import { useSkillUpstream } from '../../components/skills/skill-list';
-import { Action, ConfirmDialog, InfoTip } from '../../kit';
+import { ConfirmDialog, iconButton } from '../../kit';
 import type { GatewayApi, LibrarySkill } from '../../lib/api';
 
 /**
- * Whether a skill copied from GitHub still says what its source does, asked when its page
- * opens, and the button that copies it again. The copy replaces what the library holds, so a
- * skill edited here since it was imported asks first: those edits are what would be lost.
+ * The bar's round button inside a line of text: on the words' centre, and pulled in above and
+ * below so the line stays as tall as its words.
  */
-export function SkillUpdates({
+function InlineButton({
+  label,
+  disabled = false,
+  onClick,
+  children,
+}: {
+  label: string;
+  disabled?: boolean;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <span className="-my-1 ml-0.5 inline-flex align-middle">
+      <button
+        type="button"
+        aria-label={label}
+        title={label}
+        disabled={disabled}
+        onClick={onClick}
+        className={iconButton}
+      >
+        {children}
+      </button>
+    </span>
+  );
+}
+
+/** The answer and its button wrap as one, so the button never starts a line alone. */
+const together = 'whitespace-nowrap';
+
+/**
+ * How the version line of a skill copied from GitHub ends: with nothing while its source still
+ * says the same, asked when its page opens, and with the update and the button that takes it
+ * once the source changed. The copy replaces what the library holds, so a skill edited here
+ * since it was imported asks first: those edits are what would be lost.
+ */
+export function SkillUpdate({
   skill,
   importedAt,
   api,
-  busy,
   update,
 }: {
   skill: LibrarySkill;
   /** When it was last copied from its source. */
   importedAt: string;
   api: GatewayApi;
-  busy: boolean;
   /** Copies it from its source again; false when that failed, after saying so. */
   update: () => Promise<boolean>;
 }) {
   const upstream = useSkillUpstream(api, skill.name);
   const [asking, setAsking] = useState(false);
+  const [updating, setUpdating] = useState(false);
   // An import stamps both with the same instant, so a later change is the owner's or an agent's.
   const edited = Date.parse(skill.updatedAt) > Date.parse(importedAt);
+  const run = async () => {
+    setUpdating(true);
+    const ok = await update();
+    setUpdating(false);
+    return ok;
+  };
 
   return (
     <>
-      {upstream.isFetching ? (
-        <span className="text-muted">Checking…</span>
-      ) : upstream.isError ? (
-        <>
-          <span>Could not reach GitHub</span>
-          {upstream.error instanceof Error && (
-            <InfoTip label="What went wrong">{upstream.error.message}</InfoTip>
-          )}
-          <Action tone="quiet" size="small" onClick={() => void upstream.refetch()}>
-            Try again
-          </Action>
-        </>
-      ) : upstream.data?.changed ? (
-        <>
-          <span>Update available</span>
-          <Action
-            tone="outline"
-            size="small"
-            busy={busy && !asking}
-            onClick={() => (edited ? setAsking(true) : void update())}
-          >
-            Update
-          </Action>
-          {edited && (
-            <span className="basis-full text-xs leading-snug text-muted">
-              Edited here since the import. Updating replaces those edits.
-            </span>
-          )}
-        </>
+      {upstream.isFetching ? null : upstream.isError ? (
+        <span className="text-muted">
+          {' · '}
+          <span className={together}>
+            Couldn’t check
+            <InlineButton label="Check again" onClick={() => void upstream.refetch()}>
+              <RefreshCw size={13} aria-hidden="true" />
+            </InlineButton>
+          </span>
+        </span>
       ) : (
-        <span>Up to date</span>
+        upstream.data?.changed && (
+          <>
+            <span className="text-muted"> · </span>
+            <span className={together}>
+              Update available
+              <InlineButton
+                label="Update to the latest version"
+                disabled={updating}
+                onClick={() => (edited ? setAsking(true) : void run())}
+              >
+                {updating ? (
+                  <LoaderCircle size={13} aria-hidden="true" className="animate-spin" />
+                ) : (
+                  <ArrowDownToLine size={13} aria-hidden="true" />
+                )}
+              </InlineButton>
+            </span>
+          </>
+        )
       )}
       {/* Outside the answer above, which changes under it once the update is in. */}
       <ConfirmDialog
@@ -70,9 +110,9 @@ export function SkillUpdates({
         onOpenChange={setAsking}
         title={`Replace the edits to ${skill.name}?`}
         action="Update skill"
-        busy={busy}
+        busy={updating}
         run={() =>
-          void update().then((ok) => {
+          void run().then((ok) => {
             if (ok) setAsking(false);
           })
         }
