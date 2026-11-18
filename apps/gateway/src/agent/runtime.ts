@@ -134,6 +134,7 @@ import { guardrail } from './guardrail.js';
 import { machineBackend, offersMachineFiles } from './machine-files.js';
 import { availableNote, connectMcpTools, type McpEntry, unavailableNote } from './mcp.js';
 import { MCP_ERROR_UNSAID, mcpErrorText, mcpOutcomeUncertain } from './mcp-errors.js';
+import { withFittedImages } from './model-images.js';
 import { ROUND, withModelRetry } from './model-retry.js';
 import { Narrator, ToolCalls } from './narrator.js';
 import { ProgressReporter } from './progress.js';
@@ -706,11 +707,15 @@ export class AgentRuntime {
           providerKey ?? (config.apiKeyEnv ? process.env[config.apiKeyEnv] : undefined),
         ) === 'subscription';
 
-      const model = await this.model(
-        config,
-        process.env,
-        withConversationAffinity(outbound.fetch, config.baseURL, run.sessionId),
-        providerKey,
+      // Every call of the run goes through this one model, so no image leaves at a size the
+      // provider refuses the whole request for, whichever path put it in the messages.
+      const model = withFittedImages(
+        await this.model(
+          config,
+          process.env,
+          withConversationAffinity(outbound.fetch, config.baseURL, run.sessionId),
+          providerKey,
+        ),
       );
       const session = await this.services.sessions.session(profileId, run.sessionId);
       const learning = session.channel === LEARNING_SESSION_CHANNEL;
