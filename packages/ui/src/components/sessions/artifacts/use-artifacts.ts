@@ -13,6 +13,8 @@ export type ArtifactsApi = Pick<
   | 'exportSessionArtifact'
   | 'setSessionArtifactVisibility'
   | 'editSessionArtifact'
+  // A file's bytes, which are media of the conversation.
+  | 'media'
 >;
 
 /** Every Artifact of the conversation, the one changed last first. */

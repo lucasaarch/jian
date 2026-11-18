@@ -211,6 +211,8 @@ const madeArtifact = (artifact: (SessionArtifact & { slides?: number }) | undefi
     version: artifact.version,
     // After a change to a deck: how many slides it now has.
     ...(artifact.slides === undefined ? {} : { slides: artifact.slides }),
+    // For a file: which file it now is, as it was kept.
+    ...(artifact.file ? { file: artifact.file } : {}),
   };
 
 export function profileTools(
@@ -449,21 +451,21 @@ export function profileTools(
       ? {
           create_artifact: tool({
             description:
-              'Make an Artifact: something the owner sees drawn in the Inspector beside this conversation, under its Artifacts tab, instead of reading its source in your reply. Worth it for what is looked at, used or kept — a page, an interactive component, a document, a picture, a diagram, a presentation — not for a short answer or a snippet. `type` says how `content` is drawn: html is a whole page with its own styles and scripts; react is one component, the default export, importing only react and react-dom and styled with its own CSS or inline styles; markdown is a document; svg is one svg element; mermaid is a diagram’s source. deck is a presentation and takes `slides` instead of `content`: each slide a whole HTML page of its own, styles included, laid out for a fixed 1280x720 canvas that is scaled to fit. It runs sealed: nothing loads from the network (no CDN script, stylesheet, font or remote image, and no fetch — embed a picture as a data: address), and it cannot call your tools or Jian. Returns the artifactId the other Artifact tools take.',
+              'Make an Artifact: something the owner sees drawn in the Inspector beside this conversation, under its Artifacts tab, instead of reading its source in your reply. Worth it for what is looked at, used or kept — a page, an interactive component, a document, a picture, a diagram, a presentation — not for a short answer or a snippet. `type` says how `content` is drawn: html is a whole page with its own styles and scripts; react is one component, the default export, importing only react and react-dom and styled with its own CSS or inline styles; markdown is a document; svg is one svg element; mermaid is a diagram’s source. deck is a presentation and takes `slides` instead of `content`: each slide a whole HTML page of its own, styles included, laid out for a fixed 1280x720 canvas that is scaled to fit. It runs sealed: nothing loads from the network (no CDN script, stylesheet, font or remote image, and no fetch — embed a picture as a data: address), and it cannot call your tools or Jian. file is a file as it is, of any format up to 16 MB, which the owner reads with the reader of its format (a PDF, a picture, a Markdown or text document, code, a video; anything else as a card) and downloads unchanged. It takes no `content`: give `path`, the absolute path of a file within your reach, or `mediaId`, an attachment of this conversation. Returns the artifactId the other Artifact tools take.',
             inputSchema: sessionArtifactCreateSchema,
             execute: async (input) =>
               madeArtifact(await services.artifacts?.create(run.profileId, run.sessionId, input)),
           }),
           update_artifact: tool({
             description:
-              'Give an Artifact of this conversation a new version: the whole content again, not a patch (for a deck every slide again, as `slides`; to change one slide use update_slide). The owner sees the new one and can go back to any earlier version. The owner may have edited it by hand since you wrote it, and this replaces their edit too: read_artifact_source first when that is possible. Its type stays; make another Artifact for another type.',
+              'Give an Artifact of this conversation a new version: the whole content again, not a patch (for a deck every slide again, as `slides`; to change one slide use update_slide; for a file another `path` or `mediaId`). The owner sees the new one and can go back to any earlier version. The owner may have edited it by hand since you wrote it, and this replaces their edit too: read_artifact_source first when that is possible. Its type stays; make another Artifact for another type.',
             inputSchema: sessionArtifactRevisionSchema,
             execute: async (input) =>
               madeArtifact(await services.artifacts?.revise(run.profileId, run.sessionId, input)),
           }),
           read_artifact_source: tool({
             description:
-              'Read an Artifact of this conversation back: its source as it now stands, or as a version of it was, and whether you or the owner wrote that version. The owner edits a web page and a deck’s slides by hand in the panel, which makes a version you have never seen, so read before you update one you did not just write. A deck answers its slides, numbered from 1, or with `slide` that one alone.',
+              'Read an Artifact of this conversation back: its source as it now stands, or as a version of it was, and whether you or the owner wrote that version. The owner edits a web page and a deck’s slides by hand in the panel, which makes a version you have never seen, so read before you update one you did not just write. A deck answers its slides, numbered from 1, or with `slide` that one alone. A file answers its name, type, size and media ID, not what it holds.',
             inputSchema: sessionArtifactReadSchema,
             execute: async (input) => services.artifacts?.read(run.profileId, run.sessionId, input),
           }),
@@ -1266,7 +1268,7 @@ export const TOOL_GROUPS = {
   },
   artifacts: {
     summary:
-      'make something the owner sees drawn beside this conversation — a web page, a React component, a Markdown document, an SVG, a Mermaid diagram or a deck of slides — read it back, give it new versions, and add, rewrite, remove or move one slide of a deck',
+      'make something the owner sees drawn beside this conversation — a web page, a React component, a Markdown document, an SVG, a Mermaid diagram, a deck of slides or a file of any format — read it back, give it new versions, and add, rewrite, remove or move one slide of a deck',
     tools: [
       'create_artifact',
       'update_artifact',

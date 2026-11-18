@@ -11,15 +11,8 @@ import {
 import { useAppearance } from '../../../../lib/appearance';
 import { watchSize } from '../../../../lib/watch-size';
 import { SlideFrame } from './slide-frame';
+import { wheelReader } from './wheel';
 
-/** How far a wheel turns, in px, before it is a step to the next slide. */
-const TURN = 20;
-/** A wheel's line, in px, for a mouse that counts in lines rather than pixels. */
-const LINE = 16;
-/** A wheel quiet for this long, in ms, has ended its turn: the next event starts another. */
-const PAUSE = 150;
-/** A wheel still turning this long, in ms, after a step takes another. */
-const AGAIN = 700;
 /** How far the pointer moves, in px, before a press is a drag. */
 const DRAG = 4;
 /** The share of the width a drag covers before letting go moves to the next slide. */
@@ -36,7 +29,7 @@ const pitch = (element: HTMLElement) => element.scrollWidth / Math.max(1, elemen
 /**
  * The slides of a deck side by side, one filling the view, the one in view centred: it is
  * dragged, swiped or scrolled sideways to the next, and comes to rest on a slide, never between
- * two. A wheel that only turns vertically steps a slide at a time. What it rests on is told to
+ * two. A wheel turned vertically steps a slide at a time (wheel.ts). What it rests on is told to
  * `onAt`, and `at` changing from outside (the row of small ones, the arrows, a key) moves it.
  *
  * - A slide here is looked at, not used: it takes no pointer, so a drag or a wheel over it
@@ -117,39 +110,23 @@ export function SlideCarousel({
   useEffect(() => {
     const element = track.current;
     if (!element) return;
-    let turned = 0;
-    let before = 0;
-    let stepped = 0;
-    // Mapped by hand: a wheel that only moves vertically does nothing to a row. Not passive, so
-    // nothing under it scrolls too. Sideways is the track's own scroll, left to the browser.
+    const read = wheelReader(() => element.clientWidth);
+    // Mapped by hand: a wheel that only moves vertically does nothing to a row. Sideways is the
+    // track's own scroll, left to the browser.
     const wheel = (event: WheelEvent) => {
       const { at, onAt, editing, last } = live.current;
       // A held modifier zooms the page or means something else to the host: never the deck's.
       if (event.ctrlKey || event.metaKey || editing) return;
-      if (Math.abs(event.deltaX) >= Math.abs(event.deltaY)) {
+      const { axis, step } = read(event);
+      if (axis === 'x') {
         // The owner's hand on the track ends a move of this component's own.
         if (event.deltaX !== 0) settle();
         return;
       }
+      // Not passive, so nothing under it scrolls too, and neither does the track: what little a
+      // vertical turn goes sideways would end the move its own step began, and snap it back.
       event.preventDefault();
-      if (event.timeStamp - before > PAUSE) {
-        turned = 0;
-        stepped = 0;
-      }
-      before = event.timeStamp;
-      // One step a turn: a trackpad goes on sending the same swipe long after the fingers left.
-      if (stepped && event.timeStamp - stepped < AGAIN) return;
-      const unit =
-        event.deltaMode === WheelEvent.DOM_DELTA_LINE
-          ? LINE
-          : event.deltaMode === WheelEvent.DOM_DELTA_PAGE
-            ? element.clientWidth
-            : 1;
-      turned += event.deltaY * unit;
-      if (Math.abs(turned) < TURN) return;
-      const to = Math.max(0, Math.min(last, at + Math.sign(turned)));
-      turned = 0;
-      stepped = event.timeStamp;
+      const to = Math.max(0, Math.min(last, at + step));
       if (to !== at) onAt(to);
     };
     const align = () => {

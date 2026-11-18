@@ -7,7 +7,7 @@ import {
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import { GatewayError } from '../core/errors.js';
 import type { SessionParams } from '../http/params.js';
-import { artifactFrame, artifactPolicy, publishedArtifact } from './document.js';
+import { artifactFrame, artifactPolicy, publishedArtifact, publishedFile } from './document.js';
 import type { SessionArtifacts } from './service.js';
 
 type ArtifactParams = SessionParams & { artifactId: string };
@@ -18,11 +18,11 @@ type ArtifactParams = SessionParams & { artifactId: string };
  */
 const EDIT_BODY_LIMIT = 2 * 1024 * 1024;
 
-const html = (reply: FastifyReply, ancestors: "'self'" | "'none'") =>
+const html = (reply: FastifyReply, ancestors: "'self'" | "'none'", downloads = false) =>
   reply
     .type('text/html; charset=utf-8')
     // Over the policy the gateway gives every answer, which would let the page reach its origin.
-    .header('Content-Security-Policy', artifactPolicy(ancestors));
+    .header('Content-Security-Policy', artifactPolicy(ancestors, downloads));
 
 export function registerArtifactRoutes(
   app: FastifyInstance,
@@ -112,13 +112,20 @@ export function registerArtifactRoutes(
   });
 
   // Never kept, so a link stops answering the moment its Artifact is private again; and never
-  // inside another site's page.
+  // inside another site's page. A file is answered inside a page too, never as its own bytes.
   app.get('/v1/public-artifacts/:token', async (request, reply) => {
     const { token } = publicArtifactParamsSchema.parse(request.params);
-    const { type, title, source } = await deps.artifacts.published(token);
+    const found = await deps.artifacts.published(token);
+    // Only the page that offers the file to take away may save one: a Markdown file is drawn
+    // as a document, with no download.
+    const saves = found.type === 'file' && found.file.mimeType !== 'text/markdown';
 
-    return html(reply, "'none'")
+    return html(reply, "'none'", saves)
       .header('Cache-Control', 'no-store')
-      .send(publishedArtifact(type, title, source));
+      .send(
+        found.type === 'file'
+          ? publishedFile(found.title, found.file, found.data)
+          : publishedArtifact(found.type, found.title, found.source),
+      );
   });
 }

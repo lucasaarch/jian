@@ -2,54 +2,16 @@
 
 import { ChevronLeft, ChevronRight, CodeXml, Download, Eye, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { kindNames, type LoadedMedia, nameOf, readsAsText, size } from './media';
-import { Code, HtmlPage, languageOf, MarkdownPage, textOf } from './preview';
-import { ZoomableImage } from './zoom';
+import { type LoadedMedia, nameOf } from './media';
+import { MediaReader, RENDERED, textView } from './reader';
 
 /** How long the viewer takes to fade out; the CSS animation runs for the same time. */
 const CLOSING_MS = 160;
 
-/** Documents drawn as they read, with their source one click away. */
-const RENDERED = new Set(['text/html', 'text/markdown']);
-
 /**
- * What a document is shown as: text formats, and files of an unnamed type whose name says
- * code, as text; anything whose bytes turn out not to be text, as a download.
- */
-function textView(media: LoadedMedia) {
-  const language = languageOf(media.mimeType, media.name);
-  const declared = readsAsText(media.mimeType);
-
-  if (!declared && !(media.mimeType === 'application/octet-stream' && language)) return undefined;
-
-  const text = textOf(media.data, declared);
-
-  return text === undefined ? undefined : { text, language };
-}
-
-/**
- * A PDF shown by the browser's own reader. It reads from a local blob address, released when
- * the document changes or the viewer closes.
- */
-function Pdf({ media }: { media: LoadedMedia }) {
-  const url = useMemo(
-    () =>
-      URL.createObjectURL(
-        new Blob([Uint8Array.from(atob(media.data), (char) => char.charCodeAt(0))], {
-          type: 'application/pdf',
-        }),
-      ),
-    [media.data],
-  );
-
-  useEffect(() => () => URL.revokeObjectURL(url), [url]);
-
-  return <iframe className="viewer-pdf" src={url} title={nameOf(media)} />;
-}
-
-/**
- * The attachments of one message, one at a time over the whole screen. The arrows and the
- * keyboard move between them; Escape, the close button and a click outside close it.
+ * The attachments of one message, one at a time over the whole screen, each read as its format
+ * is (reader.tsx). The arrows and the keyboard move between them; Escape, the close button and
+ * a click outside close it.
  */
 export function MediaViewer({
   items,
@@ -140,41 +102,7 @@ export function MediaViewer({
         </button>
       </header>
       <div className="viewer-stage">
-        {media.mimeType.startsWith('image/') ? (
-          <ZoomableImage
-            key={media.id}
-            src={media.url}
-            alt={media.name ?? 'Image attachment'}
-            dismiss={leave}
-          />
-        ) : media.mimeType === 'application/pdf' ? (
-          <Pdf media={media} />
-        ) : media.mimeType.startsWith('video/') ? (
-          // biome-ignore lint/a11y/useMediaCaption: A file someone sent; it has no captions to offer.
-          <video className="viewer-video" src={media.url} controls />
-        ) : text && !source && media.mimeType === 'text/html' ? (
-          <HtmlPage key={media.id} text={text.text} title={nameOf(media)} />
-        ) : text && !source && media.mimeType === 'text/markdown' ? (
-          <MarkdownPage key={media.id} text={text.text} />
-        ) : text ? (
-          <Code key={media.id} text={text.text} language={text.language} />
-        ) : (
-          <div className="viewer-file">
-            <strong>{nameOf(media)}</strong>
-            <span>
-              {kindNames[media.mimeType] ?? media.mimeType} · {size(media.bytes)}
-            </span>
-            <p>No preview for this format.</p>
-            <a
-              className="inline-flex h-9 items-center gap-2 rounded-full bg-accent px-4 text-sm font-medium text-on-accent shadow-sm transition-colors hover:bg-accent-hover"
-              href={media.url}
-              download={nameOf(media)}
-            >
-              <Download size={16} />
-              Download
-            </a>
-          </div>
-        )}
+        <MediaReader media={media} text={text} source={source} dismiss={leave} />
       </div>
       {many && (
         <>

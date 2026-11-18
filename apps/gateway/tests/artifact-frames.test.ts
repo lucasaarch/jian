@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { ARTIFACT_FRAME_MESSAGE, type SessionArtifactType } from '@jian/contracts';
+import { ARTIFACT_FRAME_MESSAGE, type ArtifactFrameType } from '@jian/contracts';
 import { type Browser, chromium, type Page } from 'playwright';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { artifactFrame, artifactPolicy, publishedArtifact } from '../src/artifacts/document.js';
@@ -15,7 +15,7 @@ import { artifactFrame, artifactPolicy, publishedArtifact } from '../src/artifac
 const slide = (text: string) =>
   `<!doctype html><html><head><style>body { margin: 0; background: #123; color: #fff; }</style></head><body><h1></h1><script>document.querySelector('h1').textContent = '${text} ran'</script></body></html>`;
 
-const SOURCE: Partial<Record<SessionArtifactType, string>> = {
+const SOURCE: Partial<Record<ArtifactFrameType, string>> = {
   html: slide('A page'),
   deck: slide('One slide'),
   markdown: '# A document',
@@ -55,7 +55,7 @@ describe.runIf(existsSync(process.env.PLAYWRIGHT_EXECUTABLE_PATH ?? chromium.exe
       server = createServer((request, response) => {
         const url = new URL(request.url ?? '/', 'http://gateway.test');
         const [, kind, name = ''] = url.pathname.split('/');
-        const type = name as SessionArtifactType;
+        const type = name as ArtifactFrameType;
         const send = (body: string, policy?: string) => {
           response.writeHead(200, {
             'content-type': 'text/html; charset=utf-8',
@@ -99,7 +99,7 @@ held.addEventListener('load', () => {
       await page.goto(`${origin}${path}`);
       return page;
     };
-    const inPanel = (name: string, type: SessionArtifactType, source: string) => {
+    const inPanel = (name: string, type: ArtifactFrameType, source: string) => {
       handed.set(name, source);
       return open(`/panel/${name}?type=${type}`);
     };
@@ -114,7 +114,7 @@ held.addEventListener('load', () => {
       };
 
       for (const [type, text] of Object.entries(drawn)) {
-        const page = await inPanel(type, type as SessionArtifactType, SOURCE[type as 'html'] ?? '');
+        const page = await inPanel(type, type as ArtifactFrameType, SOURCE[type as 'html'] ?? '');
         await expect.poll(() => read(page), { message: type }).toContain(text);
         // Still there once everything has settled: a frame taken away after it drew is white.
         await page.waitForTimeout(300);

@@ -23633,11 +23633,18 @@ export interface operations {
                         sessionId: string;
                         title: string;
                         /** @enum {string} */
-                        type: "html" | "react" | "markdown" | "svg" | "mermaid" | "deck";
+                        type: "html" | "react" | "markdown" | "svg" | "mermaid" | "deck" | "file";
                         /** @enum {string} */
                         visibility: "private" | "public";
                         version: number;
                         publicPath: string | null;
+                        file?: {
+                            /** Format: uuid */
+                            mediaId: string;
+                            name: string;
+                            mimeType: string;
+                            bytes: number;
+                        };
                         /** Format: date-time */
                         createdAt: string;
                         /** Format: date-time */
@@ -23755,6 +23762,13 @@ export interface operations {
                         /** @enum {string} */
                         author: "agent" | "owner";
                         content: string;
+                        file?: {
+                            /** Format: uuid */
+                            mediaId: string;
+                            name: string;
+                            mimeType: string;
+                            bytes: number;
+                        };
                         compiled?: string;
                         slides?: string[];
                         /** Format: date-time */
@@ -23992,11 +24006,18 @@ export interface operations {
                         sessionId: string;
                         title: string;
                         /** @enum {string} */
-                        type: "html" | "react" | "markdown" | "svg" | "mermaid" | "deck";
+                        type: "html" | "react" | "markdown" | "svg" | "mermaid" | "deck" | "file";
                         /** @enum {string} */
                         visibility: "private" | "public";
                         version: number;
                         publicPath: string | null;
+                        file?: {
+                            /** Format: uuid */
+                            mediaId: string;
+                            name: string;
+                            mimeType: string;
+                            bytes: number;
+                        };
                         /** Format: date-time */
                         createdAt: string;
                         /** Format: date-time */
@@ -24120,11 +24141,18 @@ export interface operations {
                         sessionId: string;
                         title: string;
                         /** @enum {string} */
-                        type: "html" | "react" | "markdown" | "svg" | "mermaid" | "deck";
+                        type: "html" | "react" | "markdown" | "svg" | "mermaid" | "deck" | "file";
                         /** @enum {string} */
                         visibility: "private" | "public";
                         version: number;
                         publicPath: string | null;
+                        file?: {
+                            /** Format: uuid */
+                            mediaId: string;
+                            name: string;
+                            mimeType: string;
+                            bytes: number;
+                        };
                         /** Format: date-time */
                         createdAt: string;
                         /** Format: date-time */
