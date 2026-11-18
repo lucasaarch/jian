@@ -9,7 +9,7 @@ import type { ArtifactFolder, ArtifactFolders, ProfileArtifact, Project } from '
  */
 
 export const ALL = 'all';
-export const NO_PROJECT_NAME = 'No project';
+const NO_PROJECT_NAME = 'No project';
 
 export type Place = {
   /** What it is told apart by: `all`, a project's id or `none` after `project:`, a folder's id. */
