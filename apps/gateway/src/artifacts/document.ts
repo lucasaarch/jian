@@ -303,7 +303,9 @@ function shell(
 <meta charset="utf-8">
 <meta name="robots" content="noindex, nofollow">
 <title>${escaped(title)}</title>
-<style>html, body, iframe { margin: 0; width: 100%; height: 100%; border: 0; display: block; }</style>
+<style>:root { color-scheme: light dark; }
+html, body, iframe { margin: 0; width: 100%; height: 100%; border: 0; display: block; }
+html, body { background: transparent; }</style>
 </head>
 <body>${held}
 <script>

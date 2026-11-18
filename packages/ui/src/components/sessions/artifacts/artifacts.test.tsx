@@ -520,8 +520,12 @@ describe('the versions of an Artifact', () => {
 
 describe('a deck of slides', () => {
   const frames = () => [...container.querySelectorAll('iframe')];
-  /** The slide in view in the track, which holds the ones beside it too. */
-  const large = () => container.querySelector('[data-current] iframe') as HTMLIFrameElement;
+  /**
+   * The slide in view in the track, which holds the ones beside it too. Open for editing, the
+   * view frame stays under the editing one, which is the last.
+   */
+  const large = () =>
+    [...container.querySelectorAll('[data-current] iframe')].at(-1) as HTMLIFrameElement;
   const presented = () => document.querySelector('[role=dialog]');
 
   it('rows its slides small on top, each sealed, and shows one large under them', async () => {
@@ -606,7 +610,8 @@ describe('a deck of slides', () => {
     expect(frames().filter((item) => item.src.endsWith('?edit=1'))).toEqual([large()]);
     expect(button('Slide 1')?.disabled).toBe(true);
     expect(button('Next slide')?.disabled).toBe(true);
-    expect(button('Present')?.disabled).toBe(true);
+    // Present is in the toolbar, which Save and Cancel replace while a slide is open.
+    expect(button('Present')).toBeUndefined();
     const { element, sent } = await loaded(large());
     expect(sent).toHaveBeenCalledWith(
       { jianArtifact: SLIDES[1], jianArtifactEdit: { scale: 1 } },
