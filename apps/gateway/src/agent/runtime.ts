@@ -1011,7 +1011,11 @@ export class AgentRuntime {
         }),
       };
       // Only the panel has an Inspector to bring something to; a channel's chat does not.
-      if (session.channel !== GATEWAY_SESSION_CHANNEL) delete tools.open_in_inspector;
+      if (session.channel !== GATEWAY_SESSION_CHANNEL) {
+        delete tools.open_in_inspector;
+        delete tools.create_artifact;
+        delete tools.update_artifact;
+      }
       if (defaults?.image === 'disabled') delete tools.generate_image;
       if (defaults?.speech === 'disabled') {
         delete tools.generate_speech;

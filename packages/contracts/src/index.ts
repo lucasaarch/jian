@@ -22,6 +22,7 @@ export * from './remote.js';
 export * from './run-progress.js';
 export * from './schedules.js';
 export * from './security.js';
+export * from './session-artifacts.js';
 export * from './session-files.js';
 export * from './skills.js';
 export * from './ssh.js';

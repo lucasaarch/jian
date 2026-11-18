@@ -1,0 +1,74 @@
+import {
+  artifactFrameParamsSchema,
+  publicArtifactParamsSchema,
+  sessionArtifactVersionParamsSchema,
+} from '@jian/contracts';
+import type { FastifyInstance, FastifyReply } from 'fastify';
+import type { SessionParams } from '../http/params.js';
+import { artifactFrame, artifactPolicy, publishedArtifact } from './document.js';
+import type { SessionArtifacts } from './service.js';
+
+type ArtifactParams = SessionParams & { artifactId: string };
+
+const html = (reply: FastifyReply, ancestors: "'self'" | "'none'") =>
+  reply
+    .type('text/html; charset=utf-8')
+    // Over the policy the gateway gives every answer, which would let the page reach its origin.
+    .header('Content-Security-Policy', artifactPolicy(ancestors));
+
+export function registerArtifactRoutes(
+  app: FastifyInstance,
+  deps: { artifacts: SessionArtifacts },
+): void {
+  app.get<{ Params: SessionParams }>(
+    '/v1/profiles/:profileId/sessions/:sessionId/artifacts',
+    async (request) => deps.artifacts.list(request.params.profileId, request.params.sessionId),
+  );
+
+  app.get(
+    '/v1/profiles/:profileId/sessions/:sessionId/artifacts/:artifactId/versions/:version',
+    async (request) => {
+      const params = sessionArtifactVersionParamsSchema.parse(request.params);
+
+      return deps.artifacts.version(
+        params.profileId,
+        params.sessionId,
+        params.artifactId,
+        params.version,
+      );
+    },
+  );
+
+  app.patch<{ Params: ArtifactParams }>(
+    '/v1/profiles/:profileId/sessions/:sessionId/artifacts/:artifactId',
+    async (request) =>
+      deps.artifacts.setVisibility(
+        request.params.profileId,
+        request.params.sessionId,
+        request.params.artifactId,
+        request.body,
+      ),
+  );
+
+  // The frame holds no Artifact, so it needs no proof and may be kept: the panel, which read the
+  // source with the owner's own credential, hands it over once the frame has loaded. Only the
+  // panel may hold the frame, and the panel is served from the gateway's own address.
+  app.get('/v1/artifact-frames/:type', async (request, reply) => {
+    const { type } = artifactFrameParamsSchema.parse(request.params);
+
+    return html(reply, "'self'")
+      .header('Cache-Control', 'public, max-age=3600')
+      .send(artifactFrame(type));
+  });
+
+  // Never kept, so a link stops answering the moment its Artifact is private again; and never
+  // inside another site's page.
+  app.get('/v1/public-artifacts/:token', async (request, reply) => {
+    const { token } = publicArtifactParamsSchema.parse(request.params);
+    const { type, title, source } = await deps.artifacts.published(token);
+
+    return html(reply, "'none'")
+      .header('Cache-Control', 'no-store')
+      .send(publishedArtifact(type, title, source));
+  });
+}

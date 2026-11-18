@@ -3,6 +3,7 @@ import { cpSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
+import { stageRuntime } from '../../gateway/src/artifacts/runtime.ts';
 
 /**
  * The local gateway the packaged app runs, in .gateway/, which after-pack copies into the app's
@@ -32,7 +33,8 @@ execFileSync('pnpm', ['--filter', '@jian/contracts', 'build'], {
 });
 
 // One level under dist, as the compiled modules are: the gateway finds its migrations at
-// ../../migrations and its release notes at ../release-notes from there.
+// ../../migrations, and its release notes and the Artifact frames' libraries at ../release-notes
+// and ../artifact-runtime from there.
 await build({
   entryPoints: [join(gateway, 'src', 'local.ts')],
   outfile: join(target, 'dist', 'bundle', 'local.mjs'),
@@ -50,6 +52,7 @@ await build({
 });
 cpSync(join(gateway, 'migrations'), join(target, 'migrations'), { recursive: true });
 cpSync(join(root, 'docs', 'releases'), join(target, 'dist', 'release-notes'), { recursive: true });
+stageRuntime(join(target, 'dist', 'artifact-runtime'));
 
 // The versions the repository runs and tests with, installed for this platform and CPU.
 const version = (name) =>

@@ -1,5 +1,6 @@
 import { localPlace, remotePlace } from './agent/github-git-place.js';
 import { prepareGitAccess } from './agent/worker-workspace.js';
+import { SessionArtifacts } from './artifacts/service.js';
 import { Contacts } from './channels/contacts.js';
 import { Contexts } from './context/service.js';
 import type { Clock } from './core/clock.js';
@@ -46,6 +47,7 @@ export type Services = {
   profiles: Profiles;
   providers: Providers;
   sessions: Sessions;
+  artifacts: SessionArtifacts;
   projects: Projects;
   memories: Memories;
   media: Media;
@@ -193,6 +195,7 @@ export function buildServices({
     profiles,
     providers,
     sessions,
+    artifacts: new SessionArtifacts(store, sessions, clock, mode === 'local'),
     projects,
     memories,
     media,

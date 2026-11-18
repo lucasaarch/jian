@@ -6,6 +6,8 @@ import type {
   ProjectChoice,
   ProtectionMode,
   RequestBody,
+  SessionArtifact,
+  SessionArtifactVersion,
   SessionChanges,
   SessionFile,
   SessionFiles,
@@ -306,6 +308,39 @@ export const sessionCalls = (client: Client, origin = '') => ({
     result(
       client.GET('/v1/profiles/{profileId}/sessions/{sessionId}/files/content', {
         params: { path: { profileId, sessionId }, query: { root, path } },
+      }),
+    ),
+  /** What the agent made in the conversation, the one changed last first. */
+  sessionArtifacts: (profileId: string, sessionId: string): Promise<SessionArtifact[]> =>
+    result(
+      client.GET('/v1/profiles/{profileId}/sessions/{sessionId}/artifacts', {
+        params: { path: { profileId, sessionId } },
+      }),
+    ),
+  /** One version of one of them, which never changes once made. */
+  sessionArtifactVersion: (
+    profileId: string,
+    sessionId: string,
+    artifactId: string,
+    version: number,
+  ): Promise<SessionArtifactVersion> =>
+    result(
+      client.GET(
+        '/v1/profiles/{profileId}/sessions/{sessionId}/artifacts/{artifactId}/versions/{version}',
+        { params: { path: { profileId, sessionId, artifactId, version } } },
+      ),
+    ),
+  /** Public gives it a link anyone can open; private ends that link. Only a server offers it. */
+  setSessionArtifactVisibility: (
+    profileId: string,
+    sessionId: string,
+    artifactId: string,
+    visibility: SessionArtifact['visibility'],
+  ): Promise<SessionArtifact> =>
+    result(
+      client.PATCH('/v1/profiles/{profileId}/sessions/{sessionId}/artifacts/{artifactId}', {
+        params: { path: { profileId, sessionId, artifactId } },
+        body: { visibility },
       }),
     ),
   people: (profileId: string, sessionId: string) =>

@@ -1,5 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { cp, rm } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
+import { stageRuntime } from '../src/artifacts/runtime.ts';
 
 const root = new URL('../../../', import.meta.url);
 const run = (args) => execFileSync('pnpm', args, { cwd: root, stdio: 'inherit' });
@@ -15,3 +17,7 @@ await rm(new URL('../dist/ui/', import.meta.url), { recursive: true, force: true
 const notes = new URL('../dist/release-notes/', import.meta.url);
 await rm(notes, { recursive: true, force: true });
 await cp(new URL('../../../docs/releases/', import.meta.url), notes, { recursive: true });
+
+// What an Artifact's frame runs is a development dependency: the files are copied here, and the
+// production install carries none of those packages.
+stageRuntime(fileURLToPath(new URL('../dist/artifact-runtime/', import.meta.url)));

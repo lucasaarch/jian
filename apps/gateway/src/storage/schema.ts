@@ -16,6 +16,8 @@ import type {
   RunProgress,
   RunQuestion,
   Schedule,
+  SessionArtifactType,
+  SessionArtifactVisibility,
   SessionObjective,
   Skill,
   Subagent,
@@ -441,6 +443,48 @@ export const sessionWorktrees = pgTable(
       .on(table.source)
       .where(sql`${table.removedAt} is null`),
   ],
+);
+
+/**
+ * An Artifact the agent made for the owner to see drawn in the Inspector, in the conversation it
+ * was made in. Not `artifacts`, which holds a run's stored tool results.
+ */
+export const sessionArtifacts = pgTable(
+  'session_artifacts',
+  {
+    id: uuid('id').primaryKey(),
+    profileId: uuid('profile_id')
+      .notNull()
+      .references(() => profiles.id, { onDelete: 'cascade' }),
+    sessionId: uuid('session_id')
+      .notNull()
+      .references(() => sessions.id, { onDelete: 'cascade' }),
+    title: text('title').notNull(),
+    type: text('type').$type<SessionArtifactType>().notNull(),
+    // Its latest version, kept here so two updates at once never claim the same number.
+    version: integer('version').notNull().default(1),
+    visibility: text('visibility').$type<SessionArtifactVisibility>().notNull().default('private'),
+    // The whole proof of whoever reads a public one; null while private, and new each time it
+    // is made public, so an old link stops working.
+    publicToken: text('public_token').unique(),
+    createdAt,
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index('session_artifacts_session').on(table.sessionId, table.createdAt)],
+);
+
+/** Every content an Artifact had, numbered from 1; an update adds one and changes none. */
+export const sessionArtifactVersions = pgTable(
+  'session_artifact_versions',
+  {
+    artifactId: uuid('artifact_id')
+      .notNull()
+      .references(() => sessionArtifacts.id, { onDelete: 'cascade' }),
+    version: integer('version').notNull(),
+    content: text('content').notNull(),
+    createdAt,
+  },
+  (table) => [primaryKey({ columns: [table.artifactId, table.version] })],
 );
 
 export const runStatus = pgEnum('run_status', [
