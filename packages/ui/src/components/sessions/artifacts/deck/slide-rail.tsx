@@ -8,10 +8,10 @@ import { SlideFrame } from './slide-frame';
  * sideways, and the slide in view is ringed and kept in sight. A slide here is looked at, not
  * used; the button over it is what a click and a key reach.
  *
- * A slide is two layers, the white sheet and the frame drawn on it, and the rounded corners cut
- * each by itself: where a corner's edge is softened, the sheet showed through the frame as a
- * pale arc around a dark slide. The filter on the box that holds them changes no colour; it is
- * there so the two are drawn as one picture first, and the corners cut that.
+ * The corners are cut by every box around the frame, each taking the radius of the one outside
+ * it (`rounded-[inherit]`), and the white a slide sits on is the frame's own background: no
+ * second layer shows past a softened corner. The filter on the box that holds the frame changes
+ * no colour; it makes the scaled frame draw as one picture before the corners cut it.
  */
 export function SlideRail({
   slides,
@@ -36,7 +36,7 @@ export function SlideRail({
             <div
               className={`relative aspect-video w-24 overflow-hidden rounded-md ring-1 transition-shadow ${index === at ? 'ring-2 ring-accent' : 'ring-glass-edge'}`}
             >
-              <div inert className="absolute inset-0 grid [filter:opacity(1)]">
+              <div inert className="absolute inset-0 grid rounded-[inherit] [filter:opacity(1)]">
                 <SlideFrame
                   title={`Slide ${index + 1}, small`}
                   source={slide}
