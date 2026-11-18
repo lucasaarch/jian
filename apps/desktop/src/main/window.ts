@@ -2,6 +2,7 @@ import { join } from 'node:path';
 import { BrowserWindow, Notification, shell } from 'electron';
 import { APP_ORIGIN } from '../shared/bridge';
 import { blockReloadKeys } from './app-menu';
+import { leavesArtifactFrame } from './artifact-frames';
 import { submitInBrowser } from './forms';
 import { explainedTray, trayExplained } from './preferences';
 import { resourcesDir } from './tray';
@@ -64,6 +65,21 @@ export function createWindow(options: { quitting: () => boolean }): BrowserWindo
     if (url.startsWith(APP_ORIGIN)) return;
     event.preventDefault();
     if (/^https?:/.test(url)) void shell.openExternal(url);
+  });
+
+  // An Artifact runs in frames, and none of them may go anywhere: the address is a way out for data.
+  window.webContents.on('will-frame-navigate', (event) => {
+    const { url, isMainFrame, frame } = event;
+    if (
+      !leavesArtifactFrame({
+        isMainFrame,
+        url,
+        frameUrl: frame?.url ?? '',
+        parentUrl: frame?.parent?.url,
+      })
+    )
+      return;
+    event.preventDefault();
   });
 
   // The title bar shows maximize or restore, whichever the window would do next.
