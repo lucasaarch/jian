@@ -2,7 +2,7 @@
 
 import { EDITABLE_ARTIFACT_TYPES } from '@jian/contracts';
 import { useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Code, Eye, Pencil } from 'lucide-react';
+import { ArrowLeft, Code, Eye, Pencil, Presentation as PresentIcon } from 'lucide-react';
 import { type RefObject, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { Action, HoverTip, iconButton, SkeletonLine, SkeletonRegion } from '../../../kit';
@@ -18,6 +18,7 @@ import { ArtifactOptions } from './artifact-options';
 import { ArtifactSharing } from './artifact-sharing';
 import { DeckDownload } from './deck/deck-download';
 import { DeckView } from './deck/deck-view';
+import { Presentation } from './deck/presentation';
 import { collectEdit } from './edit';
 import { FileDownload, FileView, fileHasSource } from './file-view';
 import { fileName, LANGUAGE } from './source';
@@ -59,6 +60,7 @@ export function ArtifactView({
   // must not take the page from under the owner's hands.
   const [editing, setEditing] = useState<number>();
   const [saving, setSaving] = useState(false);
+  const [presenting, setPresenting] = useState(false);
   const frame = useRef<HTMLIFrameElement>(null);
   // Only a server gateway makes one public, or draws a deck into a file, so nothing else offers
   // either; until the gateway says which it is, neither does this.
@@ -141,6 +143,18 @@ export function ArtifactView({
                     ) : (
                       <Code size={15} aria-hidden="true" />
                     )}
+                  </button>
+                </HoverTip>
+              )}
+              {slides && (
+                <HoverTip tip="Present" side="bottom" align="end">
+                  <button
+                    type="button"
+                    aria-label="Present"
+                    className={iconButton}
+                    onClick={() => setPresenting(true)}
+                  >
+                    <PresentIcon size={15} aria-hidden="true" />
                   </button>
                 </HoverTip>
               )}
@@ -245,6 +259,15 @@ export function ArtifactView({
           source={read.data.compiled ?? read.data.content}
           editing={editing !== undefined}
           frame={frame}
+        />
+      )}
+      {presenting && slides && (
+        <Presentation
+          title={artifact.title}
+          slides={slides}
+          at={slide ?? 0}
+          onAt={setAt}
+          onClose={() => setPresenting(false)}
         />
       )}
     </>
