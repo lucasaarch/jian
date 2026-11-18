@@ -64,6 +64,15 @@ export const keys = {
       sessionId,
       ...(root !== undefined && path !== undefined ? [root, path] : []),
     ] as const,
+  /** The list alone, or with an Artifact and a version that version; the list's key heads both. */
+  sessionArtifacts: (profileId: string, sessionId: string, artifactId?: string, version?: number) =>
+    [
+      'profile',
+      profileId,
+      'artifacts',
+      sessionId,
+      ...(artifactId !== undefined && version !== undefined ? [artifactId, version] : []),
+    ] as const,
   schedules: (profileId: string) => ['profile', profileId, 'schedules'] as const,
   scheduleHistory: (profileId: string, scheduleId: string) =>
     ['profile', profileId, 'schedules', scheduleId, 'history'] as const,

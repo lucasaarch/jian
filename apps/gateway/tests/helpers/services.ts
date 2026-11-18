@@ -11,6 +11,7 @@ export async function testServices(
   clock?: () => number,
   catalog?: ModelCatalog,
   timeZone?: string,
+  mode?: 'server' | 'local',
 ): Promise<Services & { store: TestStore }> {
   const store = await TestStore.create();
   const box = new SecretBox({ activeKeyId: 'test', keys: { test: randomBytes(32) } });
@@ -23,6 +24,7 @@ export async function testServices(
       clock,
       catalog,
       ...(timeZone ? { timeZone } : {}),
+      ...(mode ? { mode } : {}),
     }),
     store,
   };

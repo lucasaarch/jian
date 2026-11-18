@@ -23,6 +23,7 @@ import { useRefresh } from '../../lib/workspace';
 import { useParams, useRouter, useSearchParams } from '../../platform/navigation';
 import type { SectionActions } from '../props';
 import { AgentToolbar } from './agent-toolbar';
+import { ArtifactsDrawer } from './artifacts/artifacts-drawer';
 import { ChangesDrawer } from './changes-drawer';
 import { Composer } from './composer';
 import { ContextRing } from './context-ring';
@@ -364,6 +365,7 @@ export function Sessions({ api, mutate, busy }: SectionActions) {
                 <CrewDrawer api={api} profileId={profile.id} profile={profile} />
                 <ChangesDrawer api={api} profileId={profile.id} />
                 <FilesDrawer api={api} profileId={profile.id} />
+                <ArtifactsDrawer api={api} profileId={profile.id} />
                 <TerminalDrawer api={api} profileId={profile.id} />
                 {/* Any conversation can have its agent settle a pull request's conflicts, and the
                   owner merges from it whichever channel it came on. */}

@@ -22,7 +22,9 @@ export type InspectorTab =
       toolCallId?: string;
       path?: string;
     }
-  | { key: string; kind: 'files'; sessionId: string };
+  | { key: string; kind: 'files'; sessionId: string }
+  /** With an `artifactId` it shows that one; with none, the list of them. */
+  | { key: string; kind: 'artifacts'; sessionId: string; artifactId?: string };
 export type BrowserPageTab = { id: string; title: string; url: string };
 type Crew = {
   sessionId?: string;
@@ -65,6 +67,8 @@ type Crew = {
   }) => void;
   /** The conversation's files, to browse and read only. */
   showFiles: () => void;
+  /** What the agent made in the conversation: one of them, or with no id the list. */
+  showArtifacts: (artifactId?: string) => void;
   follow: (runId: string, opener?: HTMLElement | null) => void;
   open: (item: GitHubItem, opener?: HTMLElement | null) => void;
   /** Brings a browser tab to the front, the Inspector open around it. */
@@ -104,7 +108,7 @@ const KEPT_CONVERSATIONS = 50;
 const isTab = (tab: unknown) =>
   Boolean(tab) &&
   typeof (tab as InspectorTab).key === 'string' &&
-  ['agent', 'github', 'browser', 'changes', 'files', 'terminal'].includes(
+  ['agent', 'github', 'browser', 'changes', 'files', 'terminal', 'artifacts'].includes(
     (tab as InspectorTab).kind,
   );
 
@@ -211,6 +215,25 @@ export const useCrew = create<Crew>()((set, get) => ({
         tabs: state.tabs.some((tab) => tab.key === key)
           ? state.tabs
           : [...state.tabs, { key, kind: 'files', sessionId: state.sessionId }],
+      };
+    }),
+  showArtifacts: (artifactId) =>
+    set((state) => {
+      if (!state.sessionId) return state;
+      const key = `artifacts:${state.sessionId}`;
+      const tab: InspectorTab = {
+        key,
+        kind: 'artifacts',
+        sessionId: state.sessionId,
+        ...(artifactId ? { artifactId } : {}),
+      };
+      return {
+        opened: true,
+        following: key,
+        item: undefined,
+        tabs: state.tabs.some((item) => item.key === key)
+          ? state.tabs.map((item) => (item.key === key ? tab : item))
+          : [...state.tabs, tab],
       };
     }),
   showChanges: (target = {}) =>

@@ -10,6 +10,7 @@ import {
   Minimize2,
   PanelRight,
   Plus,
+  Shapes,
   SquareTerminal,
 } from 'lucide-react';
 import {
@@ -58,12 +59,16 @@ export const toggleInspectorFull = () => {
 /** An agent asked the panel to show something. Only the conversation it works in listens. */
 export function focusInspector(
   sessionId: string,
-  request: { sessionId?: string; kind?: string; url?: string; runId?: string } | null | undefined,
+  request:
+    | { sessionId?: string; kind?: string; url?: string; runId?: string; artifactId?: string }
+    | null
+    | undefined,
 ) {
   if (!request || request.sessionId !== sessionId) return;
   const crew = useCrew.getState();
   if (request.kind === 'subagent' && request.runId) return crew.follow(request.runId);
   if (request.kind === 'browser') return showBrowser();
+  if (request.kind === 'artifact') return crew.showArtifacts(request.artifactId);
   const item = request.url ? githubItemOf(request.url) : undefined;
   if (item) crew.open(item);
 }
@@ -277,6 +282,12 @@ export function InspectorHost({
         ]
       : []),
     {
+      label: 'Artifacts',
+      description: 'See what the agent made in this conversation',
+      icon: Shapes,
+      run: () => useCrew.getState().showArtifacts(),
+    },
+    {
       label: 'Terminal',
       description: 'Open a shell on the gateway’s machine',
       icon: SquareTerminal,
@@ -293,9 +304,11 @@ export function InspectorHost({
           ? 'Changes'
           : tab.kind === 'files'
             ? 'Files'
-            : tab.kind === 'terminal'
-              ? terminalLabel(tabs, tab)
-              : (agents.find((agent) => agent.runId === tab.runId)?.name ?? 'Subagent');
+            : tab.kind === 'artifacts'
+              ? 'Artifacts'
+              : tab.kind === 'terminal'
+                ? terminalLabel(tabs, tab)
+                : (agents.find((agent) => agent.runId === tab.runId)?.name ?? 'Subagent');
   const close = () => useCrew.getState().close();
   const closeTab = (tab: InspectorTab) => {
     if (tab.kind === 'browser') closeBrowser?.(tab.pageId);

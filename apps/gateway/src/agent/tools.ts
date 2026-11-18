@@ -10,11 +10,15 @@ import {
   memorySchema,
   messageReactionInputSchema,
   type Run,
+  type SessionArtifact,
   type Skill,
+  sessionArtifactCreateSchema,
+  sessionArtifactRevisionSchema,
 } from '@jian/contracts';
 import { type ToolSet, tool } from 'ai';
 import { and, desc, eq } from 'drizzle-orm';
 import { z } from 'zod';
+import type { SessionArtifacts } from '../artifacts/service.js';
 import { isChatChannel } from '../channels/kinds.js';
 import { Coordination } from '../coordination/service.js';
 import { assertFound, GatewayError } from '../core/errors.js';
@@ -123,6 +127,7 @@ export type ToolServices = {
     'spawnInConversation' | 'awaitReport' | 'cancelInConversation' | 'focusInspector'
   >;
   sshKeys: Pick<SshKeys, 'list' | 'create' | 'remove' | 'sync'>;
+  artifacts?: Pick<SessionArtifacts, 'create' | 'revise'>;
   remote?: Pick<
     Remote,
     'list' | 'execute' | 'executeComputer' | 'update' | 'executeFiles' | 'offersFiles'
@@ -191,6 +196,15 @@ export function skillFor(
   if (skill === ownerAndContacts) return ownerAndContactsFor(Boolean(can.email));
   return skill;
 }
+
+/** What the agent needs of an Artifact it made. Never its link: making one public is the owner's. */
+const madeArtifact = (artifact: SessionArtifact | undefined) =>
+  artifact && {
+    artifactId: artifact.id,
+    title: artifact.title,
+    type: artifact.type,
+    version: artifact.version,
+  };
 
 export function profileTools(
   services: ToolServices,
@@ -419,6 +433,26 @@ export function profileTools(
                 ...(recommended ? { recommended } : {}),
               });
             },
+          }),
+        }
+      : {}),
+
+    // A subagent works in a conversation of its own, which is not the one on the owner's screen.
+    ...(services.artifacts && !run.subagent
+      ? {
+          create_artifact: tool({
+            description:
+              'Make an Artifact: something the owner sees drawn in the Inspector beside this conversation, under its Artifacts tab, instead of reading its source in your reply. Worth it for what is looked at, used or kept — a page, an interactive component, a document, a picture, a diagram — not for a short answer or a snippet. `type` says how `content` is drawn: html is a whole page with its own styles and scripts; react is one component, the default export, importing only react and react-dom and styled with its own CSS or inline styles; markdown is a document; svg is one svg element; mermaid is a diagram’s source. It runs sealed: nothing loads from the network (no CDN script, stylesheet, font or remote image, and no fetch — embed a picture as a data: address), and it cannot call your tools or Jian. Returns the artifactId update_artifact takes.',
+            inputSchema: sessionArtifactCreateSchema,
+            execute: async (input) =>
+              madeArtifact(await services.artifacts?.create(run.profileId, run.sessionId, input)),
+          }),
+          update_artifact: tool({
+            description:
+              'Give an Artifact of this conversation a new version: the whole content again, not a patch. The owner sees the new one and can go back to any earlier version. Its type stays; make another Artifact for another type.',
+            inputSchema: sessionArtifactRevisionSchema,
+            execute: async (input) =>
+              madeArtifact(await services.artifacts?.revise(run.profileId, run.sessionId, input)),
           }),
         }
       : {}),
@@ -1170,6 +1204,11 @@ export const TOOL_GROUPS = {
       'expect_email',
       'search_email',
     ],
+  },
+  artifacts: {
+    summary:
+      'make something the owner sees drawn beside this conversation — a web page, a React component, a Markdown document, an SVG or a Mermaid diagram — and give it new versions',
+    tools: ['create_artifact', 'update_artifact'],
   },
   self: {
     summary: 'read and version your own identity, and create profiles',
