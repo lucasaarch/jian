@@ -17,7 +17,8 @@ COMPOSE_DEV := docker compose -f compose.dev.yaml
 
 .PHONY: help install setup up pull down logs ps dev db-up db-stop db-reset changelog check-rust \
         check test test-integration lint format build image image-push \
-        release rollback test-display image-test-display image-test-inspection
+        release rollback test-display image-test-display image-test-inspection \
+        preview-up preview-down preview-status preview-token
 
 ##@ General
 
@@ -125,6 +126,26 @@ image-test-inspection: ## Real image page inspection, confined as in production;
 image-push: ## Push the locally built images; the multi-architecture indexes come from CI
 	docker push $(IMAGE):$(VERSION)
 	docker push $(WEB_IMAGE):$(VERSION)
+
+##@ Preview
+
+# A pull request or a branch on a Cubeship instance, to try before releasing: an environment of its
+# own with a database, from the images .github/workflows/preview.yml builds. PR is a pull request's
+# number or a branch's name, and TAG another tag of the images. Needs CUBESHIP_URL and
+# CUBESHIP_API_KEY; `node scripts/preview.mjs --help` says the rest.
+PREVIEW = node scripts/preview.mjs $(1) '$(PR)' $(if $(TAG),--tag '$(TAG)')
+
+preview-up: ## Deploy a pull request to its own environment, or update it: `make preview-up PR=157`
+	@$(call PREVIEW,up)
+
+preview-down: ## Delete a preview, its database included: `make preview-down PR=157`
+	@$(call PREVIEW,down)
+
+preview-status: ## Show what a preview is running and where: `make preview-status PR=157`
+	@$(call PREVIEW,status)
+
+preview-token: ## Print the host token a preview signs in with: `make preview-token PR=157`
+	@$(call PREVIEW,token)
 
 ##@ Release
 

@@ -2,6 +2,7 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { JIAN_CLIENT_HEADER, JIAN_DESKTOP_CLIENT } from '@jian/contracts';
 import { net, protocol } from 'electron';
+import { frameRequest } from './frame-requests';
 import type { GatewayStore } from './gateways/store';
 import { releasing } from './release-body';
 
@@ -56,9 +57,13 @@ async function forward(
     return Response.json({ error: 'This gateway was removed from the app.' }, { status: 404 });
   if (!FORWARDED.test(path)) return new Response('Not found', { status: 404 });
 
+  // Untrusted Artifact frames can be sent here; they never get the gateway's token.
+  const verdict = frameRequest(path, request.headers);
+  if (verdict === 'refuse') return new Response('Forbidden', { status: 403 });
+
   const headers = new Headers(request.headers);
   for (const name of DROPPED_REQUEST) headers.delete(name);
-  headers.set('authorization', `Bearer ${store.token(gateway)}`);
+  if (verdict === 'sign') headers.set('authorization', `Bearer ${store.token(gateway)}`);
   headers.set(JIAN_CLIENT_HEADER, JIAN_DESKTOP_CLIENT);
 
   const hasBody = request.method !== 'GET' && request.method !== 'HEAD';
