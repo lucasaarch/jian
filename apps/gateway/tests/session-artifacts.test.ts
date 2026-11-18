@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import {
+  ARTIFACT_EDIT_MESSAGE,
   DECK_SLIDES_MAX,
   SESSION_ARTIFACT_MAX,
   sessionArtifactSchema,
@@ -339,12 +340,25 @@ describe('the frame the panel draws one in', () => {
         ]),
       );
       expect(policy).not.toMatch(/allow-same-origin|unsafe-eval|https?:|\*/);
-      // It hands the edit to the panel that holds it and to no one else, and reaches nothing.
-      expect(frame.body.match(/postMessage/g)).toHaveLength(1);
-      expect(frame.body).toContain('parent.postMessage(');
-      expect(frame.body).not.toMatch(/fetch\(|XMLHttpRequest|WebSocket|sendBeacon|\.submit\(/);
+      // It sits in a shell, so no navigation of the editing page is allowed either.
+      expect(policy.split('; ')).toContain("frame-src 'none'");
+      expect(frame.body).toMatch(/<iframe id="artifact" sandbox="allow-scripts"[^>]* srcdoc="/);
+      // The shell relays the panel inward and out only the edit key, to its parent and no one else.
+      expect(frame.body.replace(/srcdoc="[^"]*"/, '').match(/postMessage/g)).toHaveLength(2);
+      expect(frame.body).toContain('frame.contentWindow.postMessage');
+      expect(frame.body).toContain('event.source !== frame.contentWindow');
+      expect(frame.body).toContain(`parent.postMessage({ ["${ARTIFACT_EDIT_MESSAGE}"]: said }`);
+      expect(frame.body).toContain('frame.remove()');
+      const inner = (/srcdoc="([^"]*)"/.exec(frame.body)?.[1] ?? '').replace(
+        /&#(\d+);/g,
+        (_, code) => String.fromCharCode(Number(code)),
+      );
+      // The page hands the edit to the panel that holds it and to no one else, and reaches nothing.
+      expect(inner.match(/postMessage/g)).toHaveLength(1);
+      expect(inner).toContain('parent.postMessage(');
+      expect(inner).not.toMatch(/fetch\(|XMLHttpRequest|WebSocket|sendBeacon|\.submit\(/);
       // What it is handed is read as a document, never written into the page to run.
-      expect(frame.body).toContain('new DOMParser()');
+      expect(inner).toContain('new DOMParser()');
     }
 
     // The types the owner does not edit by hand have no such frame.

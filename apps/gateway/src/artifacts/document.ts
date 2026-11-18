@@ -26,8 +26,8 @@ import { type RuntimeFile, runtimeSource } from './runtime.js';
  *   The Artifact therefore runs in a frame of its own inside a shell (`shell` below), and the
  *   shell's `frame-src 'none'` is checked on every navigation of that frame: whatever it tries
  *   to load, a URL included, is refused. A GET to a stranger's address is a way out for data.
- *   The frame the owner edits in is the exception: it talks with the panel both ways, which the
- *   shell's one inward message cannot carry, and it is only ever drawn in the owner's panel.
+ *   The frame the owner edits in sits in a shell too, one that relays both ways: what its parent
+ *   says goes in, and only what carries the edit message key comes out.
  *
  * `'unsafe-inline'` is the point, not a hole: the page exists to run the Artifact's own script.
  * `eval` stays refused, which none of the libraries needs.
@@ -276,8 +276,12 @@ ${artifact ? (published ?? body) : body}
  * With no Artifact the shell hands its parent's first message on to the frame, once it has loaded,
  * and never another. The frame has no way to reach the shell: a sandboxed frame navigates only
  * itself and what is inside it.
+ *
+ * The editing shell relays every message of its parent inward, and out only the edit key of the
+ * frame's: the panel sees them come from this window, which is the frame it holds. Nothing else
+ * the frame posts reaches the panel.
  */
-function shell(title: string, inner: string, relays: boolean): string {
+function shell(title: string, inner: string, relays: boolean, editing = false): string {
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -292,9 +296,10 @@ function shell(title: string, inner: string, relays: boolean): string {
 (() => {
   const frame = document.getElementById('artifact');
   let loaded = false;
-  let waiting = null;
+  let waiting = [];
   const relay = () => {
-    if (loaded && waiting) frame.contentWindow.postMessage(waiting, '*');
+    if (!loaded) return;
+    for (const data of waiting.splice(0)) frame.contentWindow.postMessage(data, '*');
   };
   frame.addEventListener('load', () => {
     if (loaded) return frame.remove();
@@ -304,11 +309,20 @@ function shell(title: string, inner: string, relays: boolean): string {
   if (${relays}) {
     const hear = (event) => {
       if (event.source !== parent || !event.data) return;
-      removeEventListener('message', hear);
-      waiting = event.data;
+      ${editing ? '' : "removeEventListener('message', hear);"}
+      waiting.push(event.data);
       relay();
     };
     addEventListener('message', hear);
+  }${
+    editing
+      ? `
+  addEventListener('message', (event) => {
+    if (event.source !== frame.contentWindow || !event.data) return;
+    const said = event.data[${JSON.stringify(ARTIFACT_EDIT_MESSAGE)}];
+    if (said) parent.postMessage({ [${JSON.stringify(ARTIFACT_EDIT_MESSAGE)}]: said }, '*');
+  });`
+      : ''
   }
 })();
 </script>
@@ -331,7 +345,7 @@ export function artifactFrame(type: SessionArtifactType, editing = false): strin
   let frame = frames.get(key);
 
   if (!frame) {
-    frame = editing ? page(type, undefined, true) : shell('Artifact', page(type), true);
+    frame = shell('Artifact', page(type, undefined, editing), true, editing);
     frames.set(key, frame);
   }
 
