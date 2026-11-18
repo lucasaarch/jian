@@ -4,8 +4,17 @@ import { connectMcp, MissingMcpValue, type SecretReader, STDIO_START_MS } from '
 import { mcpOauthClient } from './mcp-oauth-client.js';
 import type { McpOAuthProviders } from './types.js';
 
-/** Turns the SDK's DCR refusal into the action the owner must take on the MCP form. */
+/**
+ * Turns the SDK's DCR refusal into the action the owner must take on the MCP form, and a page
+ * where JSON was expected (a proxy's 429, an HTML error) into one line instead of the page.
+ */
 export function clarifyOauthError(message: string): string {
+  if (/JSON parsing failed|is not valid JSON|Unexpected token '?</i.test(message)) {
+    return /\b429\b|too many requests|rate limit/i.test(message)
+      ? 'The server answered with a web page instead of JSON: it is rate limiting this gateway (HTTP 429). Try again later.'
+      : 'The server answered with a web page instead of JSON, so it is not an MCP server or is failing. Check its address and try again.';
+  }
+
   if (/does not support dynamic client registration/i.test(message)) {
     return (
       'This auth server does not support dynamic client registration. ' +
