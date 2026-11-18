@@ -29,8 +29,7 @@ from the rest is a bug.
 | Anything over the page | `Overlay`, `OverlayActions`, `ConfirmDialog` |
 | Room of pages with a list | `Page` with `SettingsLayout`, `SettingsGroup`, `SettingsRow` |
 | A screen's column, heading and cards | `PageBody`, `PageHeading`, `BackLink`, `PageToolbar`, `SectionHeading`, `surfaceCard` |
-| Things to connect, side by side | `SettingsCards` holding a `SettingsCard` each |
-| Waiting | `Skeleton`, `SkeletonRegion`, `SettingsPageSkeleton`, `SettingsCardSkeleton`, `Progress` |
+| Waiting | `Skeleton`, `SkeletonRegion`, `SettingsPageSkeleton`, `Progress` |
 | State or a hint | `StatusPill`, `InfoTip`, `HoverTip` |
 | An agent | `AgentFace`, `AgentHero` |
 | Search and run | `CommandPalette` |
@@ -63,7 +62,8 @@ Use the kit's own phone width with the `phone:` variant, or `usePhone` in code.
     its right as `outline` `small` actions 2rem tall, and an arrow `iconButton` back only on a
     screen opened from a list inside it.
   - `BackLink`: an arrow and the name of the screen a page was opened from, above the heading
-    of a page with one of its own ("Plugins" over one skill) and at the top of Settings' list.
+    of a page with one of its own ("Plugins" over one skill or connector, whose header and
+    details column are `app/plugins/plugin-page.tsx`) and at the top of Settings' list.
   - `PageToolbar` under it: the search taking the room left, then its `Segmented` and
     `FilterSelect`s, and a button as `Action size="field"`. Every control in that row is the
     same box to the pixel: 2rem tall overall, `rounded-lg`, 13px text. Never size one with a

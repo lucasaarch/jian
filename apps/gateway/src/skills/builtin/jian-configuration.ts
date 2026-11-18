@@ -36,14 +36,14 @@ Shared by the whole installation.
 In the main sidebar, in place of the chat: what every agent is given, in tabs, with a search.
 
 - **Connectors**: the apps and MCP servers every agent reaches. The ones from Jian's catalog
-  are marked verified. GitHub and X are Jian's own, with accounts to connect and configure; one
-  this gateway cannot offer, as one with no \`JIAN_PUBLIC_URL\`, is not listed. The others, such
-  as Linear, Notion, Atlassian, Stripe, Sentry, Vercel and Supabase, are each service's own MCP
-  server: Connect saves it and opens its sign-in. Once connected, Configure lists its accounts,
-  each an MCP server named after the account that signed in ("linear_octo"), or numbered
-  ("linear_2") when the service cannot say who that is, with Sign in and Remove, and connects
-  another; its tools cannot be switched off. A custom one is an MCP server the owner adds by
-  hand, with connection tests, sign-in and switching tools off.
+  are marked verified. Each opens on its own page, where it is connected and changed. GitHub
+  and X are Jian's own, with accounts to connect; one this gateway cannot offer, as one with
+  no \`JIAN_PUBLIC_URL\`, is not listed. The others, such as Linear, Notion, Atlassian, Stripe,
+  Sentry, Vercel and Supabase, are each service's own MCP server: Connect saves it and opens
+  its sign-in. Its page lists its accounts, each an MCP server named after the account that
+  signed in ("linear_octo"), or numbered ("linear_2") when the service cannot say who that is,
+  with Sign in, Remove and Add account; its tools cannot be switched off. A custom one is an
+  MCP server the owner adds by hand, with Edit, a connection test, sign-in and tool switches.
 - **Skills**: one library shared by every agent. The built-in ones are Jian's, marked verified;
   the others, up to 60, were written by the owner or an agent, or imported from GitHub, as each
   row says. Add creates or imports one. A skill opens on its own page: instructions, source,

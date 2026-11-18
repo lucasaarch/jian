@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { movedToPlugins, settingsOf } from './web-addresses';
+import { movedToPlugins, returnedConnector, settingsOf } from './web-addresses';
 
 it('opens the page an address names, and Settings alone on its first page', () => {
   expect(settingsOf('/settings')).toBe('');
@@ -25,6 +25,12 @@ it('opens nothing for an address that is not a settings page', () => {
   expect(settingsOf('/settings/models/more')).toBeUndefined();
   expect(settingsOf('/agents/a1/sessions')).toBeUndefined();
   expect(settingsOf('/settingsx')).toBeUndefined();
+});
+
+it('names the connector GitHub or X sent the owner back for, by the outcome in the query', () => {
+  expect(returnedConnector(new URLSearchParams('github=connected'))).toBe('github');
+  expect(returnedConnector(new URLSearchParams('x=failed&reason=denied'))).toBe('x');
+  expect(returnedConnector(new URLSearchParams('tab=skills'))).toBeUndefined();
 });
 
 it('leaves the other addresses where they are', () => {

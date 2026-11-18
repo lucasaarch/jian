@@ -1,5 +1,12 @@
 import { expect, it } from 'vitest';
-import { onPlugins, pluginsPath, skillAt, skillPath } from './navigation';
+import {
+  connectorAt,
+  connectorPath,
+  onPlugins,
+  pluginsPath,
+  skillAt,
+  skillPath,
+} from './navigation';
 
 it('names a skill in the address of its page, and reads it back', () => {
   expect(skillPath('a1', 'trip-planning')).toBe('/agents/a1/plugins/skills/trip-planning');
@@ -18,9 +25,27 @@ it('reads no skill from any other address', () => {
   expect(skillAt('/agents/a1/skills/concise')).toBeUndefined();
 });
 
-it('counts a skill’s page as Plugins, so the sidebar keeps it marked', () => {
+it('names a connector in the address of its page, and reads it back', () => {
+  expect(connectorPath('a1', 'github')).toBe('/agents/a1/plugins/connectors/github');
+  expect(connectorAt('/agents/a1/plugins/connectors/github')).toBe('github');
+  // A custom one is named after its server, behind a mark no id of Jian's has.
+  expect(connectorPath('a1', 'custom:harbor_tickets')).toBe(
+    '/agents/a1/plugins/connectors/custom%3Aharbor_tickets',
+  );
+  expect(connectorAt(connectorPath('a1', 'custom:harbor_tickets'))).toBe('custom:harbor_tickets');
+  // The tab it was opened from rides in the query, which is no part of the pathname.
+  expect(connectorPath('a1', 'linear', 'connectors')).toBe(
+    '/agents/a1/plugins/connectors/linear?from=connectors',
+  );
+  expect(connectorAt('/agents/a1/plugins/connectors')).toBeUndefined();
+  expect(connectorAt('/agents/a1/plugins/skills/concise')).toBeUndefined();
+  expect(skillAt('/agents/a1/plugins/connectors/github')).toBeUndefined();
+});
+
+it('counts the page of a skill or a connector as Plugins, so the sidebar keeps it marked', () => {
   expect(onPlugins('/agents/a1/plugins')).toBe(true);
   expect(onPlugins(skillPath('a1', 'concise'))).toBe(true);
-  expect(onPlugins('/agents/a1/plugins/connectors/linear')).toBe(false);
+  expect(onPlugins('/agents/a1/plugins/connectors/linear')).toBe(true);
+  expect(onPlugins('/agents/a1/plugins/connectors/linear/more')).toBe(false);
   expect(onPlugins('/agents/a1/sessions')).toBe(false);
 });

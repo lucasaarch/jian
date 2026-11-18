@@ -1,70 +1,29 @@
 'use client';
 
-import { type ReactNode, useRef, useState } from 'react';
+import { type ReactNode, useState } from 'react';
 import { toast } from 'sonner';
 import { draftOf, type McpDraft, serverOf } from '../../components/integrations/mcp-draft';
-import { Action, Overlay, OverlayActions, Segmented, TextField } from '../../kit';
+import { Segmented, TextField } from '../../kit';
 import type { GatewayApi, McpServer, McpValue } from '../../lib/api';
-import { McpValues } from './mcp-values';
+import { McpValues } from '../settings/mcp-values';
 
 /**
- * Adds an MCP server, or configures one: its connection to change and test before saving —
- * nothing a test carries is stored — and its removal. `round` changes on every
- * opening, so each starts from the server.
+ * What a form of an MCP server holds while it is written: the fields as typed, starting from
+ * `server` or empty for a new one, the server they make, and a test of that connection before it
+ * is saved. Nothing a test carries is stored, and what it answers is said in a notice, so the
+ * form stays as long as its fields.
  */
-export function McpDialog({
-  open,
-  onOpenChange,
-  round,
-  ...form
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  round: number;
-} & FormProps) {
-  return (
-    <Overlay
-      open={open}
-      onOpenChange={onOpenChange}
-      title={form.server ? form.server.name : 'Add an MCP server'}
-      size="form"
-    >
-      <McpForm key={round} {...form} onCancel={() => onOpenChange(false)} />
-    </Overlay>
-  );
-}
-
-type FormProps = {
-  api: GatewayApi;
-  /** The server to configure; a new one without it. */
-  server?: McpServer;
-  busy: boolean;
-  error: string;
-  onSave: (server: McpServer) => void;
-  /** The saved server removed; asked to confirm. */
-  onRemove?: () => void;
-};
-
-function McpForm({
-  api,
-  server,
-  busy,
-  error,
-  onSave,
-  onRemove,
-  onCancel,
-}: FormProps & { onCancel: () => void }) {
+export function useMcpDraft(api: GatewayApi, server?: McpServer) {
   const [draft, setDraft] = useState<McpDraft>(() => draftOf(server));
-  const form = useRef<HTMLFormElement>(null);
-  const secretSaved = Boolean(server?.oauthClientSecret);
   const [testing, setTesting] = useState(false);
-  const change = (patch: Partial<McpDraft>) => setDraft((current) => ({ ...current, ...patch }));
+  // A stored OAuth client secret never comes back: it is kept unless typed again.
+  const secretSaved = Boolean(server?.oauthClientSecret);
+  const made = () => serverOf(draft, secretSaved);
 
-  // What a test answers is said in a notice, not in the form: the form stays as long as its fields.
   const test = async () => {
     setTesting(true);
     try {
-      const status = await api.checkMcpDraft(serverOf(draft, secretSaved));
+      const status = await api.checkMcpDraft(made());
       if (status.reachable) {
         const count = status.tools.length;
         toast.success(`Connected — ${count} ${count === 1 ? 'tool' : 'tools'}.`);
@@ -88,6 +47,50 @@ function McpForm({
       setTesting(false);
     }
   };
+
+  return {
+    draft,
+    change: (patch: Partial<McpDraft>) => setDraft((current) => ({ ...current, ...patch })),
+    secretSaved,
+    made,
+    testing,
+    test,
+  };
+}
+
+/** What each way of signing in asks of the owner. */
+const authHints: Record<McpDraft['auth'], string> = {
+  none: 'Nothing goes with the calls to say who makes them.',
+  headers: 'Headers you write go with every call.',
+  oauth: 'Saving opens the server’s sign-in in a new tab. Needs JIAN_PUBLIC_URL.',
+};
+
+/** One of a few choices, under its name, as the kit's fields are. */
+function Choice({ label, hint, children }: { label: string; hint: string; children: ReactNode }) {
+  return (
+    <div className="grid justify-items-start gap-1.5">
+      <span className="text-[13px] font-medium text-ink">{label}</span>
+      {children}
+      <small className="text-xs leading-snug text-muted">{hint}</small>
+    </div>
+  );
+}
+
+/**
+ * The fields of an MCP server, for the form around them: its name, how the gateway reaches it,
+ * and what goes with the calls. `server` is the saved one being changed, whose stored values
+ * show as kept rather than as empty.
+ */
+export function McpFields({
+  draft,
+  change,
+  secretSaved,
+  server,
+  busy,
+}: Pick<ReturnType<typeof useMcpDraft>, 'draft' | 'change' | 'secretSaved'> & {
+  server?: McpServer | undefined;
+  busy: boolean;
+}) {
   const values = (kind: 'headers' | 'env') => ({
     list: draft[kind],
     onChange: (list: McpValue[]) => change({ [kind]: list }),
@@ -100,22 +103,7 @@ function McpForm({
   });
 
   return (
-    <form
-      ref={form}
-      className="grid w-full gap-5 p-7"
-      onSubmit={(event) => {
-        event.preventDefault();
-        onSave(serverOf(draft, secretSaved));
-      }}
-    >
-      <header className="grid gap-1 pr-10">
-        <h2 className="text-lg font-semibold tracking-tight">
-          {server ? server.name : 'Add an MCP server'}
-        </h2>
-        <p className="text-sm text-muted">
-          Every agent reaches it, and loads the tools it needs from it.
-        </p>
-      </header>
+    <>
       <TextField
         label="Name"
         hint="Lowercase letters, digits and underscore."
@@ -224,53 +212,6 @@ function McpForm({
           />
         </>
       )}
-      {error && (
-        <p role="alert" className="text-sm text-bad">
-          {error}
-        </p>
-      )}
-      <OverlayActions>
-        {server && onRemove && (
-          <Action tone="danger" className="bg-bad/10" disabled={busy} onClick={onRemove}>
-            Remove
-          </Action>
-        )}
-        <Action
-          tone="outline"
-          busy={testing}
-          disabled={busy}
-          onClick={() => {
-            if (form.current?.reportValidity()) void test();
-          }}
-        >
-          Test
-        </Action>
-        <span className="flex-1" />
-        <Action tone="quiet" onClick={onCancel}>
-          Cancel
-        </Action>
-        <Action tone="primary" type="submit" busy={busy}>
-          {server ? 'Save' : 'Add server'}
-        </Action>
-      </OverlayActions>
-    </form>
-  );
-}
-
-/** What each way of signing in asks of the owner. */
-const authHints: Record<McpDraft['auth'], string> = {
-  none: 'Nothing goes with the calls to say who makes them.',
-  headers: 'Headers you write go with every call.',
-  oauth: 'Saving opens the server’s sign-in in a new tab. Needs JIAN_PUBLIC_URL.',
-};
-
-/** One of a few choices, under its name, as the kit's fields are. */
-function Choice({ label, hint, children }: { label: string; hint: string; children: ReactNode }) {
-  return (
-    <div className="grid justify-items-start gap-1.5">
-      <span className="text-[13px] font-medium text-ink">{label}</span>
-      {children}
-      <small className="text-xs leading-snug text-muted">{hint}</small>
-    </div>
+    </>
   );
 }

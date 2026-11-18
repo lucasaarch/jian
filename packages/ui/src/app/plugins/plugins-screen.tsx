@@ -3,7 +3,7 @@
 import { Menu } from '@base-ui/react/menu';
 import { useQuery } from '@tanstack/react-query';
 import { ArrowRight, Cable, ChevronDown, Download, PenLine } from 'lucide-react';
-import { useEffect, useEffectEvent, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { filterSkills, type SkillFilter, skillFilters } from '../../components/skills/skill-items';
 import { SKILL_LIMIT } from '../../components/skills/skill-list';
 import {
@@ -20,10 +20,13 @@ import {
   SettingsRowsSkeleton,
   SkeletonRegion,
 } from '../../kit';
+import { connectorPath } from '../../lib/navigation';
 import { queries } from '../../lib/query/profile';
 import { useNoInspector } from '../../lib/stores/screen';
+import { useProfileId } from '../../lib/workspace';
 import { usePathname, useRouter, useSearchParams } from '../../platform/navigation';
-import { ConnectorDialog, ConnectorIcon } from './connector-dialog';
+import { returnedConnector } from '../web-addresses';
+import { ConnectorIcon } from './connector-icon';
 import {
   ALL,
   type Connector,
@@ -33,7 +36,7 @@ import {
   isVerified,
   narrowConnectors,
 } from './connectors';
-import { McpEditor } from './custom-connector';
+import { AddConnector } from './custom-connector';
 import { type PluginItem, PluginList, PluginSection } from './plugin-list';
 import { SkillOverlays, usePluginSkills } from './plugin-skills';
 import { SkillsTab, skillRow } from './skills-tab';
@@ -75,8 +78,8 @@ function ShowAll({ onClick }: { onClick: () => void }) {
  * What the agents can be given, in place of the chat: the connectors, which are Jian's own apps
  * and the MCP servers the owner adds by hand, and the skills, written here, by an agent, or
  * imported, beside the ones built into Jian. A page of the kit's one anatomy: a search narrows
- * the rows, the tabs choose the kind, each kind's tab has its own filter, and a row opens what
- * it names. Both belong to the installation, so every agent shows the same; the page goes with
+ * the rows, the tabs choose the kind, each kind's tab has its own filter, and a row opens the
+ * page of what it names. Both belong to the installation, so every agent shows the same; the page goes with
  * no conversation, so it has no Inspector beside it. `?tab=` in the address opens a tab.
  */
 export function PluginsScreen() {
@@ -88,6 +91,7 @@ export function PluginsScreen() {
   const params = useSearchParams();
   const pathname = usePathname();
   const router = useRouter();
+  const profileId = useProfileId();
   const asked = params.get('tab');
   const [tab, setTab] = useState<Tab>(isTab(asked) ? asked : 'all');
   const [query, setQuery] = useState('');
@@ -95,10 +99,6 @@ export function PluginsScreen() {
   const [connectorFilter, setConnectorFilter] = useState<string>(ALL);
   const [skillFilter, setSkillFilter] = useState<SkillFilter>('all');
   const [adding, setAdding] = useState(false);
-  // The connector open, kept while its dialog closes; read again from the list while it is
-  // there, since connecting changes it under the dialog.
-  const [kept, setKept] = useState<Connector>();
-  const [open, setOpen] = useState(false);
 
   // An address that names a tab opens it, also when the screen is already up.
   useEffect(() => {
@@ -119,21 +119,19 @@ export function PluginsScreen() {
     x: x.data,
     servers: servers.data ?? [],
   });
+  // A connector's page remembers the Connectors tab it was opened from, to come back to it.
   const show = (id: string) => {
-    const connector = connectors.find((item) => item.id === id);
-    if (!connector) return;
-    setKept(connector);
-    setOpen(true);
+    if (profileId)
+      router.push(connectorPath(profileId, id, tab === 'connectors' ? 'connectors' : undefined));
   };
 
-  // GitHub and X send the owner back with the outcome in the query. It is said by the
-  // connector's own card, so the connector opens for it to be read there.
-  const returned = params.has('github') ? 'github' : params.has('x') ? 'x' : undefined;
-  const showReturned = useEffectEvent(() => returned && show(returned));
-  // biome-ignore lint/correctness/useExhaustiveDependencies: opened once per return, when the list is in.
+  // GitHub and X send the owner back with the outcome in the query. It is said on the
+  // connector's own page, so an address that brings it here goes on there with it.
+  const returned = returnedConnector(params);
   useEffect(() => {
-    if (connectorsReady) showReturned();
-  }, [connectorsReady, returned]);
+    if (returned && profileId)
+      router.replace(`${connectorPath(profileId, returned)}?${params.toString()}`);
+  }, [returned, profileId, params, router]);
 
   const searching = Boolean(query.trim());
   const shown = narrowConnectors(connectors, query, tab === 'connectors' ? connectorFilter : ALL);
@@ -291,14 +289,12 @@ export function PluginsScreen() {
         )}
       </PageBody>
       {connectorsReady && (
-        <>
-          <ConnectorDialog
-            connector={connectors.find((item) => item.id === kept?.id) ?? kept}
-            open={open}
-            onOpenChange={setOpen}
-          />
-          <McpEditor editing="new" open={adding} onOpenChange={setAdding} />
-        </>
+        <AddConnector
+          open={adding}
+          onOpenChange={setAdding}
+          // Saved, it has a page of its own, which is where it is read and changed from now on.
+          onAdded={(name) => show(`custom:${name}`)}
+        />
       )}
       <SkillOverlays {...skills.overlays} />
     </div>

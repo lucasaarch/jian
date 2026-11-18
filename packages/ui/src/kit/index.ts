@@ -32,7 +32,6 @@ export {
   SelectButton,
   SelectField,
 } from './select-field';
-export { SettingsCard, SettingsCards } from './settings-card';
 export {
   SettingsGroup,
   SettingsLayout,
@@ -40,7 +39,6 @@ export {
   SettingsRow,
 } from './settings-layout';
 export {
-  SettingsCardSkeleton,
   SettingsPageSkeleton,
   SettingsRowSkeleton,
   SettingsRowsSkeleton,

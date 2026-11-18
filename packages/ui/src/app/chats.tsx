@@ -7,6 +7,8 @@ import { Action } from '../kit';
 import type { Profile } from '../lib/api';
 import {
   agentPath,
+  connectorAt,
+  connectorPath,
   onActivity,
   onArtifacts,
   onPlugins,
@@ -39,11 +41,12 @@ import { Farewell } from './onboarding/farewell';
 import { StageHandoff } from './onboarding/handoff';
 import { rememberWelcome, Welcome, welcomed } from './onboarding/welcome';
 import { PhoneBar } from './phone-bar';
+import { ConnectorPage } from './plugins/connector-page';
 import { PluginsScreen } from './plugins/plugins-screen';
 import { SkillPage } from './plugins/skill-page';
 import { PullsScreen } from './pulls/pulls-screen';
 import { LoadingMark } from './reload';
-import { movedToPlugins } from './web-addresses';
+import { movedToPlugins, returnedConnector } from './web-addresses';
 
 /** How long the mark covers the window for a gateway that does not answer, in milliseconds. */
 const LOADING_PATIENCE = 15_000;
@@ -222,9 +225,11 @@ function Chats({ phone, createAgent }: { phone: boolean; createAgent: () => void
     if (!next) return;
     // Apps and MCP servers left Settings for Plugins. Their old addresses name no agent, and
     // GitHub and X still send the owner back to them with the outcome in the query, which goes
-    // along to be said there.
+    // along to that connector's own page, to be said there.
     if (movedToPlugins(pathname)) {
-      router.replace(`${pluginsPath(next.id)}${search ? `?${search}` : ''}`);
+      const returned = returnedConnector(new URLSearchParams(search));
+      const place = returned ? connectorPath(next.id, returned) : pluginsPath(next.id);
+      router.replace(`${place}${search ? `?${search}` : ''}`);
     } else router.replace(agentPath(next.id, 'sessions'));
   }, [profiles, known, last, router, pathname, search]);
 
@@ -254,8 +259,9 @@ function AgentChats({ profileId, phone }: { profileId: string; phone: boolean })
   const remember = useLastProfile((state) => state.remember);
   // The pull requests take the chat's place, as a chat would; the sidebar stays beside them.
   const pathname = usePathname();
-  // Under Plugins, one skill has a page of its own, by its name.
+  // Under Plugins, one skill has a page of its own, by its name, and one connector by its id.
   const skill = skillAt(pathname);
+  const connector = connectorAt(pathname);
   useEventStream(profileId);
   useEffect(() => remember(profileId), [profileId, remember]);
 
@@ -271,6 +277,9 @@ function AgentChats({ profileId, phone }: { profileId: string; phone: boolean })
         ) : skill !== undefined ? (
           // By name, so the next skill opened starts on its overview, not mid-edit of the last.
           <SkillPage key={skill} name={skill} />
+        ) : connector !== undefined ? (
+          // By id, so the next connector opened starts as it reads, not mid-edit of the last.
+          <ConnectorPage key={connector} id={connector} />
         ) : onPlugins(pathname) ? (
           <PluginsScreen />
         ) : onActivity(pathname) ? (

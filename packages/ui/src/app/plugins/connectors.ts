@@ -4,8 +4,6 @@ import type { XIntegration } from '../../components/integrations/x-actions';
 import type { FieldOption } from '../../kit';
 import type { McpServer } from '../../lib/api';
 import { matchesQuery } from '../../lib/search';
-import { AWS_DESCRIPTION } from '../settings/aws-card';
-import { GITHUB_DESCRIPTION, githubOffered } from '../settings/github-card';
 import {
   CATEGORIES,
   type Category,
@@ -14,7 +12,25 @@ import {
   type McpApp,
   serversOf,
 } from '../settings/mcp-apps';
-import { X_DESCRIPTION, xOffered } from '../settings/x-card';
+
+/** What each of Jian's own gives, on its row in Plugins and its page, and for the search. */
+const GITHUB_DESCRIPTION = 'Repositories, issues and pull requests for every agent.';
+const X_DESCRIPTION = 'Post, read and search on X with your own developer app.';
+const AWS_DESCRIPTION =
+  'AWS services through their APIs, as your IAM permissions allow, one account at a time.';
+
+/**
+ * Whether this gateway offers GitHub at all: GitHub registers the App only for a gateway it can
+ * send the owner back to, and what a gateway cannot do, or did not say it can, is not offered.
+ */
+const githubOffered = (integration: GithubIntegration | undefined) =>
+  Boolean((integration?.configured && integration.app) || integration?.callbackUrl);
+
+/**
+ * Whether this gateway offers X: it needs an address X accepts to send the owner back to, so a
+ * gateway without one, whatever the reason, offers nothing it could not finish.
+ */
+const xOffered = (integration: XIntegration | undefined) => Boolean(integration?.callbackUrl);
 
 /** What a connector is underneath, which decides its mark and what opens for it. */
 type ConnectorSource =

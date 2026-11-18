@@ -1,122 +1,91 @@
 'use client';
 
-import { useState } from 'react';
-import { type McpEditing, useMcpServers } from '../../components/integrations/mcp-list';
-import { ConfirmDialog, SettingsGroup } from '../../kit';
-import type { McpServer } from '../../lib/api';
+import { useRef, useState } from 'react';
+import { useMcpServers } from '../../components/integrations/mcp-list';
+import { Action, Overlay, OverlayActions } from '../../kit';
 import { useActions } from '../../lib/workspace';
-import { McpDialog } from '../settings/mcp-dialog';
-import { McpServerLine } from '../settings/mcp-server-line';
+import { McpFields, useMcpDraft } from './mcp-fields';
 
 /**
- * The form that adds a custom connector, an MCP server of the owner's, or configures a saved
- * one, and its removal, which asks for the server's name first since its credentials go with it.
- * `editing` is the server's place in the whole list, which is what is saved: Jian's own servers
- * are in it too, and keep their places. `onDone` is told once a change is saved.
+ * Adds a custom connector, an MCP server of the owner's: the one form of Plugins that is a
+ * dialog, since there is no page yet for what does not exist. Saved, it goes to the end of the
+ * list the gateway keeps, and `onAdded` is told its name, so its page can open.
  */
-export function McpEditor({
-  editing,
+export function AddConnector({
   open,
   onOpenChange,
-  onDone,
+  onAdded,
 }: {
-  editing: McpEditing;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onDone?: () => void;
+  onAdded: (name: string) => void;
 }) {
-  const { api, mutate, busy } = useActions();
-  const { servers, save, remove } = useMcpServers({ api, mutate });
-  // Every opening starts from the server, with nothing left of the one before.
+  // Every opening starts empty, with nothing left of the one before.
   const [was, setWas] = useState(open);
   const [round, setRound] = useState(0);
-  const [failed, setFailed] = useState(false);
   if (open !== was) {
     setWas(open);
-    if (open) {
-      setRound(round + 1);
-      setFailed(false);
-    }
+    if (open) setRound(round + 1);
   }
-  // By name: once the list is saved without it, its place belongs to the next server.
-  const [removing, setRemoving] = useState('');
-  const [asking, setAsking] = useState(false);
-  const server = editing === 'new' ? undefined : servers[editing];
 
   return (
-    <>
-      <McpDialog
-        open={open}
-        onOpenChange={onOpenChange}
-        round={round}
-        api={api}
-        busy={busy}
-        error={failed ? 'Could not save. Check the fields, or refresh the page.' : ''}
-        onSave={(next) =>
-          void save(next, editing).then((ok) => {
-            setFailed(!ok);
-            if (!ok) return;
-            onOpenChange(false);
-            onDone?.();
-          })
-        }
-        {...(server
-          ? {
-              server,
-              onRemove: () => {
-                setRemoving(server.name);
-                setAsking(true);
-              },
-            }
-          : {})}
-      />
-      <ConfirmDialog
-        open={asking}
-        onOpenChange={setAsking}
-        title={`Remove ${removing}?`}
-        phrase={removing}
-        action="Remove server"
-        busy={busy}
-        run={() => {
-          const index = servers.findIndex((item) => item.name === removing);
-          if (index < 0) return;
-          void remove(index).then((ok) => {
-            if (!ok) return;
-            setAsking(false);
-            onOpenChange(false);
-            onDone?.();
-          });
-        }}
-      >
-        Every agent stops reaching it on its next runs, and its credentials are deleted. This cannot
-        be undone.
-      </ConfirmDialog>
-    </>
+    <Overlay open={open} onOpenChange={onOpenChange} title="Add an MCP server" size="form">
+      <AddForm key={round} onCancel={() => onOpenChange(false)} onAdded={onAdded} />
+    </Overlay>
   );
 }
 
-/**
- * One custom connector, opened from its row: its name, whether it answers, asked of it as this
- * opens, and how many tools its agents are offered; everything else behind Configure. Saving or
- * removing it closes this too, as the row it was opened from may no longer be the same one.
- */
-export function CustomConnector({ server, close }: { server: McpServer; close: () => void }) {
-  const { api, mutate } = useActions();
-  const { servers } = useMcpServers({ api, mutate });
-  const [configuring, setConfiguring] = useState(false);
+function AddForm({ onCancel, onAdded }: { onCancel: () => void; onAdded: (name: string) => void }) {
+  const { api, mutate, busy } = useActions();
+  const { save } = useMcpServers({ api, mutate });
+  const fields = useMcpDraft(api);
+  const form = useRef<HTMLFormElement>(null);
+  const [failed, setFailed] = useState(false);
 
   return (
-    <>
-      <SettingsGroup>
-        <McpServerLine api={api} server={server} onConfigure={() => setConfiguring(true)} />
-      </SettingsGroup>
-      <McpEditor
-        // Gone from the list once removed, while this closes: there is then nothing to edit.
-        editing={servers.findIndex((item) => item.name === server.name)}
-        open={configuring}
-        onOpenChange={setConfiguring}
-        onDone={close}
-      />
-    </>
+    <form
+      ref={form}
+      className="grid w-full gap-5 p-7"
+      onSubmit={(event) => {
+        event.preventDefault();
+        const next = fields.made();
+        void save(next, 'new').then((ok) => {
+          setFailed(!ok);
+          if (ok) onAdded(next.name);
+        });
+      }}
+    >
+      <header className="grid gap-1 pr-10">
+        <h2 className="text-lg font-semibold tracking-tight">Add an MCP server</h2>
+        <p className="text-sm text-muted">
+          Every agent reaches it, and loads the tools it needs from it.
+        </p>
+      </header>
+      <McpFields {...fields} busy={busy} />
+      {failed && (
+        <p role="alert" className="text-sm text-bad">
+          Could not save. Check the fields, or refresh the page.
+        </p>
+      )}
+      <OverlayActions>
+        <Action
+          tone="outline"
+          busy={fields.testing}
+          disabled={busy}
+          onClick={() => {
+            if (form.current?.reportValidity()) void fields.test();
+          }}
+        >
+          Test
+        </Action>
+        <span className="flex-1" />
+        <Action tone="quiet" onClick={onCancel}>
+          Cancel
+        </Action>
+        <Action tone="primary" type="submit" busy={busy}>
+          Add server
+        </Action>
+      </OverlayActions>
+    </form>
   );
 }

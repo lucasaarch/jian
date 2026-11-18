@@ -14,6 +14,13 @@ export const movedToPlugins = (pathname: string) =>
   PLUGINS.includes(/^\/settings\/([^/]+)(?:\/|$)/.exec(pathname)?.[1] ?? '');
 
 /**
+ * The connector GitHub or X sent the owner back for, by the outcome each leaves in the query:
+ * `?github=` or `?x=`. Its own page is where that outcome is said.
+ */
+export const returnedConnector = (params: URLSearchParams) =>
+  params.has('github') ? 'github' : params.has('x') ? 'x' : undefined;
+
+/**
  * The settings page an address opens: `''` for `/settings` alone, the page's id for
  * `/settings/:page`, undefined anywhere else. A page that moved to Plugins is no longer one of
  * Settings', so its address opens nothing here.

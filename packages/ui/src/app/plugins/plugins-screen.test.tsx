@@ -6,10 +6,10 @@ import type { GatewayApi } from '../../lib/api';
 import { PluginsScreen } from './plugins-screen';
 
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
-const address = vi.hoisted(() => ({ query: '' }));
+const address = vi.hoisted(() => ({ query: '', replace: vi.fn(), push: vi.fn() }));
 vi.mock('../../platform/navigation', () => ({
   usePathname: () => '/agents/a1/plugins',
-  useRouter: () => ({ replace: vi.fn(), push: vi.fn() }),
+  useRouter: () => ({ replace: address.replace, push: address.push }),
   useSearchParams: () => new URLSearchParams(address.query),
 }));
 // No skill on this gateway: what the Skills tab does with them is its own test's.
@@ -63,6 +63,8 @@ let host: HTMLDivElement;
 beforeEach(() => {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
   address.query = '';
+  address.replace.mockClear();
+  address.push.mockClear();
   read.githubIntegration.mockReset().mockResolvedValue(none);
   read.xIntegration.mockReset().mockResolvedValue(none);
   read.mcpServers.mockReset().mockResolvedValue([]);
@@ -95,7 +97,7 @@ async function show() {
       </QueryClientProvider>,
     ),
   );
-  // Inside act, as what the gateway answers goes on to open a connector the owner came back to.
+  // Inside act, as what the gateway answers arrives after the first render.
   await act(async () => {
     await vi.waitFor(() => expect(host.querySelector('[role="status"]')).toBeNull());
   });
@@ -117,7 +119,7 @@ const press = async (name: string, within?: ParentNode) => {
   if (!found) throw new Error(`no ${name}`);
   await act(async () => found.click());
 };
-/** Opens a connector from its row, as a click on it does. */
+/** Clicks a connector's row, which opens its page. */
 const open = async (name: string) => {
   const found = row(name)?.querySelector('button');
   if (!found) throw new Error(`no row ${name}`);
@@ -136,15 +138,6 @@ const search = async (text: string) => {
   if (!field) throw new Error('no search');
   await type(field, text);
 };
-/** Fills the field with this label. */
-async function fill(label: string, text: string) {
-  const found = [...document.querySelectorAll('label')].find((item) =>
-    item.textContent?.startsWith(label),
-  );
-  const input = found && document.getElementById(found.htmlFor);
-  if (!(input instanceof HTMLInputElement)) throw new Error(`no field ${label}`);
-  await type(input, text);
-}
 
 const tickets = { name: 'harbor_tickets', transport: 'http', url: 'https://tickets.example.test' };
 
@@ -197,9 +190,10 @@ it("counts a server saved at an app's address as that app, never as a custom con
   expect(names()).not.toContain('aws_prod');
   expect(host.textContent).not.toContain('Connector · Custom');
 
+  // A row opens the connector's own page, which goes back to the tab it was opened from.
   await open('Notion');
-  expect(button('Configure Notion')).toBeDefined();
-  expect(button('Connect Notion')).toBeUndefined();
+  expect(address.push).toHaveBeenCalledWith('/agents/a1/plugins/connectors/notion?from=connectors');
+  expect(dialogs()).toEqual([]);
 });
 
 it('shows a few connectors on All, the connected first, and the rest behind Show all', async () => {
@@ -346,124 +340,16 @@ it('adds a custom connector from Add, at the end of the list the gateway keeps',
       env: [],
     },
   ]);
+  // And on to the page of the server just added, opened from All.
+  expect(address.push).toHaveBeenCalledWith('/agents/a1/plugins/connectors/custom%3Alantern_notes');
 });
 
-it('connects an MCP app from its row as an OAuth server, beside the servers already there', async () => {
-  // A server of the owner's own already holds the app's name: Connect must not replace it.
-  const theirs = { name: 'linear', transport: 'http', url: 'https://tickets.example.test/mcp' };
-  read.mcpServers.mockResolvedValue([theirs]);
-
-  await show();
-  await search('linear');
-  await open('Linear');
-  await press('Connect Linear');
-
-  expect(api.replaceMcpServers).toHaveBeenCalledWith([
-    theirs,
-    expect.objectContaining({
-      name: 'linear_2',
-      transport: 'http',
-      url: 'https://mcp.linear.app/mcp',
-      auth: 'oauth',
-    }),
-  ]);
-});
-
-it('connects another account of an app, shown under the name its sign-in gave it', async () => {
-  const octo = {
-    name: 'linear_octo',
-    transport: 'http',
-    url: 'https://mcp.linear.app/mcp',
-    auth: 'oauth',
-  };
-  read.mcpServers.mockResolvedValue([octo]);
-
-  await show();
-  await open('Linear');
-  await press('Configure Linear');
-  await vi.waitFor(() =>
-    expect(document.querySelector('[aria-label="Remove linear_octo"]')).not.toBeNull(),
-  );
-
-  // Connected under a name to hold it until the gateway learns who signed in.
-  await press('Connect another account');
-  expect(api.replaceMcpServers).toHaveBeenCalledWith([
-    octo,
-    expect.objectContaining({ name: 'linear', url: 'https://mcp.linear.app/mcp', auth: 'oauth' }),
-  ]);
-});
-
-it('shows an account under the name its sign-in gave it, once the gateway renames it', async () => {
-  const server = { transport: 'http', url: 'https://mcp.linear.app/mcp', auth: 'oauth' };
-  read.mcpServers
-    .mockResolvedValueOnce([{ ...server, name: 'linear' }])
-    .mockResolvedValue([{ ...server, name: 'linear_kai' }]);
-  // The gateway learned who signed in and answers under the account's name.
-  api.checkMcpServer.mockImplementation(async (name: string) => ({
-    name: name === 'linear' ? 'linear_kai' : name,
-    reachable: true,
-    tools: [],
-    checkedAt: '2026-11-05T00:00:00.000Z',
-  }));
-
-  await show();
-  await open('Linear');
-  await press('Configure Linear');
-
-  await vi.waitFor(() =>
-    expect(document.querySelector('[aria-label="Remove linear_kai"]')).not.toBeNull(),
-  );
-});
-
-it('connects an AWS account as its own command server, keys kept as secret values', async () => {
-  const first = {
-    name: 'aws_prod',
-    transport: 'stdio',
-    command: 'uvx',
-    args: ['awslabs.aws-api-mcp-server@latest'],
-    env: [],
-  };
-  read.mcpServers.mockResolvedValue([first]);
-
-  await show();
-  await open('AWS');
-  await press('Configure AWS');
-  expect(document.querySelector('[aria-label="Remove aws_prod"]')).not.toBeNull();
-
-  await press('Connect another account');
-  await fill('Account name', 'Staging EU');
-  await fill('Access key ID', 'AKIAEXAMPLE');
-  await fill('Secret access key', 'shh');
-  await fill('Region', 'eu-west-1');
-  const submit = [...document.querySelectorAll('button')].find((item) => item.type === 'submit');
-  await act(async () => submit?.click());
-
-  expect(api.replaceMcpServers).toHaveBeenCalledWith([
-    first,
-    expect.objectContaining({
-      name: 'aws_staging_eu',
-      transport: 'stdio',
-      command: 'uvx',
-      args: ['awslabs.aws-api-mcp-server@latest'],
-      auth: 'none',
-      env: [
-        { name: 'AWS_ACCESS_KEY_ID', value: 'AKIAEXAMPLE' },
-        { name: 'AWS_SECRET_ACCESS_KEY', value: 'shh' },
-        { name: 'AWS_REGION', value: 'eu-west-1' },
-      ],
-    }),
-  ]);
-});
-
-it('offers to connect GitHub until an account is in, and to configure it after', async () => {
+it('says on its row that GitHub is connected, and leads the list with it', async () => {
   read.githubIntegration.mockResolvedValue({ ...none, callbackUrl: githubCallback });
 
   await show();
   await search('github');
   expect(row('GitHub')?.textContent).not.toContain('Connected');
-  await open('GitHub');
-  await vi.waitFor(() => expect(button('Connect GitHub')).toBeDefined());
-  expect(button('Configure GitHub')).toBeUndefined();
   await act(async () => root?.unmount());
   document.body.innerHTML = '';
 
@@ -479,25 +365,26 @@ it('offers to connect GitHub until an account is in, and to configure it after',
   expect(names()[0]).toBe('GitHub');
   expect(row('GitHub')?.textContent).toContain('Connected');
   await open('GitHub');
-  await vi.waitFor(() => expect(button('Configure GitHub')).toBeDefined());
-  expect(button('Connect GitHub')).toBeUndefined();
+  expect(address.push).toHaveBeenCalledWith('/agents/a1/plugins/connectors/github');
 });
 
-it('opens the connector GitHub sends the owner back to, where its outcome is said', async () => {
+it('sends an owner GitHub or X left on Plugins on to that connector, outcome and all', async () => {
   const { toast } = await import('sonner');
   vi.mocked(toast.success).mockClear();
   address.query = 'github=connected';
-  read.githubIntegration.mockResolvedValue({
-    configured: true,
-    permissionsVerified: true,
-    app,
-    callbackUrl: githubCallback,
-    accounts: [account],
-  });
 
   await show();
 
-  await vi.waitFor(() => expect(button('Configure GitHub')).toBeDefined());
-  expect(dialogs()).toHaveLength(1);
-  expect(toast.success).toHaveBeenCalledWith('GitHub account connected.');
+  // Replaced, so Back does not return to an address that would send them here again.
+  expect(address.replace).toHaveBeenCalledWith(
+    '/agents/a1/plugins/connectors/github?github=connected',
+  );
+  // The connector's page says the outcome, once.
+  expect(toast.success).not.toHaveBeenCalled();
+  await act(async () => root?.unmount());
+  address.replace.mockClear();
+
+  address.query = 'x=failed';
+  await show();
+  expect(address.replace).toHaveBeenCalledWith('/agents/a1/plugins/connectors/x?x=failed');
 });
