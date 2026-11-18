@@ -1,7 +1,7 @@
 'use client';
 
 import { FolderPlus } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArtifactView } from '../../components/sessions/artifacts/artifact-view';
 import { TYPE_NAME } from '../../components/sessions/artifacts/source';
 import {
@@ -16,13 +16,13 @@ import {
   surfaceCard,
 } from '../../kit';
 import type { ProfileArtifact, SessionArtifact } from '../../lib/api';
-import { agentPath, newChatPath } from '../../lib/navigation';
+import { agentPath, artifactsPath, newChatPath } from '../../lib/navigation';
 import { useProjects } from '../../lib/query/agent';
 import { panelApi } from '../../lib/query/client';
 import { useCrew } from '../../lib/stores/crew';
 import { draftKey, useDrafts } from '../../lib/stores/drafts';
 import { useNoInspector } from '../../lib/stores/screen';
-import { useRouter } from '../../platform/navigation';
+import { useRouter, useSearchParams } from '../../platform/navigation';
 import type { CardActions } from './artifact-card';
 import { attempt, useArtifactDialogs } from './artifact-dialogs';
 import { ArtifactFolders } from './artifact-folders';
@@ -54,7 +54,8 @@ const TYPES = [
  * was made in until the owner moves it to a folder of their own. A row of shortcuts starts a
  * conversation that asks for a new one. One opens here as it does in the Inspector, drawn by the
  * same view (artifact-view.tsx), which then takes the page's whole room. It goes with no
- * conversation, so it has no Inspector beside it.
+ * conversation, so it has no Inspector beside it. The one open is in the address
+ * (`?artifact=`), so the browser's back comes to the cards as the view's own back does.
  */
 export function ArtifactsScreen({
   profileId,
@@ -77,7 +78,20 @@ export function ArtifactsScreen({
     return () => clearTimeout(timer);
   }, [typed]);
   const [placeKey, setPlaceKey] = useState(ALL);
-  const [opened, setOpened] = useState<string>();
+  const opened = useSearchParams().get('artifact') ?? undefined;
+  // The one last opened from the cards, whose way back is the history's step back; one the
+  // address opened has nothing behind it here, and the cards take its place instead.
+  const pushed = useRef<string>(undefined);
+  const open = (id: string) => {
+    pushed.current = id;
+    router.push(`${artifactsPath(profileId)}?artifact=${encodeURIComponent(id)}`);
+  };
+  const close = () => {
+    const back = opened !== undefined && pushed.current === opened;
+    pushed.current = undefined;
+    if (back) router.back();
+    else router.replace(artifactsPath(profileId));
+  };
 
   const found = useArtifactFolders(api, profileId).data;
   const places = useMemo(() => placesOf(found), [found]);
@@ -101,7 +115,7 @@ export function ArtifactsScreen({
   const home = (item: ProfileArtifact) => homeName(item, projects);
 
   const on: CardActions = {
-    open: (item) => setOpened(item.id),
+    open: (item) => open(item.id),
     pin: (item) => void attempt(() => keeping.change(item, { pinned: !item.pinned })),
     rename: (item) => name({ kind: 'artifact', artifact: item }),
     duplicate: (item) => void attempt(() => keeping.duplicate(item), `Duplicated ${item.title}.`),
@@ -140,7 +154,7 @@ export function ArtifactsScreen({
           profileId={profileId}
           artifact={artifact}
           page
-          onBack={() => setOpened(undefined)}
+          onBack={close}
         />
       </section>
     );

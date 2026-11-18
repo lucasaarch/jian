@@ -2,6 +2,7 @@ import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { ArtifactFolder, ProfileArtifact, Project, Session } from '../../lib/api';
+import { artifactsPath } from '../../lib/navigation';
 import { keys } from '../../lib/query/keys';
 import { useCrew } from '../../lib/stores/crew';
 import { draftKey, useDrafts } from '../../lib/stores/drafts';
@@ -251,6 +252,8 @@ async function render(api: ArtifactsPageApi, mode: 'server' | 'local' = 'server'
     slices: { sessions: [chat], projects: [site], contacts: [] },
   });
   client.setQueryData(keys.gateway, { status: 'ok', mode });
+  // Where the page is, which the agent's cache alone leaves at the agent.
+  memoryNavigation.go(artifactsPath(profile.id));
   await act(async () =>
     root.render(
       <AgentCache profile={profile} client={client}>
@@ -353,6 +356,26 @@ it('opens one in the page with the Inspector’s own view, and comes back to the
 
   await click(button('All artifacts', container));
   expect(titles()).toEqual(['Landing', 'Release notes']);
+  expect(memoryNavigation.current()).toBe(artifactsPath(profile.id));
+});
+
+it('keeps the one open in the address, so the browser’s back comes to the cards', async () => {
+  await render(gateway());
+
+  await click(button('Open Landing'));
+  await settled(() => Boolean(container.querySelector('iframe')));
+  expect(memoryNavigation.current()).toBe(`${artifactsPath(profile.id)}?artifact=${landing.id}`);
+
+  await act(async () => memoryNavigation.back());
+  expect(titles()).toEqual(['Landing', 'Release notes']);
+  expect(memoryNavigation.current()).toBe(artifactsPath(profile.id));
+
+  // One the address opened has nothing of the page behind it: back is to the cards in its place.
+  await act(async () => memoryNavigation.go(`${artifactsPath(profile.id)}?artifact=${notes.id}`));
+  await settled(() => button('All artifacts', container) !== undefined);
+  await click(button('All artifacts', container));
+  expect(titles()).toEqual(['Landing', 'Release notes']);
+  expect(memoryNavigation.current()).toBe(artifactsPath(profile.id));
 });
 
 it('offers a card’s menu, with the link only of one that is public', async () => {
@@ -542,14 +565,10 @@ it('deletes one only after asking', async () => {
   expect(titles()).toEqual(['Release notes', 'Flow']);
 });
 
-it('keeps the page as it was when the gateway refuses, as it does a paired phone', async () => {
+it('keeps the page as it was when the gateway refuses a change', async () => {
   const api = gateway();
-  api.deleteSessionArtifact.mockRejectedValueOnce(
-    new Error('A paired device cannot delete an Artifact.'),
-  );
-  api.updateSessionArtifact.mockRejectedValueOnce(
-    new Error('A paired device cannot organise Artifacts.'),
-  );
+  api.deleteSessionArtifact.mockRejectedValueOnce(new Error('The gateway could not delete it.'));
+  api.updateSessionArtifact.mockRejectedValueOnce(new Error('The gateway could not change it.'));
   await render(api);
 
   await click(button('Pin Landing'));
