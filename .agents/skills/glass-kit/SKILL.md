@@ -63,7 +63,10 @@ Use the kit's own phone width with the `phone:` variant, or `usePhone` in code.
     its right as `outline` `small` actions 2rem tall, and an arrow `iconButton` back only on a
     screen opened from a list inside it (one skill).
   - `PageToolbar` under it: the search taking the room left, then its `Segmented` and
-    `FilterSelect`s. No bar of its own at the top: a screen that is only read has none.
+    `FilterSelect`s, and a button as `Action size="field"`. Every control in that row is the
+    same box to the pixel: 2rem tall overall, `rounded-lg`, 13px text. Never size one with a
+    `className="h-8"` patch; a kit piece that does not match is fixed in the kit. No bar of its
+    own at the top: a screen that is only read has none.
   - Sections: `SettingsGroup`, or a `SectionHeading` (`text-xs` muted) over the content.
   - Cards: `surfaceCard` with `p-4`, never another radius, ground or border.
   - Spacing: `gap-7` between sections (`gap-5` on a phone), `gap-4` from heading to toolbar to

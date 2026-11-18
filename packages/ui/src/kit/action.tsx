@@ -33,13 +33,16 @@ const afloat: Record<ActionTone, string> = {
 export const FloatingActions = createContext<{ form?: string } | null>(null);
 
 /**
- * `small` sits at the end of a settings row. `icon` is round and holds only an icon, so it needs
+ * `small` sits at the end of a settings row. `field` stands in a toolbar among fields (a search,
+ * a filter, a boxed `Segmented`) and has their box to the pixel: 32px, their corners, their
+ * text. `icon` is round and holds only an icon, so it needs
  * an `aria-label` to be named. With no words to show where the keyboard is, it alone draws a
  * ring under its focus; the panel has none of its own.
  */
 const sizes = {
   regular: 'h-9 gap-2 rounded-full px-4 text-sm',
   small: 'h-7 gap-1.5 rounded-md px-2.5 text-xs',
+  field: 'h-8 gap-1.5 rounded-lg px-2.5 text-[13px]',
   icon: 'size-9 shrink-0 rounded-full focus-visible:ring-2 focus-visible:ring-ink',
 } as const;
 
@@ -67,7 +70,7 @@ export function Action({
     >
       {busy && (
         <LoaderCircle
-          size={size === 'small' ? 13 : 15}
+          size={size === 'small' || size === 'field' ? 13 : 15}
           className="animate-spin"
           aria-hidden="true"
         />

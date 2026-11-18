@@ -137,9 +137,9 @@ export function PluginsScreen() {
             />
           )}
           <Menu.Root>
-            <Menu.Trigger render={<Action tone="outline" size="small" className="h-8" />}>
+            <Menu.Trigger render={<Action tone="outline" size="field" />}>
               Add
-              <ChevronDown size={13} aria-hidden="true" />
+              <ChevronDown size={14} aria-hidden="true" />
             </Menu.Trigger>
             <Menu.Portal>
               <Menu.Positioner side="bottom" align="end" sideOffset={6} className="z-50">
