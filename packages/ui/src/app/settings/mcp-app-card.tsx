@@ -19,7 +19,7 @@ import { useActions } from '../../lib/workspace';
 import { freeName, type McpApp, serversOf } from './mcp-apps';
 
 /** The app's mark in the text colour, as GitHub's and X's are. */
-function AppIcon({ app, size = 14 }: { app: McpApp; size?: number }) {
+export function AppIcon({ app, size = 14 }: { app: Pick<McpApp, 'icon'>; size?: number }) {
   return (
     <svg
       viewBox={app.icon.viewBox ?? '0 0 24 24'}
@@ -41,7 +41,7 @@ type Check = { status?: McpStatus; error: string; busy: boolean };
  * asked twice for one look. A check can come back under another name: the gateway names an app's
  * new account after who signed in, and the list is read again to show it.
  */
-function useAccountChecks(names: string[]) {
+export function useAccountChecks(names: string[]) {
   const { api } = useActions();
   const client = useQueryClient();
   const [checks, setChecks] = useState<Record<string, Check>>({});
@@ -229,13 +229,13 @@ function AppSettings({
   );
 }
 
-function AccountRow({
+export function AccountRow({
   app,
   server,
   check,
   remove,
 }: {
-  app: McpApp;
+  app: Pick<McpApp, 'name'>;
   server: McpServer;
   check: Check;
   remove: () => Promise<boolean>;
@@ -282,8 +282,8 @@ function AccountRow({
         busy={busy}
         run={() => void remove().then((ok) => ok && setAsking(false))}
       >
-        Every agent stops reaching this {app.name} account on its next runs, and its sign-in is
-        deleted. You can connect it again.
+        Every agent stops reaching this {app.name} account on its next runs, and its sign-in or keys
+        are deleted. You can connect it again.
       </ConfirmDialog>
     </li>
   );

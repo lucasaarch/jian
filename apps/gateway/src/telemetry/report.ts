@@ -1,4 +1,4 @@
-import { mcpAppOf } from '@jian/contracts';
+import { isAwsServer, type McpServer, mcpAppOf } from '@jian/contracts';
 import { and, count, eq, gte, lt, sql } from 'drizzle-orm';
 import { listMcpServers } from '../mcp/repository.js';
 import type { Queryable } from '../storage/database.js';
@@ -52,6 +52,10 @@ const add = (into: Record<string, number>, key: string, by = 1) => {
   into[key] = (into[key] ?? 0) + by;
 };
 
+/** The app a server is, by its address, or AWS by its command; none for any other. */
+const appOfServer = (server: McpServer) =>
+  isAwsServer(server) ? 'aws' : mcpAppOf(server.url ?? undefined);
+
 /** What the installation is: how big, on what, with what connected. No names, no addresses. */
 export async function installationFacts(db: Queryable) {
   const total = async (
@@ -65,8 +69,8 @@ export async function installationFacts(db: Queryable) {
   const servers = await listMcpServers(db);
   const apps: Record<string, number> = {};
   let custom = 0;
-  for (const { url } of servers) {
-    const app = mcpAppOf(url ?? undefined);
+  for (const server of servers) {
+    const app = appOfServer(server);
     if (app) add(apps, app);
     else custom++;
   }
@@ -134,7 +138,7 @@ export async function usageBetween(db: Queryable, since: Date, until: Date) {
   }
 
   const servers = await listMcpServers(db);
-  const appOf = new Map(servers.map((server) => [server.name, mcpAppOf(server.url ?? undefined)]));
+  const appOf = new Map(servers.map((server) => [server.name, appOfServer(server)]));
   const phases = await db
     .select({ data: checkpoints.data })
     .from(checkpoints)
