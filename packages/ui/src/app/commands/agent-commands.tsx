@@ -177,9 +177,10 @@ export function useAgentCommands({
         keys: { key: 'k', shift: true, alt: true },
         title: 'Skills',
         detail: current.name,
-        keywords: ['agent', 'skill', 'abilities'],
+        keywords: ['agent', 'skill', 'abilities', 'plugins', 'library', 'import'],
         icon: <Sparkles size={15} />,
-        run: () => useAgentOverlay.getState().openSettings('skills'),
+        // Every agent's, so a tab of Plugins and no longer a page of this agent's settings.
+        run: place(pluginsPath(current.id, 'skills')),
       },
       {
         id: 'memories',

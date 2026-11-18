@@ -17,7 +17,13 @@ export type SkillEditing = number | 'new';
  */
 export function useSkillList({ api, mutate }: Pick<SectionActions, 'api' | 'mutate'>) {
   const client = useQueryClient();
-  const skills = useQuery({ queryKey: keys.skills, queryFn: () => api.skills() }).data ?? [];
+  const library = useQuery({ queryKey: keys.skills, queryFn: () => api.skills() });
+  const skills = library.data ?? [];
+  const error = library.error
+    ? library.error instanceof Error
+      ? library.error.message
+      : 'Could not load.'
+    : '';
   const change = (action: () => Promise<unknown>, message: string) =>
     mutate(async () => {
       await action();
@@ -37,10 +43,10 @@ export function useSkillList({ api, mutate }: Pick<SectionActions, 'api' | 'muta
     );
   };
 
-  const remove = (name: string) => change(() => api.deleteSkill(name), 'Removed.');
+  const remove = (name: string) => change(() => api.deleteSkill(name), 'Deleted.');
 
   /** Copies a skill, or a folder of them, from a repository address; trimmed first. */
   const importFrom = (url: string) => change(() => api.importSkill(url.trim()), 'Skill imported.');
 
-  return { skills, save, remove, importFrom };
+  return { skills, loading: library.isPending, error, save, remove, importFrom };
 }

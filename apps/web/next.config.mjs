@@ -33,9 +33,10 @@ const MOVED = [
   // and X send the owner back to them, as every gateway, old or new, is told to.
   ['/settings/integrations/:rest*', '/settings/apps'],
   ['/settings/remote', '/settings/machines'],
-  // An agent's skills, memories and channels are pages of its settings overlay, which these
-  // older addresses open before going on to its chats.
-  ['/agents/:profileId/:tab(skills|memories|channels)', '/agents/:profileId/customize/:tab'],
+  // Skills are every agent's, a tab of Plugins. An agent's memories and channels are pages of
+  // its settings overlay, which these older addresses open before going on to its chats.
+  ['/agents/:profileId/skills', '/agents/:profileId/plugins?tab=skills'],
+  ['/agents/:profileId/:tab(memories|channels)', '/agents/:profileId/customize/:tab'],
   ['/agents/:profileId/identity', '/agents/:profileId/settings'],
   // Projects are created and chosen in the composer; their screen is gone.
   ['/agents/:profileId/projects/:rest*', '/agents/:profileId/sessions'],

@@ -10,10 +10,6 @@ import { AgentOverlays } from './agent-overlays';
 import { AppSettings } from './app-settings';
 
 // What each page lists is its own test's; here only which pages a gateway has.
-vi.mock('./customize/skills-page', () => ({
-  SkillsPage: () => <p>Skills</p>,
-  SkillsWaiting: () => null,
-}));
 vi.mock('./customize/channels-page', () => ({
   ChannelsPage: () => <p>Channels</p>,
   ChannelsWaiting: () => null,
@@ -47,6 +43,18 @@ async function render(ui: React.ReactNode, mode: 'local' | 'server') {
 
 const labels = (selector: string) =>
   [...document.querySelectorAll(selector)].map((item) => item.textContent?.trim());
+
+it("sends the old addresses of an agent's skills on to Plugins, which every agent shares", async () => {
+  await render(<AgentOverlays profileId={profile.id} />, 'server');
+
+  for (const old of ['customize/skills', 'customize']) {
+    await act(async () => memoryNavigation.go(`/agents/${profile.id}/${old}`));
+
+    expect(memoryNavigation.current()).toBe(`/agents/${profile.id}/plugins?tab=skills`);
+    // No page of the agent's settings opens for them any more.
+    expect(useAgentOverlay.getState().settings).toBeUndefined();
+  }
+});
 
 for (const mode of ['local', 'server'] as const) {
   it(`offers channels in the agent's settings only on a server (${mode})`, async () => {

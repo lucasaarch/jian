@@ -12,9 +12,12 @@ vi.mock('../../platform/navigation', () => ({
   useRouter: () => ({ replace: vi.fn(), push: vi.fn() }),
   useSearchParams: () => new URLSearchParams(address.query),
 }));
+// No skill on this gateway: what the Skills tab does with them is its own test's.
 const api = vi.hoisted(() => ({
   replaceMcpServers: vi.fn(async (servers: unknown[]) => servers),
   checkMcpServer: vi.fn(),
+  skills: async () => [],
+  builtinSkills: async () => [],
 }));
 vi.mock('../../lib/workspace', () => ({
   useActions: () => ({
@@ -31,6 +34,7 @@ const read = vi.hoisted(() => ({
   githubIntegration: vi.fn(),
   xIntegration: vi.fn(),
   mcpServers: vi.fn(),
+  profiles: async () => [],
 }));
 vi.mock('../../lib/query/client', () => ({ panelApi: () => read }));
 
@@ -204,6 +208,8 @@ it('shows a few connectors on All, the connected first, and the rest behind Show
 
   await show();
 
+  // All narrows by the search alone: each kind's filter is on its own tab.
+  expect(button('Filter connectors', host)).toBeUndefined();
   // Stripe is far down the catalog; connected, it leads.
   expect(names('Connectors')).toHaveLength(8);
   expect(names()[0]).toBe('Stripe');
@@ -213,10 +219,11 @@ it('shows a few connectors on All, the connected first, and the rest behind Show
   expect(names('Connected')).toEqual(['Stripe']);
   expect(names('Available').length).toBeGreaterThan(8);
   expect(button('Show all', host)).toBeUndefined();
+  expect(button('Filter connectors', host)).toBeDefined();
 
   await press('Skills', host);
   expect(rows()).toEqual([]);
-  expect(host.textContent).toContain('Skills move here soon.');
+  expect(host.textContent).toContain('No skills yet.');
   expect(button('Filter connectors', host)).toBeUndefined();
 });
 
@@ -255,8 +262,9 @@ it('narrows the connectors by search and by the filter', async () => {
   expect(names()).toEqual(['harbor_tickets']);
   await search('nothing like this');
   expect(names()).toEqual([]);
-  expect(host.textContent).toContain('No connector matches.');
+  expect(host.textContent).toContain('No plugin matches.');
   await search('');
+  await press('Connectors', host);
 
   const choose = async (label: string) => {
     const filter = button('Filter connectors', host);
@@ -278,6 +286,28 @@ it('narrows the connectors by search and by the filter', async () => {
   await vi.waitFor(() => expect(names()).toEqual(['X']));
   await choose('Connected');
   await vi.waitFor(() => expect(names()).toEqual(['harbor_tickets']));
+  await search('nothing like this');
+  expect(host.textContent).toContain('No connector matches.');
+});
+
+it('opens the Connectors tab an address names', async () => {
+  address.query = 'tab=connectors';
+
+  await show();
+
+  expect(button('Filter connectors', host)).toBeDefined();
+  expect(names('Available').length).toBeGreaterThan(8);
+});
+
+it('keeps the skills readable when the connectors could not be read', async () => {
+  read.mcpServers.mockRejectedValue(new Error('The gateway is unreachable.'));
+
+  await show();
+  expect(host.querySelector('[role="alert"]')?.textContent).toBe('The gateway is unreachable.');
+
+  await press('Skills', host);
+  expect(host.querySelector('[role="alert"]')).toBeNull();
+  expect(host.textContent).toContain('No skills yet.');
 });
 
 it('adds a custom connector from Add, at the end of the list the gateway keeps', async () => {

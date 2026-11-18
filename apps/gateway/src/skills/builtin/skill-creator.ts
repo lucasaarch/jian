@@ -61,5 +61,5 @@ the time the right answer there is "Nothing to keep."
 
 Tell the owner in a line when you write or change a skill, and what it is for. It appears
 under **Plugins → Skills** in the panel, marked as written by you, where they can read it, edit
-it, switch it off or remove it.`,
+it, delete it, or switch it off for every agent.`,
 };

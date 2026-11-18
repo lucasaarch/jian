@@ -2,7 +2,7 @@
 
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import type { BuiltinSkill, GatewayApi } from '../../lib/api';
+import type { GatewayApi } from '../../lib/api';
 import { keys } from '../../lib/query/keys';
 import type { SectionActions } from '../props';
 
@@ -26,12 +26,13 @@ const switchedMessage = (name: string, on: boolean) =>
   on ? `${name} switched on.` : `${name} switched off.`;
 
 /**
- * Which built-in skills are on, for every agent, and the switch. A switch moves the moment it
- * is pressed, while the gateway is told; refused, it goes back to what the gateway holds, and
- * the refusal is said.
+ * Which skills are on, for every agent, and the switch: the library's and the built-in ones are
+ * switched the same way, by name, which the two never share. A switch moves the moment it is
+ * pressed, while the gateway is told; refused, it goes back to what the gateway holds, and the
+ * refusal is said.
  */
-export function useBuiltinSwitches(
-  skills: BuiltinSkill[],
+export function useSkillSwitches(
+  skills: { name: string; enabled: boolean }[],
   { api, mutate }: Pick<SectionActions, 'api' | 'mutate'>,
 ) {
   const client = useQueryClient();
@@ -47,7 +48,10 @@ export function useBuiltinSwitches(
       async () => {
         await api.setSkillEnabled(name, on);
         // Read again before the press lets go, or the switch would show the old value a moment.
-        await client.invalidateQueries({ queryKey: keys.builtinSkills });
+        await Promise.all([
+          client.invalidateQueries({ queryKey: keys.skills }),
+          client.invalidateQueries({ queryKey: keys.builtinSkills }),
+        ]);
       },
       switchedMessage(name, on),
     );

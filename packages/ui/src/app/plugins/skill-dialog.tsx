@@ -9,18 +9,16 @@ import { SkillInstructions } from './skill-reading';
 type FormProps = {
   /** The skill to configure; a new one without it. */
   skill?: Skill;
-  /** Where it came from, said beside its name; nothing for one written here. */
+  /** Whose it is, said beside its name: "By you". A new one has none yet. */
   source?: string;
   busy: boolean;
   onSave: (skill: Skill) => void;
-  /** The saved skill removed; asked to confirm. */
-  onRemove?: () => void;
 };
 
 /**
- * Writes a skill, or configures one of the agent's own: its name, when the agent should use it
- * and its instructions, read as written or as the agent sees them, and its removal. `round`
- * changes on every opening, so each starts from the skill and nothing typed outlives a cancel.
+ * Writes a skill, or edits one of the library's: its name, when an agent should use it and its
+ * instructions, read as written or as the agents see them. `round` changes on every opening, so
+ * each starts from the skill and nothing typed outlives a cancel.
  */
 export function SkillDialog({
   open,
@@ -45,7 +43,6 @@ function SkillForm({
   source,
   busy,
   onSave,
-  onRemove,
   onCancel,
 }: FormProps & { onCancel: () => void }) {
   const [instructions, setInstructions] = useState(skill?.instructions ?? '');
@@ -64,7 +61,7 @@ function SkillForm({
           <span className="truncate">{skill ? skill.name : 'Create a skill'}</span>
           {source && <StatusPill>{source}</StatusPill>}
         </h2>
-        <p className="text-sm text-muted">Instructions the agent loads when it needs them.</p>
+        <p className="text-sm text-muted">Instructions every agent loads when it needs them.</p>
       </header>
       <TextField
         label="Name"
@@ -106,11 +103,6 @@ function SkillForm({
         />
       )}
       <OverlayActions>
-        {skill && onRemove && (
-          <Action tone="danger" className="bg-bad/10" disabled={busy} onClick={onRemove}>
-            Remove
-          </Action>
-        )}
         <Action
           tone="outline"
           disabled={!instructions.trim()}

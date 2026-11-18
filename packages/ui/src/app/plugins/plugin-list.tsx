@@ -2,9 +2,9 @@
 
 import { BadgeCheck } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { SectionHeading, StatusPill } from '../../kit';
+import { SectionHeading, StatusPill, type StatusTone } from '../../kit';
 
-/** One row of Plugins, whatever it is underneath: a connector, and a skill once they move here. */
+/** One row of Plugins, whatever it is underneath: a connector or a skill. */
 export type PluginItem = {
   id: string;
   icon: ReactNode;
@@ -14,8 +14,10 @@ export type PluginItem = {
   description: string;
   /** What kind of thing it is and whose: "Connector · By Linear". */
   meta: string;
-  /** How it stands, in a word, when that is worth saying: "Connected". */
+  /** How it stands, in a word, when that is worth saying: "Connected", "Off". */
   status?: string;
+  /** The tint of that word: green unless told, for what is in use. */
+  statusTone?: StatusTone;
 };
 
 /** The badge of what Jian provides, beside a name. */
@@ -74,7 +76,9 @@ export function PluginList({
                     {item.name}
                   </span>
                   {item.verified && <VerifiedBadge />}
-                  {item.status && <StatusPill tone="good">{item.status}</StatusPill>}
+                  {item.status && (
+                    <StatusPill tone={item.statusTone ?? 'good'}>{item.status}</StatusPill>
+                  )}
                 </span>
                 <span className="truncate text-xs text-muted">{item.description}</span>
                 <span className="truncate text-xs text-muted/70">{item.meta}</span>
