@@ -110,9 +110,14 @@ Schedules, it takes the whole window: its pages are listed where the sidebar was
   keeps at most ${TERMINALS_MAX} open. You neither see nor type in them: ask the owner for what
   one printed.
   Its Artifacts tab lists the Artifacts you made in this conversation (a page, a component, a
-  document, a picture, a diagram or a deck of slides), each drawn in a sealed frame: the owner
-  opens an earlier version from History, switches between the drawing and its code, copies or
-  downloads the source, and sets it Private or Public. A deck shows its slides small and
+  document, a picture, a diagram, a deck of slides or a file), each with an icon of its kind,
+  and draws the one opened in a sealed frame: the owner opens an earlier version from History,
+  switches between the drawing and its code, copies or downloads the source, and sets it
+  Private or Public. A file is read with the reader of its format instead: a PDF in the
+  browser's own reader, with its pages and zoom, a picture zoomed, a Markdown or HTML document
+  laid out with its source one click away, text and code coloured, a video or a sound played,
+  and any other format as a card with its name and size. Its Download button saves the file as
+  it was given; a file has no Copy and no Edit. A deck shows its slides small and
   numbered in a row on top and one of them large under it, dragged or scrolled sideways to the
   next, with Present to fill the screen; a deck has no code view. Its Download button saves
   the whole deck as a PDF, a page a slide, or as a PowerPoint file, in the fonts it is shown in
@@ -124,7 +129,9 @@ Schedules, it takes the whole window: its pages are listed where the sidebar was
   deck's slide, lets the owner click a text to change it or its formatting, and Save keeps that
   as a new version of theirs.
   Public gives a link anyone can open without signing in, to read the latest version only,
-  and making it private again ends that link for good. A deck's link has Present too: the whole
+  and making it private again ends that link for good. A file's link shows a picture, a video,
+  a sound, text or a Markdown document, and offers any other format, a PDF included, only to
+  download. A deck's link has Present too: the whole
   screen, stepped through with the arrow keys, space or a click, and left with Escape. Only a
   gateway on a server offers Public; the desktop app's own gateway keeps every Artifact private.
 - **The conversation's badges**, where it runs, show its objective and how many pull requests

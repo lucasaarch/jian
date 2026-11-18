@@ -19,8 +19,10 @@ export const SLIDE_WIDTH = 1280;
 export const SLIDE_HEIGHT = 720;
 
 /**
- * What the frame draws it as: a whole page, one React component, a Markdown document, an SVG
- * picture, a Mermaid diagram, or a deck of slides, each a page of its own.
+ * What it is drawn as: a whole page, one React component, a Markdown document, an SVG picture,
+ * a Mermaid diagram, or a deck of slides, each a page of its own. A `file` is none of these: it
+ * is a file as it was, of any format, which the panel reads with the reader of that format and
+ * no frame runs.
  */
 export const sessionArtifactTypeSchema = z.enum([
   'html',
@@ -29,7 +31,11 @@ export const sessionArtifactTypeSchema = z.enum([
   'svg',
   'mermaid',
   'deck',
+  'file',
 ]);
+
+/** The types a frame draws, which is every type whose source the agent wrote. */
+export const artifactFrameTypeSchema = sessionArtifactTypeSchema.exclude(['file']);
 
 /** `private` is read by the owner alone; `public` by anyone holding its link. */
 export const sessionArtifactVisibilitySchema = z.enum(['private', 'public']);
@@ -51,6 +57,27 @@ const slidesSchema = z.array(slideHtmlSchema).min(1).max(DECK_SLIDES_MAX);
 
 const slideNumberSchema = z.number().int().min(1).max(DECK_SLIDES_MAX);
 
+const filePathSchema = z
+  .string()
+  .min(1)
+  .max(4096)
+  .describe('For a file, in place of content: the absolute path of a file within your reach.');
+
+const fileMediaIdSchema = z
+  .uuid()
+  .describe('For a file, in place of content: the media ID of an attachment of this conversation.');
+
+/**
+ * The file of a `file` Artifact's version: where its bytes are kept, which is with the
+ * conversation's media, and what the panel needs to choose a reader before it has them.
+ */
+export const sessionArtifactFileSchema = z.strictObject({
+  mediaId: z.uuid(),
+  name: z.string(),
+  mimeType: z.string(),
+  bytes: z.number().int().min(0),
+});
+
 /** How a deck's version is kept: its slides in order, as that version's `content`, in JSON. */
 export const deckContentSchema = z.strictObject({ slides: slidesSchema });
 
@@ -63,8 +90,10 @@ export const sessionArtifactCreateSchema = z.strictObject({
     .min(1)
     .max(SESSION_ARTIFACT_MAX)
     .optional()
-    .describe('The whole source. For every type but deck.'),
+    .describe('The whole source. For every type but deck and file.'),
   slides: slidesSchema.optional().describe('For a deck, in place of content: its slides in order.'),
+  path: filePathSchema.optional(),
+  mediaId: fileMediaIdSchema.optional(),
 });
 
 /** A new version of one: the whole content again, never a patch. */
@@ -75,10 +104,12 @@ export const sessionArtifactRevisionSchema = z.strictObject({
     .min(1)
     .max(SESSION_ARTIFACT_MAX)
     .optional()
-    .describe('The whole source, replaced. For every type but deck.'),
+    .describe('The whole source, replaced. For every type but deck and file.'),
   slides: slidesSchema
     .optional()
     .describe('For a deck, in place of content: every slide again, in order.'),
+  path: filePathSchema.optional(),
+  mediaId: fileMediaIdSchema.optional(),
   title: z.string().trim().min(1).max(120).optional().describe('Only to rename it.'),
 });
 
@@ -143,6 +174,8 @@ export const sessionArtifactSchema = z.strictObject({
    * null while it is private. The link changes each time it is made public again.
    */
   publicPath: z.string().nullable(),
+  /** A file only: the file of its latest version. */
+  file: sessionArtifactFileSchema.optional(),
   createdAt: z.iso.datetime(),
   updatedAt: z.iso.datetime(),
 });
@@ -158,8 +191,13 @@ export const sessionArtifactVersionSchema = z.strictObject({
   artifactId: z.uuid(),
   version: z.number().int().min(1),
   author: sessionArtifactAuthorSchema,
-  /** The source as it was written. A deck's is its slides as they are kept, in JSON. */
+  /**
+   * The source as it was written. A deck's is its slides as they are kept, in JSON. A file has
+   * none and answers it empty: its bytes are read as media, by `file.mediaId`.
+   */
   content: z.string(),
+  /** A file only: the file this version is. */
+  file: sessionArtifactFileSchema.optional(),
   /** A React component as plain script, which is what its frame runs; absent for the rest. */
   compiled: z.string().optional(),
   /** A deck's slides in order, each a page of its own; absent for the rest. */
@@ -191,7 +229,7 @@ export const deckExportQuerySchema = z.strictObject({
 export const deckExportSchema = z.strictObject({ mimeType: z.string(), data: z.string() });
 
 /** The frame an Artifact of each type is drawn in, with nothing of any Artifact in it. */
-export const artifactFrameParamsSchema = z.strictObject({ type: sessionArtifactTypeSchema });
+export const artifactFrameParamsSchema = z.strictObject({ type: artifactFrameTypeSchema });
 
 /**
  * `edit=1` asks for the frame the owner edits by hand in, which a type outside
@@ -226,6 +264,8 @@ export const ARTIFACT_FRAME_MESSAGE = 'jianArtifact';
 export const ARTIFACT_EDIT_MESSAGE = 'jianArtifactEdit';
 
 export type SessionArtifactType = z.infer<typeof sessionArtifactTypeSchema>;
+export type ArtifactFrameType = z.infer<typeof artifactFrameTypeSchema>;
+export type SessionArtifactFile = z.infer<typeof sessionArtifactFileSchema>;
 export type SessionArtifactVisibility = z.infer<typeof sessionArtifactVisibilitySchema>;
 export type SessionArtifactAuthor = z.infer<typeof sessionArtifactAuthorSchema>;
 export type SessionArtifact = z.infer<typeof sessionArtifactSchema>;

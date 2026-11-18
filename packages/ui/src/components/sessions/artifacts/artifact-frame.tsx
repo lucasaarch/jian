@@ -1,8 +1,11 @@
 'use client';
 
-import { ARTIFACT_EDIT_MESSAGE, ARTIFACT_FRAME_MESSAGE } from '@jian/contracts';
+import {
+  ARTIFACT_EDIT_MESSAGE,
+  ARTIFACT_FRAME_MESSAGE,
+  type ArtifactFrameType,
+} from '@jian/contracts';
 import { type CSSProperties, type RefObject, useEffect, useRef } from 'react';
-import type { SessionArtifact } from '../../../lib/api';
 import { gatewayConnection } from '../../../platform/gateway';
 
 /**
@@ -35,7 +38,7 @@ export function ArtifactFrame({
   style,
   lazy = false,
 }: {
-  type: SessionArtifact['type'];
+  type: ArtifactFrameType;
   title: string;
   /** What the frame runs: the source, a React component compiled, or one slide of a deck. */
   source: string;

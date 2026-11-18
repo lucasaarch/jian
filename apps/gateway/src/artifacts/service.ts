@@ -1,5 +1,6 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import {
+  type ArtifactFrameType,
   type DeckExport,
   deckExportQuerySchema,
   deckSlideAddSchema,
@@ -9,7 +10,7 @@ import {
   EDITABLE_ARTIFACT_TYPES,
   type SessionArtifact,
   type SessionArtifactAuthor,
-  type SessionArtifactType,
+  type SessionArtifactFile,
   type SessionArtifactVersion,
   sessionArtifactCreateSchema,
   sessionArtifactEditSchema,
@@ -22,11 +23,13 @@ import { transform } from 'sucrase';
 import type { Clock } from '../core/clock.js';
 import { assertFound, GatewayError } from '../core/errors.js';
 import { recordEvent } from '../core/events.js';
+import { findMedia } from '../media/repository.js';
 import type { SessionReader } from '../sessions/port.js';
 import type { Queryable, Store } from '../storage/database.js';
 import { sessionArtifacts, sessionArtifactVersions } from '../storage/schema.js';
 import { changedSlides, deckContent, type SlideChange, slidesOf } from './deck.js';
 import { exportDeck } from './export.js';
+import { fileOf, keptFile } from './file.js';
 
 /** What a component's frame can hand it; anything else would have to come from the network. */
 const IMPORTABLE = new Set(['react', 'react-dom', 'react-dom/client']);
@@ -67,17 +70,28 @@ function compiled(content: string): string {
 }
 
 /** What a frame is handed for a type: the source itself, but a component compiled. */
-const drawn = (type: SessionArtifactType, content: string) =>
+const drawn = (type: ArtifactFrameType, content: string) =>
   type === 'react' ? compiled(content) : content;
+
+/** What the agent gives for a version: which of these it takes depends on the type. */
+type Given = {
+  content?: string | undefined;
+  slides?: string[] | undefined;
+  path?: string | undefined;
+  mediaId?: string | undefined;
+};
 
 /**
  * What a version keeps for what the agent gave: a deck its slides, any other type its source.
  * Refused here, where the agent can still fix it, rather than drawn broken for the owner.
  */
-function kept(
-  type: SessionArtifactType,
-  given: { content?: string | undefined; slides?: string[] | undefined },
-): string {
+function kept(type: ArtifactFrameType, given: Given): string {
+  if (given.path !== undefined || given.mediaId !== undefined) {
+    throw new GatewayError(
+      400,
+      `Only a file Artifact takes \`path\` or \`mediaId\`, and this one is ${type}. Make another Artifact of type file for a file.`,
+    );
+  }
   if (type === 'deck') {
     if (!given.slides || given.content !== undefined) {
       throw new GatewayError(
@@ -106,7 +120,11 @@ const SLIDE_INPUT = {
   move: deckSlideMoveSchema,
 };
 
-const recordOf = (row: typeof sessionArtifacts.$inferSelect): SessionArtifact => ({
+/** `content` is its latest version's, which only a file needs: it says which file that is. */
+const recordOf = (
+  row: typeof sessionArtifacts.$inferSelect,
+  content?: string | null,
+): SessionArtifact => ({
   id: row.id,
   sessionId: row.sessionId,
   title: row.title,
@@ -117,6 +135,7 @@ const recordOf = (row: typeof sessionArtifacts.$inferSelect): SessionArtifact =>
     row.visibility === 'public' && row.publicToken
       ? `/v1/public-artifacts/${row.publicToken}`
       : null,
+  ...(row.type === 'file' && content ? { file: fileOf(content) } : {}),
   createdAt: row.createdAt.toISOString(),
   updatedAt: row.updatedAt.toISOString(),
 });
@@ -180,6 +199,28 @@ export class SessionArtifacts {
     return assertFound(row, 'Artifact version');
   }
 
+  /**
+   * What a version keeps for what the agent gave. A file is kept as media of the conversation
+   * (file.ts), in the transaction that makes the version, so neither is left without the other.
+   */
+  private async kept(
+    tx: Queryable,
+    profileId: string,
+    sessionId: string,
+    type: SessionArtifact['type'],
+    given: Given,
+  ): Promise<string> {
+    if (type !== 'file') return kept(type, given);
+    if (given.content !== undefined || given.slides) {
+      throw new GatewayError(
+        400,
+        'A file Artifact is given as `path` or `mediaId`, and takes no `content` or `slides`.',
+      );
+    }
+
+    return keptFile(tx, profileId, sessionId, given);
+  }
+
   /** A new version beside the ones it had: none is ever changed or removed. */
   private async versioned(
     tx: Queryable,
@@ -207,7 +248,7 @@ export class SessionArtifacts {
       createdAt: now,
     });
 
-    return recordOf(revised);
+    return recordOf(revised, content);
   }
 
   /** Tells the panel showing this conversation to bring the Artifact forward, as it now is. */
@@ -221,11 +262,13 @@ export class SessionArtifacts {
 
   async create(profileId: string, sessionId: string, input: unknown): Promise<SessionArtifact> {
     const data = sessionArtifactCreateSchema.parse(input);
-    const content = kept(data.type, data);
+    // Before anything is read or kept: a source that cannot be drawn costs no transaction.
+    if (data.type !== 'file') kept(data.type, data);
     await this.sessions.session(profileId, sessionId);
     const now = new Date(this.clock());
 
     return this.store.transaction(profileId, async (tx) => {
+      const content = await this.kept(tx, profileId, sessionId, data.type, data);
       const [row] = await tx
         .insert(sessionArtifacts)
         .values({
@@ -244,7 +287,7 @@ export class SessionArtifacts {
         .values({ artifactId: made.id, version: 1, content, createdAt: now });
       await this.shown(tx, profileId, sessionId, made.id);
 
-      return recordOf(made);
+      return recordOf(made, content);
     });
   }
 
@@ -257,7 +300,7 @@ export class SessionArtifacts {
       const revised = await this.versioned(
         tx,
         current,
-        kept(current.type, data),
+        await this.kept(tx, profileId, sessionId, current.type, data),
         'agent',
         data.title,
       );
@@ -359,7 +402,10 @@ export class SessionArtifacts {
           `Only a deck has slides, and this Artifact is ${artifact.type}.`,
         );
       }
-      return { ...about, content: found.content };
+      // A file has no source to read back: what it is, and the media it is kept as.
+      return artifact.type === 'file'
+        ? { ...about, file: fileOf(found.content) }
+        : { ...about, content: found.content };
     }
     const slides = slidesOf(found.content).map((html, index) => ({ slide: index + 1, html }));
     if (data.slide === undefined) return { ...about, slides };
@@ -378,14 +424,23 @@ export class SessionArtifacts {
   async list(profileId: string, sessionId: string): Promise<SessionArtifact[]> {
     await this.sessions.session(profileId, sessionId);
     const rows = await this.store.db
-      .select()
+      .select({ artifact: sessionArtifacts, content: sessionArtifactVersions.content })
       .from(sessionArtifacts)
+      // Only a file's version is read here, which is a few words: never a page or a deck.
+      .leftJoin(
+        sessionArtifactVersions,
+        and(
+          eq(sessionArtifacts.type, 'file'),
+          eq(sessionArtifactVersions.artifactId, sessionArtifacts.id),
+          eq(sessionArtifactVersions.version, sessionArtifacts.version),
+        ),
+      )
       .where(
         and(eq(sessionArtifacts.profileId, profileId), eq(sessionArtifacts.sessionId, sessionId)),
       )
       .orderBy(desc(sessionArtifacts.updatedAt));
 
-    return rows.map(recordOf);
+    return rows.map((row) => recordOf(row.artifact, row.content));
   }
 
   async version(
@@ -401,7 +456,8 @@ export class SessionArtifacts {
       artifactId: artifact.id,
       version: found.version,
       author: found.author,
-      content: found.content,
+      content: artifact.type === 'file' ? '' : found.content,
+      ...(artifact.type === 'file' ? { file: fileOf(found.content) } : {}),
       ...(artifact.type === 'react' ? { compiled: compiled(found.content) } : {}),
       ...(artifact.type === 'deck' ? { slides: slidesOf(found.content) } : {}),
       createdAt: found.createdAt.toISOString(),
@@ -473,7 +529,12 @@ export class SessionArtifacts {
 
     return this.store.transaction(profileId, async (tx) => {
       const current = await this.find(tx, profileId, sessionId, artifactId);
-      if (current.visibility === visibility) return recordOf(current);
+      // A file is answered with the file it is, as the list answers it.
+      const content =
+        current.type === 'file'
+          ? (await this.stored(tx, current.id, current.version)).content
+          : undefined;
+      if (current.visibility === visibility) return recordOf(current, content);
       const [row] = await tx
         .update(sessionArtifacts)
         .set({
@@ -483,21 +544,26 @@ export class SessionArtifacts {
         .where(eq(sessionArtifacts.id, current.id))
         .returning();
 
-      return recordOf(assertFound(row, 'Artifact'));
+      return recordOf(assertFound(row, 'Artifact'), content);
     });
   }
 
   /**
    * What a link answers: the latest version of the one Artifact that holds this secret while it
-   * is public, and nothing of the conversation, the profile or any other version.
+   * is public, and nothing of the conversation, the profile or any other version. For a file
+   * that is the file itself, bytes in base64, and no other media of the conversation.
    */
   async published(
     token: string,
-  ): Promise<{ type: SessionArtifactType; title: string; source: string }> {
+  ): Promise<
+    | { type: ArtifactFrameType; title: string; source: string }
+    | { type: 'file'; title: string; file: SessionArtifactFile; data: string }
+  > {
     const [row] = this.local
       ? []
       : await this.store.db
           .select({
+            profileId: sessionArtifacts.profileId,
             type: sessionArtifacts.type,
             title: sessionArtifacts.title,
             content: sessionArtifactVersions.content,
@@ -516,6 +582,12 @@ export class SessionArtifacts {
           .limit(1);
     const found = assertFound(row, 'Artifact');
 
-    return { type: found.type, title: found.title, source: drawn(found.type, found.content) };
+    if (found.type !== 'file') {
+      return { type: found.type, title: found.title, source: drawn(found.type, found.content) };
+    }
+    const file = fileOf(found.content);
+    const { data } = await findMedia(this.store.db, found.profileId, file.mediaId);
+
+    return { type: 'file', title: found.title, file, data };
   }
 }
