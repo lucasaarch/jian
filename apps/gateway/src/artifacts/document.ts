@@ -21,6 +21,13 @@ import { type RuntimeFile, runtimeSource } from './runtime.js';
  *   gateway, or anyone.
  * - No form is sent and no frame is loaded inside it. A public deck holds each slide in a frame
  *   written into the page itself, which is bound by this same policy and sandbox.
+ * - The Artifact's own page cannot take itself anywhere. `navigate-to` does not exist in browsers,
+ *   so no policy stops `location = …` or `<meta http-equiv=refresh>` on the page that holds them.
+ *   The Artifact therefore runs in a frame of its own inside a shell (`shell` below), and the
+ *   shell's `frame-src 'none'` is checked on every navigation of that frame: whatever it tries
+ *   to load, a URL included, is refused. A GET to a stranger's address is a way out for data.
+ *   The frame the owner edits in is the exception: it talks with the panel both ways, which the
+ *   shell's one inward message cannot carry, and it is only ever drawn in the owner's panel.
  *
  * `'unsafe-inline'` is the point, not a hole: the page exists to run the Artifact's own script.
  * `eval` stays refused, which none of the libraries needs.
@@ -41,6 +48,7 @@ export function artifactPolicy(ancestors: "'self'" | "'none'"): string {
     "connect-src 'none'",
     "base-uri 'none'",
     "form-action 'none'",
+    "frame-src 'none'",
     `frame-ancestors ${ancestors}`,
     'sandbox allow-scripts',
   ].join('; ');
@@ -260,6 +268,55 @@ ${artifact ? (published ?? body) : body}
 `;
 }
 
+/**
+ * What the gateway answers: a shell that holds the Artifact's page in a sandboxed `srcdoc` frame.
+ * Loading a `srcdoc` is no request, so `frame-src 'none'` lets it be and refuses every later
+ * navigation of the frame. Should one still get through, the frame is removed rather than kept.
+ *
+ * With no Artifact the shell hands its parent's first message on to the frame, once it has loaded,
+ * and never another. The frame has no way to reach the shell: a sandboxed frame navigates only
+ * itself and what is inside it.
+ */
+function shell(title: string, inner: string, relays: boolean): string {
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="robots" content="noindex, nofollow">
+<title>${escaped(title)}</title>
+<style>html, body, iframe { margin: 0; width: 100%; height: 100%; border: 0; display: block; }</style>
+</head>
+<body>
+<iframe id="artifact" sandbox="allow-scripts" referrerpolicy="no-referrer" srcdoc="${escaped(inner)}"></iframe>
+<script>
+(() => {
+  const frame = document.getElementById('artifact');
+  let loaded = false;
+  let waiting = null;
+  const relay = () => {
+    if (loaded && waiting) frame.contentWindow.postMessage(waiting, '*');
+  };
+  frame.addEventListener('load', () => {
+    if (loaded) return frame.remove();
+    loaded = true;
+    relay();
+  });
+  if (${relays}) {
+    const hear = (event) => {
+      if (event.source !== parent || !event.data) return;
+      removeEventListener('message', hear);
+      waiting = event.data;
+      relay();
+    };
+    addEventListener('message', hear);
+  }
+})();
+</script>
+</body>
+</html>
+`;
+}
+
 const frames = new Map<string, string>();
 
 /**
@@ -274,7 +331,7 @@ export function artifactFrame(type: SessionArtifactType, editing = false): strin
   let frame = frames.get(key);
 
   if (!frame) {
-    frame = page(type, undefined, editing);
+    frame = editing ? page(type, undefined, true) : shell('Artifact', page(type), true);
     frames.set(key, frame);
   }
 
@@ -286,4 +343,4 @@ export const publishedArtifact = (
   type: SessionArtifactType,
   title: string,
   source: string,
-): string => page(type, { title, source });
+): string => shell(title, page(type, { title, source }), false);

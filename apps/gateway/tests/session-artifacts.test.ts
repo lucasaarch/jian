@@ -220,15 +220,20 @@ describe('who reads an Artifact', () => {
         "default-src 'none'",
         "connect-src 'none'",
         "form-action 'none'",
+        "frame-src 'none'",
         "frame-ancestors 'none'",
         'sandbox allow-scripts',
       ]),
     );
     expect(policy).not.toMatch(/allow-same-origin|unsafe-eval|https?:|\*/);
     // The source arrives as data, and what it holds never reads as the page's own markup.
-    expect(page.body).toContain('Hello \\u003c/script>\\u003cscript>alert(1)');
+    expect(page.body).toContain('Hello \\u003c/script&#62;\\u003cscript&#62;alert(1)');
     expect(page.body).not.toContain('<script>alert(1)');
     expect(page.body).not.toContain('<b>title</b>');
+    // It runs in a frame of its own, under a shell whose `frame-src 'none'` refuses every
+    // navigation of that frame: a script or a meta refresh cannot take it to an address.
+    expect(page.body).toMatch(/<iframe id="artifact" sandbox="allow-scripts"[^>]* srcdoc="/);
+    expect(page.body.match(/<iframe/g)).toHaveLength(1);
     // Nothing of where it came from.
     expect(page.body).not.toContain(owner.id);
     expect(page.body).not.toContain(session.id);
@@ -307,8 +312,11 @@ describe('the frame the panel draws one in', () => {
     // With no library in it, the frame's own script is all there is: it says nothing back.
     for (const type of ['html', 'deck']) {
       const own = (await app.inject({ url: `/v1/artifact-frames/${type}` })).body;
-      expect(own).not.toMatch(/postMessage|fetch\(|XMLHttpRequest|WebSocket|sendBeacon/);
+      expect(own).not.toMatch(/fetch\(|XMLHttpRequest|WebSocket|sendBeacon|parent\.postMessage/);
       expect(own).not.toContain('contenteditable');
+      // The shell only ever posts inward, to the frame it holds, and the frame is the page below.
+      expect(own.match(/postMessage/g)).toHaveLength(1);
+      expect(own).toContain('frame.contentWindow.postMessage');
     }
 
     expect((await app.inject({ url: '/v1/artifact-frames/python' })).statusCode).toBe(400);
@@ -488,15 +496,17 @@ describe('a deck of slides', () => {
     const page = await app.inject({ url: publicPath });
     expect(page.statusCode).toBe(200);
     expect(String(page.headers['content-security-policy'])).toContain('sandbox allow-scripts');
-    expect(page.body).toContain('Second');
-    expect(page.body).not.toContain('<script>alert(1)');
-    // Each slide is a frame written into the page, as sealed as the page.
-    expect(page.body).toContain("setAttribute('sandbox', 'allow-scripts')");
-    expect(page.body).not.toMatch(/postMessage|contenteditable|jian-edit|fetch\(/i);
-    // A link reads, with or without asking for the editing frame.
-    expect((await app.inject({ url: `${publicPath}?edit=1` })).body).not.toMatch(
-      /postMessage|contenteditable|jian-edit/i,
+    // The deck runs in the frame the shell holds, written into its `srcdoc`.
+    const inner = (/srcdoc="([^"]*)"/.exec(page.body)?.[1] ?? '').replace(/&#(\d+);/g, (_, code) =>
+      String.fromCharCode(Number(code)),
     );
+    expect(inner).toContain('Second');
+    expect(inner).not.toContain('<script>alert(1)');
+    // Each slide is a frame written into the page, as sealed as the page.
+    expect(inner).toContain("setAttribute('sandbox', 'allow-scripts')");
+    expect(inner).not.toMatch(/postMessage|contenteditable|jian-edit|fetch\(/i);
+    // A link reads, with or without asking for the editing frame.
+    expect((await app.inject({ url: `${publicPath}?edit=1` })).body).toBe(page.body);
   });
 });
 
