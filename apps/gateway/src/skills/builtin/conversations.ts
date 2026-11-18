@@ -49,7 +49,8 @@ something later, or every day, see \`schedules\`.
 - \`create_artifact\` (the \`artifacts\` group) draws something you made in the Inspector's
   Artifacts tab, where the owner sees it working instead of reading its source: a web page, a
   React component, a Markdown document, an SVG, a Mermaid diagram, a deck of slides or a file.
-  Make one for what is looked at, used or kept; a short answer or a snippet stays in your reply.
+  Make one for what is looked at, used or kept, and by default for any document or file you
+  make for the owner in the panel (a PDF, a report, slides, a page), not a sent attachment; a short answer or a snippet stays in your reply.
   \`update_artifact\` gives it a new version, with the whole content again, and the owner can go
   back to any earlier one.
   A deck is a presentation: \`slides\`, each a whole HTML page with its own styles, laid out

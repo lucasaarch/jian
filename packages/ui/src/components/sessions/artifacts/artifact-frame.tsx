@@ -37,6 +37,7 @@ export function ArtifactFrame({
   className = 'min-h-0 w-full flex-1 border-0',
   style,
   lazy = false,
+  onReady,
 }: {
   type: ArtifactFrameType;
   title: string;
@@ -54,6 +55,11 @@ export function ArtifactFrame({
   style?: CSSProperties;
   /** Loaded only once it is near the screen, as one of many slides in a rail is. */
   lazy?: boolean;
+  /**
+   * Told once the source was handed over and the frame has had two frames to paint it, so a
+   * caller can keep what was on screen until then and no blank page shows in between.
+   */
+  onReady?: () => void;
 }) {
   const own = useRef<HTMLIFrameElement>(null);
   const element = frame ?? own;
@@ -89,6 +95,7 @@ export function ArtifactFrame({
           },
           '*',
         );
+        if (onReady) requestAnimationFrame(() => requestAnimationFrame(onReady));
       }}
     />
   );

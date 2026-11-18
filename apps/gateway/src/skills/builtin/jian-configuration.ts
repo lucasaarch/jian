@@ -126,7 +126,7 @@ Schedules, it takes the whole window: its pages are listed where the sidebar was
   and any other format as a card with its name and size. Its Download button saves the file as
   it was given; a file has no Copy and no Edit. A deck shows its slides small and
   numbered in a row on top and one of them large under it, dragged or scrolled sideways to the
-  next, with Present to fill the screen; a deck has no code view. Its Download button saves
+  next, with Present in the toolbar, beside Edit, to fill the screen; a deck has no code view. Its Download button saves
   the whole deck as a PDF, a page a slide, or as a PowerPoint file, in the fonts it is shown in
   or in basic ones any computer has, and the slide in view as a web page or as a picture. The
   PowerPoint file holds each slide as a picture with its text in the notes, so it opens the

@@ -7,6 +7,7 @@ import {
   useEffect,
   useLayoutEffect,
   useRef,
+  useState,
 } from 'react';
 import { useAppearance } from '../../../../lib/appearance';
 import { watchSize } from '../../../../lib/watch-size';
@@ -56,6 +57,11 @@ export function SlideCarousel({
   frame: RefObject<HTMLIFrameElement | null>;
 }) {
   const { still } = useAppearance();
+  const [painted, setPainted] = useState(false);
+  // The next edit starts hidden again.
+  useEffect(() => {
+    if (!editing) setPainted(false);
+  }, [editing]);
   const track = useRef<HTMLDivElement>(null);
   // Read by listeners that outlive a render.
   const live = useRef({ at, onAt, editing, last: slides.length - 1 });
@@ -226,14 +232,25 @@ export function SlideCarousel({
             className={`relative w-full shrink-0 snap-center snap-always ${open ? '' : 'pointer-events-none'}`}
           >
             {Math.abs(index - at) <= 1 && (
-              <SlideFrame
-                key={String(open)}
-                title={`${title}, slide ${index + 1}`}
-                source={slide}
-                editing={open}
-                {...(open ? { frame } : {})}
-                className="absolute inset-0 px-(--inspector-inset) py-2"
-              />
+              <>
+                {/* Kept under the editing frame, which is shown only once it has painted: a frame
+                    swapped in drew a blank white page for a moment. */}
+                <SlideFrame
+                  title={`${title}, slide ${index + 1}`}
+                  source={slide}
+                  className="absolute inset-0 px-(--inspector-inset) py-2"
+                />
+                {open && (
+                  <SlideFrame
+                    title={`${title}, slide ${index + 1}, editing`}
+                    source={slide}
+                    editing
+                    frame={frame}
+                    onReady={() => setPainted(true)}
+                    className={`absolute inset-0 px-(--inspector-inset) py-2 ${painted ? '' : 'opacity-0'}`}
+                  />
+                )}
+              </>
             )}
           </div>
         );
