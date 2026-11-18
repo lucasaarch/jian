@@ -78,7 +78,6 @@ function gateway(artifacts: ProfileArtifact[] = [landing, notes, diagram], made 
 
   return {
     held,
-    media: refused,
     sessionArtifacts: refused,
     exportSessionArtifact: refused,
     setSessionArtifactVisibility: refused,

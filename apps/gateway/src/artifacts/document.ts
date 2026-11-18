@@ -2,9 +2,8 @@ import {
   ARTIFACT_EDIT_MESSAGE,
   ARTIFACT_FRAME_MESSAGE,
   ARTIFACT_PRESENT_MESSAGE,
-  type ArtifactFrameType,
   EDITABLE_ARTIFACT_TYPES,
-  type SessionArtifactFile,
+  type SessionArtifactType,
 } from '@jian/contracts';
 import { GatewayError } from '../core/errors.js';
 import { EDITING } from './edit-frame.js';
@@ -40,11 +39,8 @@ import { type RuntimeFile, runtimeSource } from './runtime.js';
  * for none. The one exception is the frame the owner opens to edit a page by hand
  * (edit-frame.ts), which runs nothing of the Artifact and answers the panel's request for the
  * edited markup; a public link never serves it.
- *
- * `downloads` is for a public file's page alone (`publishedFile` below), whose reader takes the
- * file away: it lets the page the gateway wrote save a file, and nothing a frame inside it holds.
  */
-export function artifactPolicy(ancestors: "'self'" | "'none'", downloads = false): string {
+export function artifactPolicy(ancestors: "'self'" | "'none'"): string {
   return [
     "default-src 'none'",
     "script-src 'unsafe-inline'",
@@ -57,7 +53,7 @@ export function artifactPolicy(ancestors: "'self'" | "'none'", downloads = false
     "form-action 'none'",
     "frame-src 'none'",
     `frame-ancestors ${ancestors}`,
-    `sandbox allow-scripts${downloads ? ' allow-downloads' : ''}`,
+    'sandbox allow-scripts',
   ].join('; ');
 }
 
@@ -95,7 +91,7 @@ const WRITE = `document.write(source);`;
  * page, which arrives holding the source, draws it.
  */
 const DRAW: Record<
-  ArtifactFrameType,
+  SessionArtifactType,
   { libraries: readonly RuntimeFile[]; body: string; whole?: true }
 > = {
   html: { libraries: [], body: WRITE, whole: true },
@@ -163,7 +159,7 @@ export const escaped = (value: string) =>
  * (edit-frame.ts) and never draws, so nothing of the Artifact runs in it.
  */
 function page(
-  type: ArtifactFrameType,
+  type: SessionArtifactType,
   artifact?: { title: string; source: string },
   editing = false,
   presented = false,
@@ -336,7 +332,7 @@ const frames = new Map<string, string>();
  * is the one the owner edits by hand in, which only a page and a deck's slide have. `present` is
  * a deck's player, already presenting, for the panel's own presentation of it.
  */
-export function artifactFrame(type: ArtifactFrameType, editing = false, present = false): string {
+export function artifactFrame(type: SessionArtifactType, editing = false, present = false): string {
   if (editing && !EDITABLE_ARTIFACT_TYPES.includes(type)) {
     throw new GatewayError(400, 'Only a web page or a deck is edited by hand.');
   }
@@ -363,104 +359,8 @@ export function artifactFrame(type: ArtifactFrameType, editing = false, present 
  * take the whole screen, to be presented: that frame runs the gateway's own player, and each
  * slide, which is what the agent wrote, sits one frame further in with no such leave.
  */
-export const publishedArtifact = (type: ArtifactFrameType, title: string, source: string): string =>
-  shell(title, page(type, { title, source }), 'nothing', type === 'deck');
-
-const FILE_STYLE = `
-:root { color-scheme: light dark; }
-html, body { margin: 0; min-height: 100%; }
-body { font: 15px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif; overflow-wrap: anywhere; }
-header { position: sticky; top: 0; display: flex; align-items: center; gap: 12px;
-  padding: 12px 16px; background: Canvas;
-  border-bottom: 1px solid color-mix(in srgb, CanvasText 15%, transparent); }
-header div { flex: 1; min-width: 0; }
-header strong, header span { display: block; overflow: hidden; text-overflow: ellipsis;
-  white-space: nowrap; }
-header span { font-size: 12px; opacity: .65; }
-a { flex: none; padding: 6px 14px; border-radius: 999px; font-weight: 500;
-  text-decoration: none; color: Canvas; background: CanvasText; }
-main { padding: 16px; }
-img, video { display: block; max-width: 100%; height: auto; margin: 0 auto; }
-audio { display: block; width: 100%; }
-pre { margin: 0; white-space: pre-wrap; font: 13px/1.55 ui-monospace, SFMono-Regular, Menlo,
-  monospace; }
-p { margin: 48px 0; text-align: center; opacity: .65; }`;
-
-// The gateway's own script, and the only one on the page. The file is never markup here: a
-// picture, a film and a sound are a blob the browser decodes, text is set as text, and any other
-// format is only offered to take away. So nothing an agent or a stranger wrote into a file runs.
-const FILE_SCRIPT = `
-(() => {
-  const file = JSON.parse(document.getElementById('file').textContent);
-  const bytes = Uint8Array.from(atob(file.data), (char) => char.charCodeAt(0));
-  const url = URL.createObjectURL(new Blob([bytes], { type: file.mimeType }));
-  const link = document.getElementById('download');
-  link.href = url;
-  link.download = file.name;
-  const kind = file.mimeType.split('/')[0];
-  const tag = { image: 'img', video: 'video', audio: 'audio' }[kind];
-  const declared = kind === 'text' || /^application\\/(json|xml)$/.test(file.mimeType);
-  let shown;
-  if (tag) {
-    shown = document.createElement(tag);
-    shown.src = url;
-    if (tag === 'img') shown.alt = file.name;
-    else shown.controls = true;
-  } else if (declared || file.mimeType === 'application/octet-stream') {
-    // A file of no named type is text only if every byte of it reads as text.
-    let text;
-    try { text = new TextDecoder('utf-8', { fatal: !declared }).decode(bytes); } catch {}
-    if (text !== undefined && (declared || !text.includes('\\0'))) {
-      shown = document.createElement('pre');
-      shown.textContent = text;
-    }
-  }
-  if (!shown) {
-    shown = document.createElement('p');
-    shown.textContent = 'No preview for this format. Download it to open it.';
-  }
-  document.querySelector('main').append(shown);
-})();`;
-
-const sized = (bytes: number) =>
-  bytes < 1024
-    ? `${bytes} B`
-    : bytes < 1024 * 1024
-      ? `${Math.round(bytes / 1024)} KB`
-      : `${(bytes / 1024 / 1024).toFixed(1)} MB`;
-
-/**
- * A public file as a page of its own: its name, a way to take it away as it was, and what a
- * browser shows of it without running any of it. The gateway never answers the file's bytes as
- * a document of their type, which would make a page out of whatever the file holds. It is
- * answered under `artifactPolicy(…, true)`, the one page allowed to save a file.
- *
- * A Markdown file is the exception: it is drawn as a Markdown Artifact is, in the sealed frame
- * that type has, and that page offers no download.
- */
-export function publishedFile(title: string, file: SessionArtifactFile, data: string): string {
-  if (file.mimeType === 'text/markdown') {
-    return publishedArtifact('markdown', title, Buffer.from(data, 'base64').toString('utf8'));
-  }
-
-  return `<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="robots" content="noindex, nofollow">
-<title>${escaped(title)}</title>
-<style>${FILE_STYLE}</style>
-</head>
-<body>
-<header>
-<div><strong>${escaped(file.name)}</strong><span>${escaped(sized(file.bytes))}</span></div>
-<a id="download">Download</a>
-</header>
-<main></main>
-<script type="application/json" id="file">${embedded({ name: file.name, mimeType: file.mimeType, data })}</script>
-<script>${FILE_SCRIPT}</script>
-</body>
-</html>
-`;
-}
+export const publishedArtifact = (
+  type: SessionArtifactType,
+  title: string,
+  source: string,
+): string => shell(title, page(type, { title, source }), 'nothing', type === 'deck');

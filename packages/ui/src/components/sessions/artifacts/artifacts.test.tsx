@@ -57,10 +57,6 @@ function gateway(artifacts: SessionArtifact[] = [counter, notes, page, deck]) {
 
   return {
     held,
-    // None of these is a file: the files have a test of their own (artifact-files.test.tsx).
-    media: vi.fn(async (): Promise<never> => {
-      throw new Error('Media not found');
-    }),
     sessionArtifacts: vi.fn(async () => [...held]),
     sessionArtifactVersion: vi.fn(
       async (_profile: string, _session: string, artifactId: string, version: number) => ({

@@ -78,7 +78,8 @@ Schedules, it takes the whole window: its pages are listed where the sidebar was
   No project, until moved to a folder the owner made (New folder). A card's pin and menu pin,
   rename, duplicate or move it, copy its public link, go to its conversation, or delete it for
   good with every version. Create something new starts a chat with the request begun, unsent.
-  A phone paired by QR code reads them but cannot edit, delete or organise them.
+  A phone paired by QR code pins, renames, duplicates, moves and deletes them and keeps the
+  folders too, but cannot edit one by hand or make one public.
 - **Pull requests**, below Artifacts on a server gateway with GitHub connected, list the open
   pull requests of every connected account in place of the chat. Review there hands one to an
   agent; Review settings choose the reviewing agent, its instructions, and whether new pull
@@ -117,14 +118,11 @@ Schedules, it takes the whole window: its pages are listed where the sidebar was
   keeps at most ${TERMINALS_MAX} open. You neither see nor type in them: ask the owner for what
   one printed.
   Its Artifacts tab lists the Artifacts you made in this conversation (a page, a component, a
-  document, a picture, a diagram, a deck of slides or a file), each with an icon of its kind,
+  document, a picture, a diagram or a deck of slides), each with an icon of its kind,
   and draws the one opened in a sealed frame: the owner opens an earlier version from History,
   switches between the drawing and its code, copies or downloads the source, and sets it
-  Private or Public. A file is read with the reader of its format instead: a PDF in the
-  browser's own reader, with its pages and zoom, a picture zoomed, a Markdown or HTML document
-  laid out with its source one click away, text and code coloured, a video or a sound played,
-  and any other format as a card with its name and size. Its Download button saves the file as
-  it was given; a file has no Copy and no Edit. A deck shows its slides small and
+  Private or Public. A finished file, a PDF or any other, is not an Artifact: it comes as a
+  sent file in the chat. A deck shows its slides small and
   numbered in a row on top and one of them large under it, dragged or scrolled sideways to the
   next, with Present in the toolbar, beside Edit, to fill the screen with the same player its public link has; a deck has no code view. Its Download button saves
   the whole deck as a PDF, a page a slide, or as a PowerPoint file, in the fonts it is shown in
@@ -136,9 +134,7 @@ Schedules, it takes the whole window: its pages are listed where the sidebar was
   deck's slide, lets the owner click a text to change it or its formatting, and Save keeps that
   as a new version of theirs.
   Public gives a link anyone can open without signing in, to read the latest version only,
-  and making it private again ends that link for good. A file's link shows a picture, a video,
-  a sound, text or a Markdown document, and offers any other format, a PDF included, only to
-  download. A deck's link has Present too, the same player the panel's Present opens: the whole
+  and making it private again ends that link for good. A deck's link has Present too, the same player the panel's Present opens: the whole
   screen, stepped through with the arrow keys, space or a click, and left with Escape. Only a
   gateway on a server offers Public; the desktop app's own gateway keeps every Artifact private.
 - **The conversation's badges**, where it runs, show its objective and how many pull requests

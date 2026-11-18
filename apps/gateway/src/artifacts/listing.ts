@@ -2,13 +2,12 @@ import { NO_PROJECT, type SessionArtifactType } from '@jian/contracts';
 import { and, desc, eq, ilike, isNull, sql } from 'drizzle-orm';
 import { assertFound } from '../core/errors.js';
 import type { Queryable } from '../storage/database.js';
-import { sessionArtifacts, sessionArtifactVersions, sessions } from '../storage/schema.js';
+import { sessionArtifacts, sessions } from '../storage/schema.js';
 
 /**
  * Every Artifact of a profile, across its conversations, the one changed last first, a page at
  * a time: what the panel's Artifacts page lists. Each comes with the stored title and the project
- * of its conversation and, for a file alone, its latest version's content, which says which file
- * it is.
+ * of its conversation.
  *
  * `folder` narrows it to one folder of the owner's, and `project` to what nobody moved out of a
  * project's conversations (`none`: of those in no project), which is where each one starts.
@@ -63,21 +62,11 @@ export async function pageProfileArtifacts(
   const rows = await db
     .select({
       artifact: sessionArtifacts,
-      content: sessionArtifactVersions.content,
       sessionTitle: sessions.title,
       projectId: sessions.projectId,
     })
     .from(sessionArtifacts)
     .innerJoin(sessions, eq(sessions.id, sessionArtifacts.sessionId))
-    // Only a file's version is read, which is a few words: never a page or a deck.
-    .leftJoin(
-      sessionArtifactVersions,
-      and(
-        eq(sessionArtifacts.type, 'file'),
-        eq(sessionArtifactVersions.artifactId, sessionArtifacts.id),
-        eq(sessionArtifactVersions.version, sessionArtifacts.version),
-      ),
-    )
     .where(and(...conditions))
     .orderBy(desc(sessionArtifacts.updatedAt), desc(sessionArtifacts.id))
     .limit(where.limit + 1);

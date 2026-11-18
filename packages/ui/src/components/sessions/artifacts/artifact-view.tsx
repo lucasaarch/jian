@@ -19,7 +19,6 @@ import { DeckDownload } from './deck/deck-download';
 import { DeckView } from './deck/deck-view';
 import { Presentation } from './deck/presentation';
 import { collectEdit } from './edit';
-import { FileDownload, FileView, fileHasSource } from './file-view';
 import { fileName, LANGUAGE } from './source';
 import { type ArtifactsApi, artifactChanged, useArtifactVersion } from './use-artifacts';
 
@@ -31,9 +30,6 @@ import { type ArtifactsApi, artifactChanged, useArtifactVersion } from './use-ar
  *
  * A deck is read as slides, never as code: a slide's markup is still copied from the options,
  * and the deck is taken away as a file from a menu of its own (deck/deck-download.tsx).
- *
- * A file is read with the reader of its format and no frame (file-view.tsx): it has versions
- * and a link like the rest, is downloaded as it was given, and is never edited here.
  *
  * A page and a deck's slide can be edited by hand: Edit opens the version in view in the frame
  * that edits (artifact-frame.tsx), and Save asks that frame for the markup and hands it to the
@@ -78,11 +74,8 @@ export function ArtifactView({
   // What is read as code, copied and downloaded: the source as written, or the slide in view.
   const source = slide === undefined ? read.data?.content : slides?.[slide];
   const editable = EDITABLE_ARTIFACT_TYPES.includes(artifact.type);
-  // The file of the version in view, once that version is read.
-  const file = artifact.type === 'file' ? read.data?.file : undefined;
-  // What has a drawing and a source to switch between: not a deck, and of files only a page
-  // or a document.
-  const sourced = artifact.type === 'file' ? file && fileHasSource(file) : artifact.type !== 'deck';
+  // What has a drawing and a source to switch between: all but a deck.
+  const sourced = artifact.type !== 'deck';
 
   const save = async () => {
     if (editing === undefined || saving) return;
@@ -215,8 +208,6 @@ export function ArtifactView({
                   />
                   <ArtifactOptions source={source} what="Slide" />
                 </>
-              ) : artifact.type === 'file' ? (
-                file && <FileDownload api={api} profileId={profileId} file={file} />
               ) : (
                 <ArtifactOptions source={source} file={fileName(artifact, version)} what="Source" />
               )}
@@ -238,8 +229,6 @@ export function ArtifactView({
             <SkeletonLine key={width} className={width} />
           ))}
         </SkeletonRegion>
-      ) : artifact.type === 'file' ? (
-        file && <FileView key={version} api={api} profileId={profileId} file={file} source={code} />
       ) : code ? (
         <InspectorBody className="px-(--inspector-inset)">
           <CodeBlock text={source ?? ''} language={LANGUAGE[artifact.type]} wrapped />

@@ -170,7 +170,7 @@ describe('deleting an Artifact', () => {
     expect((await app.inject({ method: 'DELETE', url, headers })).statusCode).toBe(404);
   });
 
-  it('is refused to a paired phone, which only reads', async () => {
+  it('is deleted from a paired phone too', async () => {
     const { services, app, owner, plans, all, one, phone } = await setup();
     const artifact = await services.artifacts.create(owner.id, plans.id, {
       title: 'Notes',
@@ -182,13 +182,13 @@ describe('deleting an Artifact', () => {
     expect((await all('', owner.id, device)).json()).toMatchObject({
       items: [{ id: artifact.id }],
     });
-    const refused = await app.inject({
+    const deleted = await app.inject({
       method: 'DELETE',
       url: one(artifact.id, plans.id),
       headers: device,
     });
-    expect(refused.statusCode).toBe(403);
-    expect((await all()).json()).toMatchObject({ items: [{ id: artifact.id, version: 1 }] });
+    expect(deleted.statusCode).toBe(204);
+    expect((await all()).json()).toMatchObject({ items: [] });
   });
 });
 
@@ -338,26 +338,44 @@ describe('keeping Artifacts on the page', () => {
     expect((await page(`?folder=${again.id}`)).items).toEqual([]);
   });
 
-  it('is refused to a paired phone, which only reads', async () => {
+  it('is kept from a paired phone too, which neither edits nor publishes one', async () => {
     const { app, phone, send, folder, kept, folders, page, at } = await organising();
     const keep = await folder('Keep');
     const device = await phone();
 
     expect((await app.inject({ url: folders(), headers: device })).statusCode).toBe(200);
     for (const [method, url, payload] of [
-      ['PATCH', at, { pinned: true }],
-      ['PATCH', at, { title: 'Taken' }],
-      ['PATCH', at, { folderId: keep.id }],
-      // Not smuggled in beside a change it may make.
+      // Who sees it is the owner's, from the panel: not smuggled in beside a change it may make.
+      ['PATCH', at, { visibility: 'public' }],
       ['PATCH', at, { visibility: 'private', pinned: true }],
-      ['POST', `${at}/duplicate`, undefined],
-      ['POST', folders(), { name: 'Phone' }],
-      ['PATCH', `${folders()}/${keep.id}`, { name: 'Phone' }],
-      ['DELETE', `${folders()}/${keep.id}`, undefined],
+      ['POST', `${at}/versions`, { version: 1, content: '# Mine' }],
     ] as const) {
       expect((await send(method, url, payload, device)).statusCode, `${method} ${url}`).toBe(403);
     }
-    expect((await page()).items).toMatchObject([{ title: 'Memo', pinned: false, folderId: null }]);
-    expect(await kept()).toMatchObject({ folders: [{ id: keep.id, name: 'Keep', artifacts: 0 }] });
+    expect((await page()).items).toMatchObject([
+      { title: 'Memo', pinned: false, version: 1, visibility: 'private' },
+    ]);
+
+    for (const [method, url, payload, status] of [
+      ['PATCH', at, { pinned: true, title: 'Minutes' }, 200],
+      ['POST', `${at}/duplicate`, undefined, 201],
+      ['PATCH', at, { folderId: keep.id }, 200],
+      ['POST', folders(), { name: 'Phone' }, 201],
+      ['PATCH', `${folders()}/${keep.id}`, { name: 'Kept' }, 200],
+    ] as const) {
+      expect((await send(method, url, payload, device)).statusCode, `${method} ${url}`).toBe(
+        status,
+      );
+    }
+    expect((await page(`?folder=${keep.id}`)).items).toMatchObject([
+      { title: 'Minutes', pinned: true, folderId: keep.id },
+    ]);
+    expect((await kept()).folders).toMatchObject([
+      { id: keep.id, name: 'Kept', artifacts: 1 },
+      { name: 'Phone', artifacts: 0 },
+    ]);
+    expect((await send('DELETE', `${folders()}/${keep.id}`, undefined, device)).statusCode).toBe(
+      204,
+    );
   });
 });

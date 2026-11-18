@@ -3,7 +3,7 @@
 import {
   ARTIFACT_EDIT_MESSAGE,
   ARTIFACT_FRAME_MESSAGE,
-  type ArtifactFrameType,
+  type SessionArtifactType,
 } from '@jian/contracts';
 import { type CSSProperties, type RefObject, useEffect, useRef } from 'react';
 import { gatewayConnection } from '../../../platform/gateway';
@@ -40,7 +40,7 @@ export function ArtifactFrame({
   lazy = false,
   onReady,
 }: {
-  type: ArtifactFrameType;
+  type: SessionArtifactType;
   title: string;
   /** What the frame runs: the source, a React component compiled, or one slide of a deck. */
   source: string;

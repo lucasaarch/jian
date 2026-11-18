@@ -7,10 +7,9 @@ import type { SessionArtifact } from '../../lib/api';
 
 /**
  * What the agent makes when asked, each with the words a new conversation opens on: the start
- * of a request the owner finishes, so each ends where the subject goes. A file is not among
- * them: the agent keeps one it was given, it is not asked to make one.
+ * of a request the owner finishes, so each ends where the subject goes.
  */
-const STARTERS: { type: Exclude<SessionArtifact['type'], 'file'>; prompt: string }[] = [
+const STARTERS: { type: SessionArtifact['type']; prompt: string }[] = [
   { type: 'deck', prompt: 'Create a deck of slides as an Artifact about ' },
   { type: 'markdown', prompt: 'Write a document as an Artifact about ' },
   { type: 'html', prompt: 'Build a web page as an Artifact that ' },
