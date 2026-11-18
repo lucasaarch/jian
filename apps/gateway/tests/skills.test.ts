@@ -1,8 +1,13 @@
-import { type McpServer, mcpSchema, skillSchema } from '@jian/contracts';
+import { MAX_LIBRARY_SKILLS, type McpServer, mcpSchema, skillSchema } from '@jian/contracts';
 import { describe, expect, it } from 'vitest';
 import { githubMcpServer } from '../src/agent/github-mcp.js';
 import { profileTools } from '../src/agent/tools.js';
-import { availableSkills, builtinSkills, findSkill } from '../src/skills/builtin/index.js';
+import {
+  availableSkills,
+  builtinSkills,
+  findSkill,
+  NO_LIBRARY,
+} from '../src/skills/builtin/index.js';
 import { parseSkillDocument } from '../src/skills/document.js';
 import { Skills } from '../src/skills/service.js';
 import { testServices } from './helpers/services.js';
@@ -40,17 +45,11 @@ function repository(files: Record<string, string>) {
   return { fetcher, asked };
 }
 
-async function profileWith(skills: Array<{ name: string; description: string }> = []) {
-  const services = await testServices();
-  const profile = await services.profiles.createProfile({
-    name: 'Atlas',
-    instructions: 'Help.',
-    model,
-    skills: skills.map((skill) => ({ ...skill, instructions: 'Written by the agent.' })),
-  });
-
-  return { services, profile };
-}
+const written = (name: string, description = 'Written by hand') => ({
+  name,
+  description,
+  instructions: 'Written by hand.',
+});
 
 describe('skill documents', () => {
   it('reads the open format and ignores the keys other runtimes add', () => {
@@ -70,70 +69,98 @@ describe('skill documents', () => {
 });
 
 describe('importing a skill', () => {
-  it('copies the instructions and records where they came from', async () => {
-    const { services, profile } = await profileWith();
+  it('copies the instructions into the library and records where they came from', async () => {
+    const services = await testServices();
     const { fetcher } = repository({ 'skills/deploy/SKILL.md': document });
-    const skills = new Skills(services.profiles, fetcher);
 
-    const updated = await skills.importSkill(profile.id, {
+    const [imported] = await new Skills(services.skillLibrary, fetcher).importSkill({
       url: 'https://github.com/acme/tools/tree/main/skills/deploy',
     });
-
-    const imported = updated.skills.find((skill) => skill.name === 'deploy');
 
     expect(imported?.instructions).toContain('run the pipeline');
     expect(imported?.origin?.ref).toBe('main');
     expect(imported?.origin?.url).toContain('github.com/acme/tools');
+    expect(imported?.enabled).toBe(true);
+    expect((await services.skillLibrary.list()).map((skill) => skill.name)).toEqual(['deploy']);
   });
 
-  it('keeps what the agent wrote and replaces only the skill of the same name', async () => {
-    const { services, profile } = await profileWith([
-      { name: 'notes', description: 'The agent wrote this' },
-      { name: 'deploy', description: 'An older copy' },
-    ]);
+  it('keeps what others wrote and replaces only the skill of the same name', async () => {
+    const services = await testServices();
+    const agent = await services.profiles.createProfile({
+      name: 'Atlas',
+      instructions: 'Help.',
+      model,
+    });
+    await services.skillLibrary.create(written('notes'), agent.id);
+    await services.skillLibrary.create(written('deploy', 'An older copy'), agent.id);
     const { fetcher } = repository({ 'skills/deploy/SKILL.md': document });
-    const skills = new Skills(services.profiles, fetcher);
 
-    const updated = await skills.importSkill(profile.id, {
+    const imported = await new Skills(services.skillLibrary, fetcher).importSkill({
       url: 'https://github.com/acme/tools/tree/main/skills/deploy',
     });
+    const library = await services.skillLibrary.list();
 
-    expect(updated.skills).toHaveLength(2);
-    expect(updated.skills.find((skill) => skill.name === 'notes')?.origin).toBeUndefined();
-    expect(updated.skills.find((skill) => skill.name === 'deploy')?.description).toBe(
-      'Ship a release safely',
-    );
+    // Only what was imported is answered; the library still holds the rest.
+    expect(imported.map((skill) => skill.name)).toEqual(['deploy']);
+    expect(library).toHaveLength(2);
+    expect(library.find((skill) => skill.name === 'notes')).toMatchObject({
+      writtenBy: 'agent',
+      authorProfileId: agent.id,
+    });
+    // An import is the owner's: the agent that wrote the older copy no longer owns the name.
+    const deploy = library.find((skill) => skill.name === 'deploy');
+    expect(deploy?.description).toBe('Ship a release safely');
+    expect(deploy?.origin?.ref).toBe('main');
+    expect(deploy?.writtenBy).toBeUndefined();
+    expect(deploy?.authorProfileId).toBeUndefined();
   });
 
-  it('refuses a host it cannot resolve, without touching the profile', async () => {
-    const { services, profile } = await profileWith();
+  it('refuses a host it cannot resolve, without touching the library', async () => {
+    const services = await testServices();
     const { fetcher, asked } = repository({});
-    const skills = new Skills(services.profiles, fetcher);
+    const skills = new Skills(services.skillLibrary, fetcher);
 
     await expect(
-      skills.importSkill(profile.id, { url: 'https://gitlab.com/acme/tools' }),
+      skills.importSkill({ url: 'https://gitlab.com/acme/tools' }),
     ).rejects.toMatchObject({ statusCode: 400 });
 
     expect(asked).toHaveLength(0);
-    expect((await services.profiles.profile(profile.id)).version).toBe(profile.version);
+    expect(await services.skillLibrary.list()).toHaveLength(0);
   });
 
-  it('reports a rate limited host instead of leaving a half imported profile', async () => {
-    const { services, profile } = await profileWith();
+  it('reports a rate limited host instead of leaving a half imported library', async () => {
+    const services = await testServices();
     const fetcher = (async () => new Response('', { status: 403 })) as typeof globalThis.fetch;
-    const skills = new Skills(services.profiles, fetcher);
+    const skills = new Skills(services.skillLibrary, fetcher);
 
     await expect(
-      skills.importSkill(profile.id, { url: 'https://github.com/acme/tools' }),
+      skills.importSkill({ url: 'https://github.com/acme/tools' }),
     ).rejects.toMatchObject({ statusCode: 429 });
 
-    expect((await services.profiles.profile(profile.id)).skills).toHaveLength(0);
+    expect(await services.skillLibrary.list()).toHaveLength(0);
+  });
+
+  it('refuses an import the library has no room for, and keeps none of it', async () => {
+    const services = await testServices();
+
+    for (let index = 0; index < MAX_LIBRARY_SKILLS; index++) {
+      await services.skillLibrary.create(written(`held-${index}`));
+    }
+
+    const { fetcher } = repository({ 'skills/deploy/SKILL.md': document });
+
+    await expect(
+      new Skills(services.skillLibrary, fetcher).importSkill({
+        url: 'https://github.com/acme/tools/tree/main/skills/deploy',
+      }),
+    ).rejects.toMatchObject({ statusCode: 409 });
+    expect(await services.skillLibrary.list()).toHaveLength(MAX_LIBRARY_SKILLS);
   });
 });
 
 describe('importing a folder of skills', () => {
   it.each(['skills', 'skills/.curated'])('imports a skill from the %s directory', async (path) => {
-    const { services, profile } = await profileWith();
+    const services = await testServices();
     const { fetcher } = repository({
       [`contents/${path}?ref=main`]: JSON.stringify([
         { name: 'deploy', type: 'dir' },
@@ -141,131 +168,37 @@ describe('importing a folder of skills', () => {
       ]),
       [`${path}/deploy/SKILL.md`]: document,
     });
-    const imported = await new Skills(services.profiles, fetcher).importSkill(profile.id, {
+    const imported = await new Skills(services.skillLibrary, fetcher).importSkill({
       url: `https://github.com/acme/tools/tree/main/${path}`,
     });
 
-    expect(imported.skills.map((skill) => skill.name)).toEqual(['deploy']);
-    expect(imported.skills[0]?.instructions).toBe(
-      'Check the release notes, then run the pipeline.',
-    );
+    expect(imported.map((skill) => skill.name)).toEqual(['deploy']);
+    expect(imported[0]?.instructions).toBe('Check the release notes, then run the pipeline.');
   });
 
   it('imports a folder of skills without duplicating the skills path', async () => {
-    const { services, profile } = await profileWith();
+    const services = await testServices();
     const { fetcher } = repository({
       'contents/skills?ref=main': JSON.stringify([{ name: 'deploy', type: 'dir' }]),
       'skills/deploy/SKILL.md': document,
     });
-    const imported = await new Skills(services.profiles, fetcher).importSkill(profile.id, {
+    const imported = await new Skills(services.skillLibrary, fetcher).importSkill({
       url: 'https://github.com/acme/tools/tree/main/skills',
     });
-    expect(imported.skills.map((skill) => skill.name)).toEqual(['deploy']);
+    expect(imported.map((skill) => skill.name)).toEqual(['deploy']);
   });
 });
 
-describe('the skills an agent writes for itself', () => {
-  const call = { toolCallId: 'test', messages: [], context: {} };
+describe('the skills every agent carries', () => {
+  const names = (servers: McpServer[] = []) =>
+    availableSkills(NO_LIBRARY, servers).map((skill) => skill.name);
 
-  async function agent() {
-    const services = await testServices();
-    const profile = await services.profiles.createProfile({
-      name: 'Atlas',
-      instructions: 'Help.',
-      model,
-    });
-    const { fetcher } = repository({ 'skills/deploy/SKILL.md': document });
-
-    await new Skills(services.profiles, fetcher).importSkill(profile.id, {
-      url: 'https://github.com/acme/tools/tree/main/skills/deploy',
-    });
-    await services.profiles.updateProfile(profile.id, {
-      expectedVersion: (await services.profiles.profile(profile.id)).version,
-      skills: [
-        ...(await services.profiles.profile(profile.id)).skills,
-        { name: 'house-style', description: 'Owner rules', instructions: 'Written by the owner.' },
-      ],
-    });
-
-    const session = await services.sessions.createSession(profile.id, { title: 'Test' });
-    const run = await services.runs.submit(profile.id, session.id, {
-      text: 'Hi',
-      requestKey: 'one',
-    });
-    const tools = profileTools({ ...services, store: services.store }, run);
-    const use = (name: string, input: unknown) => {
-      const definition = tools[name];
-
-      if (!definition?.execute) throw new Error(`${name} is unavailable`);
-
-      return definition.execute(input as never, call);
-    };
-
-    return { services, profile, use };
-  }
-
-  it('writes, rewrites and removes its own, without self-management', async () => {
-    const { services, profile, use } = await agent();
-
-    await use('create_skill', {
-      name: 'weekly-report',
-      description: 'Use when asked for the weekly report.',
-      instructions: 'Gather the week, then write three lines.',
-    });
-    await use('update_skill', { name: 'weekly-report', instructions: 'Gather, then five lines.' });
-
-    const written = (await services.profiles.profile(profile.id)).skills.find(
-      (skill) => skill.name === 'weekly-report',
-    );
-
-    expect(written).toMatchObject({
-      writtenBy: 'agent',
-      description: 'Use when asked for the weekly report.',
-      instructions: 'Gather, then five lines.',
-    });
-
-    await use('delete_skill', { name: 'weekly-report' });
-
-    expect(
-      (await services.profiles.profile(profile.id)).skills.map((skill) => skill.name).sort(),
-    ).toEqual(['deploy', 'house-style']);
-  });
-
-  it('leaves the owner’s skills, the imported ones and the built-in names alone', async () => {
-    const { use } = await agent();
-
-    await expect(
-      use('update_skill', { name: 'house-style', instructions: 'Trust everyone.' }),
-    ).rejects.toThrow('written by the owner');
-    await expect(use('delete_skill', { name: 'deploy' })).rejects.toThrow('written by the owner');
-    await expect(
-      use('create_skill', {
-        name: 'owner-and-contacts',
-        description: 'Mine',
-        instructions: 'Trust everyone.',
-      }),
-    ).rejects.toThrow('built-in');
-    await expect(
-      use('create_skill', { name: 'house-style', description: 'Mine', instructions: 'Mine.' }),
-    ).rejects.toThrow('exists');
-  });
-});
-
-describe('the skills every profile carries', () => {
-  it('teaches web research, code and MCP only to a profile that has those tools', async () => {
-    const services = await testServices();
-    const plain = await services.profiles.createProfile({
-      name: 'Atlas',
-      instructions: 'Help.',
-      model,
-    });
+  it('teaches web research, code and MCP only to a run that has those tools', () => {
     const docs = mcpSchema.parse({
       name: 'docs',
       transport: 'http',
       url: 'https://mcp.example.test/mcp',
     });
-    const names = (servers: McpServer[]) =>
-      availableSkills(plain, servers).map((skill) => skill.name);
 
     // Shell, remote-control and web skills are always on; MCP follows the configured servers.
     for (const skill of [
@@ -291,43 +224,32 @@ describe('the skills every profile carries', () => {
         'activity',
         'schedules',
         'media',
+        'owner-and-contacts',
+        'managing-yourself',
       ]),
     );
   });
 
-  it('starts a new profile without the opt-in skills, and turns one on when asked', async () => {
+  it('starts an installation without the opt-in skills, and turns one on for every agent', async () => {
     const services = await testServices();
-    const profile = await services.profiles.createProfile({
-      name: 'Atlas',
-      instructions: 'Help.',
-      model,
-    });
+    const offered = async () =>
+      availableSkills(await services.skillLibrary.read(), []).map((skill) => skill.name);
 
-    expect(availableSkills(profile, []).map((skill) => skill.name)).not.toContain(
-      'discernment-nudge',
-    );
+    expect(await services.skillLibrary.list()).toEqual([]);
+    expect(await offered()).not.toContain('discernment-nudge');
 
-    const on = await services.profiles.updateProfile(profile.id, {
-      expectedVersion: profile.version,
-      disabledSkills: [],
-    });
+    await services.skillLibrary.setEnabled('discernment-nudge', { enabled: true });
 
-    expect(availableSkills(on, []).map((skill) => skill.name)).toContain('discernment-nudge');
+    expect(await offered()).toContain('discernment-nudge');
   });
 
-  it('teaches GitHub only to a run the integration attached its server to', async () => {
-    const services = await testServices();
-    const profile = await services.profiles.createProfile({
-      name: 'Atlas',
-      instructions: 'Help.',
-      model,
-    });
+  it('teaches GitHub only to a run the integration attached its server to', () => {
     const attached = [githubMcpServer('github')];
     const configured = [{ ...githubMcpServer('mine'), auth: 'oauth' as const, headers: [] }];
 
-    expect(findSkill(profile, [], 'github')).toBeUndefined();
-    expect(findSkill(profile, configured, 'github')).toBeUndefined();
-    expect(findSkill(profile, attached, 'github')?.instructions).toContain('search_mcp_tools');
+    expect(findSkill(NO_LIBRARY, [], 'github')).toBeUndefined();
+    expect(findSkill(NO_LIBRARY, configured, 'github')).toBeUndefined();
+    expect(findSkill(NO_LIBRARY, attached, 'github')?.instructions).toContain('search_mcp_tools');
   });
 
   it('keeps every built-in skill within what a skill may be', () => {
@@ -363,38 +285,22 @@ describe('the skills every profile carries', () => {
     expect(configuration?.instructions).toContain('JIAN_TIME_ZONE');
   });
 
-  it('offers them without the profile storing one', async () => {
-    const services = await testServices();
-    const plain = await services.profiles.createProfile({
-      name: 'Atlas',
-      instructions: 'Help.',
-      model,
-    });
-
-    expect(plain.skills).toEqual([]);
-    expect(availableSkills(plain, []).map((skill) => skill.name)).toEqual(
-      expect.arrayContaining(['owner-and-contacts', 'managing-yourself']),
-    );
+  it('always explains workspace shell and Remote Control (allowShell is deprecated)', () => {
+    expect(names()).toContain('machine-tools');
+    expect(names()).toContain('remote-control');
   });
 
-  it('always explains workspace shell and Remote Control (allowShell is deprecated)', async () => {
-    const services = await testServices();
-    const plain = await services.profiles.createProfile({
-      name: 'Atlas',
-      instructions: 'Help.',
-      model,
-    });
-
-    expect(availableSkills(plain, []).map((skill) => skill.name)).toContain('machine-tools');
-    expect(availableSkills(plain, []).map((skill) => skill.name)).toContain('remote-control');
-  });
-
-  it('loads a built-in body through the same tool as an imported one', async () => {
+  it('loads a built-in body through the same tool as a library one', async () => {
     const services = await testServices();
     const profile = await services.profiles.createProfile({
       name: 'Atlas',
       instructions: 'Help.',
       model,
+    });
+    await services.skillLibrary.create({
+      name: 'house-style',
+      description: 'Owner rules',
+      instructions: 'Lead with the answer.',
     });
     const session = await services.sessions.createSession(profile.id, { title: 'Test' });
     const run = await services.runs.submit(profile.id, session.id, {
@@ -407,40 +313,53 @@ describe('the skills every profile carries', () => {
       throw new Error('load_skill is unavailable');
     }
 
-    const skill = (await load.execute({ name: 'memory-keeping' } as never, {
-      toolCallId: 'test',
-      messages: [],
-      context: {},
-    })) as { instructions: string };
+    const call = { toolCallId: 'test', messages: [], context: {} };
+    const read = async (name: string) =>
+      (await load.execute?.({ name } as never, call)) as { instructions: string };
 
-    expect(skill.instructions).toContain('expectedVersion');
+    expect((await read('memory-keeping')).instructions).toContain('expectedVersion');
+    expect((await read('house-style')).instructions).toBe('Lead with the answer.');
   });
 
-  it('lets the owner switch one off and an import replace one', async () => {
+  it('lets the owner switch one off for every agent, and an import replace one', async () => {
     const services = await testServices();
-    const profile = await services.profiles.createProfile({
-      name: 'Atlas',
-      instructions: 'Help.',
-      model,
+    const offered = async () =>
+      availableSkills(await services.skillLibrary.read(), []).map((skill) => skill.name);
+
+    await services.skillLibrary.setEnabled('channel-replies', { enabled: false });
+
+    expect(await offered()).not.toContain('channel-replies');
+    // Switching one off leaves what was already off as it was.
+    expect(await offered()).not.toContain('discernment-nudge');
+
+    await services.skillLibrary.addImported([
+      { name: 'memory-keeping', description: 'Mine', instructions: 'Remember nothing.' },
+    ]);
+
+    const library = await services.skillLibrary.read();
+
+    expect(findSkill(library, [], 'memory-keeping')?.instructions).toBe('Remember nothing.');
+    expect(availableSkills(library, []).filter((s) => s.name === 'memory-keeping')).toHaveLength(1);
+  });
+
+  it('offers a library skill to every agent until the owner switches it off', async () => {
+    const services = await testServices();
+    const offered = async () =>
+      availableSkills(await services.skillLibrary.read(), []).map((skill) => skill.name);
+
+    await services.skillLibrary.create(written('house-style'));
+    expect(await offered()).toContain('house-style');
+
+    await services.skillLibrary.setEnabled('house-style', { enabled: false });
+    expect(await offered()).not.toContain('house-style');
+    expect((await services.skillLibrary.list())[0]).toMatchObject({
+      name: 'house-style',
+      enabled: false,
     });
 
-    const off = await services.profiles.updateProfile(profile.id, {
-      expectedVersion: profile.version,
-      disabledSkills: ['channel-replies'],
-    });
-
-    expect(availableSkills(off, []).map((skill) => skill.name)).not.toContain('channel-replies');
-
-    const replaced = await services.profiles.updateProfile(off.id, {
-      expectedVersion: off.version,
-      skills: [{ name: 'memory-keeping', description: 'Mine', instructions: 'Remember nothing.' }],
-    });
-
-    const loaded = findSkill(replaced, [], 'memory-keeping');
-
-    expect(loaded?.instructions).toBe('Remember nothing.');
-    expect(availableSkills(replaced, []).filter((s) => s.name === 'memory-keeping')).toHaveLength(
-      1,
-    );
+    // Removed and written again, it is a new skill: the old switch does not follow the name.
+    await services.skillLibrary.remove('house-style');
+    await services.skillLibrary.create(written('house-style'));
+    expect(await offered()).toContain('house-style');
   });
 });

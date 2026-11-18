@@ -91,6 +91,9 @@ const GONE = [
   /listening for GitHub/,
   // Settings → Integrations became Apps and MCP servers.
   /\bIntegrations\b/,
+  // Settings → Apps and Settings → MCP servers became Plugins → Connectors, and each agent's
+  // Skills page became Plugins → Skills.
+  /Settings (→|>) (Apps|MCP servers)/,
   // Only the linked-device WhatsApp channel remains.
   /WhatsApp Business/,
 ];

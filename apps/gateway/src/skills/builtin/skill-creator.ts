@@ -7,8 +7,9 @@ export const skillCreator: Skill = {
   instructions: `# Writing your own skills
 
 A skill is how you handle one kind of situation, written down so you do it the same way
-every time. The tools are in the \`skills\` group; load it with \`load_tools\`:
-\`create_skill\`, \`update_skill\`, \`delete_skill\`.
+every time. Skills are one library shared by every agent of this installation: what you write,
+every agent is offered, and you are offered theirs. The tools are in the \`skills\` group; load
+it with \`load_tools\`: \`create_skill\`, \`update_skill\`, \`delete_skill\`.
 
 ## Skill or memory
 
@@ -38,7 +39,8 @@ Once is not a routine. A one-line rule belongs in a memory or in your identity.
   afternoon" gets used; "Formats the weekly report" does not.
 - **instructions** — up to 12,000 characters, in Markdown: the steps in order, the decisions
   and how to make them, what to do when a step fails, and the traps you already fell into.
-  Write for yourself on a busy day: short, concrete, with the exact names and values.
+  Write for yourself on a busy day: short, concrete, with the exact names and values. Another
+  agent may follow it too, so leave out what only your own conversations would explain.
 
 ## Looking back on your own
 
@@ -52,11 +54,12 @@ the time the right answer there is "Nothing to keep."
 - \`update_skill\` when a skill was wrong or incomplete — a correction is the best reason.
 - One skill per job. Merge two that overlap and \`delete_skill\` the other.
 - A skill that never gets opened has the wrong description; rewrite that first.
-- You can change only the skills you wrote. The owner's and the imported ones, and the
-  built-in ones, are theirs; if one is wrong, tell the owner what to change.
-- A profile holds twenty skills in all.
+- You can change only the skills you wrote. One the owner wrote or imported, one another
+  agent wrote, and the built-in ones are refused, with whose it is; if one is wrong, tell the
+  owner what to change.
+- The library holds 60 skills in all, the built-in ones aside.
 
 Tell the owner in a line when you write or change a skill, and what it is for. It appears
-under **Skills** in the panel, marked as written by you, where they can read it, switch it
-off or remove it.`,
+under **Plugins → Skills** in the panel, marked as written by you, where they can read it, edit
+it, switch it off or remove it.`,
 };

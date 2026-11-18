@@ -3,7 +3,7 @@ import { type Skill, TERMINALS_MAX } from '@jian/contracts';
 export const jianConfiguration: Skill = {
   name: 'jian-configuration',
   description:
-    'Use when asked where to find or change something in Jian: a setting, model, provider, channel, integration, machine, schedule, memory or skill.',
+    'Use when asked where to find or change something in Jian: a setting, model, provider, channel, connector, MCP server, machine, schedule, memory or skill.',
   instructions: `# Where things are in Jian
 
 The owner configures everything in the panel, the same in the desktop app and on the web. Name the
@@ -23,17 +23,6 @@ Shared by the whole installation.
 - **Capabilities**: the models for channels, incoming audio, image generation and speech. A
   conversation is compacted by its own model. Automatic selects from connected providers;
   Disabled turns that activity off where offered.
-- **Apps**: a card for each app, connected ones first, with a search and a category list.
-  GitHub and X are Jian's own, with accounts to connect and configure; one this gateway cannot
-  offer, as one with no \`JIAN_PUBLIC_URL\`, is not listed. The others, such as Linear, Notion,
-  Atlassian, Stripe, Sentry, Vercel and Supabase, are each service's own MCP server: Connect saves
-  it and opens its sign-in. Once connected, Configure lists its accounts, each an MCP server named
-  after the account that signed in ("linear_octo"), or numbered ("linear_2") when the service
-  cannot say who that is, with Sign in and Remove, and connects another. Its
-  card is all there is of it: it is not listed under MCP servers, and its tools cannot be switched
-  off.
-- **MCP servers**: the MCP servers added by hand, with connection tests, sign-in and switching
-  tools off. A server connected from Apps is not here.
 - **SSH keys**: the keys every agent uses for Git.
 - **Machines**: on a server gateway, the computers every agent can use, and how to install their
   worker. A desktop app connected to that gateway is listed as This computer.
@@ -41,6 +30,25 @@ Shared by the whole installation.
   phones with when each was last seen, turns message previews in notifications on or off per
   phone, and revokes a phone. The gateway needs its public address set to pair one.
 - **Connection**: on a server gateway, how this panel reaches it.
+
+## Plugins
+
+In the main sidebar, in place of the chat: what every agent of the installation is given, in two
+tabs.
+
+- **Connectors**: the apps and MCP servers every agent reaches. The ones from Jian's catalog
+  are marked verified. GitHub and X are Jian's own, with accounts to connect and configure; one
+  this gateway cannot offer, as one with no \`JIAN_PUBLIC_URL\`, is not listed. The others, such
+  as Linear, Notion, Atlassian, Stripe, Sentry, Vercel and Supabase, are each service's own MCP
+  server: Connect saves it and opens its sign-in. Once connected, Configure lists its accounts,
+  each an MCP server named after the account that signed in ("linear_octo"), or numbered
+  ("linear_2") when the service cannot say who that is, with Sign in and Remove, and connects
+  another; its tools cannot be switched off. A custom one is an MCP server the owner adds by
+  hand, with connection tests, sign-in and switching tools off.
+- **Skills**: one library shared by every agent. The built-in ones are Jian's; the others, up
+  to 60, were written by the owner, written by an agent, or imported from GitHub, and each says
+  which. The owner reads any of them, creates and imports new ones, edits or removes any that
+  is not built-in, and switches any off or on, built-in included, for every agent at once.
 
 ## Agent settings
 
@@ -50,10 +58,6 @@ Schedules, it takes the whole window: its pages are listed where the sidebar was
 - **Identity**: name, picture, instructions, summary for the team and boundaries, and Compact
   conversations: whether its conversations are summarised near the model's limit, the default,
   or at a size the owner sets. See \`managing-context\`.
-- **Skills**: this agent's own and the built-in ones as cards, with a search and a filter by
-  where they came from (written here, imported, built-in). A card opens the skill to read, its
-  instructions rendered; the menu on one of its own edits or removes it, and a built-in one has
-  a switch. Create and Import (from GitHub) are in the bar above the cards.
 - **Memories**: this agent's, as a map (a node each, a line for each link) or a list, with a
   search and a filter by project. Opening one lets the owner rewrite it, link it to others or
   pin it to projects, and forget it.

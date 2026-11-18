@@ -43,9 +43,9 @@ async function conversation(
     name: 'Atlas',
     instructions: 'Help.',
     model: { ...model, apiKeyEnv: 'JIAN_PROVIDER_TEST' },
-    skills,
     ...(contextPolicy ? { contextPolicy } : {}),
   });
+  for (const skill of skills) await services.skillLibrary.create(skill);
   const session = await services.sessions.createSession(profile.id, { title: 'Loads' });
 
   /** One turn whose model answers each step with `steps[i]`, recording what it was sent. */

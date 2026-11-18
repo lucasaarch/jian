@@ -10,7 +10,7 @@ import {
 import { onOwnerComputer } from '../agent/workspace-home.js';
 import { gatewayTimeZone } from '../core/time-zone.js';
 import { sanitizeObjectiveText } from '../sessions/objective.js';
-import { availableSkills } from '../skills/builtin/index.js';
+import { availableSkills, NO_LIBRARY, type SkillLibraryState } from '../skills/builtin/index.js';
 import { tokenCounter } from './budget.js';
 import { compactionPoint } from './compaction.js';
 import { defaultScale } from './scale.js';
@@ -19,6 +19,8 @@ import { type Kept, renderKept } from './survivors.js';
 export interface ContextSources {
   /** The MCP servers this run reaches: the skills it is offered follow them. */
   servers: readonly McpServer[];
+  /** The installation's skill library; left out, only the built-in skills are offered. */
+  library?: SkillLibraryState;
   /** The run has the worktree tools, so the skill about them is offered. */
   worktrees?: boolean;
   /** The run has spawn_subagent: it is told when handing work to one is worth it. */
@@ -56,7 +58,7 @@ export interface ContextSources {
   loadedSkills?: readonly string[];
   /** Instructions from the conversation's workspaces, written by their repositories' authors. */
   project?: string[];
-  /** Skills the conversation's workspaces offer, beside the profile's. */
+  /** Skills the conversation's workspaces offer, beside the installation's. */
   projectSkills?: ReadonlyArray<Pick<Skill, 'name' | 'description'>>;
   /**
    * Provider tokens per token of the estimate (`scale.ts`): the session's last measured one, or
@@ -222,7 +224,9 @@ export function buildContext(
   // Skill bodies are loaded on demand; the prompt carries only their discovery catalog.
   const loaded = new Set(sources.loadedSkills ?? []);
   const skills = [
-    ...availableSkills(run.profile, sources.servers, { worktrees: sources.worktrees === true }),
+    ...availableSkills(sources.library ?? NO_LIBRARY, sources.servers, {
+      worktrees: sources.worktrees === true,
+    }),
     ...(sources.projectSkills ?? []),
   ].map(({ name, description }) => ({
     name,

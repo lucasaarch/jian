@@ -14,8 +14,11 @@ async function setup() {
     name: 'Zero Two',
     instructions: 'Help.',
     model: { provider: 'openai', modelId: 'test', apiKeyEnv: 'JIAN_PROVIDER_TEST' },
-    skills: [{ name: 'concise', description: 'Be short.', instructions: 'Lead with the answer.' }],
   });
+  await services.skillLibrary.create(
+    { name: 'concise', description: 'Be short.', instructions: 'Lead with the answer.' },
+    profile.id,
+  );
   const channel = await channels.connect(profile.id, {
     type: 'telegram',
     botToken: '123:synthetic-test-token',
@@ -65,9 +68,10 @@ describe('resetting a profile', () => {
     expect(await listMemories(services.store.db, profile.id, 100)).toEqual([]);
     expect(await services.runs.activities(profile.id)).toEqual([]);
 
-    const kept = await services.profiles.profile(profile.id);
-
-    expect(kept.skills.map((skill) => skill.name)).toEqual(['concise']);
+    // What the agent wrote into the shared library is not its conversations or memories.
+    expect(await services.skillLibrary.list()).toMatchObject([
+      { name: 'concise', authorProfileId: profile.id },
+    ]);
     expect((await channels.list(profile.id)).map((item) => item.id)).toEqual([channel.id]);
 
     const [contact] = await channels.contacts(profile.id);

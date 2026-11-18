@@ -4,7 +4,7 @@ import { join, resolve } from 'node:path';
 
 /**
  * Where agents work, which depends on the host and never on the agent: every agent of an
- * installation shares one filesystem. Memories, conversations, skills and the browser's logins
+ * installation shares one filesystem. Memories, conversations and the browser's logins
  * stay per agent; files do not.
  *
  * - A server gateway gives them one directory, the workspaces root, as `HOME`.

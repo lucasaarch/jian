@@ -20,7 +20,7 @@ import type {
   SessionArtifactType,
   SessionArtifactVisibility,
   SessionObjective,
-  Skill,
+  SkillOrigin,
   Subagent,
   Usage,
 } from '@jian/contracts';
@@ -62,8 +62,6 @@ export const profiles = pgTable('profiles', {
   model: jsonb('model').$type<ModelConfig>().notNull(),
   identity: jsonb('identity').$type<Identity>().notNull(),
   contextPolicy: jsonb('context_policy').$type<ContextPolicy>().notNull(),
-  skills: jsonb('skills').$type<Skill[]>().notNull().default([]),
-  disabledSkills: jsonb('disabled_skills').$type<string[]>().notNull().default([]),
   // Deprecated product switch — always on; column kept for older rows / API compatibility.
   allowShell: boolean('allow_shell').notNull().default(true),
   version: integer('version').notNull(),
@@ -194,6 +192,26 @@ export const mcpServers = pgTable('mcp_servers', {
   name: text('name').primaryKey(),
   server: jsonb('server').$type<McpServer>().notNull(),
   position: integer('position').notNull(),
+  createdAt,
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+/**
+ * The installation's skill library, offered to every agent. `writtenBy` and `origin` say who a
+ * skill came from: an agent, an import, or with neither the owner. `authorProfileId` is the agent
+ * that wrote it, the only one whose tools may change it; it is cleared when that agent is deleted
+ * and the skill stays. Which are switched off is the `disabledSkills` setting, shared with the
+ * built-in ones.
+ */
+export const skills = pgTable('skills', {
+  name: text('name').primaryKey(),
+  description: text('description').notNull(),
+  instructions: text('instructions').notNull(),
+  origin: jsonb('origin').$type<SkillOrigin>(),
+  writtenBy: text('written_by').$type<'agent'>(),
+  authorProfileId: uuid('author_profile_id').references(() => profiles.id, {
+    onDelete: 'set null',
+  }),
   createdAt,
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });

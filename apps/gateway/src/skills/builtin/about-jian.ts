@@ -41,13 +41,13 @@ task.
 
 ## What an agent is
 
-An installation holds several **profiles**, each an agent with its own identity, memories, skills,
+An installation holds several **profiles**, each an agent with its own identity, memories,
 conversations and channels. You are one of them. One profile cannot read another's memories or
 conversations, and they exchange only the messages they choose to send each other. What the
 installation holds is shared by every agent: provider credentials, the models for each capability,
-the MCP servers, the GitHub and X integrations, SSH keys, connected machines and the files on the
-gateway's machine, which all agents work on together. Secrets are kept in an encrypted vault no
-agent can read.
+the MCP servers, the GitHub and X integrations, the skill library, SSH keys, connected machines
+and the files on the gateway's machine, which all agents work on together. Secrets are kept in an
+encrypted vault no agent can read.
 
 Messages from the panel, channels, API clients, other agents and schedules each start a run. Jian
 assembles the profile's instructions, relevant memories, the conversation and the tools that run

@@ -22,6 +22,7 @@ import {
   SkeletonRegion,
   surfaceCard,
 } from '../../kit';
+import { useAgents } from '../../lib/query/agent';
 import { useActions } from '../../lib/workspace';
 import { SkillCard } from './skill-card';
 import { SkillDialog } from './skill-dialog';
@@ -59,16 +60,18 @@ export function SkillsWaiting() {
 }
 
 /**
- * The agent's skills as cards, its own and those the gateway ships, searched and filtered by
- * where they came from. Opening one reads it, rendered, in place of the cards; the agent's own
- * are edited in a form, and removing one asks for its name first. A built-in skill is switched
- * on and off.
+ * The installation's skills as cards, the library every agent shares and those the gateway
+ * ships, searched and filtered by where they came from. Opening one reads it, rendered, in place
+ * of the cards; the library's are edited in a form, and removing one asks for its name first. A
+ * built-in skill is switched on and off.
  */
 export function SkillsPage() {
   const { api, mutate, busy } = useActions();
-  const { profile, skills, save, remove, importFrom } = useSkillList({ api, mutate });
-  const builtIn = useBuiltinSkills(profile, api);
-  const { enabled, flip } = useBuiltinSwitches(profile, { api, mutate });
+  const { skills, save, remove, importFrom } = useSkillList({ api, mutate });
+  const builtIn = useBuiltinSkills(api);
+  const { enabled, flip } = useBuiltinSwitches(builtIn.skills, { api, mutate });
+  const agents = useAgents();
+  const author = (id?: string) => agents.find((agent) => agent.id === id)?.name ?? 'an agent';
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<SkillFilter>('all');
   // By key, not the item: a switch or a save redraws the card the reading is showing.
@@ -83,7 +86,7 @@ export function SkillsPage() {
   const [asking, setAsking] = useState(false);
   const full = skills.length >= SKILL_LIMIT;
   const configured = editing === 'new' ? undefined : skills[editing];
-  const items = skillItems(skills, builtIn.skills, profile.name, enabled);
+  const items = skillItems(skills, builtIn.skills, author, enabled);
   const shown = filterSkills(items, query, filter);
   const open = items.find((item) => item.key === reading);
 
@@ -130,7 +133,7 @@ export function SkillsPage() {
                   size="small"
                   className="h-8"
                   disabled={full}
-                  title={full ? `An agent keeps up to ${SKILL_LIMIT}.` : undefined}
+                  title={full ? `The library holds up to ${SKILL_LIMIT}.` : undefined}
                   onClick={() => edit('new')}
                 >
                   <Plus size={13} />
@@ -215,9 +218,7 @@ export function SkillsPage() {
         action="Remove skill"
         busy={busy}
         run={() => {
-          const index = skills.findIndex((skill) => skill.name === removing);
-          if (index < 0) return;
-          void remove(index).then((ok) => {
+          void remove(removing).then((ok) => {
             if (!ok) return;
             setAsking(false);
             setFormOpen(false);
@@ -225,7 +226,7 @@ export function SkillsPage() {
           });
         }}
       >
-        The agent stops using it on its next runs. This cannot be undone.
+        Every agent stops using it on its next runs. This cannot be undone.
       </ConfirmDialog>
     </>
   );

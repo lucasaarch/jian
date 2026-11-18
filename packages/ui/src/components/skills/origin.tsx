@@ -15,7 +15,7 @@ function originOf(url?: string): { label: string; path?: string; logo?: ReactNod
   return { label: 'Imported', path };
 }
 
-/** Who a skill is owed to: the agent that wrote it for itself, or where the owner got it. */
+/** Who a skill is owed to: the agent that wrote it, or where the owner got it. */
 export function sourceOf(skill: Skill, agentName: string): ReturnType<typeof originOf> {
   return skill.writtenBy === 'agent'
     ? { label: `Written by ${agentName}` }

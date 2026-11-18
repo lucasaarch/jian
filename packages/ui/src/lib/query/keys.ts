@@ -24,6 +24,8 @@ export const keys = {
     ['integrations', 'github', kind, owner.toLowerCase(), repo.toLowerCase(), number] as const,
   remoteMachines: ['remote-machines'] as const,
   mcpServers: ['mcp-servers'] as const,
+  skills: ['skills'] as const,
+  builtinSkills: ['built-in-skills'] as const,
   releases: ['releases'] as const,
   repository: ['repository'] as const,
   gateway: ['gateway'] as const,
@@ -88,7 +90,6 @@ export const keys = {
   channelQr: (profileId: string, channelId: string) =>
     ['profile', profileId, 'channels', channelId, 'qr'] as const,
   codexLogin: ['providers', 'openai', 'oauth'] as const,
-  builtinSkills: (profileId: string) => ['profile', profileId, 'builtin-skills'] as const,
   stats: (profileId: string, days: number) => ['profile', profileId, 'stats', days] as const,
   activityCalendar: (profileId: string, zone: string) =>
     ['profile', profileId, 'activity-calendar', zone] as const,

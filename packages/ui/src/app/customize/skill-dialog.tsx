@@ -73,6 +73,8 @@ function SkillForm({
         required
         pattern={skillFields.name.pattern}
         defaultValue={skill?.name ?? ''}
+        // The library keeps a skill under its name: an edit changes what it says.
+        readOnly={Boolean(skill)}
         autoComplete="off"
         spellCheck={false}
       />

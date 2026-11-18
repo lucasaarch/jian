@@ -78,7 +78,7 @@ import {
   ponytailMode,
   readLastClient,
 } from '../sessions/repository.js';
-import { availableSkills, findSkill } from '../skills/builtin/index.js';
+import { availableSkills, findSkill, type SkillLibraryState } from '../skills/builtin/index.js';
 import type { WebSearch } from '../web/service.js';
 import type { Workspaces } from '../workspaces/service.js';
 import { offersWorktrees } from '../worktrees/offered.js';
@@ -348,7 +348,7 @@ export class AgentRuntime {
    */
   /**
    * The instructions of the skills this conversation loaded, written for this run, to sit at the
-   * end of its instructions. One the profile no longer has is forgotten; past a tenth of the
+   * end of its instructions. One no longer offered is forgotten; past a tenth of the
    * model's window, or 16k of its tokens, the least recently used go, and the catalog offers
    * them again.
    */
@@ -358,6 +358,7 @@ export class AgentRuntime {
     servers: readonly McpServer[],
     can: Parameters<typeof skillFor>[3],
     projectSkills: readonly Skill[],
+    library: SkillLibraryState,
     /** Provider tokens per token of the estimate: the room is in the provider's tokens. */
     scale: number,
   ): Promise<string> {
@@ -368,7 +369,10 @@ export class AgentRuntime {
     const count = (text: string) => Math.ceil(estimate(text) * scale);
     const kept = loads
       .filter((load) => load.kind === 'skill')
-      .map((load) => ({ load, skill: skillFor(run, servers, load.name, can, projectSkills) }));
+      .map((load) => ({
+        load,
+        skill: skillFor(run, servers, load.name, can, projectSkills, library),
+      }));
     const gone = kept.filter((item) => !item.skill).map((item) => item.load.name);
     let held = kept.flatMap((item) =>
       item.skill ? [{ ...item, tokens: count(item.skill.instructions) }] : [],
@@ -787,6 +791,9 @@ export class AgentRuntime {
       }
       // The skills a run offers follow the servers it has, GitHub's included.
       const skillServers = learning ? installed : servers;
+      // The installation's library as this run starts. It is not frozen with the profile: a
+      // skill belongs to every agent, so each run reads what is there now.
+      const library = await this.services.skillLibrary.read();
       const baseAccess = run.subagent
         ? await prepareWorkerWorkspace(run, this.services.sshKeys)
         : await prepareGitAccess(this.services.sshKeys);
@@ -863,7 +870,7 @@ export class AgentRuntime {
                 // A subagent's are its conversation's: the one that started it.
                 conversation,
                 new Set(
-                  availableSkills(run.profile, skillServers, {
+                  availableSkills(library, skillServers, {
                     worktrees: Boolean(worktrees),
                   }).map((skill) => skill.name),
                 ),
@@ -1075,6 +1082,7 @@ export class AgentRuntime {
               ...(session.remoteMachineId ? { machine: { files: Boolean(machineFiles) } } : {}),
             },
             project.skills,
+            library,
             scale,
           );
       if (githubMcpFailure) unavailable.push(githubMcpFailure);
@@ -1113,7 +1121,7 @@ export class AgentRuntime {
       if (mcpDown) withTurnNote(context, mcpDown);
       compactCommand = isCompactCommand(run.input);
       if (compactCommand) compactionRequested = true;
-      const cavemanSkill = findSkill(run.profile, skillServers, 'caveman');
+      const cavemanSkill = findSkill(library, skillServers, 'caveman');
       let currentCavemanMode: CavemanMode = cavemanSkill
         ? await cavemanMode(this.services.store.db, profileId, run.sessionId)
         : 'off';
@@ -1743,7 +1751,7 @@ export class AgentRuntime {
         ? `\n\nExecution target: machine ${session.remoteMachineId}. Use only remote machine tools for project work; local machine tools are intentionally unavailable.`
         : '';
       const instructions = dress(`${context.system}${targetInstructions}`);
-      const codingSkill = findSkill(run.profile, skillServers, 'ponytail');
+      const codingSkill = findSkill(library, skillServers, 'ponytail');
       const instructionsForMode = (mode: PonytailMode) =>
         !codingSkill
           ? instructions

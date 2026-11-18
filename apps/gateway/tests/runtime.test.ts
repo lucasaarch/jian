@@ -352,16 +352,16 @@ async function fixture(contextPolicy?: Record<string, number | 'auto'>, subscrip
   return { services, profile, session, run };
 }
 
-it('makes Ponytail available for code review before tools load, unless this agent disabled it', async () => {
+it('makes Ponytail available for code review before tools load, unless the owner switched it off', async () => {
   for (const disabled of [false, true]) {
     const services = await testServices();
     const profile = await services.profiles.createProfile({
       ...input,
       allowShell: true,
-      disabledSkills: disabled ? ['discernment-nudge', 'ponytail'] : ['discernment-nudge'],
       // Room for the coding tools and instructions together: no compaction between the calls.
       contextPolicy: { inputTokens: 64000 },
     });
+    if (disabled) await services.skillLibrary.setEnabled('ponytail', { enabled: false });
     const session = await services.sessions.createSession(profile.id, { title: 'Code' });
     const run = await services.runs.submit(profile.id, session.id, {
       text: 'Review this code',
@@ -507,7 +507,7 @@ it('applies an owner mode change sent while a run is active on its next step', a
   expect(prompts[1]).not.toContain('Ponytail — coding work');
 });
 
-it('keeps Caveman opt-in and scoped to the owner, conversation and agent switch', async () => {
+it('keeps Caveman opt-in and scoped to the owner, the conversation and the skill switch', async () => {
   const services = await testServices();
   const profile = await services.profiles.createProfile(input);
   const session = await services.sessions.createSession(profile.id, { title: 'Main' });
@@ -541,11 +541,9 @@ it('keeps Caveman opt-in and scoped to the owner, conversation and agent switch'
   expect(await promptFor('stop caveman')).not.toContain('Caveman — concise replies');
   expect(await promptFor('/caveman')).toContain('Caveman mode: full');
 
-  const disabled = await services.profiles.createProfile({
-    ...input,
-    name: 'No Caveman',
-    disabledSkills: ['caveman'],
-  });
+  // Switched off, it is off for every agent, whatever a conversation asked for.
+  await services.skillLibrary.setEnabled('caveman', { enabled: false });
+  const disabled = await services.profiles.createProfile({ ...input, name: 'No Caveman' });
   const disabledSession = await services.sessions.createSession(disabled.id, { title: 'Disabled' });
   const run = await services.runs.submit(
     disabled.id,
@@ -1727,8 +1725,11 @@ it('writes its own skill through the loop without accepting new capability grant
 
   const updated = await services.profiles.profile(profile.id);
 
-  expect(updated.version).toBe(2);
-  expect(updated.skills[0]).toMatchObject({ name: 'release', writtenBy: 'agent' });
+  // The skill joins the shared library under its author; the agent's own profile is untouched.
+  expect(await services.skillLibrary.list()).toMatchObject([
+    { name: 'release', writtenBy: 'agent', authorProfileId: profile.id },
+  ]);
+  expect(updated.version).toBe(1);
   expect(updated.model).toEqual(profile.model);
 });
 

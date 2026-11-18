@@ -14,7 +14,11 @@ async function conversation(provider = 'anthropic') {
     name: 'Atlas',
     instructions: 'Help the owner.',
     model: { provider, modelId: 'test', apiKeyEnv: 'JIAN_PROVIDER_TEST' },
-    skills: [{ name: 'lookup', description: 'Search the catalog', instructions: 'Body' }],
+  });
+  await services.skillLibrary.create({
+    name: 'lookup',
+    description: 'Search the catalog',
+    instructions: 'Body',
   });
   const session = await services.sessions.createSession(profile.id, { title: 'Cache' });
 

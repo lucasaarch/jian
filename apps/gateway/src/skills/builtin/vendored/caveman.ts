@@ -10,5 +10,5 @@ Cut filler, repetition and decorative formatting, not facts. Keep technical name
 
 Lite: concise full sentences. Full: shorter phrasing and fragments when unambiguous. Ultra: shortest unambiguous answer. Never invent abbreviations or omit a condition that changes meaning. If compression makes a security warning or multi-step instruction unclear, use ordinary prose.
 
-In the gateway panel chat, the owner can change this conversation's mode with standalone /caveman lite, /caveman full, /caveman ultra or /caveman off; /caveman means full. The mode is off by default. An agent-level Skills switch also disables it. This skill governs replies, not what work is done.`,
+In the gateway panel chat, the owner can change this conversation's mode with standalone /caveman lite, /caveman full, /caveman ultra or /caveman off; /caveman means full. The mode is off by default. Switched off under Plugins → Skills, it is off for every agent. This skill governs replies, not what work is done.`,
 };

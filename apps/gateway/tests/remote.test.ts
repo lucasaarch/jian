@@ -883,7 +883,7 @@ describe('what each run is told it can do with the web', () => {
       id: 'r',
       profileId: scope.profileId,
       sessionId: scope.sessionId,
-      profile: { skills: [], disabledSkills: [] },
+      profile: {},
     } as unknown as Run;
     const tools = (browser: boolean) =>
       profileTools(
@@ -910,12 +910,12 @@ describe('what each run is told it can do with the web', () => {
 
   it('loads the skill for this run, and leaves an owner’s own of that name alone', async () => {
     const services = await testServices();
-    const load = (skills: unknown[]) => {
+    const load = () => {
       const run = {
         id: 'r',
         profileId: scope.profileId,
         sessionId: scope.sessionId,
-        profile: { skills, disabledSkills: [], capabilities: {} },
+        profile: { capabilities: {} },
       } as unknown as Run;
       const execute = profileTools(services as never, run, undefined, undefined, [], {
         browser: false,
@@ -925,9 +925,11 @@ describe('what each run is told it can do with the web', () => {
       return execute({ name: 'web-research' });
     };
 
-    expect((await load([])).instructions).toContain('agent that started you');
-    const own = { name: 'web-research', description: 'Mine', instructions: 'As I wrote it.' };
-    expect((await load([own])).instructions).toBe('As I wrote it.');
+    expect((await load()).instructions).toContain('agent that started you');
+    await services.skillLibrary.addImported([
+      { name: 'web-research', description: 'Mine', instructions: 'As I wrote it.' },
+    ]);
+    expect((await load()).instructions).toBe('As I wrote it.');
   });
 });
 
