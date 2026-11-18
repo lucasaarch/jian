@@ -69,6 +69,11 @@ type Crew = {
   showFiles: () => void;
   /** What the agent made in the conversation: one of them, or with no id the list. */
   showArtifacts: (artifactId?: string) => void;
+  /**
+   * One of them, in a conversation that may not be on screen yet: asked from the agent's page of
+   * every Artifact on the way to its conversation, which opens with it in the Inspector.
+   */
+  showArtifactIn: (sessionId: string, artifactId: string) => void;
   follow: (runId: string, opener?: HTMLElement | null) => void;
   open: (item: GitHubItem, opener?: HTMLElement | null) => void;
   /** Brings a browser tab to the front, the Inspector open around it. */
@@ -236,6 +241,22 @@ export const useCrew = create<Crew>()((set, get) => ({
           : [...state.tabs, tab],
       };
     }),
+  showArtifactIn: (sessionId, artifactId) => {
+    if (get().sessionId === sessionId) return get().showArtifacts(artifactId);
+    // Put with what that conversation had open, which is what it restores on arriving.
+    const was = restored(sessionId);
+    const key = `artifacts:${sessionId}`;
+    const tab: InspectorTab = { key, kind: 'artifacts', sessionId, artifactId };
+    keep(sessionId, {
+      ...was,
+      opened: true,
+      following: key,
+      item: undefined,
+      tabs: was.tabs.some((item) => item.key === key)
+        ? was.tabs.map((item) => (item.key === key ? tab : item))
+        : [...was.tabs, tab],
+    });
+  },
   showChanges: (target = {}) =>
     set((state) => {
       if (!state.sessionId) return state;

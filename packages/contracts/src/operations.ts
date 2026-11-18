@@ -161,6 +161,8 @@ import {
   artifactFrameQuerySchema,
   deckExportQuerySchema,
   deckExportSchema,
+  profileArtifactPageSchema,
+  profileArtifactsQuerySchema,
   publicArtifactParamsSchema,
   sessionArtifactEditSchema,
   sessionArtifactSchema,
@@ -1497,6 +1499,17 @@ export const operations: Operation[] = [
     response: sessionFileSchema,
   },
   {
+    // Every Artifact of the agent, across its conversations. Not under `artifacts`, which at
+    // this level reads a stored tool result (`getArtifact`): an id from here answers nothing
+    // there.
+    method: 'GET',
+    path: `${profile}/session-artifacts`,
+    operationId: 'listProfileArtifacts',
+    access: 'admin',
+    query: profileArtifactsQuerySchema,
+    response: profileArtifactPageSchema,
+  },
+  {
     method: 'GET',
     path: `${session}/artifacts`,
     operationId: 'listSessionArtifacts',
@@ -1542,6 +1555,16 @@ export const operations: Operation[] = [
     access: 'admin',
     body: sessionArtifactUpdateSchema,
     response: sessionArtifactSchema,
+  },
+  {
+    // Gone with every version it had, and with its public link. The owner's alone: a paired
+    // phone only reads, and is refused with a 403.
+    method: 'DELETE',
+    path: `${session}/artifacts/:artifactId`,
+    operationId: 'deleteSessionArtifact',
+    access: 'admin',
+    response: z.null(),
+    status: 204,
   },
   {
     // Public because it holds nothing of anyone's: the empty frame the panel hands an Artifact

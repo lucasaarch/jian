@@ -44,6 +44,7 @@ export function ArtifactsDrawer({ api, profileId }: { api: ArtifactsApi; profile
             profileId={profileId}
             artifact={artifact}
             closer={closer}
+            onBack={() => useCrew.getState().showArtifacts()}
           />
         ) : (
           <>

@@ -9,6 +9,7 @@ import {
   GitPullRequest,
   Mail,
   MessageSquare,
+  Shapes,
   SquarePen,
   Terminal,
 } from 'lucide-react';
@@ -21,8 +22,10 @@ import { useGatewayMode } from '../lib/gateway-mode';
 import {
   activityPath,
   agentPath,
+  artifactsPath,
   newChatPath,
   onActivity,
+  onArtifacts,
   onPulls,
   pullsPath,
 } from '../lib/navigation';
@@ -183,9 +186,9 @@ const action =
 
 /**
  * The top of the sidebar: a new chat — an action, never shown as the one open — and the agent's
- * Schedules, a page over the app. On a server with GitHub connected, the pull requests, which
- * take the chat's place: GitHub can only reach a gateway with a public address. Its Activity,
- * also in the chat's place, is always last.
+ * Schedules, a page over the app, then every Artifact it made, in the chat's place. On a server
+ * with GitHub connected, the pull requests, which take the chat's place too: GitHub can only
+ * reach a gateway with a public address. Its Activity, also in the chat's place, is always last.
  */
 function NewChat({ profileId }: { profileId?: string }) {
   const router = useRouter();
@@ -214,6 +217,16 @@ function NewChat({ profileId }: { profileId?: string }) {
       >
         <AlarmClock size={15} className="text-muted" aria-hidden="true" />
         Schedules
+      </button>
+      <button
+        type="button"
+        onClick={profileId ? go(artifactsPath(profileId)) : undefined}
+        disabled={!profileId}
+        aria-current={onArtifacts(pathname) ? 'page' : undefined}
+        className={action}
+      >
+        <Shapes size={15} className="text-muted" aria-hidden="true" />
+        Artifacts
       </button>
       {pulls && profileId && (
         <button

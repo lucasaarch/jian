@@ -20,6 +20,12 @@ export const activityPath = (profileId: string) => agentPath(profileId, 'activit
 /** Whether a pathname is an agent's activity. */
 export const onActivity = (pathname: string) => /^\/agents\/[^/]+\/activity\/?$/.test(pathname);
 
+/** Every Artifact the agent made, in place of its chat. */
+export const artifactsPath = (profileId: string) => agentPath(profileId, 'artifacts');
+
+/** Whether a pathname is an agent's Artifacts. */
+export const onArtifacts = (pathname: string) => /^\/agents\/[^/]+\/artifacts\/?$/.test(pathname);
+
 /** Where an agent's new chat opens: its chats, asked to start one, in a project when given. */
 export function newChatPath(profileId: string, projectId?: string): string {
   const project = projectId ? `&project=${encodeURIComponent(projectId)}` : '';

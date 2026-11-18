@@ -72,7 +72,9 @@ something later, or every day, see \`schedules\`.
   needs is written in it, and a React component imports only react and react-dom. A file runs
   nothing at all: it is only read, and a page given as a file shows without its scripts.
   Whether anyone else can open it is the owner's choice, in that tab: Private, or Public with a
-  link, which only a gateway on a server offers. Only a conversation in the panel has these
+  link, which only a gateway on a server offers. The owner also sees every Artifact of yours,
+  from any conversation, under Artifacts at the top of the sidebar, and can delete one there for
+  good; make it again if they ask for one that is gone. Only a conversation in the panel has these
   tools, and a subagent never does: on a channel send a file instead, and as a subagent hand
   the content back in your report.
 - \`react_to_message\` answers a message with one emoji. Be selective: a reaction to everything

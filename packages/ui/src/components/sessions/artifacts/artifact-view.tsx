@@ -8,8 +8,6 @@ import { toast } from 'sonner';
 import { Action, HoverTip, iconButton, SkeletonLine, SkeletonRegion } from '../../../kit';
 import type { SessionArtifact } from '../../../lib/api';
 import { useGatewayMode } from '../../../lib/gateway-mode';
-import { keys } from '../../../lib/query/keys';
-import { useCrew } from '../../../lib/stores/crew';
 import { CodeBlock } from '../../ui/code-block';
 import { InspectorBar, InspectorBody } from '../inspector';
 import { ArtifactFrame } from './artifact-frame';
@@ -21,11 +19,11 @@ import { DeckView } from './deck/deck-view';
 import { collectEdit } from './edit';
 import { FileDownload, FileView, fileHasSource } from './file-view';
 import { fileName, LANGUAGE } from './source';
-import { type ArtifactsApi, useArtifactVersion } from './use-artifacts';
+import { type ArtifactsApi, artifactChanged, useArtifactVersion } from './use-artifacts';
 
 /**
- * One Artifact in the Inspector: drawn in its sealed frame, or as its source, at the version
- * the owner picks from its history. With none picked it is the latest, and follows the agent's
+ * One Artifact, in the Inspector or in the agent's page of every Artifact (app/artifacts): drawn
+ * in its sealed frame, or as its source, at the version the owner picks from its history. With none picked it is the latest, and follows the agent's
  * updates; an older one in view is named beside the title. Mount it with the Artifact's id as
  * its key, so another one starts drawn and at its latest.
  *
@@ -44,11 +42,18 @@ export function ArtifactView({
   profileId,
   artifact,
   closer,
+  onBack,
+  startEditing = false,
 }: {
   api: ArtifactsApi;
   profileId: string;
   artifact: SessionArtifact;
-  closer: RefObject<HTMLButtonElement | null>;
+  /** The Inspector's way out, which the page of every Artifact has none of. */
+  closer?: RefObject<HTMLButtonElement | null>;
+  /** Back to the list it was opened from. */
+  onBack: () => void;
+  /** Opens already being edited, for a list whose Edit asked for it. */
+  startEditing?: boolean;
 }) {
   const client = useQueryClient();
   const [picked, setPicked] = useState<number>();
@@ -57,7 +62,7 @@ export function ArtifactView({
   const [at, setAt] = useState(0);
   // The version open for editing. It is held while it is: an update of the agent's meanwhile
   // must not take the page from under the owner's hands.
-  const [editing, setEditing] = useState<number>();
+  const [editing, setEditing] = useState(startEditing ? artifact.version : undefined);
   const [saving, setSaving] = useState(false);
   const frame = useRef<HTMLIFrameElement>(null);
   // Only a server gateway makes one public, or draws a deck into a file, so nothing else offers
@@ -89,10 +94,7 @@ export function ArtifactView({
           content: html,
           ...(slide === undefined ? {} : { slide: slide + 1 }),
         });
-        client.setQueryData<SessionArtifact[]>(
-          keys.sessionArtifacts(profileId, artifact.sessionId),
-          (all) => all?.map((item) => (item.id === next.id ? next : item)),
-        );
+        artifactChanged(client, profileId, next);
         toast.success(`Saved as version ${next.version}.`);
       }
       // Back to the latest, which is now the one just saved.
@@ -193,12 +195,7 @@ export function ArtifactView({
         }
       >
         <HoverTip tip="All artifacts" hoverOnly side="bottom">
-          <button
-            type="button"
-            aria-label="All artifacts"
-            className={iconButton}
-            onClick={() => useCrew.getState().showArtifacts()}
-          >
+          <button type="button" aria-label="All artifacts" className={iconButton} onClick={onBack}>
             <ArrowLeft size={15} aria-hidden="true" />
           </button>
         </HoverTip>

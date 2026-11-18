@@ -7,14 +7,14 @@ import { useState } from 'react';
 import { toast } from 'sonner';
 import { iconButton, MenuDivider, MenuEntry, MenuSwitch, menuPopup } from '../../../kit';
 import type { SessionArtifact } from '../../../lib/api';
-import { keys } from '../../../lib/query/keys';
 import { gatewayOrigin } from '../../../platform/gateway';
 import { copy } from './source';
-import type { ArtifactsApi } from './use-artifacts';
+import { type ArtifactsApi, artifactChanged } from './use-artifacts';
 
 /**
  * Who reads an Artifact: the owner alone, or anyone holding its link. Drawn only on a server
- * gateway (artifact-view.tsx): the gateway a desktop app runs refuses to make one public, since
+ * gateway, over the open one (artifact-view.tsx) and on its line in the agent's page of them
+ * (app/artifacts): the gateway a desktop app runs refuses to make one public, since
  * no link from outside reaches it. The link is the gateway's own address, as the world reaches
  * it, and a new one each time it is made public.
  */
@@ -41,10 +41,7 @@ export function ArtifactSharing({
         artifact.id,
         visibility,
       );
-      client.setQueryData<SessionArtifact[]>(
-        keys.sessionArtifacts(profileId, artifact.sessionId),
-        (all) => all?.map((item) => (item.id === next.id ? next : item)),
-      );
+      artifactChanged(client, profileId, next);
     } catch (error) {
       // The gateway's own sentence, as when it runs inside a desktop app after all.
       toast.error(error instanceof Error ? error.message : 'The Artifact could not be changed.');

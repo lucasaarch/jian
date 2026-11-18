@@ -20,11 +20,15 @@ export function InspectorBar({
   options?: ReactNode;
   /** What it holds takes the whole line, with nothing pushing the options to the end. */
   spread?: boolean;
-  /** Focused when the Inspector opens, so the keyboard is in it and Escape is at hand. */
-  closer: RefObject<HTMLButtonElement | null>;
+  /**
+   * Focused when the Inspector opens, so the keyboard is in it and Escape is at hand. With none
+   * the bar stands outside the Inspector, as over an Artifact read in the agent's page of them,
+   * and holds no way to put the Inspector away.
+   */
+  closer?: RefObject<HTMLButtonElement | null> | undefined;
 }) {
   const close = useCrew((state) => state.close);
-  const hosted = useInspectorHosted();
+  const hosted = useInspectorHosted() || !closer;
 
   return (
     <div className="flex h-10 shrink-0 items-center gap-2 pr-[calc(var(--window-controls,0px)+var(--inspector-inset))] pl-(--inspector-inset) text-muted">

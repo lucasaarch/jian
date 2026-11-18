@@ -72,7 +72,14 @@ Schedules, it takes the whole window: its pages are listed where the sidebar was
 ## In the conversation
 
 - **Schedules** open from the top of the sidebar.
-- **Pull requests**, below Schedules on a server gateway with GitHub connected, list the open
+- **Artifacts**, below Schedules, in place of the chat: every Artifact you made, whatever the
+  conversation, the one changed last first, each with its kind, version, conversation and when
+  it last changed. The owner searches them by title and narrows them to one type, and opens one
+  there as the Inspector's Artifacts tab shows it, with History, the code, Download and Edit.
+  The menu at the end of a row also goes to its conversation with the Artifact open beside it,
+  and deletes it for good, after asking: every version goes and a public link stops working.
+  A phone paired by QR code reads them but cannot edit or delete one.
+- **Pull requests**, below Artifacts on a server gateway with GitHub connected, list the open
   pull requests of every connected account in place of the chat. Review there hands one to an
   agent; Review settings choose the reviewing agent, its instructions, and whether new pull
   requests are reviewed on their own through the GitHub App's webhook.

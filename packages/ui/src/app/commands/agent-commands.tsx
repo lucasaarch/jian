@@ -9,6 +9,7 @@ import {
   MessagesSquare,
   Plus,
   Search,
+  Shapes,
   Sparkles,
   SquarePen,
   UserCog,
@@ -23,7 +24,7 @@ import {
 import { AgentFace } from '../../kit/face';
 import type { Profile } from '../../lib/api';
 import { useGatewayMode } from '../../lib/gateway-mode';
-import { activityPath, agentPath, newChatPath } from '../../lib/navigation';
+import { activityPath, agentPath, artifactsPath, newChatPath } from '../../lib/navigation';
 import { useAgentOverlay } from '../../lib/stores/agent-overlay';
 import { useOnboarding } from '../../lib/stores/onboarding';
 import { useRouter } from '../../platform/navigation';
@@ -131,6 +132,15 @@ export function useAgentCommands({
         keywords: ['schedule', 'reminder', 'recurring', 'cron', 'later'],
         icon: <AlarmClock size={15} />,
         run: () => useAgentOverlay.getState().openSchedules(),
+      },
+      {
+        id: 'artifacts',
+        group: 'Agent',
+        title: 'Artifacts',
+        detail: current.name,
+        keywords: ['artifact', 'page', 'document', 'deck', 'slides', 'diagram', 'file', 'made'],
+        icon: <Shapes size={15} />,
+        run: place(artifactsPath(current.id)),
       },
       {
         id: 'skills',

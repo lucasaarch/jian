@@ -130,6 +130,21 @@ it('offers the pull requests only on a server gateway with a GitHub account conn
   expect(button(view.host)?.getAttribute('aria-current')).toBe('page');
 });
 
+it('opens the agent’s Artifacts from right under Schedules, on any gateway', async () => {
+  const view = await render([], { mode: 'local', githubAccounts: 0 });
+  const top = [...(view.host.querySelector('nav > div')?.querySelectorAll('button') ?? [])];
+
+  expect(top.map((item) => item.textContent)).toEqual([
+    'New chat',
+    'Schedules',
+    'Artifacts',
+    'Activity',
+  ]);
+  await act(async () => top[2]?.click());
+  expect(memoryNavigation.current()).toBe(`/agents/${profile.id}/artifacts`);
+  expect(top[2]?.getAttribute('aria-current')).toBe('page');
+});
+
 it('shows worker activity on the principal conversation instead of its hidden task session', async () => {
   const view = await render([
     { id: 'parent', sessionId: 's-1', status: 'completed' },
