@@ -3,6 +3,12 @@
 @reference "./themes.css";
 
 .spin {
+  /* An inline SVG sits on the text baseline and turns around a box taller than its glyph, so it
+     wobbles; a block box turning about its own centre stays put. */
+  display: block;
+  flex-shrink: 0;
+  transform-origin: 50% 50%;
+  transform-box: fill-box;
   animation: spin 1s linear infinite;
 }
 
