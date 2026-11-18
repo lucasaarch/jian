@@ -235,6 +235,8 @@ describe('who reads an Artifact', () => {
     // navigation of that frame: a script or a meta refresh cannot take it to an address.
     expect(page.body).toMatch(/<iframe id="artifact" sandbox="allow-scripts"[^>]* srcdoc="/);
     expect(page.body.match(/<iframe/g)).toHaveLength(1);
+    // What the agent wrote runs in that frame, so it may not take the whole screen.
+    expect(page.body).not.toContain('allowfullscreen');
     // Nothing of where it came from.
     expect(page.body).not.toContain(owner.id);
     expect(page.body).not.toContain(session.id);
@@ -310,14 +312,31 @@ describe('the frame the panel draws one in', () => {
       expect(frame.body).toContain('event.source === parent');
     }
 
-    // With no library in it, the frame's own script is all there is: it says nothing back.
+    // A page and a slide are pages already: the shell makes the frame out of the source it is
+    // handed, sealed like any other, and says nothing to anyone.
     for (const type of ['html', 'deck']) {
       const own = (await app.inject({ url: `/v1/artifact-frames/${type}` })).body;
-      expect(own).not.toMatch(/fetch\(|XMLHttpRequest|WebSocket|sendBeacon|parent\.postMessage/);
+      expect(own).not.toMatch(/fetch\(|XMLHttpRequest|WebSocket|sendBeacon|postMessage/);
       expect(own).not.toContain('contenteditable');
-      // The shell only ever posts inward, to the frame it holds, and the frame is the page below.
+      expect(own).not.toContain('<iframe');
+      expect(own).toContain("frame.setAttribute('sandbox', 'allow-scripts')");
+      expect(own).toContain('frame.srcdoc = source');
+      // A frame that loads a second time went somewhere, and is removed. Writing a page over a
+      // loaded one is such a second load, so nothing here does: it left every page white.
+      expect(own).toContain('frame.remove()');
+      expect(own).not.toMatch(/document\.(open|write)/);
+      expect(own).not.toContain('allowfullscreen');
+    }
+    // The others are drawn by a page of the gateway's, which the shell posts the source on to.
+    for (const type of ['react', 'markdown', 'svg', 'mermaid']) {
+      const own = (await app.inject({ url: `/v1/artifact-frames/${type}` })).body.replace(
+        /srcdoc="[^"]*"/,
+        '',
+      );
       expect(own.match(/postMessage/g)).toHaveLength(1);
       expect(own).toContain('frame.contentWindow.postMessage');
+      expect(own).toContain('frame.remove()');
+      expect(own).not.toMatch(/document\.(open|write)|allowfullscreen/);
     }
 
     expect((await app.inject({ url: '/v1/artifact-frames/python' })).statusCode).toBe(400);
@@ -510,6 +529,11 @@ describe('a deck of slides', () => {
     const page = await app.inject({ url: publicPath });
     expect(page.statusCode).toBe(200);
     expect(String(page.headers['content-security-policy'])).toContain('sandbox allow-scripts');
+    // The frame the shell holds runs the gateway's player, which may take the whole screen to
+    // present; a slide, which is what the agent wrote, is a frame inside it with no such leave.
+    expect(page.body).toMatch(
+      /<iframe id="artifact" sandbox="allow-scripts"[^>]* allowfullscreen /,
+    );
     // The deck runs in the frame the shell holds, written into its `srcdoc`.
     const inner = (/srcdoc="([^"]*)"/.exec(page.body)?.[1] ?? '').replace(/&#(\d+);/g, (_, code) =>
       String.fromCharCode(Number(code)),
@@ -519,6 +543,10 @@ describe('a deck of slides', () => {
     // Each slide is a frame written into the page, as sealed as the page.
     expect(inner).toContain("setAttribute('sandbox', 'allow-scripts')");
     expect(inner).not.toMatch(/postMessage|contenteditable|jian-edit|fetch\(/i);
+    expect(inner).not.toMatch(/allowfullscreen|setAttribute\('allow'|\.allow\b/);
+    // It is presented from the page itself, and asks for less motion where the reader does.
+    expect(inner).toContain('requestFullscreen');
+    expect(inner).toContain('prefers-reduced-motion: reduce');
     // A link reads, with or without asking for the editing frame.
     expect((await app.inject({ url: `${publicPath}?edit=1` })).body).toBe(page.body);
   });

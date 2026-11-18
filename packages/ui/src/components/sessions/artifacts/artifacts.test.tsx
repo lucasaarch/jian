@@ -174,10 +174,17 @@ async function opened(artifact: SessionArtifact, api = gateway(), mode?: 'server
   return api;
 }
 
+/** The version in view: the one last read from the gateway. */
+const viewed = (api: ReturnType<typeof gateway>) =>
+  api.sessionArtifactVersion.mock.calls.at(-1)?.[3];
+/** The older version in view, as the bar names it beside the title; none for the latest. */
+const older = () => drawer()?.querySelector('h2')?.nextElementSibling?.textContent || undefined;
+
 describe('the Artifacts tab', () => {
   it('lists what the agent made, and opens one', async () => {
+    const api = gateway();
     await act(async () => useCrew.getState().showArtifacts());
-    await render(gateway());
+    await render(api);
     await settled(() => Boolean(drawer()?.querySelector('li')));
 
     expect([...(drawer()?.querySelectorAll('li') ?? [])].map((row) => row.textContent)).toEqual([
@@ -192,7 +199,7 @@ describe('the Artifacts tab', () => {
     await settled(() => Boolean(frame()));
 
     expect(drawer()?.querySelector('h2')?.textContent).toBe('Launch notes');
-    expect(button('Version')?.textContent).toBe('v3');
+    expect(viewed(api)).toBe(3);
 
     await click(button('All artifacts'));
     expect(frame()).toBeNull();
@@ -271,14 +278,14 @@ describe('an Artifact the agent updates', () => {
     const made = { sessionId: 'session', kind: 'artifact', artifactId: notes.id };
     await act(async () => focusInspector('session', made));
     await settled(() => Boolean(frame()));
-    expect(button('Version')?.textContent).toBe('v3');
+    expect(viewed(api)).toBe(3);
     const first = frame();
 
     api.held[1] = { ...notes, version: 4 };
     await act(async () => publish({ id: 1, type: 'conversation.inspector.focus', data: made }));
-    await settled(() => button('Version')?.textContent === 'v4');
+    await settled(() => viewed(api) === 4);
 
-    expect(button('Version')?.textContent).toBe('v4');
+    expect(older()).toBeUndefined();
     // A new version is a new frame, not the old one told to draw again.
     await settled(() => Boolean(frame()) && frame() !== first);
     expect(frame()).not.toBe(first);
@@ -388,12 +395,12 @@ describe('editing one by hand', () => {
     const { sent } = await loaded();
     expect(sent).toHaveBeenCalledTimes(1);
     expect(sent).toHaveBeenCalledWith({ jianArtifact: PAGE, jianArtifactEdit: { scale: 1 } }, '*');
-    // The version is held while it is edited.
-    expect(button('Version')?.disabled).toBe(true);
+    // The version is held while it is edited: there is no picking another.
+    expect(button('History')).toBeUndefined();
 
     await click(named('Cancel'));
     expect(frame()?.getAttribute('src')).toBe(`${window.location.origin}/v1/artifact-frames/html`);
-    expect(button('Version')?.disabled).toBe(false);
+    expect(button('History')).toBeDefined();
   });
 
   it('saves what that frame answers, and no one else, as a new version', async () => {
@@ -418,7 +425,7 @@ describe('editing one by hand', () => {
     expect(api.editSessionArtifact).not.toHaveBeenCalled();
 
     await answer(element.contentWindow, { collect: word, html: edited });
-    await settled(() => button('Version')?.textContent === 'v3');
+    await settled(() => viewed(api) === 3);
     expect(api.editSessionArtifact).toHaveBeenCalledTimes(1);
     expect(api.editSessionArtifact).toHaveBeenCalledWith('profile', 'session', page.id, {
       version: 2,
@@ -426,7 +433,8 @@ describe('editing one by hand', () => {
     });
     // It stopped listening the moment it had its answer, and shows the new version drawn.
     expect(listening(unheard)).toBe(1);
-    expect(button('Version')?.textContent).toBe('v3');
+    expect(viewed(api)).toBe(3);
+    expect(older()).toBeUndefined();
     await settled(() => Boolean(frame()));
     expect(frame()?.getAttribute('src')).toBe(`${window.location.origin}/v1/artifact-frames/html`);
 
@@ -463,25 +471,65 @@ describe('editing one by hand', () => {
     expect(frame()?.getAttribute('src')).toContain('?edit=1');
 
     expect(api.editSessionArtifact).not.toHaveBeenCalled();
-    expect(button('Version')?.textContent).toBe('v2');
+    expect(viewed(api)).toBe(2);
+  });
+});
+
+describe('the versions of an Artifact', () => {
+  const choices = () => [...document.querySelectorAll<HTMLElement>('[role=menuitemradio]')];
+  const listed = async () => {
+    await click(button('History'));
+    await settled(() => choices().length > 0);
+    return choices().map(
+      (choice) =>
+        `${choice.textContent}${choice.getAttribute('aria-checked') === 'true' ? ' (in view)' : ''}`,
+    );
+  };
+
+  it('are behind one button of the bar, the latest marked, and one is picked from there', async () => {
+    const api = await opened(notes);
+    // The bar holds no select of versions: the title, and nothing beside it at the latest.
+    expect(older()).toBeUndefined();
+
+    expect(await listed()).toEqual(['Version 3 · latest (in view)', 'Version 2', 'Version 1']);
+    await click(choices()[1]);
+    await settled(() => viewed(api) === 2);
+    expect(viewed(api)).toBe(2);
+    expect(older()).toBe('v2');
+    await settled(() => choices().length === 0);
+
+    expect(await listed()).toEqual(['Version 3 · latest', 'Version 2 (in view)', 'Version 1']);
+    await click(choices()[0]);
+    await settled(() => older() === undefined);
+    expect(older()).toBeUndefined();
   });
 });
 
 describe('a deck of slides', () => {
   const frames = () => [...container.querySelectorAll('iframe')];
-  const large = () => frames().find((item) => item.title.startsWith('Plan, slide'));
+  /** The slide in view in the track, which holds the ones beside it too. */
+  const large = () => container.querySelector('[data-current] iframe') as HTMLIFrameElement;
   const presented = () => document.querySelector('[role=dialog]');
 
-  it('numbers its slides down the side, each sealed, and shows one large', async () => {
+  it('rows its slides small on top, each sealed, and shows one large under them', async () => {
     await opened(deck);
 
     const rail = drawer()?.querySelector('nav[aria-label=Slides]');
-    expect([...(rail?.querySelectorAll('li') ?? [])].map((row) => row.textContent)).toEqual([
-      '1',
-      '2',
-      '3',
+    expect(
+      [...(rail?.querySelectorAll('button') ?? [])].map((item) => item.getAttribute('aria-label')),
+    ).toEqual(['Slide 1', 'Slide 2', 'Slide 3']);
+    // The row comes before the slide in view, not beside it.
+    expect(
+      (rail as Element).compareDocumentPosition(large()) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    // Three small ones, and of the large ones the slide in view and the one after it.
+    expect(frames().map((item) => item.title)).toEqual([
+      'Slide 1, small',
+      'Slide 2, small',
+      'Slide 3, small',
+      'Plan, slide 1',
+      'Plan, slide 2',
     ]);
-    expect(frames()).toHaveLength(4);
     for (const item of frames()) {
       expect(item.getAttribute('sandbox')).toBe('allow-scripts');
       expect(item.getAttribute('src')).toBe(`${window.location.origin}/v1/artifact-frames/deck`);
@@ -496,15 +544,44 @@ describe('a deck of slides', () => {
 
     await click(button('Slide 3'));
     expect(large()?.title).toBe('Plan, slide 3');
+    expect(button('Slide 3')?.getAttribute('aria-current')).toBe('true');
+    expect(drawer()?.textContent).toContain('3 / 3');
     expect(button('Next slide')?.disabled).toBe(true);
     await click(button('Previous slide'));
     expect(large()?.title).toBe('Plan, slide 2');
+    expect(button('Slide 2')?.getAttribute('aria-current')).toBe('true');
     expect((await loaded(large())).sent).toHaveBeenCalledWith({ jianArtifact: SLIDES[1] }, '*');
 
-    // Its code is the slide in view, not the deck as it is kept.
-    await click(button('View code'));
-    expect(drawer()?.querySelector('pre')?.textContent).toContain('<h1>Two</h1>');
-    expect(drawer()?.querySelector('pre')?.textContent).not.toContain('"slides"');
+    // A deck is read as slides: there is no code to switch to.
+    expect(button('View code')).toBeUndefined();
+  });
+
+  it('follows the track to the slide it is scrolled to', async () => {
+    await opened(deck);
+    const track = large().closest('[data-current]')?.parentElement as HTMLElement;
+    // Three slides side by side, each as wide as the track, as a browser lays them out.
+    Object.defineProperty(track, 'clientWidth', { value: 400, configurable: true });
+    Object.defineProperty(track, 'scrollWidth', { value: 1200, configurable: true });
+    const scrollTo = async (left: number) => {
+      track.scrollLeft = left;
+      await act(async () => track.dispatchEvent(new Event('scroll')));
+    };
+
+    // Told its size, as the browser tells it, the track is aligned for it.
+    await click(button('Next slide'));
+    await click(button('Previous slide'));
+    await scrollTo(0);
+    expect(large()?.title).toBe('Plan, slide 1');
+
+    // Past the middle of the way to the next, that one is in view, in the row and the count too.
+    await scrollTo(230);
+    expect(large()?.title).toBe('Plan, slide 2');
+    expect(button('Slide 2')?.getAttribute('aria-current')).toBe('true');
+    expect(drawer()?.textContent).toContain('2 / 3');
+    await scrollTo(800);
+    expect(large()?.title).toBe('Plan, slide 3');
+    await scrollTo(390);
+    expect(large()?.title).toBe('Plan, slide 2');
   });
 
   it('edits the slide in view, and says which when it saves', async () => {
@@ -526,14 +603,14 @@ describe('a deck of slides', () => {
     await click(named('Save'));
     const edited = (SLIDES[1] as string).replace('Two', 'Second');
     await answer(element.contentWindow, { collect: asked(sent), html: edited });
-    await settled(() => button('Version')?.textContent === 'v2');
+    await settled(() => viewed(api) === 2);
 
     expect(api.editSessionArtifact).toHaveBeenCalledWith('profile', 'session', deck.id, {
       version: 1,
       content: edited,
       slide: 2,
     });
-    expect(button('Version')?.textContent).toBe('v2');
+    expect(viewed(api)).toBe(2);
   });
 
   it('is presented over the whole window, and comes back to the slide it ended on', async () => {
@@ -542,7 +619,8 @@ describe('a deck of slides', () => {
 
     await click(button('Present'));
     await settled(() => Boolean(presented()));
-    const shown = () => presented()?.querySelector('iframe');
+    // The slide on top: the one it came from stays drawn under it.
+    const shown = () => [...(presented()?.querySelectorAll('iframe') ?? [])].at(-1);
     expect(shown()?.getAttribute('sandbox')).toBe('allow-scripts');
     expect(shown()?.title).toBe('Slide 1 of 3');
 

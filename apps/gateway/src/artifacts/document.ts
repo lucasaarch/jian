@@ -3,11 +3,10 @@ import {
   ARTIFACT_FRAME_MESSAGE,
   EDITABLE_ARTIFACT_TYPES,
   type SessionArtifactType,
-  SLIDE_HEIGHT,
-  SLIDE_WIDTH,
 } from '@jian/contracts';
 import { GatewayError } from '../core/errors.js';
 import { EDITING } from './edit-frame.js';
+import { PLAYER, PLAYER_STYLE } from './player.js';
 import { type RuntimeFile, runtimeSource } from './runtime.js';
 
 /**
@@ -28,6 +27,9 @@ import { type RuntimeFile, runtimeSource } from './runtime.js';
  *   to load, a URL included, is refused. A GET to a stranger's address is a way out for data.
  *   The frame the owner edits in sits in a shell too, one that relays both ways: what its parent
  *   says goes in, and only what carries the edit message key comes out.
+ * - Only a public deck's frame may take the whole screen, to be presented. That frame runs the
+ *   gateway's own player (player.ts); what the agent wrote is each slide, one frame further in,
+ *   which is given no such leave.
  *
  * `'unsafe-inline'` is the point, not a hole: the page exists to run the Artifact's own script.
  * `eval` stays refused, which none of the libraries needs.
@@ -60,18 +62,6 @@ html, body { margin: 0; }
 body { padding: 16px; font: 15px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif;
   overflow-wrap: anywhere; }
 body.react, body.deck { padding: 0; }
-body.deck #root { display: grid; grid-template-rows: minmax(0, 1fr) auto; height: 100vh; }
-#stage { display: grid; place-items: center; min-height: 0; overflow: hidden; }
-#sheet { position: relative; overflow: hidden; background: #fff;
-  box-shadow: 0 0 0 1px color-mix(in srgb, CanvasText 15%, transparent); }
-#sheet iframe { position: absolute; top: 0; left: 0; width: ${SLIDE_WIDTH}px;
-  height: ${SLIDE_HEIGHT}px; max-width: none; border: 0; transform-origin: 0 0; }
-#steps { display: flex; justify-content: center; align-items: center; gap: 12px; padding: 8px;
-  font-variant-numeric: tabular-nums; }
-#steps button { width: 32px; height: 32px; border: 0; border-radius: 999px; font: inherit;
-  font-size: 18px; color: inherit; background: color-mix(in srgb, CanvasText 8%, transparent);
-  cursor: pointer; }
-#steps button:disabled { opacity: .4; cursor: default; }
 #failure { margin: 12px; padding: 12px; border-radius: 8px; white-space: pre-wrap;
   font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; color: #b42318;
   background: color-mix(in srgb, #b42318 12%, transparent); }
@@ -84,75 +74,28 @@ table { border-collapse: collapse; }
 th, td { padding: 4px 10px; border: 1px solid color-mix(in srgb, CanvasText 20%, transparent); }
 blockquote { margin-inline: 0; padding-inline-start: 12px;
   border-inline-start: 3px solid color-mix(in srgb, CanvasText 25%, transparent); }
-`;
+${PLAYER_STYLE}`;
 
-// A whole page takes the document's place. The policy came with the response and stays.
-const WRITE = `document.open(); document.write(source); document.close();`;
-
-/**
- * A whole deck on a page of its own, which is what its public link answers: one slide at a time
- * on its fixed canvas, scaled to the window, with the arrows to step through. Each slide is a
- * frame written into this page, never loaded, so it is bound by the page's policy and sandbox.
- * `source` is the deck as a version keeps it.
- */
-const PLAYER = `const slides = JSON.parse(source).slides;
-let at = 0;
-const make = (tag, id) => Object.assign(document.createElement(tag), { id });
-const stage = make('div', 'stage');
-const sheet = make('div', 'sheet');
-const steps = make('nav', 'steps');
-const count = make('span', 'count');
-const step = (label, glyph, by) => {
-  const button = Object.assign(make('button', ''), { type: 'button', textContent: glyph });
-  button.setAttribute('aria-label', label);
-  button.addEventListener('click', () => go(at + by));
-  return button;
-};
-const back = step('Previous slide', '\\u2039', -1);
-const next = step('Next slide', '\\u203a', 1);
-const fit = () => {
-  const scale = Math.min((stage.clientWidth - 32) / ${SLIDE_WIDTH}, (stage.clientHeight - 32) / ${SLIDE_HEIGHT});
-  sheet.style.width = ${SLIDE_WIDTH} * scale + 'px';
-  sheet.style.height = ${SLIDE_HEIGHT} * scale + 'px';
-  if (sheet.firstChild) sheet.firstChild.style.transform = 'scale(' + scale + ')';
-};
-const go = (to) => {
-  at = Math.max(0, Math.min(slides.length - 1, to));
-  const slide = document.createElement('iframe');
-  slide.setAttribute('sandbox', 'allow-scripts');
-  slide.title = 'Slide ' + (at + 1);
-  slide.srcdoc = slides[at];
-  sheet.replaceChildren(slide);
-  count.textContent = at + 1 + ' / ' + slides.length;
-  back.disabled = at === 0;
-  next.disabled = at === slides.length - 1;
-  fit();
-};
-steps.setAttribute('aria-label', 'Slides');
-steps.append(back, count, next);
-stage.append(sheet);
-root.append(stage, steps);
-addEventListener('resize', fit);
-addEventListener('keydown', (event) => {
-  const by = { ArrowRight: 1, ArrowDown: 1, PageDown: 1, ' ': 1, ArrowLeft: -1, ArrowUp: -1, PageUp: -1 }[event.key];
-  if (!by) return;
-  event.preventDefault();
-  go(at + by);
-});
-go(0);`;
+// A whole page, written into the one being read. This runs while the page is still parsed, so
+// the source carries on from here and the page loads once. Never `document.open` on a page that
+// has loaded: it loads again, which the shell takes for a navigation (`shell` below).
+const WRITE = `document.write(source);`;
 
 /**
  * How each type is drawn, as the body of `async (source, libraries) => { … }` in the page, with
- * `root` and `run` in reach. `libraries` are the type's files below, in their order. `published`
- * is how its public page draws it, where that differs from the frame the panel holds.
+ * `root` and `run` in reach. `libraries` are the type's files below, in their order.
+ *
+ * `whole` is a type whose source is a page already. In the panel the shell makes the frame out
+ * of it and no page of ours stands between (`shell` below); `body` is then only how its public
+ * page, which arrives holding the source, draws it.
  */
 const DRAW: Record<
   SessionArtifactType,
-  { libraries: readonly RuntimeFile[]; body: string; published?: string }
+  { libraries: readonly RuntimeFile[]; body: string; whole?: true }
 > = {
-  html: { libraries: [], body: WRITE },
+  html: { libraries: [], body: WRITE, whole: true },
   // The panel hands its frame one slide, a page like any other; the public page holds them all.
-  deck: { libraries: [], body: WRITE, published: PLAYER },
+  deck: { libraries: [], body: PLAYER, whole: true },
   // Markup set this way runs no script element of its own.
   svg: { libraries: [], body: `root.innerHTML = source;` },
   markdown: {
@@ -217,7 +160,7 @@ function page(
   artifact?: { title: string; source: string },
   editing = false,
 ): string {
-  const { libraries, body, published } = DRAW[type];
+  const { libraries, body } = DRAW[type];
 
   return `<!doctype html>
 <html lang="en">
@@ -249,7 +192,7 @@ function page(
     script.remove();
   };
   const draw = async (source, libraries) => {
-${artifact ? (published ?? body) : body}
+${editing ? '' : body}
   };${editing ? EDITING : ''}
   const show = (source) => draw(source, read('libraries')).catch(fail);
   const given = read('artifact');
@@ -271,17 +214,83 @@ ${artifact ? (published ?? body) : body}
 /**
  * What the gateway answers: a shell that holds the Artifact's page in a sandboxed `srcdoc` frame.
  * Loading a `srcdoc` is no request, so `frame-src 'none'` lets it be and refuses every later
- * navigation of the frame. Should one still get through, the frame is removed rather than kept.
+ * navigation of the frame. Should one still get through, the frame is removed rather than kept:
+ * a frame loads once, and its second load is taken for a navigation.
  *
- * With no Artifact the shell hands its parent's first message on to the frame, once it has loaded,
- * and never another. The frame has no way to reach the shell: a sandboxed frame navigates only
- * itself and what is inside it.
+ * That is why no page here is written over a loaded one with `document.open`: a document opened
+ * and closed again loads again, and the shell would remove the frame it had just drawn in. So
+ * with no `inner`, as for a web page and a slide in the panel, the shell makes the frame itself
+ * out of the first source its parent posts. The source is the frame's `srcdoc`, bound by this
+ * same policy and sandbox, and it loads once like any other.
  *
- * The editing shell relays every message of its parent inward, and out only the edit key of the
- * frame's: the panel sees them come from this window, which is the frame it holds. Nothing else
- * the frame posts reaches the panel.
+ * With an `inner` page that waits for its source (`once`), the shell hands its parent's first
+ * message on to the frame, once it has loaded, and never another. The frame has no way to reach
+ * the shell: a sandboxed frame navigates only itself and what is inside it.
+ *
+ * The editing shell (`always`) relays every message of its parent inward, and out only the edit
+ * key of the frame's: the panel sees them come from this window, which is the frame it holds.
+ * Nothing else the frame posts reaches the panel.
+ *
+ * `fullscreen` lets the frame take the whole screen when its reader asks for it. It changes
+ * nothing of where the frame can go or what it can reach, and a frame inside it is not given it.
  */
-function shell(title: string, inner: string, relays: boolean, editing = false): string {
+function shell(
+  title: string,
+  inner: string | null,
+  hears: 'nothing' | 'once' | 'always',
+  fullscreen = false,
+): string {
+  const held =
+    inner === null
+      ? ''
+      : `
+<iframe id="artifact" sandbox="allow-scripts" referrerpolicy="no-referrer"${fullscreen ? ' allowfullscreen' : ''} srcdoc="${escaped(inner)}"></iframe>`;
+  const made = `
+  const hear = (event) => {
+    const source = event.source === parent && event.data && event.data.${ARTIFACT_FRAME_MESSAGE};
+    if (typeof source !== 'string') return;
+    removeEventListener('message', hear);
+    const frame = document.createElement('iframe');
+    frame.setAttribute('sandbox', 'allow-scripts');
+    frame.setAttribute('referrerpolicy', 'no-referrer');
+    frame.srcdoc = source;
+    hold(frame, () => {});
+    document.body.append(frame);
+  };
+  addEventListener('message', hear);`;
+  const relayed = `
+  const frame = document.getElementById('artifact');
+  let loaded = false;
+  const waiting = [];
+  const relay = () => {
+    if (!loaded) return;
+    for (const data of waiting.splice(0)) frame.contentWindow.postMessage(data, '*');
+  };
+  hold(frame, () => {
+    loaded = true;
+    relay();
+  });${
+    hears === 'nothing'
+      ? ''
+      : `
+  const hear = (event) => {
+    if (event.source !== parent || !event.data) return;
+    ${hears === 'once' ? "removeEventListener('message', hear);" : ''}
+    waiting.push(event.data);
+    relay();
+  };
+  addEventListener('message', hear);`
+  }${
+    hears === 'always'
+      ? `
+  addEventListener('message', (event) => {
+    if (event.source !== frame.contentWindow || !event.data) return;
+    const said = event.data[${JSON.stringify(ARTIFACT_EDIT_MESSAGE)}];
+    if (said) parent.postMessage({ [${JSON.stringify(ARTIFACT_EDIT_MESSAGE)}]: said }, '*');
+  });`
+      : ''
+  }`;
+
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -290,40 +299,17 @@ function shell(title: string, inner: string, relays: boolean, editing = false): 
 <title>${escaped(title)}</title>
 <style>html, body, iframe { margin: 0; width: 100%; height: 100%; border: 0; display: block; }</style>
 </head>
-<body>
-<iframe id="artifact" sandbox="allow-scripts" referrerpolicy="no-referrer" srcdoc="${escaped(inner)}"></iframe>
+<body>${held}
 <script>
 (() => {
-  const frame = document.getElementById('artifact');
-  let loaded = false;
-  let waiting = [];
-  const relay = () => {
-    if (!loaded) return;
-    for (const data of waiting.splice(0)) frame.contentWindow.postMessage(data, '*');
-  };
-  frame.addEventListener('load', () => {
-    if (loaded) return frame.remove();
-    loaded = true;
-    relay();
-  });
-  if (${relays}) {
-    const hear = (event) => {
-      if (event.source !== parent || !event.data) return;
-      ${editing ? '' : "removeEventListener('message', hear);"}
-      waiting.push(event.data);
-      relay();
-    };
-    addEventListener('message', hear);
-  }${
-    editing
-      ? `
-  addEventListener('message', (event) => {
-    if (event.source !== frame.contentWindow || !event.data) return;
-    const said = event.data[${JSON.stringify(ARTIFACT_EDIT_MESSAGE)}];
-    if (said) parent.postMessage({ [${JSON.stringify(ARTIFACT_EDIT_MESSAGE)}]: said }, '*');
-  });`
-      : ''
-  }
+  const hold = (frame, ready) => {
+    let loaded = false;
+    frame.addEventListener('load', () => {
+      if (loaded) return frame.remove();
+      loaded = true;
+      ready();
+    });
+  };${inner === null ? made : relayed}
 })();
 </script>
 </body>
@@ -345,16 +331,22 @@ export function artifactFrame(type: SessionArtifactType, editing = false): strin
   let frame = frames.get(key);
 
   if (!frame) {
-    frame = shell('Artifact', page(type, undefined, editing), true, editing);
+    frame = editing
+      ? shell('Artifact', page(type, undefined, true), 'always')
+      : shell('Artifact', DRAW[type].whole ? null : page(type), 'once');
     frames.set(key, frame);
   }
 
   return frame;
 }
 
-/** One Artifact as a page of its own, which is what a public link answers. */
+/**
+ * One Artifact as a page of its own, which is what a public link answers. Only a deck's frame may
+ * take the whole screen, to be presented: that frame runs the gateway's own player, and each
+ * slide, which is what the agent wrote, sits one frame further in with no such leave.
+ */
 export const publishedArtifact = (
   type: SessionArtifactType,
   title: string,
   source: string,
-): string => shell(title, page(type, { title, source }), false);
+): string => shell(title, page(type, { title, source }), 'nothing', type === 'deck');

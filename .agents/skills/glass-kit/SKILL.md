@@ -24,8 +24,8 @@ from the rest is a bug.
 | Field | `TextField`, `TextArea`, `SelectField`, `DateTimeField`, `RowInput` |
 | Search and filter a list | `SearchField`, with a `FilterSelect` beside it |
 | On and off, or one of a few | `SwitchControl`, `Toggle`, `Segmented` |
-| List that opens | `Picker`, `MenuEntry`, `MenuDivider`, `menuPopup` |
-| Row of tabs that can outgrow its bar | `ScrollStrip`: no scrollbar, wheel and fades |
+| List that opens | `Picker`, `MenuEntry`, `MenuChoices` (one of a few, ticked), `MenuDivider`, `menuPopup` |
+| Row of tabs or thumbnails that can outgrow its bar | `ScrollStrip`: no scrollbar, wheel and fades |
 | Anything over the page | `Overlay`, `OverlayActions`, `ConfirmDialog` |
 | Room of pages with a list | `Page` with `SettingsLayout`, `SettingsGroup`, `SettingsRow` |
 | A screen's column, heading and cards | `PageBody`, `PageHeading`, `PageToolbar`, `SectionHeading`, `surfaceCard` |

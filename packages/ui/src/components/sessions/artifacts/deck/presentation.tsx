@@ -2,7 +2,7 @@
 
 import { Dialog } from '@base-ui/react/dialog';
 import { ChevronLeft, ChevronRight, X } from 'lucide-react';
-import { type KeyboardEvent, useEffect, useRef } from 'react';
+import { type KeyboardEvent, useCallback, useEffect, useRef, useState } from 'react';
 import { iconButton } from '../../../../kit';
 import { SlideFrame } from './slide-frame';
 
@@ -22,7 +22,9 @@ const STEP: Record<string, number> = {
 /**
  * A deck presented: one slide filling the screen, on black. It asks the browser for the whole
  * screen and, where that is refused, covers the window instead. The keys and a click step
- * through it, and Escape ends it.
+ * through it, and Escape ends it. A slide fades in over the one before it, which stays drawn
+ * under it, so there is no black between two; whoever asked for less motion gets the next slide
+ * at once (flight.css).
  *
  * The slide is inert here: a click on it is the click that moves on, and the keyboard stays with
  * the presentation instead of going into a frame the panel cannot hear.
@@ -40,15 +42,35 @@ export function Presentation({
   onAt: (index: number) => void;
   onClose: () => void;
 }) {
-  const stage = useRef<HTMLDivElement>(null);
+  const stage = useRef<HTMLDivElement | null>(null);
+  // The portal draws the stage a render after this one: the screen is asked for once the stage
+  // is there, which an effect of the first render alone never sees.
+  const [drawn, setDrawn] = useState<HTMLDivElement | null>(null);
+  const hold = useCallback((element: HTMLDivElement | null) => {
+    stage.current = element;
+    setDrawn(element);
+  }, []);
   // Read when the screen is left, so a parent drawn again does not leave and take it twice.
   const close = useRef(onClose);
   close.current = onClose;
   const last = slides.length - 1;
-  const go = (to: number) => onAt(Math.max(0, Math.min(last, to)));
+  // The slide left for this one, kept drawn under it, and how many times a slide was left:
+  // each one shown is a layer of its own, named by that count, so a frame is never moved or
+  // handed another slide, either of which would leave it empty.
+  const [left, setLeft] = useState<{ turn: number; slide?: number }>({ turn: 0 });
+  const go = (to: number) => {
+    const target = Math.max(0, Math.min(last, to));
+    if (target === at) return;
+    setLeft({ turn: left.turn + 1, slide: at });
+    onAt(target);
+  };
+  const layers = [
+    ...(left.slide === undefined ? [] : [{ turn: left.turn - 1, slide: left.slide }]),
+    { turn: left.turn, slide: at },
+  ];
 
   useEffect(() => {
-    const element = stage.current;
+    const element = drawn;
     if (!element?.requestFullscreen) return;
     let entered = false;
     const left = () => {
@@ -68,7 +90,7 @@ export function Presentation({
       document.removeEventListener('fullscreenchange', left);
       if (document.fullscreenElement === element) void document.exitFullscreen().catch(() => {});
     };
-  }, []);
+  }, [drawn]);
 
   const keyed = (event: KeyboardEvent) => {
     if (event.key === 'Escape') {
@@ -93,20 +115,26 @@ export function Presentation({
     <Dialog.Root open onOpenChange={(open) => !open && onClose()}>
       <Dialog.Portal>
         <Dialog.Popup
-          ref={stage}
+          ref={hold}
           initialFocus={stage}
           aria-label={`${title}, presented`}
           onKeyDown={keyed}
           className="group/present fixed inset-0 z-50 bg-black outline-none"
         >
-          <div inert className="absolute inset-0 grid">
-            <SlideFrame
-              key={at}
-              title={`Slide ${at + 1} of ${slides.length}`}
-              source={slides[at] ?? ''}
-              className="size-full"
-            />
-          </div>
+          {layers.map(({ turn, slide }) => (
+            <div
+              key={turn}
+              inert
+              className="absolute inset-0 grid animate-[viewer-fade_320ms_ease-out]"
+            >
+              <SlideFrame
+                key={slide}
+                title={`Slide ${slide + 1} of ${slides.length}`}
+                source={slides[slide] ?? ''}
+                className="size-full"
+              />
+            </div>
+          ))}
           {/* The whole screen moves on at a click. The keyboard has its keys and the buttons
               below, so this one is the pointer's alone. */}
           <button

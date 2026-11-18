@@ -111,13 +111,16 @@ Schedules, it takes the whole window: its pages are listed where the sidebar was
   one printed.
   Its Artifacts tab lists the Artifacts you made in this conversation (a page, a component, a
   document, a picture, a diagram or a deck of slides), each drawn in a sealed frame: the owner
-  picks a version, switches between the drawing and its code, copies or downloads the source,
-  and sets it Private or Public. A deck shows its slides numbered down the side and one of them
-  large, with Present to fill the screen. Edit, on a web page or a deck's slide, lets the owner
-  click a text to change it or its formatting, and Save keeps that as a new version of theirs.
+  opens an earlier version from History, switches between the drawing and its code, copies or
+  downloads the source, and sets it Private or Public. A deck shows its slides small and
+  numbered in a row on top and one of them large under it, dragged or scrolled sideways to the
+  next, with Present to fill the screen; a deck has no code view. Edit, on a web page or a
+  deck's slide, lets the owner click a text to change it or its formatting, and Save keeps that
+  as a new version of theirs.
   Public gives a link anyone can open without signing in, to read the latest version only,
-  and making it private again ends that link for good. Only a gateway on a server offers Public;
-  the desktop app's own gateway keeps every Artifact private.
+  and making it private again ends that link for good. A deck's link has Present too: the whole
+  screen, stepped through with the arrow keys, space or a click, and left with Escape. Only a
+  gateway on a server offers Public; the desktop app's own gateway keeps every Artifact private.
 - **The conversation's badges**, where it runs, show its objective and how many pull requests
   you created in it through GitHub's MCP server, your subagents' included; one you only linked or
   read is not counted. That one opens the list of them with how each stands — Watching while the

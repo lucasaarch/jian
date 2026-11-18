@@ -24,7 +24,10 @@ export function SlideFrame({
   editing?: boolean;
   frame?: RefObject<HTMLIFrameElement | null>;
   lazy?: boolean;
-  /** The box: it needs a size of its own, which the slide then fits inside. */
+  /**
+   * The box: it needs a size of its own, which the slide then fits inside. Padding given here
+   * is room kept around the slide, not room the slide is scaled to.
+   */
   className?: string;
 }) {
   const box = useRef<HTMLDivElement>(null);
@@ -44,27 +47,31 @@ export function SlideFrame({
   }, []);
 
   return (
+    // Two boxes, because an element's measured size counts its padding: scaled to the padded
+    // box, a slide came out wider than the room inside it and ran past the panel's edge. The one
+    // track is sized by the box alone, never by the slide in it.
     <div
-      ref={box}
-      className={`grid min-h-0 min-w-0 place-items-center overflow-hidden ${className}`}
+      className={`grid min-h-0 min-w-0 grid-cols-[minmax(0,1fr)] grid-rows-[minmax(0,1fr)] ${className}`}
     >
-      {/* The sheet a slide is drawn on is white wherever it is shown, here, in a presentation
-          and on its public page, so a slide that sets no ground of its own reads the same. */}
-      <div
-        className="relative shrink-0 overflow-hidden bg-white"
-        style={{ width: SLIDE_WIDTH * scale, height: SLIDE_HEIGHT * scale }}
-      >
-        <ArtifactFrame
-          type="deck"
-          title={title}
-          source={source}
-          editing={editing}
-          scale={scale}
-          lazy={lazy}
-          {...(frame ? { frame } : {})}
-          className="absolute top-0 left-0 max-w-none origin-top-left border-0"
-          style={{ width: SLIDE_WIDTH, height: SLIDE_HEIGHT, transform: `scale(${scale})` }}
-        />
+      <div ref={box} className="grid min-h-0 min-w-0 place-items-center overflow-hidden">
+        {/* The sheet a slide is drawn on is white wherever it is shown, here, in a presentation
+            and on its public page, so a slide that sets no ground of its own reads the same. */}
+        <div
+          className="relative shrink-0 overflow-hidden bg-white"
+          style={{ width: SLIDE_WIDTH * scale, height: SLIDE_HEIGHT * scale }}
+        >
+          <ArtifactFrame
+            type="deck"
+            title={title}
+            source={source}
+            editing={editing}
+            scale={scale}
+            lazy={lazy}
+            {...(frame ? { frame } : {})}
+            className="absolute top-0 left-0 max-w-none origin-top-left border-0"
+            style={{ width: SLIDE_WIDTH, height: SLIDE_HEIGHT, transform: `scale(${scale})` }}
+          />
+        </div>
       </div>
     </div>
   );
