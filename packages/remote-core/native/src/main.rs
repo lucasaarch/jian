@@ -1,49 +1,82 @@
 //! Jian Remote's Computer Use helper: a long-lived child of the worker that reads the display,
-//! drives input and draws the agent's pointer. It reads one JSON request a line on stdin and
+//! drives input and draws the agents' pointers. It reads one JSON request a line on stdin and
 //! answers each with one JSON line on stdout, in order; diagnostics go to stderr. See
 //! `protocol` for the messages.
 
+mod cursor;
 mod keys;
 mod motion;
 mod platform;
 mod protocol;
 mod screenshot;
+#[cfg(any(target_os = "macos", windows, test))]
+mod text;
 
+use std::collections::HashMap;
 use std::io::{BufRead, Write};
 use std::time::Duration;
 
 use serde_json::{Value, json};
 
-use platform::{Platform, Pointer, Presence};
-use protocol::{Point, Request, click_count, error, ok};
+use cursor::Look;
+use platform::{Need, Platform, Pointer, Presence};
+use protocol::{Envelope, Failure, Point, Request, click_count, error, ok};
 
-/// The helper between requests: what it acts with, and the pointer the user watches.
+/// A scroll longer than this is a mistake, not a wish: the worker's contract stops here too.
+const SCROLL_MAX_LINES: i64 = 100;
+
+/// The helper between requests: what it acts with, and the pointer of each session using the
+/// screen. The worker sends one request at a time, so the sessions take turns at the one mouse
+/// and keyboard there is; what each keeps to itself is where its pointer stands.
 pub struct Helper<P: Platform, Q: Pointer> {
     platform: P,
-    pointer: Q,
+    /// By session, with the look each was made with; "" is a worker that names none.
+    pointers: HashMap<String, (Look, Q)>,
 }
 
 impl<P: Platform, Q: Pointer> Helper<P, Q> {
-    pub fn new(platform: P, pointer: Q) -> Self {
-        Self { platform, pointer }
-    }
-
-    pub fn handle(&mut self, request: Request) -> Value {
-        match self.act(request) {
-            Ok(reply) => reply,
-            Err(message) => error(message),
+    pub fn new(platform: P) -> Self {
+        Self {
+            platform,
+            pointers: HashMap::new(),
         }
     }
 
-    fn act(&mut self, request: Request) -> Result<Value, String> {
+    pub fn handle(&mut self, envelope: Envelope) -> Value {
+        match self.act(&envelope.session, envelope.request) {
+            Ok(reply) => reply,
+            Err(failure) => failure.reply(),
+        }
+    }
+
+    /// Every pointer there is, for a platform that has to animate them itself.
+    #[cfg(windows)]
+    pub fn pointers(&mut self) -> impl Iterator<Item = &mut Q> {
+        self.pointers.values_mut().map(|(_, pointer)| pointer)
+    }
+
+    /// Up to the first event posted, a failure is known to have reached nothing; from there
+    /// on it is a platform's plain message, which reads as uncertain.
+    fn act(&mut self, session: &str, request: Request) -> Result<Value, Failure> {
         match request {
             Request::Ping => {}
-            Request::EnsureSession => self.start()?,
-            Request::SetIdle => self.pointer.show(Presence::Idle),
-            Request::EndSession => self.pointer.hide(),
+            Request::EnsureSession { label, color } => {
+                self.dress(session, Look::new(label.as_deref(), color.as_deref()));
+                self.start(session)?;
+            }
+            Request::SetIdle => {
+                if let Some((_, pointer)) = self.pointers.get_mut(session) {
+                    pointer.show(Presence::Idle);
+                }
+            }
+            Request::EndSession => {
+                if let Some((_, mut pointer)) = self.pointers.remove(session) {
+                    pointer.hide();
+                }
+            }
             Request::SessionStatus => return Ok(session_status(&self.platform)),
             Request::Geometry => {
-                let geometry = self.platform.geometry()?;
+                let geometry = self.platform.geometry().map_err(Failure::unsent)?;
                 return Ok(ok(json!({
                     "originX": 0,
                     "originY": 0,
@@ -56,9 +89,11 @@ impl<P: Platform, Q: Pointer> Helper<P, Q> {
             }
             Request::Screenshot { max_bytes } => {
                 let platform = &self.platform;
-                let capture = platform.capture()?;
+                platform.preflight(Need::Screen)?;
+                let capture = platform.capture().map_err(Failure::unsent)?;
                 let max_bytes = max_bytes.unwrap_or(screenshot::DEFAULT_MAX_BYTES);
-                let jpeg = screenshot::fit(max_bytes, |width| platform.scale(&capture, width))?;
+                let jpeg = screenshot::fit(max_bytes, |width| platform.scale(&capture, width))
+                    .map_err(Failure::unsent)?;
                 return Ok(ok(json!({
                     "widthPx": jpeg.width,
                     "heightPx": jpeg.height,
@@ -66,17 +101,22 @@ impl<P: Platform, Q: Pointer> Helper<P, Q> {
                 })));
             }
             // The pointer alone: the user's cursor stays where it is.
-            Request::Move { point_x, point_y } => self.glide(Point {
-                x: point_x,
-                y: point_y,
-            })?,
+            Request::Move { point_x, point_y } => self.glide(
+                session,
+                Point {
+                    x: point_x,
+                    y: point_y,
+                },
+            )?,
             Request::Click { button, count } => {
                 let count = click_count(count)?;
                 let at = self
-                    .pointer
-                    .tip()
-                    .ok_or("move the pointer before clicking")?;
-                self.pointer.flash();
+                    .pointers
+                    .get(session)
+                    .and_then(|(_, pointer)| pointer.tip())
+                    .ok_or_else(|| Failure::invalid("move the pointer before clicking"))?;
+                self.platform.preflight(Need::Mouse(at))?;
+                self.pointer(session).flash();
                 self.platform.click_at(at, button, count)?;
             }
             Request::ClickAt {
@@ -90,8 +130,9 @@ impl<P: Platform, Q: Pointer> Helper<P, Q> {
                     x: point_x,
                     y: point_y,
                 };
-                self.glide(at)?;
-                self.pointer.flash();
+                self.platform.preflight(Need::Mouse(at))?;
+                self.glide(session, at)?;
+                self.pointer(session).flash();
                 self.platform.click_at(at, button, count)?;
             }
             Request::Drag {
@@ -107,16 +148,27 @@ impl<P: Platform, Q: Pointer> Helper<P, Q> {
                     },
                     Point { x: to_x, y: to_y },
                 );
-                self.glide(from)?;
-                self.pointer.flash();
-                let pointer = &mut self.pointer;
+                self.platform.preflight(Need::Mouse(from))?;
+                self.glide(session, from)?;
+                self.pointer(session).flash();
+                let (_, pointer) = self.pointers.get_mut(session).expect("made by the glide");
                 self.platform
                     .drag(from, &motion::drag_path(from, to), &mut |at| {
                         pointer.place(at)
                     })?;
             }
-            Request::Type { text } => self.platform.type_text(&text)?,
-            Request::Key { key } => self.platform.key(keys::parse_chord(&key)?)?,
+            Request::Type { text } => {
+                self.platform.preflight(Need::Keyboard)?;
+                self.platform.type_text(&text)?;
+            }
+            Request::Key { key } => {
+                let chord = keys::parse_chord(&key).map_err(Failure::invalid)?;
+                if let Some(reason) = keys::blocked(chord) {
+                    return Err(Failure::policy(reason));
+                }
+                self.platform.preflight(Need::Keyboard)?;
+                self.platform.key(chord)?;
+            }
             Request::Scroll {
                 point_x,
                 point_y,
@@ -127,29 +179,60 @@ impl<P: Platform, Q: Pointer> Helper<P, Q> {
                     x: point_x,
                     y: point_y,
                 };
-                self.glide(at)?;
-                let amount = u32::try_from(amount.max(1)).unwrap_or(u32::MAX);
+                self.platform.preflight(Need::Mouse(at))?;
+                self.glide(session, at)?;
+                let amount = amount.clamp(1, SCROLL_MAX_LINES) as u32;
                 self.platform.scroll(at, direction, amount)?;
             }
         }
         Ok(ok(Value::Null))
     }
 
-    /// Shows the pointer, starting where the user's own cursor is when there is no session yet.
-    fn start(&mut self) -> Result<(), String> {
-        if self.pointer.tip().is_none() {
-            self.pointer.place(self.platform.cursor()?);
+    fn pointer(&mut self, session: &str) -> &mut Q {
+        let (_, pointer) = self.pointers.entry(session.to_owned()).or_insert_with(|| {
+            let look = Look::default();
+            let pointer = Q::new(&look);
+            (look, pointer)
+        });
+        pointer
+    }
+
+    /// Gives the session's pointer its name and colour. One that is already drawn another way,
+    /// because the agent was renamed, is drawn anew where it stands.
+    fn dress(&mut self, session: &str, look: Look) {
+        if matches!(self.pointers.get(session), Some((worn, _)) if *worn == look) {
+            return;
         }
-        self.pointer.show(Presence::Active);
+        let stood = self.pointers.remove(session).and_then(|(_, mut old)| {
+            let tip = old.tip();
+            old.hide();
+            tip
+        });
+        let mut pointer = Q::new(&look);
+        if let Some(tip) = stood {
+            pointer.place(tip);
+        }
+        self.pointers.insert(session.to_owned(), (look, pointer));
+    }
+
+    /// Shows the session's pointer, starting where the user's own cursor is when it has not
+    /// been anywhere yet. Nothing is posted here, so a failure reached nothing.
+    fn start(&mut self, session: &str) -> Result<(), Failure> {
+        if self.pointer(session).tip().is_none() {
+            let cursor = self.platform.cursor().map_err(Failure::unsent)?;
+            self.pointer(session).place(cursor);
+        }
+        self.pointer(session).show(Presence::Active);
         Ok(())
     }
 
-    fn glide(&mut self, to: Point) -> Result<(), String> {
-        self.start()?;
-        let from = self.pointer.tip().unwrap_or(to);
+    fn glide(&mut self, session: &str, to: Point) -> Result<(), Failure> {
+        self.start(session)?;
+        let pointer = self.pointer(session);
+        let from = pointer.tip().unwrap_or(to);
         for (at, pause) in motion::glide(from, to) {
-            self.pointer.place(at);
-            self.pointer.wait(pause);
+            pointer.place(at);
+            pointer.wait(pause);
         }
         Ok(())
     }
@@ -163,7 +246,7 @@ fn session_status(platform: &impl Platform) -> Value {
 }
 
 /// Answers the requests on stdin in order until the worker closes it.
-fn serve(execute: &mut dyn FnMut(Request) -> Value) {
+fn serve(execute: &mut dyn FnMut(Envelope) -> Value) {
     let mut stdout = std::io::stdout().lock();
     for line in std::io::stdin().lock().lines() {
         let Ok(line) = line else { break };
@@ -171,7 +254,7 @@ fn serve(execute: &mut dyn FnMut(Request) -> Value) {
         if line.is_empty() {
             continue;
         }
-        let reply = match serde_json::from_str::<Request>(line) {
+        let reply = match serde_json::from_str::<Envelope>(line) {
             Ok(request) => execute(request),
             Err(parse) => {
                 eprintln!("computer-helper: {parse}");

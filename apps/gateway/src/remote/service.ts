@@ -1,6 +1,8 @@
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import {
   REMOTE_BROWSER_CAPABILITY,
+  REMOTE_COMPUTER_RESULT_CAPABILITY,
+  REMOTE_COMPUTER_SESSIONS_CAPABILITY,
   REMOTE_FILES_CAPABILITY,
   REMOTE_SYSTEM_MAX_LENGTH,
   type RemoteBrowserParams,
@@ -21,12 +23,19 @@ import {
   remoteResultSchema,
   remoteUpdateParamsSchema,
 } from '@jian/contracts';
-import { and, asc, eq, inArray, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, inArray, ne, or, sql } from 'drizzle-orm';
 import { GatewayError } from '../core/errors.js';
 import { gatewayRelease, workerOutdated } from '../core/release.js';
 import type { GatewayVault } from '../security/gateway-vault.js';
 import type { Store } from '../storage/database.js';
-import { remoteMachines, remoteTasks } from '../storage/schema.js';
+import { profiles, remoteMachines, remoteTasks } from '../storage/schema.js';
+import {
+  nextInTurn,
+  pointerColor,
+  pointerLabel,
+  TURN_GAP_MS,
+  turnHolder,
+} from './computer-sessions.js';
 
 const tokenHash = (token: string) => createHash('sha256').update(token).digest('hex');
 const present = (lastSeen: Date | null, now: number) =>
@@ -515,11 +524,17 @@ export class Remote {
       .where(eq(remoteTasks.id, taskId));
   }
 
+  /**
+   * `sessionId` is the conversation the action belongs to. A worker that keeps sessions gives
+   * each its own pointer, named after the agent, and its own last screenshot; without one, or
+   * on a worker from before sessions, everything shares the machine's one pointer as before.
+   */
   async executeComputer(
     profileId: string,
     machineId: string,
     input: unknown,
     signal?: AbortSignal,
+    sessionId?: string,
   ) {
     const data = remoteComputerCommandSchema.parse(input);
     const machine = await this.machine(machineId);
@@ -536,6 +551,14 @@ export class Remote {
       );
     }
     const { timeoutMs, ...computer } = data;
+    // Both are fields a worker from before them would refuse or ignore, and the first makes it
+    // answer with fields a gateway from before them would refuse: each goes only to a worker
+    // that says it knows it.
+    const offered = machine.capabilities ?? [];
+    const session =
+      sessionId && offered.includes(REMOTE_COMPUTER_SESSIONS_CAPABILITY)
+        ? await this.pointerOf(profileId, sessionId)
+        : undefined;
     return this.waitForTask(
       profileId,
       machineId,
@@ -543,11 +566,29 @@ export class Remote {
         kind: 'computer',
         command: '',
         cwd: null,
-        payload: computer,
+        payload: {
+          ...computer,
+          ...(offered.includes(REMOTE_COMPUTER_RESULT_CAPABILITY) ? { protocol: 2 as const } : {}),
+          ...(session ? { session } : {}),
+        },
         timeoutMs,
       },
       signal,
     );
+  }
+
+  /** How a conversation's pointer is drawn: the agent's name beside it, in the agent's colour. */
+  private async pointerOf(profileId: string, sessionId: string) {
+    const [profile] = await this.store.db
+      .select({ name: profiles.name })
+      .from(profiles)
+      .where(eq(profiles.id, profileId))
+      .limit(1);
+    return {
+      id: sessionId,
+      name: pointerLabel(profile?.name ?? ''),
+      color: pointerColor(profileId),
+    };
   }
 
   /**
@@ -595,6 +636,48 @@ export class Remote {
         ? result.stdout.trim() || `Updated to ${result.update?.to ?? version}.`
         : result.stderr.trim() || 'The update failed.',
     };
+  }
+
+  /**
+   * The task a polling worker is handed: the oldest queued, except that a conversation using
+   * the screen keeps it for its next steps before another one's are served (see
+   * computer-sessions.ts). Without two conversations at the screen this is the oldest task.
+   */
+  private async nextQueued(machineId: string, outdated: boolean) {
+    const queued = await this.store.db
+      .select()
+      .from(remoteTasks)
+      .where(
+        and(
+          eq(remoteTasks.machineId, machineId),
+          eq(remoteTasks.status, 'queued'),
+          ...(outdated ? [eq(remoteTasks.kind, 'update')] : []),
+        ),
+      )
+      .orderBy(asc(remoteTasks.createdAt))
+      // More than a few waiting at once is already rare; past this many, the oldest are
+      // enough to choose from.
+      .limit(8);
+    if (!queued.some((task) => task.kind === 'computer')) return queued[0];
+    const now = this.clock();
+    const [last] = await this.store.db
+      .select({
+        kind: remoteTasks.kind,
+        payload: remoteTasks.payload,
+        updatedAt: remoteTasks.updatedAt,
+      })
+      .from(remoteTasks)
+      .where(
+        and(
+          eq(remoteTasks.machineId, machineId),
+          eq(remoteTasks.kind, 'computer'),
+          ne(remoteTasks.status, 'queued'),
+          gt(remoteTasks.updatedAt, new Date(now - TURN_GAP_MS)),
+        ),
+      )
+      .orderBy(desc(remoteTasks.updatedAt))
+      .limit(1);
+    return nextInTurn(queued, turnHolder(last, now), now);
   }
 
   /** Agents get no work from a worker on another major.minor: it must be updated first. */
@@ -738,18 +821,7 @@ export class Remote {
       .where(eq(remoteMachines.id, machineId));
     // A worker on another major.minor is handed nothing but its update.
     const outdated = workerOutdated(version, this.release());
-    const [next] = await this.store.db
-      .select()
-      .from(remoteTasks)
-      .where(
-        and(
-          eq(remoteTasks.machineId, machineId),
-          eq(remoteTasks.status, 'queued'),
-          ...(outdated ? [eq(remoteTasks.kind, 'update')] : []),
-        ),
-      )
-      .orderBy(asc(remoteTasks.createdAt))
-      .limit(1);
+    const next = await this.nextQueued(machineId, outdated);
     if (!next) return { task: null };
     const [claimed] = await this.store.db
       .update(remoteTasks)

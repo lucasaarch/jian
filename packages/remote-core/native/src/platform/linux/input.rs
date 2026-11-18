@@ -15,7 +15,8 @@ use super::display::{Display, display, x_error};
 use super::keyboard::{Keyboard, char_keysym, key_keysym, modifier_keysyms};
 use super::pixels::{Layout, shrink};
 use crate::keys::Chord;
-use crate::platform::{Geometry, Platform, SessionStatus};
+use crate::motion::{DRAG_GRAB, DRAG_SETTLE, DRAG_STEP};
+use crate::platform::{Geometry, Held, Platform, SessionStatus};
 use crate::protocol::{Button, Direction, Point};
 use crate::screenshot::Frame;
 
@@ -141,13 +142,22 @@ impl Platform for Linux {
             input.display.flush()?;
             sleep(Duration::from_millis(12));
             input.fake(BUTTON_PRESS_EVENT, 1)?;
+            // From here the button comes up however this ends: a move that fails half way
+            // must not leave it down, dragging whatever the user touches next.
+            let _held = Held(|| {
+                let _ = input.fake(BUTTON_RELEASE_EVENT, 1);
+                let _ = input.display.flush();
+            });
+            input.display.flush()?;
+            sleep(DRAG_GRAB);
             for &point in path {
                 input.move_to(point)?;
                 input.display.flush()?;
                 step(point);
-                sleep(Duration::from_millis(6));
+                sleep(DRAG_STEP);
             }
-            input.fake(BUTTON_RELEASE_EVENT, 1)
+            sleep(DRAG_SETTLE);
+            Ok(())
         })
     }
 

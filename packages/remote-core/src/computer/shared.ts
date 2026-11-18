@@ -11,6 +11,17 @@ export const COMPUTER_CAPABILITIES = Object.freeze({
 
 export type ComputerCapability = (typeof COMPUTER_CAPABILITIES)[keyof typeof COMPUTER_CAPABILITIES];
 
+/**
+ * What a worker with Computer Use says beside its platform: its results carry `code` and
+ * `delivery` when asked with `protocol: 2`, and it keeps a session per conversation. The names
+ * are the contract's (`REMOTE_COMPUTER_RESULT_CAPABILITY`, `REMOTE_COMPUTER_SESSIONS_CAPABILITY`),
+ * repeated here because the published worker carries the contracts as types only.
+ */
+export const COMPUTER_PROTOCOL_CAPABILITIES = Object.freeze([
+  'computer-result-v2',
+  'computer-sessions-v1',
+] as const);
+
 const CAPABILITY_SET: ReadonlySet<string> = new Set(Object.values(COMPUTER_CAPABILITIES));
 
 /** True when a worker capability string means remote_computer is supported. */

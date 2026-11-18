@@ -4,8 +4,9 @@
 
 use std::time::Duration;
 
+use crate::cursor::Look;
 use crate::keys::Chord;
-use crate::protocol::{Button, Direction, Point};
+use crate::protocol::{Button, Direction, Failure, Point};
 use crate::screenshot::Frame;
 
 #[cfg(target_os = "macos")]
@@ -54,10 +55,39 @@ impl SessionStatus {
     }
 }
 
+/// What a request needs the system to allow.
+#[derive(Debug, Clone, Copy)]
+pub enum Need {
+    /// Reading the display.
+    Screen,
+    /// Typing, which goes to whichever window has the keyboard.
+    Keyboard,
+    /// Clicking, dragging or scrolling at a point, which goes to the window under it.
+    Mouse(Point),
+}
+
+/// Lets go of a key or a button when it goes out of scope, however the code between the press
+/// and the release ends: an error half way, or a panic, must not leave it held on the user's
+/// machine, where it would drag or type into whatever comes next.
+pub struct Held<F: FnMut()>(pub F);
+
+impl<F: FnMut()> Drop for Held<F> {
+    fn drop(&mut self) {
+        (self.0)();
+    }
+}
+
 /// Reading the display and acting on it, as the user's own mouse and keyboard would.
 pub trait Platform {
     /// One capture of the display, which `scale` may draw more than once at smaller sizes.
     type Capture;
+
+    /// Says no before anything is tried when the system would not let it happen: a permission
+    /// the user has not given, or a window the helper may not drive. Asked before every request
+    /// that reads the display or posts input, so a refusal is known to have touched nothing.
+    fn preflight(&self, _need: Need) -> Result<(), Failure> {
+        Ok(())
+    }
 
     fn geometry(&self) -> Result<Geometry, String>;
     fn session_status(&self) -> SessionStatus;
@@ -82,9 +112,11 @@ pub enum Presence {
     Idle,
 }
 
-/// The agent's own pointer, drawn over everything and never taking a click: the user sees
-/// where the agent works while their own cursor stays theirs.
+/// One agent's own pointer, drawn over everything and never taking a click: the user sees
+/// where each agent works while their own cursor stays theirs.
 pub trait Pointer {
+    /// A pointer that looks like `look`, not yet shown. Dropping it takes it off the screen.
+    fn new(look: &Look) -> Self;
     fn show(&mut self, presence: Presence);
     /// Hides it and forgets where it was; the next session starts at the user's cursor.
     fn hide(&mut self);

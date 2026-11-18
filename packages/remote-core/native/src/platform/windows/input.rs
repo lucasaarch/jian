@@ -1,7 +1,9 @@
 //! Windows: GDI reads the display and SendInput acts on it, as the user's own mouse and
 //! keyboard would. SendInput reaches only windows at the helper's integrity level or below: an
-//! app running as administrator ignores it unless the worker does too.
+//! app running as administrator ignores it unless the worker does too, which `preflight` says
+//! before anything is sent.
 
+use std::cell::Cell;
 use std::thread::sleep;
 use std::time::Duration;
 
@@ -17,18 +19,38 @@ use windows_sys::Win32::UI::WindowsAndMessaging::WHEEL_DELTA;
 use super::capture::Capture;
 use super::coords::Pixel;
 use super::display::{self, Primary};
-use super::keymap::{self, Stroke, VirtualKey};
+use super::integrity;
+use super::keymap::{self, VirtualKey};
 use super::messages;
 use super::session;
 use crate::keys::Chord;
-use crate::platform::{Geometry, Platform, SessionStatus};
-use crate::protocol::{Button, Direction, Point};
+use crate::motion::{DRAG_GRAB, DRAG_SETTLE, DRAG_STEP, scroll_steps};
+use crate::platform::{Geometry, Held, Need, Platform, SessionStatus};
+use crate::protocol::{Button, Direction, Failure, Point};
 use crate::screenshot::Frame;
+use crate::text::{self, Piece};
 
 pub struct Windows;
 
 impl Platform for Windows {
     type Capture = Capture;
+
+    /// Input for a window above the helper's integrity level goes nowhere and SendInput calls
+    /// it sent; see `integrity`. Reading the display needs nothing.
+    fn preflight(&self, need: Need) -> Result<(), Failure> {
+        let window = match need {
+            Need::Screen => return Ok(()),
+            Need::Keyboard => integrity::keyboard_target(),
+            Need::Mouse(at) => integrity::window_at(pixel(at)),
+        };
+        if integrity::out_of_reach(window) {
+            return Err(Failure::permission(
+                "elevation",
+                "That window belongs to an app running as administrator, which Windows does not let Jian Remote control. Run Jian Remote as administrator to work in it, or work in another window.",
+            ));
+        }
+        Ok(())
+    }
 
     /// Points are the primary display's pixels over its scale; see `coords`.
     fn geometry(&self) -> Result<Geometry, String> {
@@ -82,25 +104,43 @@ impl Platform for Windows {
             send(&[move_to(pixel(from))])?;
             sleep(Duration::from_millis(12));
             send(&[mouse(MOUSEEVENTF_LEFTDOWN, 0)])?;
-            let moved = path.iter().try_for_each(|&point| {
-                send(&[move_to(pixel(point))])?;
-                step(point);
-                sleep(Duration::from_millis(6));
+            let released = Cell::new(Ok(()));
+            let moved = (|| {
+                // From here the button comes up however this ends: a move that fails half
+                // way must not leave it down, dragging whatever the user touches next.
+                let _held = Held(|| released.set(send(&[mouse(MOUSEEVENTF_LEFTUP, 0)])));
+                sleep(DRAG_GRAB);
+                for &point in path {
+                    send(&[move_to(pixel(point))])?;
+                    step(point);
+                    sleep(DRAG_STEP);
+                }
+                sleep(DRAG_SETTLE);
                 Ok::<_, String>(())
-            });
-            // Released even when a move failed: a button left down drags whatever comes next.
-            let released = send(&[mouse(MOUSEEVENTF_LEFTUP, 0)]);
-            moved.and(released)
+            })();
+            moved.and(released.into_inner())
         })
     }
 
     fn type_text(&self, text: &str) -> Result<(), String> {
-        for stroke in keymap::strokes(text) {
-            match stroke {
-                Stroke::Key(key) => send(&[key_input(key, false), key_input(key, true)])?,
-                Stroke::Unit(unit) => send(&[unit_input(unit, false), unit_input(unit, true)])?,
+        for piece in text::pieces(text) {
+            match piece {
+                // Line breaks and tabs are the keys themselves: an editor reads a typed
+                // U+000A as nothing.
+                Piece::Return => send(&tap(keymap::RETURN))?,
+                Piece::Tab => send(&tap(keymap::TAB))?,
+                // A run in one batch, each unit pressed and released in order: nothing lands
+                // between the two halves of a character outside the basic plane.
+                Piece::Text(units) => {
+                    let inputs: Vec<INPUT> = units
+                        .iter()
+                        .flat_map(|&unit| [unit_input(unit, false), unit_input(unit, true)])
+                        .collect();
+                    send(&inputs)?;
+                }
             }
-            sleep(Duration::from_millis(2));
+            // Apps read a run as it arrives; without a breath between runs some drop one.
+            sleep(Duration::from_millis(4));
         }
         Ok(())
     }
@@ -110,8 +150,19 @@ impl Platform for Windows {
         let key = keymap::virtual_key(chord.key);
         let mut inputs: Vec<INPUT> = modifiers.iter().map(|&m| key_input(m, false)).collect();
         inputs.extend([key_input(key, false), key_input(key, true)]);
-        inputs.extend(modifiers.iter().rev().map(|&m| key_input(m, true)));
-        send(&inputs)
+        let release: Vec<INPUT> = modifiers
+            .iter()
+            .rev()
+            .map(|&m| key_input(m, true))
+            .collect();
+        inputs.extend(release.iter().copied());
+        // A batch Windows took only part of may have left a modifier down, which would turn
+        // whatever the user types next into shortcuts: they are let go again, alone.
+        send(&inputs).inspect_err(|_| {
+            if !release.is_empty() {
+                let _ = send(&release);
+            }
+        })
     }
 
     fn scroll(&self, at: Point, direction: Direction, amount: u32) -> Result<(), String> {
@@ -126,8 +177,8 @@ impl Platform for Windows {
         with_user_cursor_kept(|| {
             // The wheel goes to the window under the cursor, so the cursor goes there first.
             send(&[move_to(pixel(at))])?;
-            for _ in 0..amount.max(1) {
-                send(&[mouse(flags, delta)])?;
+            for lines in scroll_steps(amount) {
+                send(&[mouse(flags, delta * lines as i32)])?;
                 sleep(Duration::from_millis(12));
             }
             Ok(())
@@ -206,6 +257,10 @@ fn mouse(flags: MOUSE_EVENT_FLAGS, data: i32) -> INPUT {
             },
         },
     }
+}
+
+fn tap(key: VirtualKey) -> [INPUT; 2] {
+    [key_input(key, false), key_input(key, true)]
 }
 
 /// A key by its virtual code, with its scan code too: games and remote desktops read that.

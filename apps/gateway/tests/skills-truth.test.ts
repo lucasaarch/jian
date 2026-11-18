@@ -64,12 +64,17 @@ const NOT_TOOLS = new Set([
   'documentation_url',
   'double_click',
   'end_session',
+  'invalid_args',
   'left_click',
   'left_click_drag',
   'mouse_move',
   'node_modules',
+  'perm_denied',
+  'policy_denied',
   'reply_to',
   'right_click',
+  'screen_changed',
+  'screen_recording',
 ]);
 
 /** Plain enough from their own description, so no skill has to teach them. */

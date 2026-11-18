@@ -1,6 +1,7 @@
 import { spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { hostWording } from '../../host.ts';
+import type { Failure } from '../outcome.ts';
 import type { ComputerAction, Preparation } from '../session.ts';
 import { helperPaths } from './helper.ts';
 import { wakeMacDisplay } from './power.ts';
@@ -75,8 +76,19 @@ const LOCKED_SCREENSHOT_NOTE =
 const LOCKED_ACTION_HINT =
   ' Mac session reports locked; if this failed, unlock or keep the display awake (post-login lock ≠ FileVault loginwindow).';
 
-/** Screenshots need Screen Recording; input needs Accessibility. Each failure names its own. */
-function permissionHint(message: string, action: ComputerAction): string {
+const SETTINGS = 'System Settings → Privacy & Security';
+
+/**
+ * Screenshots need Screen Recording; input needs Accessibility. The helper checks both before
+ * it acts and names the one missing; a failure it could not name is read from its wording.
+ */
+function permissionHint(message: string, action: ComputerAction, failure: Failure): string {
+  if (failure.permission === 'screen_recording') {
+    return ` Allow ${hostWording().name} under ${SETTINGS} → Screen Recording, then try again.`;
+  }
+  if (failure.permission === 'accessibility') {
+    return ` Allow ${hostWording().name} under ${SETTINGS} → Accessibility, then try again.`;
+  }
   if (action === 'screenshot') {
     return /accessib|not permitted|not authorized|Screen Recording/i.test(message)
       ? ` ${hostWording().name} needs Screen Recording (and Accessibility for input) in System Settings.`
@@ -92,7 +104,7 @@ export function prepareMacAction(): Preparation {
   const { sessionLocked } = prepareComputerUi();
   return {
     note: sessionLocked ? LOCKED_SCREENSHOT_NOTE : '',
-    explain: (message, action) =>
-      `${message}${permissionHint(message, action)}${sessionLocked ? LOCKED_ACTION_HINT : ''}`.trim(),
+    explain: (message, action, failure) =>
+      `${message}${permissionHint(message, action, failure)}${sessionLocked ? LOCKED_ACTION_HINT : ''}`.trim(),
   };
 }

@@ -77,6 +77,29 @@ export const remoteComputerActionSchema = z.enum([
   'end_session',
 ]);
 
+/**
+ * What a worker says when its computer results carry `code`, `delivery` and `permission`. The
+ * gateway asks for them with `protocol: 2`; without it the worker answers as it always did, so
+ * a gateway from before these fields never receives one it would refuse.
+ */
+export const REMOTE_COMPUTER_RESULT_CAPABILITY = 'computer-result-v2';
+
+/**
+ * What a worker says when it keeps one Computer Use session per conversation: each with its own
+ * pointer, labelled and coloured, and its own last screenshot. Only such a worker is sent
+ * `session`.
+ */
+export const REMOTE_COMPUTER_SESSIONS_CAPABILITY = 'computer-sessions-v1';
+
+/** The conversation an action belongs to, and how its pointer is told apart on the screen. */
+export const remoteComputerSessionSchema = z.strictObject({
+  id: z.string().min(1).max(100),
+  /** The agent's name, drawn in a small label beside its pointer. */
+  name: z.string().min(1).max(60),
+  /** `#rrggbb`, the pointer's accent. */
+  color: z.string().regex(/^#[0-9a-fA-F]{6}$/),
+});
+
 export const remoteComputerParamsSchema = z.strictObject({
   action: remoteComputerActionSchema,
   coordinate: coordinateSchema.optional(),
@@ -84,8 +107,12 @@ export const remoteComputerParamsSchema = z.strictObject({
   text: z.string().min(1).max(4000).optional(),
   key: z.string().min(1).max(100).optional(),
   scrollDirection: z.enum(['up', 'down', 'left', 'right']).optional(),
-  scrollAmount: z.number().int().min(1).max(20).optional(),
+  scrollAmount: z.number().int().min(1).max(100).optional(),
   duration: z.number().min(0).max(5).optional(),
+  /** Sent only to a worker that advertises `computer-result-v2`. */
+  protocol: z.literal(2).optional(),
+  /** Sent only to a worker that advertises `computer-sessions-v1`. */
+  session: remoteComputerSessionSchema.optional(),
 });
 
 export const remoteComputerCommandSchema = z.strictObject({
@@ -95,7 +122,7 @@ export const remoteComputerCommandSchema = z.strictObject({
   text: z.string().min(1).max(4000).optional(),
   key: z.string().min(1).max(100).optional(),
   scrollDirection: z.enum(['up', 'down', 'left', 'right']).optional(),
-  scrollAmount: z.number().int().min(1).max(20).optional(),
+  scrollAmount: z.number().int().min(1).max(100).optional(),
   duration: z.number().min(0).max(5).optional(),
   timeoutMs: z.number().int().min(1000).max(120000).default(30000),
 });
@@ -439,6 +466,33 @@ export const remoteTaskSchema = z.strictObject({
   env: z.record(z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/), z.string().max(8192)).optional(),
 });
 
+/**
+ * Why a computer action failed. `screen_changed` is another agent having acted on the screen
+ * since this conversation's last screenshot; `policy_denied` a key chord Jian never presses.
+ */
+export const remoteComputerErrorCodeSchema = z.enum([
+  'perm_denied',
+  'invalid_args',
+  'timeout',
+  'policy_denied',
+  'screen_changed',
+  'failed',
+]);
+
+/**
+ * Whether a failed action reached the screen. `not_delivered` means nothing was sent, so the
+ * same action can be repeated; `uncertain` means some of it may have landed, so the screen has
+ * to be looked at first.
+ */
+export const remoteComputerDeliverySchema = z.enum(['not_delivered', 'uncertain']);
+
+/** The OS permission a `perm_denied` action lacked. */
+export const remoteComputerPermissionSchema = z.enum([
+  'accessibility',
+  'screen_recording',
+  'elevation',
+]);
+
 export const remoteComputerResultSchema = z.strictObject({
   ok: z.boolean(),
   widthPx: z.number().int().positive().optional(),
@@ -450,6 +504,10 @@ export const remoteComputerResultSchema = z.strictObject({
     })
     .optional(),
   error: z.string().max(2000).optional(),
+  /** The three below come only from a worker that was sent `protocol: 2`. */
+  code: remoteComputerErrorCodeSchema.optional(),
+  delivery: remoteComputerDeliverySchema.optional(),
+  permission: remoteComputerPermissionSchema.optional(),
 });
 
 export const remoteResultSchema = z.strictObject({
@@ -490,5 +548,9 @@ export type RemoteTask = z.infer<typeof remoteTaskSchema>;
 /** What a worker posts back, before the gateway fills its defaults in. */
 export type RemoteResult = z.input<typeof remoteResultSchema>;
 export type RemoteComputerResult = z.input<typeof remoteComputerResultSchema>;
+export type RemoteComputerSession = z.infer<typeof remoteComputerSessionSchema>;
+export type RemoteComputerErrorCode = z.infer<typeof remoteComputerErrorCodeSchema>;
+export type RemoteComputerDelivery = z.infer<typeof remoteComputerDeliverySchema>;
+export type RemoteComputerPermission = z.infer<typeof remoteComputerPermissionSchema>;
 export type RemoteUpdateParams = z.infer<typeof remoteUpdateParamsSchema>;
 export type RemoteMachineUpdate = z.infer<typeof remoteMachineUpdateSchema>;

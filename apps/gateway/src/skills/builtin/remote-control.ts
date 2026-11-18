@@ -88,9 +88,10 @@ Load the \`remote\` tool group with \`load_tools\` before calling these tools.
 - \`remote_computer\` — Anthropic-style desktop control on **macOS, Linux (X11), and Windows**
   (primary display): \`screenshot\`, \`left_click\`, \`right_click\`, \`double_click\`,
   \`mouse_move\`, \`type\`, \`key\`, \`scroll\`, \`left_click_drag\`, \`wait\`, \`end_session\`.
-  Coordinates are pixels in the screenshot image (origin top-left); use the returned
-  \`widthPx\` / \`heightPx\`. A Jian overlay pointer is visible while the session is open;
-  call \`end_session\` when finished so it disappears.
+  Coordinates are pixels in your last screenshot image (origin top-left); use the returned
+  \`widthPx\` / \`heightPx\`. \`scroll_amount\` is in lines, up to 100. While you use the
+  screen a pointer with your name beside it is drawn there, one per conversation; call
+  \`end_session\` when finished so yours disappears.
 - \`pull_remote_file\` — read an absolute remote path into conversation media, up to 300,000 bytes; a
   larger file fails, so split or compress it with \`run_remote_command\` first.
 - \`push_remote_file\` — write UTF-8 or base64 bytes to an absolute remote path, up to 300,000 bytes. A
@@ -119,6 +120,39 @@ ${machineFiles(machine)}
 6. For a small file exchange, use pull/push. Larger transfers need an arrangement the owner
    made (cloud folder, \`scp\`, etc.) via \`run_remote_command\`.
 
+## When a computer action fails
+
+A failed \`remote_computer\` result says what to do next, on a machine whose Jian Remote is
+current:
+
+- \`retry: "safe"\` — nothing reached the screen. Fix what \`error\` names and send the action
+  again.
+- \`retry: "unsafe"\` — part of it may have landed: a click, half a text. Take a screenshot and
+  look before anything else. Sending it again blind can type or click twice.
+- No \`retry\` at all comes from an older Jian Remote: treat it as unsafe.
+
+\`code\` says why:
+
+- \`perm_denied\` — the machine did not allow it, and \`permission\` names what is missing.
+  \`accessibility\` or \`screen_recording\`: the owner allows Jian Remote under System Settings
+  → Privacy & Security on that Mac. \`elevation\`: the Windows window you aimed at, or the one
+  taking the keys, runs as administrator, which Jian Remote cannot drive unless it does too.
+  Tell the owner; trying again changes nothing.
+- \`screen_changed\` — another agent used this screen after your last screenshot, or an action
+  of yours was cut short. Nothing was sent. Take a screenshot, look again, then act.
+- \`timeout\` — the action ran out of time and was stopped. Take a screenshot before going on.
+- \`policy_denied\` — a key combination Jian never presses, such as locking the screen or
+  signing out. Do not look for another way to press it.
+- \`invalid_args\` — the action was missing something or aimed outside the screenshot.
+
+## Sharing a screen
+
+Several agents and conversations can use the same computer. Their actions run one at a time,
+and while one is in the middle of its steps another waits some seconds for its turn, so allow
+for a slower answer rather than repeating the call. Your coordinates always belong to your own
+last screenshot. There is still one keyboard focus and one screen: after anyone else acts, your
+next click, key or text is refused with \`screen_changed\` until you take a screenshot.
+
 ## After reboot
 
 The installer registers an auto-start: Windows Task Scheduler **ONLOGON**, macOS LaunchAgent, or
@@ -133,7 +167,8 @@ panel. A desktop app's own machine comes and goes with the app.
   Screenshots are scaled/recompressed on the remote machine to fit.
 - macOS computer use needs **Screen Recording** and **Accessibility** for **Jian Remote** in
   System Settings. Linux needs an X11 session (XWayland reaches only XWayland apps). Windows needs an
-  interactive desktop session. If a tool result says permissions or tools are missing, tell
+  interactive desktop session, and cannot drive a window that runs as administrator. If a tool
+  result says permissions or tools are missing, tell
   the owner — do not invent shell workarounds that bypass Jian’s app identity.
 - A **locked** Mac (post-login password lock) stays online. Jian attempts Computer Use after
   waking the display; soft-refusing because of \`uiState\` is wrong. FileVault loginwindow

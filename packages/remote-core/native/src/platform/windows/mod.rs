@@ -1,18 +1,20 @@
-//! Windows: GDI reads the display, SendInput acts on it, and a layered window draws the pointer.
+//! Windows: GDI reads the display, SendInput acts on it, and a layered window draws each
+//! agent's pointer.
 //!
 //! Threads: a window belongs to the thread that created it, and only that thread's message
 //! loop moves it, draws it and keeps Windows from ghosting it. So the main thread owns the
-//! pointer's window and runs every request, and another thread reads stdin. That thread hands
+//! pointers' windows and runs every request, and another thread reads stdin. That thread hands
 //! each request over a channel and wakes the main thread with a thread message; the main thread
 //! runs it and sends the answer back, in order, one at a time. Between requests the main thread
 //! sleeps in its message loop, waking every frame while a click ripple plays out.
 
-mod canvas;
 mod capture;
 mod coords;
 mod display;
 mod input;
+mod integrity;
 mod keymap;
+mod label;
 mod messages;
 mod overlay;
 mod pointer;
@@ -30,15 +32,15 @@ pub use input::Windows;
 use pointer::WinPointer;
 
 use crate::Helper;
-use crate::protocol::{Request, error};
+use crate::protocol::{Envelope, error};
 
 /// Runs the helper: `serve` reads the requests and gets each answered, and when it returns the
 /// process ends. The main thread stays in its message loop until then.
-pub fn run(serve: impl FnOnce(&mut dyn FnMut(Request) -> Value) + Send + 'static) {
+pub fn run(serve: impl FnOnce(&mut dyn FnMut(Envelope) -> Value) + Send + 'static) {
     display::become_dpi_aware();
     messages::create_queue();
     let thread = unsafe { GetCurrentThreadId() };
-    let (requests, inbox) = mpsc::channel::<Request>();
+    let (requests, inbox) = mpsc::channel::<Envelope>();
     let (outbox, answers) = mpsc::channel::<Value>();
 
     std::thread::spawn(move || {
@@ -53,12 +55,12 @@ pub fn run(serve: impl FnOnce(&mut dyn FnMut(Request) -> Value) + Send + 'static
         std::process::exit(0);
     });
 
-    let pointer = WinPointer::new();
-    let animation = pointer.animation();
-    let mut helper = Helper::new(Windows, pointer);
+    let mut helper = Helper::<Windows, WinPointer>::new(Windows);
     loop {
-        messages::sleep_until_message(animation.next_frame(), true);
-        animation.tick();
+        // Until the next frame of whichever pointer is in the middle of a ripple.
+        let frame = helper.pointers().filter_map(|p| p.next_frame()).min();
+        messages::sleep_until_message(frame, true);
+        helper.pointers().for_each(WinPointer::tick);
         while let Some(message) = messages::next(null_mut()) {
             match message.message {
                 WM_QUIT => return,

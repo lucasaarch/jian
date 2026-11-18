@@ -69,3 +69,20 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SO
 
 The skill in `.agents/skills/humanizer`, from https://github.com/blader/humanizer. MIT License,
 Copyright (c) 2025 Siqi Chen. Its license is kept beside it, in that folder.
+
+## agent-desktop
+
+Copyright the agent-desktop authors (Vercel Labs). Licensed under the Apache License, Version 2.0.
+
+- Source: <https://github.com/vercel-labs/agent-desktop>
+- Commit: `e8934a5e95e1d212c74ead95cd3e4701c04eca31`
+- License: <https://www.apache.org/licenses/LICENSE-2.0>
+
+The pointer Jian Remote draws for each agent, in `packages/remote-core/native/src/cursor.rs`,
+follows the look of agent-desktop's cursor overlay: the dart's outline, its dark rim and shadow,
+the default accent colour, and the measures of the name's pill and its place beside the tip.
+The code that draws it is Jian's own. Several behaviours of the Computer Use helper were
+written after reading how agent-desktop does them, without copying its code: typing text in
+runs that never split a character, releasing a held button however a drag ends, the pauses of
+a drag, wheel events of several lines, the key combinations it refuses, and failures that say
+whether any input was delivered.

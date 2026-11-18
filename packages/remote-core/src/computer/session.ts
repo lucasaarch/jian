@@ -1,7 +1,15 @@
 import type { ChildProcessWithoutNullStreams } from 'node:child_process';
 import type { RemoteComputerParams } from '@jian/contracts';
 import { HelperChannel } from './helper-channel.ts';
-import { type ActionOutcome, failed, messageOf, succeeded } from './outcome.ts';
+import {
+  type ActionOutcome,
+  type Failure,
+  failed,
+  failureOf,
+  messageOf,
+  refused,
+  succeeded,
+} from './outcome.ts';
 import {
   type DisplayGeometry,
   type DisplayPoint,
@@ -10,7 +18,7 @@ import {
   scaleFromGeometry,
 } from './shared.ts';
 
-/** Without an action for this long, the helper is told to idle its overlay, in ms. */
+/** Without an action for this long, the helper is told to idle a pointer, in ms. */
 const IDLE_MS = 30_000;
 
 export type ComputerAction = RemoteComputerParams['action'];
@@ -33,7 +41,7 @@ export async function captureThroughHelper(channel: HelperChannel): Promise<Scre
 export type Preparation = {
   /** Said beside a screenshot that worked. */
   note: string;
-  explain(message: string, action: ComputerAction): string;
+  explain(message: string, action: ComputerAction, failure: Failure): string;
 };
 
 /** What differs per OS. Everything else about a session is the same on all three. */
@@ -52,63 +60,172 @@ export type ComputerPlatform = {
 const plain: Preparation = { note: '', explain: (message) => message };
 
 /**
- * One agent's use of this screen: the helper process, the display it reported, and the last
- * screenshot, whose pixels are the coordinates the agent clicks in.
+ * One conversation's place at this screen: its pointer, and the last screenshot it took, whose
+ * pixels are the coordinates its agent clicks in.
+ */
+type Seat = {
+  /** Survives a helper crash: the agent's coordinates still refer to the same screenshot. */
+  shot: ShotGeometry | null;
+  /** The helper that draws this seat's pointer. A new helper has to be told of the seat again. */
+  channel: HelperChannel | null;
+  idleTimer: NodeJS.Timeout | null;
+  /**
+   * The screen was acted on since this seat last looked at it: by another conversation, or by
+   * an action of its own that was cut short. Its next screenshot clears it.
+   */
+  stale: boolean;
+};
+
+/** A gateway from before sessions sends none: everything it asks for shares this one seat. */
+const SHARED_SEAT = '';
+
+/**
+ * What changes the screen under the other conversations. Moving a pointer only moves Jian's
+ * own drawing of it, never the user's cursor.
+ */
+const ACTS: ReadonlySet<ComputerAction> = new Set([
+  'left_click',
+  'right_click',
+  'double_click',
+  'left_click_drag',
+  'type',
+  'key',
+  'scroll',
+]);
+
+const SCREEN_CHANGED =
+  'The screen may have changed since your last screenshot: another agent used this computer, or an action was cut short. Nothing was sent. Take a screenshot and look again before acting.';
+
+/**
+ * Computer Use on this machine: one helper process and one screen, shared by every conversation
+ * that uses it. Actions run one at a time, in the order they arrive; each conversation has its
+ * own seat, and is refused an action aimed at a screen another one has changed since.
  */
 export class ComputerSession {
   private readonly platform: ComputerPlatform;
   private channel: HelperChannel | null = null;
-  private display: DisplayGeometry | null = null;
-  /** Survives a helper crash: the agent's coordinates still refer to the same screenshot. */
-  private shot: ShotGeometry | null = null;
-  private idleTimer: NodeJS.Timeout | null = null;
+  private readonly seats = new Map<string, Seat>();
+  /** The action in hand and all before it: the next one starts when this settles. */
+  private queue: Promise<unknown> = Promise.resolve();
 
   constructor(platform: ComputerPlatform) {
     this.platform = platform;
   }
 
   /** Never rejects: every failure is an outcome the agent can read. */
-  async runAction(computer: RemoteComputerParams): Promise<ActionOutcome> {
-    if (computer.action === 'end_session') {
-      await this.end();
+  runAction(computer: RemoteComputerParams): Promise<ActionOutcome> {
+    const outcome = this.queue.then(() => this.act(computer));
+    this.queue = outcome.catch(() => {});
+    return outcome;
+  }
+
+  /**
+   * Stops whatever is running, for an action that outlived its time limit: the helper is
+   * killed, so a stuck one cannot go on to press something later. Every seat has to look at
+   * the screen again, since nobody knows how far the action got.
+   */
+  abort(message: string): void {
+    for (const seat of this.seats.values()) seat.stale = true;
+    this.channel?.stop(message);
+  }
+
+  /** Ends every seat and the helper. */
+  async end(): Promise<void> {
+    for (const id of [...this.seats.keys()]) await this.leave(id);
+    this.close();
+  }
+
+  private async act(computer: RemoteComputerParams): Promise<ActionOutcome> {
+    const { action } = computer;
+    const id = computer.session?.id ?? SHARED_SEAT;
+    if (action === 'end_session') {
+      await this.leave(id);
       return succeeded();
     }
-    if (computer.action === 'wait') {
+    if (action === 'wait') {
       const ms = Math.round((computer.duration ?? 0.35) * 1000);
       await new Promise((resolve) => setTimeout(resolve, ms));
-      if (this.channel) this.bumpIdle();
+      const seat = this.seats.get(id);
+      if (seat?.channel) this.bumpIdle(seat, id);
       return succeeded();
     }
 
+    const seat = this.seat(id);
     const preparation = this.platform.prepare?.() ?? plain;
     try {
-      const channel = await this.ensure();
-      if (computer.action === 'screenshot') return await this.screenshot(channel, preparation.note);
-      await this.input(channel, computer);
-      this.bumpIdle();
+      if (seat.stale && ACTS.has(action)) throw refused(SCREEN_CHANGED, 'screen_changed');
+      const channel = await this.ensure(seat, id, computer.session);
+      if (action === 'screenshot') return await this.screenshot(channel, seat, preparation.note);
+      await this.input(channel, seat, id, computer);
+      this.changed(seat, action);
       return succeeded();
     } catch (error) {
-      return failed(preparation.explain(messageOf(error), computer.action));
+      const failure = failureOf(error);
+      if (failure.delivery === 'uncertain') this.changed(seat, action);
+      // Privacy permissions are read when a process starts: a helper that was refused would go
+      // on being refused after the owner grants them.
+      if (failure.code === 'perm_denied') this.close();
+      return failed(preparation.explain(messageOf(error), action, failure), failure);
     }
   }
 
-  async end(): Promise<void> {
-    this.clearIdle();
-    this.platform.release?.();
+  private seat(id: string): Seat {
+    let seat = this.seats.get(id);
+    if (!seat) {
+      // Whoever arrives at a screen others are using has not seen what they did to it.
+      seat = { shot: null, channel: null, idleTimer: null, stale: this.seats.size > 0 };
+      this.seats.set(id, seat);
+    }
+    return seat;
+  }
+
+  /** After `action` by `seat`, the others no longer know what is on the screen. */
+  private changed(seat: Seat, action: ComputerAction): void {
+    if (!ACTS.has(action)) return;
+    for (const other of this.seats.values()) if (other !== seat) other.stale = true;
+  }
+
+  /** The seat's pointer goes; the helper goes with the last seat. */
+  private async leave(id: string): Promise<void> {
+    const seat = this.seats.get(id);
+    if (!seat) return;
+    this.seats.delete(id);
+    this.clearIdle(seat);
+    if (this.channel && seat.channel === this.channel) {
+      await this.channel.request({ cmd: 'endSession', ...named(id) }).catch(() => {});
+    }
+    if (this.seats.size === 0) this.close();
+  }
+
+  private close(): void {
     const channel = this.channel;
     this.channel = null;
-    if (channel) {
-      await channel.request({ cmd: 'endSession' }).catch(() => {});
-      channel.kill();
-    }
-    this.display = null;
-    this.shot = null;
+    for (const seat of this.seats.values()) this.clearIdle(seat);
+    this.platform.release?.();
+    channel?.kill();
   }
 
-  private async ensure(): Promise<HelperChannel> {
-    const channel = this.channel?.alive ? this.channel : await this.open();
+  private async ensure(
+    seat: Seat,
+    id: string,
+    session: RemoteComputerParams['session'],
+  ): Promise<HelperChannel> {
+    const channel = this.channel?.alive
+      ? this.channel
+      : await this.open().catch((error) => {
+          // A helper that never started sent nothing to the screen.
+          throw refused(messageOf(error), 'failed');
+        });
     this.platform.hold?.(channel.pid ?? process.pid);
-    this.bumpIdle();
+    if (seat.channel !== channel) {
+      await channel.request({
+        cmd: 'ensureSession',
+        ...named(id),
+        ...(session ? { label: session.name, color: session.color } : {}),
+      });
+      seat.channel = channel;
+    }
+    this.bumpIdle(seat, id);
     return channel;
   }
 
@@ -116,20 +233,12 @@ export class ComputerSession {
     const channel = new HelperChannel(await this.platform.launch(), () => {
       if (this.channel !== channel) return;
       this.channel = null;
-      this.clearIdle();
+      for (const seat of this.seats.values()) this.clearIdle(seat);
       this.platform.release?.();
     });
     this.channel = channel;
     try {
       await channel.call({ cmd: 'ping' }, 'Computer-use helper did not respond.');
-      const geometry = await channel.call({ cmd: 'geometry' }, 'Could not read display geometry.');
-      this.display = {
-        originX: Number(geometry.originX) || 0,
-        originY: Number(geometry.originY) || 0,
-        pointWidth: Number(geometry.pointWidth),
-        pointHeight: Number(geometry.pointHeight),
-      };
-      await channel.request({ cmd: 'ensureSession' });
       return channel;
     } catch (error) {
       // A helper that answered wrong is not reused: the next action starts a fresh one.
@@ -139,59 +248,84 @@ export class ComputerSession {
     }
   }
 
-  private async screenshot(channel: HelperChannel, note: string): Promise<ActionOutcome> {
-    if (!this.display) throw new Error('Display geometry unavailable.');
+  /**
+   * Read again for every screenshot, never kept: the display can change resolution or scale,
+   * or another can become primary, while the helper runs.
+   */
+  private async display(channel: HelperChannel): Promise<DisplayGeometry> {
+    const geometry = await channel.call({ cmd: 'geometry' }, 'Could not read display geometry.');
+    return {
+      originX: Number(geometry.originX) || 0,
+      originY: Number(geometry.originY) || 0,
+      pointWidth: Number(geometry.pointWidth),
+      pointHeight: Number(geometry.pointHeight),
+    };
+  }
+
+  private async screenshot(
+    channel: HelperChannel,
+    seat: Seat,
+    note: string,
+  ): Promise<ActionOutcome> {
+    const display = await this.display(channel);
     const shot = await this.platform.capture(channel);
-    this.shot = { ...this.display, widthPx: shot.widthPx, heightPx: shot.heightPx };
-    this.bumpIdle();
+    seat.shot = { ...display, widthPx: shot.widthPx, heightPx: shot.heightPx };
+    seat.stale = false;
     return succeeded(
-      { widthPx: shot.widthPx, heightPx: shot.heightPx, scale: scaleFromGeometry(this.shot) },
+      { widthPx: shot.widthPx, heightPx: shot.heightPx, scale: scaleFromGeometry(seat.shot) },
       { stdout: shot.base64, stderr: note },
     );
   }
 
-  private async input(channel: HelperChannel, computer: RemoteComputerParams): Promise<void> {
+  private async input(
+    channel: HelperChannel,
+    seat: Seat,
+    id: string,
+    computer: RemoteComputerParams,
+  ): Promise<void> {
     const { action } = computer;
+    const send = (payload: Record<string, unknown>, failure: string) =>
+      channel.call({ ...payload, ...named(id) }, failure);
     switch (action) {
       case 'mouse_move': {
-        const at = this.point(computer.coordinate, 'coordinate is required for this action.');
-        await channel.call({ cmd: 'move', ...at }, 'Move failed.');
+        const at = point(seat, computer.coordinate, 'coordinate is required for this action.');
+        await send({ cmd: 'move', ...at }, 'Move failed.');
         return;
       }
       case 'left_click':
       case 'right_click':
       case 'double_click': {
-        const at = this.point(computer.coordinate, 'coordinate is required for this action.');
+        const at = point(seat, computer.coordinate, 'coordinate is required for this action.');
         const button = action === 'right_click' ? 'right' : 'left';
         const count = action === 'double_click' ? 2 : 1;
         // One request: the helper moves its pointer there, clicks, and restores the user's cursor.
-        await channel.call({ cmd: 'clickAt', ...at, button, count }, 'Click failed.');
+        await send({ cmd: 'clickAt', ...at, button, count }, 'Click failed.');
         return;
       }
       case 'left_click_drag': {
         const missing = 'startCoordinate and coordinate are required for drag.';
-        const from = this.point(computer.startCoordinate, missing);
-        const to = this.point(computer.coordinate, missing);
-        await channel.call(
+        const from = point(seat, computer.startCoordinate, missing);
+        const to = point(seat, computer.coordinate, missing);
+        await send(
           { cmd: 'drag', fromX: from.pointX, fromY: from.pointY, toX: to.pointX, toY: to.pointY },
           'Drag failed.',
         );
         return;
       }
       case 'type': {
-        if (!computer.text) throw new Error('text is required for type.');
-        await channel.call({ cmd: 'type', text: computer.text }, 'Type failed.');
+        if (!computer.text) throw refused('text is required for type.');
+        await send({ cmd: 'type', text: computer.text }, 'Type failed.');
         return;
       }
       case 'key': {
-        if (!computer.key) throw new Error('key is required for key.');
-        await channel.call({ cmd: 'key', key: computer.key }, 'Key failed.');
+        if (!computer.key) throw refused('key is required for key.');
+        await send({ cmd: 'key', key: computer.key }, 'Key failed.');
         return;
       }
       case 'scroll': {
-        const at = this.point(computer.coordinate, 'coordinate is required for scroll.');
-        if (!computer.scrollDirection) throw new Error('scrollDirection is required for scroll.');
-        await channel.call(
+        const at = point(seat, computer.coordinate, 'coordinate is required for scroll.');
+        if (!computer.scrollDirection) throw refused('scrollDirection is required for scroll.');
+        await send(
           {
             cmd: 'scroll',
             ...at,
@@ -203,34 +337,41 @@ export class ComputerSession {
         return;
       }
       default:
-        throw new Error(`Unsupported computer action: ${action}`);
+        throw refused(`Unsupported computer action: ${action}`);
     }
   }
 
-  /** A pixel of the last screenshot as a display point; there must be one, and it must hold it. */
-  private point(coordinate: Coordinate | undefined, missing: string): DisplayPoint {
-    if (!coordinate) throw new Error(missing);
-    const shot = this.shot;
-    if (!shot) throw new Error('Take a screenshot before using screen coordinates.');
-    const [x, y] = coordinate;
-    if (x < 0 || y < 0 || x >= shot.widthPx || y >= shot.heightPx) {
-      throw new Error(
-        `Coordinate (${x}, ${y}) is outside the last screenshot (${shot.widthPx}×${shot.heightPx}).`,
-      );
-    }
-    return imagePixelToPoint(x, y, shot);
-  }
-
-  private bumpIdle(): void {
-    this.clearIdle();
-    this.idleTimer = setTimeout(() => {
-      void this.channel?.request({ cmd: 'setIdle' }).catch(() => {});
+  private bumpIdle(seat: Seat, id: string): void {
+    this.clearIdle(seat);
+    seat.idleTimer = setTimeout(() => {
+      if (this.channel && seat.channel === this.channel) {
+        void this.channel.request({ cmd: 'setIdle', ...named(id) }).catch(() => {});
+      }
     }, IDLE_MS);
-    this.idleTimer.unref();
+    seat.idleTimer.unref();
   }
 
-  private clearIdle(): void {
-    if (this.idleTimer) clearTimeout(this.idleTimer);
-    this.idleTimer = null;
+  private clearIdle(seat: Seat): void {
+    if (seat.idleTimer) clearTimeout(seat.idleTimer);
+    seat.idleTimer = null;
   }
+}
+
+/** Which pointer a request is about. The shared seat is the helper's own default: no name. */
+function named(id: string): { session?: string } {
+  return id === SHARED_SEAT ? {} : { session: id };
+}
+
+/** A pixel of the seat's last screenshot as a display point; there must be one, and it must hold it. */
+function point(seat: Seat, coordinate: Coordinate | undefined, missing: string): DisplayPoint {
+  if (!coordinate) throw refused(missing);
+  const shot = seat.shot;
+  if (!shot) throw refused('Take a screenshot before using screen coordinates.');
+  const [x, y] = coordinate;
+  if (x < 0 || y < 0 || x >= shot.widthPx || y >= shot.heightPx) {
+    throw refused(
+      `Coordinate (${x}, ${y}) is outside the last screenshot (${shot.widthPx}×${shot.heightPx}).`,
+    );
+  }
+  return imagePixelToPoint(x, y, shot);
 }

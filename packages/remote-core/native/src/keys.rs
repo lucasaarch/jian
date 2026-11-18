@@ -62,6 +62,33 @@ pub fn parse_chord(spec: &str) -> Result<Chord, String> {
     Ok(Chord { modifiers, key })
 }
 
+/// Why Jian never presses `chord`, when it is one of the few that take the session away from
+/// the user rather than act inside it. Which keys those are depends on the system: Cmd+L opens
+/// a browser's address bar on a Mac, and the same keys lock a Windows or Linux desktop.
+pub fn blocked(chord: Chord) -> Option<&'static str> {
+    blocked_on(chord, cfg!(target_os = "macos"))
+}
+
+fn blocked_on(chord: Chord, mac: bool) -> Option<&'static str> {
+    let Modifiers {
+        command,
+        control,
+        option,
+        shift,
+    } = chord.modifiers;
+    let taken = match (mac, chord.key) {
+        // Lock the screen, and sign out with or without asking.
+        (true, Key::Char('q')) => command && (control || shift),
+        (false, Key::Char('l')) => command && !control && !option && !shift,
+        // The system's own screen on Windows; the end of the X server where it is enabled.
+        (false, Key::Named(Named::Delete | Named::Backspace)) => control && option,
+        _ => false,
+    };
+    taken.then_some(
+        "Jian does not press this key combination: it locks the screen or ends the session.",
+    )
+}
+
 fn parse_key(token: &str) -> Option<Key> {
     let named = match token {
         "return" | "enter" => Named::Return,
@@ -105,6 +132,39 @@ mod tests {
         assert!(!chord.modifiers.control && !chord.modifiers.option);
         assert_eq!(parse_chord("enter").unwrap().key, Key::Named(Named::Return));
         assert_eq!(parse_chord("ctrl+f12").unwrap().key, Key::Function(12));
+    }
+
+    #[test]
+    fn never_presses_what_takes_the_session_from_the_user() {
+        let blocked = |spec: &str, mac: bool| blocked_on(parse_chord(spec).unwrap(), mac).is_some();
+        for spec in ["cmd+ctrl+q", "cmd+shift+q", "cmd+option+shift+q"] {
+            assert!(blocked(spec, true), "{spec}");
+            assert!(!blocked(spec, false), "{spec}");
+        }
+        for spec in ["super+l", "ctrl+alt+delete", "ctrl+alt+backspace"] {
+            assert!(blocked(spec, false), "{spec}");
+            assert!(!blocked(spec, true), "{spec}");
+        }
+        // The everyday neighbours of those stay.
+        for spec in [
+            "cmd+q",
+            "cmd+l",
+            "ctrl+l",
+            "ctrl+shift+l",
+            "delete",
+            "ctrl+backspace",
+        ] {
+            assert!(!blocked(spec, true), "{spec}");
+        }
+        for spec in [
+            "ctrl+l",
+            "ctrl+shift+l",
+            "delete",
+            "ctrl+backspace",
+            "alt+f4",
+        ] {
+            assert!(!blocked(spec, false), "{spec}");
+        }
     }
 
     #[test]
