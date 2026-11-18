@@ -29,6 +29,12 @@
     border-top-color: var(--muted);
     animation: spin 1s linear infinite;
   }
+  /* A still arc still says "at work"; the turning is what reduced motion drops. */
+  @media (prefers-reduced-motion: reduce) {
+    .work-spinner {
+      animation: none;
+    }
+  }
   .work-mark[data-failed] {
     color: var(--bad);
   }

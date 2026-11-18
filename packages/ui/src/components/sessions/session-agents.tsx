@@ -8,6 +8,8 @@ import { pillClass } from '../../kit';
 import type { Subagent } from '../../lib/api';
 import { useCrew } from '../../lib/stores/crew';
 import { active, Elapsed, nowOf } from './crew';
+import { statusOf } from './progress';
+import { WorkMark } from './thought-line';
 
 /** None at work: one list for every render, so the badge is not drawn again for nothing. */
 const NONE: Subagent[] = [];
@@ -61,6 +63,7 @@ export function SessionAgents({ sessionId }: { sessionId: string }) {
                       useCrew.getState().follow(agent.runId, trigger.current);
                     }}
                   >
+                    <WorkMark working orb={statusOf(agent).state} />
                     <span className="session-agent-text">
                       <span className="session-agent-name">{agent.name}</span>
                       <span className="session-agent-now">{nowOf(agent)}</span>
