@@ -61,12 +61,13 @@ Use the kit's own phone width with the `phone:` variant, or `usePhone` in code.
   Artifacts, pull requests, activity, skills and memories, and any new screen of the kind, are
   built from `page-layout.tsx`. The `page-anatomy` skill says how to build a new one:
   - `PageBody`: the column, 60rem at most on every screen alike, rows, cards or a table.
-  - `PageHeading`: an `h1` in `text-xl`, what acts on the whole screen (Create, Import, Edit) at
-    its right as `outline` `small` actions 2rem tall, and an arrow `iconButton` back only on a
-    screen opened from a list inside it (one skill).
+  - `PageHeading`: an `h1` in `text-xl`, what acts on the whole screen without adding to it
+    (Refresh, Edit, settings) at its right as `outline` `small` actions 2rem tall, and an arrow
+    `iconButton` back only on a screen opened from a list inside it (one skill, one schedule).
   - `PageToolbar` under it: the search taking the room left, then its `Segmented` and
-    `FilterSelect`s. It sticks under the title bar while the page scrolls. No bar of tools of its
-    own at the window's top: what acts on the screen sits in the heading.
+    `FilterSelect`s, then what adds to the list (New, Create, Import) at its right end, as the
+    same actions. It sticks under the title bar while the page scrolls. No bar of tools of its
+    own at the window's top.
   - Sections: `SettingsGroup`, or a `SectionHeading` (`text-xs` muted) over the content.
   - Cards: `surfaceCard` with `p-4`, never another radius, ground or border.
   - Spacing: `gap-7` between sections (`gap-5` on a phone), `gap-4` from heading to toolbar to

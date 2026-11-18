@@ -12,6 +12,8 @@ import type { SessionArtifact } from '../../lib/api';
 const STARTERS: { type: SessionArtifact['type']; prompt: string }[] = [
   { type: 'deck', prompt: 'Create a deck of slides as an Artifact about ' },
   { type: 'markdown', prompt: 'Write a document as an Artifact about ' },
+  { type: 'sheet', prompt: 'Make a spreadsheet as an Artifact of ' },
+  { type: 'board', prompt: 'Lay out a whiteboard as an Artifact of ' },
   { type: 'html', prompt: 'Build a web page as an Artifact that ' },
   { type: 'react', prompt: 'Build a React component as an Artifact that ' },
   { type: 'svg', prompt: 'Draw an SVG picture as an Artifact of ' },

@@ -20,7 +20,8 @@ export const SLIDE_HEIGHT = 720;
 
 /**
  * What it is drawn as: a whole page, one React component, a Markdown document, an SVG picture,
- * a Mermaid diagram, or a deck of slides, each a page of its own. Always a source the agent
+ * a Mermaid diagram, a deck of slides, each a page of its own, a spreadsheet (CSV, whose cells
+ * may hold formulas), or a whiteboard (`boardContentSchema`, in JSON). Always a source the agent
  * wrote, never a file as it was: a file it made is sent as a file.
  */
 export const sessionArtifactTypeSchema = z.enum([
@@ -30,6 +31,8 @@ export const sessionArtifactTypeSchema = z.enum([
   'svg',
   'mermaid',
   'deck',
+  'sheet',
+  'board',
 ]);
 
 /** `private` is read by the owner alone; `public` by anyone holding its link. */
@@ -54,6 +57,49 @@ const slideNumberSchema = z.number().int().min(1).max(DECK_SLIDES_MAX);
 
 /** How a deck's version is kept: its slides in order, as that version's `content`, in JSON. */
 export const deckContentSchema = z.strictObject({ slides: slidesSchema });
+
+/** The most things one whiteboard holds. */
+export const BOARD_ITEMS_MAX = 2000;
+
+/** A place on a whiteboard, `[x, y]` in CSS pixels at its full size, `y` going down. */
+const boardPointSchema = z.tuple([z.number(), z.number()]);
+const boardColorSchema = z
+  .string()
+  .regex(/^#[0-9a-fA-F]{6}$/)
+  .describe('#rrggbb');
+
+/**
+ * One thing on a whiteboard. A note, a text, a box and an ellipse stand at `x`, `y` (their top
+ * left corner) and are `w` by `h`; an arrow and a line go `from` one point `to` another; a pen
+ * stroke passes through its `points`.
+ */
+const boardItemSchema = z.discriminatedUnion('kind', [
+  z.strictObject({
+    kind: z.enum(['note', 'text', 'box', 'ellipse']),
+    x: z.number(),
+    y: z.number(),
+    w: z.number().positive(),
+    h: z.number().positive(),
+    text: z.string().max(5000).optional(),
+    color: boardColorSchema.optional(),
+  }),
+  z.strictObject({
+    kind: z.enum(['arrow', 'line']),
+    from: boardPointSchema,
+    to: boardPointSchema,
+    color: boardColorSchema.optional(),
+  }),
+  z.strictObject({
+    kind: z.literal('pen'),
+    points: z.array(boardPointSchema).min(2).max(4000),
+    color: boardColorSchema.optional(),
+  }),
+]);
+
+/** How a whiteboard is kept, as its `content` in JSON: what is on it, the first one lowest. */
+export const boardContentSchema = z.strictObject({
+  items: z.array(boardItemSchema).max(BOARD_ITEMS_MAX),
+});
 
 /** What the agent gives to make one. */
 export const sessionArtifactCreateSchema = z.strictObject({
@@ -307,9 +353,10 @@ export const ARTIFACT_FRAME_MESSAGE = 'jianArtifact';
  *
  * - Beside the source, `{ scale }` from the panel opens the frame for editing instead of running
  *   what it was handed; `{ scale }` again says how far the panel scales the frame since.
- * - `{ collect: <nonce> }` from the panel asks for the edited markup. The frame answers that
+ * - `{ collect: <nonce> }` from the panel asks for the edited source. The frame answers that
  *   and nothing else, with `{ collect: <the same nonce>, html }`, or `{ collect, unchanged: true }`
- *   when nothing was edited.
+ *   when nothing was edited. `html` is the source in the type's own form whatever the type: a
+ *   page's markup, a document's Markdown, a spreadsheet's CSV, a whiteboard's JSON.
  *
  * The frame says nothing it was not asked, and the panel reads nothing else from it.
  */
@@ -332,5 +379,15 @@ export type SessionArtifactVersion = z.infer<typeof sessionArtifactVersionSchema
 export type DeckExportQuery = z.infer<typeof deckExportQuerySchema>;
 export type DeckExport = z.infer<typeof deckExportSchema>;
 
-/** The types the owner edits by hand in the panel: a page, and a deck one slide at a time. */
-export const EDITABLE_ARTIFACT_TYPES: readonly SessionArtifactType[] = ['html', 'deck'];
+/**
+ * The types the owner edits by hand in the panel: a page, a deck one slide at a time, a
+ * document, a spreadsheet and a whiteboard. What the agent wrote as code (a component, a
+ * picture, a diagram) is changed by asking the agent.
+ */
+export const EDITABLE_ARTIFACT_TYPES: readonly SessionArtifactType[] = [
+  'html',
+  'deck',
+  'markdown',
+  'sheet',
+  'board',
+];

@@ -28,10 +28,14 @@ for the pieces; this one is about how a screen goes together.
 ```tsx
 <div className="flex h-full min-h-0">
   <PageBody labelledBy="x-title">
-    <PageHeading id="x-title" title="X" description="One line of what it is." actions={…} />
+    <PageHeading id="x-title" title="X" description="One line of what it is." />
     <PageToolbar>
       <SearchField label="Search x" className="min-w-44 flex-1" … />
       {/* Segmented, FilterSelect… */}
+      <Action tone="outline" size="small" className="h-8" …>
+        <Plus size={14} aria-hidden="true" />
+        New x
+      </Action>
     </PageToolbar>
     {/* sections */}
   </PageBody>
@@ -41,13 +45,15 @@ for the pieces; this one is about how a screen goes together.
 
 - **One width.** `PageBody` is 60rem at most on every screen, rows, forms, cards or a table.
   Never pass a width of your own or wrap the content in another `max-w-*`.
-- **The heading** holds what acts on the whole screen (New, Import, Refresh, settings) at its
-  right: `Action tone="outline" size="small" className="h-8"`, or `iconButton`s with a
-  `HoverTip`. No bar of tools at the window's top (`ScreenHeader`): that is only for a document
-  open full size, as an Artifact is.
+- **The heading** is the title and its one line. What acts on the whole screen without adding
+  to it (Refresh, settings) sits at its right: `Action tone="outline" size="small"
+  className="h-8"`, or `iconButton`s with a `HoverTip`. No bar of tools at the window's top
+  (`ScreenHeader`): that is only for a document open full size, as an Artifact is.
 - **The toolbar** is sticky: it stays under the title bar while the page scrolls. Put the search
-  first, taking the room left, then filters. Anything that narrows the list goes here, never
-  above the heading or inside a section.
+  first, taking the room left, then filters, then what adds to the list (New schedule, New
+  folder, Import, Create) at its right end, as the same outline `Action`s: they stay in reach
+  however far the list scrolls. Anything that narrows the list goes here too, never above the
+  heading or inside a section.
 - **Sections**: a `SectionHeading` over a `surfaceCard`, or a `SettingsGroup`. A list is a card
   with `divide-y divide-glass-edge overflow-hidden`, each row a full-width button `px-4 py-3`
   that hovers `bg-glass-press`. A table lies in a card too (`@container overflow-hidden`), its

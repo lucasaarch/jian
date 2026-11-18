@@ -190,7 +190,7 @@ it('pauses at once, and switches back on when the gateway refuses', async () => 
   expect(toggle()?.getAttribute('aria-checked')).toBe('true');
 });
 
-it('creates a repeating schedule from the heading, with the time written as its recurrence', async () => {
+it('creates a repeating schedule from the toolbar, with the time written as its recurrence', async () => {
   const createSchedule = vi.fn(async () => ({ id: 'made' }));
   const view = await render({ createSchedule });
 
