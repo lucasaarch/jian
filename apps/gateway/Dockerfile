@@ -78,13 +78,16 @@ RUN pnpm --filter @jian/gateway build && pnpm --filter @jian/gateway --prod depl
 FROM node:24-bookworm-slim
 # The workbench an agent with the shell switch on reaches for: version control, the network,
 # text, builds and the common runtimes. ffmpeg is the gateway's own, for converting speech.
+# The fonts are the gateway's too, for the deck it draws into a file (src/artifacts/export.ts):
+# Liberation has the measures of Arial and Courier New, which a deck's basic fonts ask for, and
+# without a colour emoji font every emoji on a slide is drawn as an empty box.
 RUN apt-get update && apt-get install -y --no-install-recommends \
       bash ffmpeg ca-certificates gnupg \
       git openssh-client curl wget rsync \
       chromium xvfb xauth x11-utils x11-apps mesa-utils vulkan-tools \
       libgl1-mesa-dri libegl1 libglx-mesa0 mesa-vulkan-drivers \
       libx11-dev libgl-dev libxcursor1 libxi6 libxrandr2 libxkbcommon-x11-0 \
-      fonts-dejavu-core \
+      fonts-dejavu-core fonts-liberation fonts-noto-color-emoji \
       jq ripgrep fd-find gawk sed grep diffutils patch file tree less nano vim-tiny \
       zip unzip xz-utils bzip2 zstd \
       procps psmisc lsof iproute2 iputils-ping dnsutils netcat-openbsd \

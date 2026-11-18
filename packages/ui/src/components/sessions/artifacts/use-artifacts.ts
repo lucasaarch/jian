@@ -10,6 +10,7 @@ export type ArtifactsApi = Pick<
   GatewayApi,
   | 'sessionArtifacts'
   | 'sessionArtifactVersion'
+  | 'exportSessionArtifact'
   | 'setSessionArtifactVisibility'
   | 'editSessionArtifact'
 >;

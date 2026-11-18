@@ -235,6 +235,8 @@ describe('who reads an Artifact', () => {
     // navigation of that frame: a script or a meta refresh cannot take it to an address.
     expect(page.body).toMatch(/<iframe id="artifact" sandbox="allow-scripts"[^>]* srcdoc="/);
     expect(page.body.match(/<iframe/g)).toHaveLength(1);
+    // What the agent wrote runs in that frame, so it may not take the whole screen.
+    expect(page.body).not.toContain('allowfullscreen');
     // Nothing of where it came from.
     expect(page.body).not.toContain(owner.id);
     expect(page.body).not.toContain(session.id);
@@ -284,6 +286,73 @@ describe('who reads an Artifact', () => {
       .where(eq(sessionArtifacts.id, artifact.id));
     expect((await app.inject({ url: `/v1/public-artifacts/${secret}` })).statusCode).toBe(404);
   });
+
+  // What the files hold is in artifact-export.test.ts, which needs a browser. Everything here is
+  // refused before one is started.
+  it('draws a deck into a file for its owner alone, and only what a deck has', async () => {
+    const { services, app, owner, at, make, setVisibility } = await setup();
+    const deck = await make({
+      title: 'Plan',
+      type: 'deck',
+      slides: ['A', 'B'].map((text) => `<!doctype html><html><body>${text}</body></html>`),
+    });
+    const notes = await make();
+    const file = (id: string, query: string, version = 1) =>
+      at(`/${id}/versions/${version}/export?${query}`);
+    const answered = async (url: string, authorization = headers.authorization) => {
+      const answer = await app.inject({ url, headers: { authorization } });
+      return `${answer.statusCode} ${answer.json().error}`;
+    };
+
+    expect((await app.inject({ url: file(deck.id, 'format=pdf') })).statusCode).toBe(401);
+    // A public link reads the deck and is proof of nothing else: it draws no file.
+    const { publicPath } = (await setVisibility(deck.id, 'public')).json();
+    const secret = publicPath.split('/').at(-1);
+    expect(await answered(file(deck.id, 'format=pdf'), `Bearer ${secret}`)).toMatch(/^401 /);
+    expect((await app.inject({ url: `${publicPath}/export?format=pdf` })).statusCode).toBe(401);
+    expect(await answered(`${publicPath}/export?format=pdf`)).toMatch(/^404 /);
+
+    // Nor through another conversation, with the credential.
+    const elsewhere = await services.sessions.createSession(owner.id, { channel: 'api' });
+    expect(await answered(at(`/${deck.id}/versions/1/export?format=pdf`, elsewhere.id))).toMatch(
+      /^404 /,
+    );
+    expect(await answered(file(deck.id, 'format=pdf', 2))).toMatch(/^404 /);
+
+    expect(await answered(file(notes.id, 'format=pdf'))).toMatch(/^400 Only a deck/);
+    expect(await answered(file(deck.id, 'format=png'))).toMatch(/^400 .*say which/);
+    expect(await answered(file(deck.id, 'format=png&slide=3'))).toMatch(
+      /^400 The deck has 2 slides, so there is no slide 3/,
+    );
+    for (const query of [
+      '',
+      'format=docx',
+      'format=pdf&fonts=comic',
+      'format=png&slide=0',
+      'format=png&slide=first',
+      'format=pdf&to=https://example.test',
+    ]) {
+      expect(await answered(file(deck.id, query))).toBe('400 Invalid request');
+    }
+  });
+
+  it('draws no deck on the gateway a desktop app runs, which has no browser to', async () => {
+    const { app, at, make } = await setup('local');
+    const deck = await make({
+      title: 'Plan',
+      type: 'deck',
+      slides: ['<!doctype html><html><body>A</body></html>'],
+    });
+
+    const refused = await app.inject({
+      url: at(`/${deck.id}/versions/1/export?format=pdf`),
+      headers,
+    });
+    expect(refused.statusCode).toBe(409);
+    expect(refused.json().error).toMatch(/only on a server gateway/);
+    // The deck itself is read there as anywhere.
+    expect((await app.inject({ url: at(`/${deck.id}/versions/1`), headers })).statusCode).toBe(200);
+  });
 });
 
 describe('the frame the panel draws one in', () => {
@@ -310,14 +379,31 @@ describe('the frame the panel draws one in', () => {
       expect(frame.body).toContain('event.source === parent');
     }
 
-    // With no library in it, the frame's own script is all there is: it says nothing back.
+    // A page and a slide are pages already: the shell makes the frame out of the source it is
+    // handed, sealed like any other, and says nothing to anyone.
     for (const type of ['html', 'deck']) {
       const own = (await app.inject({ url: `/v1/artifact-frames/${type}` })).body;
-      expect(own).not.toMatch(/fetch\(|XMLHttpRequest|WebSocket|sendBeacon|parent\.postMessage/);
+      expect(own).not.toMatch(/fetch\(|XMLHttpRequest|WebSocket|sendBeacon|postMessage/);
       expect(own).not.toContain('contenteditable');
-      // The shell only ever posts inward, to the frame it holds, and the frame is the page below.
+      expect(own).not.toContain('<iframe');
+      expect(own).toContain("frame.setAttribute('sandbox', 'allow-scripts')");
+      expect(own).toContain('frame.srcdoc = source');
+      // A frame that loads a second time went somewhere, and is removed. Writing a page over a
+      // loaded one is such a second load, so nothing here does: it left every page white.
+      expect(own).toContain('frame.remove()');
+      expect(own).not.toMatch(/document\.(open|write)/);
+      expect(own).not.toContain('allowfullscreen');
+    }
+    // The others are drawn by a page of the gateway's, which the shell posts the source on to.
+    for (const type of ['react', 'markdown', 'svg', 'mermaid']) {
+      const own = (await app.inject({ url: `/v1/artifact-frames/${type}` })).body.replace(
+        /srcdoc="[^"]*"/,
+        '',
+      );
       expect(own.match(/postMessage/g)).toHaveLength(1);
       expect(own).toContain('frame.contentWindow.postMessage');
+      expect(own).toContain('frame.remove()');
+      expect(own).not.toMatch(/document\.(open|write)|allowfullscreen/);
     }
 
     expect((await app.inject({ url: '/v1/artifact-frames/python' })).statusCode).toBe(400);
@@ -510,6 +596,11 @@ describe('a deck of slides', () => {
     const page = await app.inject({ url: publicPath });
     expect(page.statusCode).toBe(200);
     expect(String(page.headers['content-security-policy'])).toContain('sandbox allow-scripts');
+    // The frame the shell holds runs the gateway's player, which may take the whole screen to
+    // present; a slide, which is what the agent wrote, is a frame inside it with no such leave.
+    expect(page.body).toMatch(
+      /<iframe id="artifact" sandbox="allow-scripts"[^>]* allowfullscreen /,
+    );
     // The deck runs in the frame the shell holds, written into its `srcdoc`.
     const inner = (/srcdoc="([^"]*)"/.exec(page.body)?.[1] ?? '').replace(/&#(\d+);/g, (_, code) =>
       String.fromCharCode(Number(code)),
@@ -519,6 +610,10 @@ describe('a deck of slides', () => {
     // Each slide is a frame written into the page, as sealed as the page.
     expect(inner).toContain("setAttribute('sandbox', 'allow-scripts')");
     expect(inner).not.toMatch(/postMessage|contenteditable|jian-edit|fetch\(/i);
+    expect(inner).not.toMatch(/allowfullscreen|setAttribute\('allow'|\.allow\b/);
+    // It is presented from the page itself, and asks for less motion where the reader does.
+    expect(inner).toContain('requestFullscreen');
+    expect(inner).toContain('prefers-reduced-motion: reduce');
     // A link reads, with or without asking for the editing frame.
     expect((await app.inject({ url: `${publicPath}?edit=1` })).body).toBe(page.body);
   });

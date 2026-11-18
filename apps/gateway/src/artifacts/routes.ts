@@ -47,6 +47,23 @@ export function registerArtifactRoutes(
     },
   );
 
+  // A deck's version drawn into a file. It reads, so a paired phone may ask as the owner does;
+  // a public link has no way to it, and neither has the frame, which holds no credential.
+  app.get(
+    '/v1/profiles/:profileId/sessions/:sessionId/artifacts/:artifactId/versions/:version/export',
+    async (request) => {
+      const params = sessionArtifactVersionParamsSchema.parse(request.params);
+
+      return deps.artifacts.export(
+        params.profileId,
+        params.sessionId,
+        params.artifactId,
+        params.version,
+        request.query,
+      );
+    },
+  );
+
   // The owner's edit by hand, saved by the panel as a new version. It asks for the owner's
   // credential like every route of a conversation: the frame the edit was made in has none and
   // reaches nothing, and a public link only reads. A paired phone only reads too: the owner

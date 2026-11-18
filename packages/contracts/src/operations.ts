@@ -159,6 +159,8 @@ import { panelSessionEndSchema, panelSessionInputSchema, panelSessionSchema } fr
 import {
   artifactFrameParamsSchema,
   artifactFrameQuerySchema,
+  deckExportQuerySchema,
+  deckExportSchema,
   publicArtifactParamsSchema,
   sessionArtifactEditSchema,
   sessionArtifactSchema,
@@ -1508,6 +1510,18 @@ export const operations: Operation[] = [
     access: 'admin',
     params: sessionArtifactVersionParamsSchema,
     response: sessionArtifactVersionSchema,
+  },
+  {
+    // A deck's version as a file to keep. It only reads, so a paired phone may ask too. Only a
+    // server gateway has the browser that draws the slides; a desktop app's own refuses with a
+    // 409.
+    method: 'GET',
+    path: `${session}/artifacts/:artifactId/versions/:version/export`,
+    operationId: 'exportSessionArtifactVersion',
+    access: 'admin',
+    params: sessionArtifactVersionParamsSchema,
+    query: deckExportQuerySchema,
+    response: deckExportSchema,
   },
   {
     // The owner's own edit of a page or of one slide, saved from the panel as a new version.

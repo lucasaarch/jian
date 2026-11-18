@@ -34,7 +34,8 @@ function revealedAt(
 /**
  * A row of items that scrolls sideways with no scrollbar, as tabs do: a vertical wheel scrolls it
  * while it overflows, an edge with more past it fades, and the item marked `aria-selected="true"`
- * is brought into view whenever `active` names another. Draws the `scroll-strip` utility.
+ * (a tab) or `aria-current="true"` (one of a set that is not tabs) is brought into view whenever
+ * `active` names another. Draws the `scroll-strip` utility.
  */
 export function ScrollStrip({
   active,
@@ -94,7 +95,7 @@ export function ScrollStrip({
   // biome-ignore lint/correctness/useExhaustiveDependencies: `active` is what asks for this.
   useLayoutEffect(() => {
     const element = strip.current;
-    const selected = element?.querySelector('[aria-selected="true"]');
+    const selected = element?.querySelector('[aria-selected="true"], [aria-current="true"]');
     if (!element || !selected) return;
     let item: Element = selected;
     while (item.parentElement && item.parentElement !== element) item = item.parentElement;

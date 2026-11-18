@@ -33,6 +33,11 @@ export type SessionFileRoot = SessionFiles['roots'][number];
 export type SessionFile = JsonResponse<'readSessionFile', 200>;
 export type SessionArtifact = JsonResponse<'listSessionArtifacts', 200>[number];
 export type SessionArtifactVersion = JsonResponse<'readSessionArtifactVersion', 200>;
+export type DeckExport = JsonResponse<'exportSessionArtifactVersion', 200>;
+/** The query is generated with every field optional; the format is what is being asked for. */
+export type DeckExportQuery = NonNullable<
+  operations['exportSessionArtifactVersion']['parameters']['query']
+> & { format: 'pdf' | 'png' | 'pptx' };
 export type SessionWorktree = JsonResponse<'listSessionWorktrees', 200>[number];
 export type SubscriptionUsage = JsonResponse<'listSubscriptionUsage', 200>[number];
 export type BuiltinSkill = JsonResponse<'listBuiltinSkills', 200>[number];

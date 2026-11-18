@@ -17,8 +17,11 @@ const gateway = join(root, 'apps', 'gateway');
 const target = fileURLToPath(new URL('../.gateway/', import.meta.url));
 /** Kept out of the bundle and installed beside it. */
 const native = ['sharp', '@electric-sql/pglite', '@lydell/node-pty'];
-/** Kept out and not installed: only a server's store and queue import them. */
-const unreached = ['pg', 'pg-boss', 'playwright'];
+/**
+ * Kept out and not installed: only a server's store and queue import them, and its browser with
+ * what writes the PowerPoint file of a deck that browser drew, which this gateway refuses to.
+ */
+const unreached = ['pg', 'pg-boss', 'playwright', 'pptxgenjs'];
 /**
  * On Windows pnpm and npm are .cmd scripts, which Node runs only through a shell. The arguments
  * here are all fixed, so the shell sees nothing it could read otherwise.

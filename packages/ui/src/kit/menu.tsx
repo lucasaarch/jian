@@ -1,6 +1,7 @@
 'use client';
 
 import { Menu } from '@base-ui/react/menu';
+import { Check } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 /** The popup every menu of the kit is drawn in, from a button or a right click alike. */
@@ -69,6 +70,49 @@ export function MenuSwitch({
         <span className="block size-3 rounded-full bg-ink shadow-sm transition-[translate,background-color] duration-200 group-data-checked:translate-x-2.5 group-data-checked:bg-canvas" />
       </span>
     </Menu.CheckboxItem>
+  );
+}
+
+/**
+ * One of a few, chosen from the menu, which closes on the choice: the one in force is ticked.
+ * For a short list behind an icon button, where a select's own button would say too much.
+ */
+export function MenuChoices({
+  label,
+  value,
+  options,
+  onValueChange,
+}: {
+  /** What is being chosen, for assistive technology. */
+  label: string;
+  value: string;
+  /** `detail` is said after the name, quieter. */
+  options: readonly { value: string; label: string; detail?: string }[];
+  onValueChange: (value: string) => void;
+}) {
+  return (
+    <Menu.RadioGroup
+      aria-label={label}
+      value={value}
+      onValueChange={(next) => onValueChange(String(next))}
+    >
+      {options.map((option) => (
+        <Menu.RadioItem
+          key={option.value}
+          value={option.value}
+          closeOnClick
+          className="flex h-8 cursor-pointer items-center gap-2.5 rounded-lg px-2.5 outline-none select-none data-highlighted:bg-glass-press"
+        >
+          <span className="min-w-0 flex-1 truncate">
+            {option.label}
+            {option.detail && <span className="text-muted"> · {option.detail}</span>}
+          </span>
+          <Menu.RadioItemIndicator className="shrink-0">
+            <Check size={14} aria-hidden="true" />
+          </Menu.RadioItemIndicator>
+        </Menu.RadioItem>
+      ))}
+    </Menu.RadioGroup>
   );
 }
 
