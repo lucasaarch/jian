@@ -13,9 +13,8 @@ import { type ArtifactsApi, artifactChanged } from './use-artifacts';
 
 /**
  * Who reads an Artifact: the owner alone, or anyone holding its link. Drawn only on a server
- * gateway, over the open one (artifact-view.tsx) and on its line in the agent's page of them
- * (app/artifacts): the gateway a desktop app runs refuses to make one public, since
- * no link from outside reaches it. The link is the gateway's own address, as the world reaches
+ * gateway, over the open one (artifact-view.tsx) and in no list of Artifacts: the gateway a
+ * desktop app runs refuses to make one public, since no link from outside reaches it. The link is the gateway's own address, as the world reaches
  * it, and a new one each time it is made public.
  */
 export function ArtifactSharing({

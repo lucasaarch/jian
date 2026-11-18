@@ -191,12 +191,16 @@ it('narrows the list by title, asking the gateway once typing rests', async () =
   expect(api.profileArtifacts).toHaveBeenLastCalledWith(profile.id, { q: 'flow' });
 });
 
-it('offers to change who reads one only on a server gateway', async () => {
-  await render(gateway(), 'local');
+it('changes who reads one only inside it, never from the list', async () => {
+  await render(gateway());
 
   expect(button('Public: anyone with the link')).toBeUndefined();
   expect(button('Private: only you')).toBeUndefined();
   expect(button(`Actions for ${landing.title}`)).toBeDefined();
+
+  await click(button('Open Landing'));
+  await settled(() => Boolean(container.querySelector('iframe')));
+  expect(button('Public: anyone with the link', container)).toBeDefined();
 });
 
 it('opens one in the page with the Inspector’s own view, and comes back to the list', async () => {

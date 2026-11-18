@@ -18,7 +18,6 @@ import {
 } from '../../kit';
 import type { ProfileArtifact, SessionArtifact } from '../../lib/api';
 import { conversationName } from '../../lib/conversation-name';
-import { useGatewayMode } from '../../lib/gateway-mode';
 import { agentPath } from '../../lib/navigation';
 import { useAgents, useContacts, useProjects, useSessions } from '../../lib/query/agent';
 import { panelApi } from '../../lib/query/client';
@@ -58,7 +57,6 @@ export function ArtifactsScreen({
 }) {
   useNoInspector();
   const router = useRouter();
-  const server = useGatewayMode() === 'server';
   const sessions = useSessions();
   const projects = useProjects();
   const contacts = useContacts();
@@ -113,18 +111,18 @@ export function ArtifactsScreen({
 
   if (artifact && opened) {
     return (
-      // The view is the Inspector's, whose bar keeps clear of the window's buttons at the very
-      // top: here it lies under the host's title bar, where there are none, and on a page's
-      // wider edge.
+      // The view is the Inspector's, but its bar is the screen's own (screen-header.tsx), in the
+      // host's title bar; what lies under it keeps a page's wider edge.
       <section
         aria-label={artifact.title}
-        className="flex h-full min-h-0 flex-col pt-(--chrome-top) [--inspector-inset:1rem] [--window-controls:0px] phone:[--inspector-inset:0.5rem]"
+        className="flex h-full min-h-0 flex-col [--inspector-inset:1rem] phone:[--inspector-inset:0.5rem]"
       >
         <ArtifactView
           key={artifact.id}
           api={api}
           profileId={profileId}
           artifact={artifact}
+          page
           onBack={() => setOpened(undefined)}
           startEditing={opened.editing}
         />
@@ -174,10 +172,7 @@ export function ArtifactsScreen({
         ) : (
           <>
             <ArtifactsList
-              api={api}
-              profileId={profileId}
               artifacts={artifacts}
-              server={server}
               empty={
                 narrowed
                   ? 'No Artifact matches.'

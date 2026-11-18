@@ -9,7 +9,8 @@ import { Action, HoverTip, iconButton, SkeletonLine, SkeletonRegion } from '../.
 import type { SessionArtifact } from '../../../lib/api';
 import { useGatewayMode } from '../../../lib/gateway-mode';
 import { CodeBlock } from '../../ui/code-block';
-import { InspectorBar, InspectorBody } from '../inspector';
+import { InspectorBody } from '../inspector';
+import { ArtifactBar } from './artifact-bar';
 import { ArtifactFrame } from './artifact-frame';
 import { ArtifactHistory } from './artifact-history';
 import { ArtifactOptions } from './artifact-options';
@@ -43,6 +44,7 @@ export function ArtifactView({
   profileId,
   artifact,
   closer,
+  page = false,
   onBack,
   startEditing = false,
 }: {
@@ -51,6 +53,8 @@ export function ArtifactView({
   artifact: SessionArtifact;
   /** The Inspector's way out, which the page of every Artifact has none of. */
   closer?: RefObject<HTMLButtonElement | null>;
+  /** On the agent's page of every Artifact: its bar is the screen's, not the Inspector's. */
+  page?: boolean;
   /** Back to the list it was opened from. */
   onBack: () => void;
   /** Opens already being edited, for a list whose Edit asked for it. */
@@ -112,8 +116,23 @@ export function ArtifactView({
 
   return (
     <>
-      <InspectorBar
+      <ArtifactBar
+        page={page}
         closer={closer}
+        title={artifact.title}
+        old={version === artifact.version ? undefined : version}
+        back={
+          <HoverTip tip="All artifacts" hoverOnly side="bottom">
+            <button
+              type="button"
+              aria-label="All artifacts"
+              className={iconButton}
+              onClick={onBack}
+            >
+              <ArrowLeft size={15} aria-hidden="true" />
+            </button>
+          </HoverTip>
+        }
         options={
           editing !== undefined ? (
             <>
@@ -207,17 +226,7 @@ export function ArtifactView({
             </>
           )
         }
-      >
-        <HoverTip tip="All artifacts" hoverOnly side="bottom">
-          <button type="button" aria-label="All artifacts" className={iconButton} onClick={onBack}>
-            <ArrowLeft size={15} aria-hidden="true" />
-          </button>
-        </HoverTip>
-        <h2 className="min-w-0 truncate text-[13px] font-medium text-ink">{artifact.title}</h2>
-        {version !== artifact.version && (
-          <span className="shrink-0 text-xs text-muted tabular-nums">v{version}</span>
-        )}
-      </InspectorBar>
+      />
 
       {read.isError ? (
         <p role="alert" className="px-(--inspector-inset) pt-3 text-sm text-muted">

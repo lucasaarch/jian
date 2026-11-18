@@ -3,24 +3,19 @@
 import { Menu } from '@base-ui/react/menu';
 import { EDITABLE_ARTIFACT_TYPES } from '@jian/contracts';
 import { Ellipsis, Eye, MessageSquare, Pencil, Trash2 } from 'lucide-react';
-import { ArtifactSharing } from '../../components/sessions/artifacts/artifact-sharing';
 import { KindIcon, kindName } from '../../components/sessions/artifacts/kind';
 import { iconButton, MenuDivider, MenuEntry, menuPopup, StatusPill, surfaceCard } from '../../kit';
 import type { ProfileArtifact } from '../../lib/api';
 import { ago } from '../../lib/format';
-import type { ArtifactsPageApi } from './use-profile-artifacts';
 
 /**
  * The agent's Artifacts as rows, the one changed last first: what kind each is, its name, its
  * version, the conversation it was made in and when it last changed. A row opens it; what else
- * is done to it is behind one menu at its end. Who reads it is changed beside that menu, on a
- * server gateway alone, as over an open one (artifact-sharing.tsx).
+ * is done to it is behind one menu at its end. Who reads it is changed only inside the opened
+ * Artifact. The hover is the row's, so the time and the menu sit on the same ground.
  */
 export function ArtifactsList({
-  api,
-  profileId,
   artifacts,
-  server,
   empty,
   conversation,
   onOpen,
@@ -28,11 +23,7 @@ export function ArtifactsList({
   onGo,
   onDelete,
 }: {
-  api: ArtifactsPageApi;
-  profileId: string;
   artifacts: ProfileArtifact[];
-  /** Whether the gateway can make one public. */
-  server: boolean;
   /** What to say when there are none to show. */
   empty: string;
   /** The name of the conversation one was made in. */
@@ -48,12 +39,15 @@ export function ArtifactsList({
       className={`min-w-0 divide-y divide-glass-edge overflow-hidden ${surfaceCard}`}
     >
       {artifacts.map((artifact) => (
-        <li key={artifact.id} className="flex min-w-0 items-center gap-0.5 pr-2">
+        <li
+          key={artifact.id}
+          className="flex min-w-0 items-center gap-0.5 pr-2 transition-colors focus-within:bg-glass-press hover:bg-glass-press"
+        >
           <button
             type="button"
             aria-label={`Open ${artifact.title}`}
             onClick={() => onOpen(artifact)}
-            className="flex min-w-0 flex-1 items-center gap-3 py-3 pr-2 pl-4 text-left transition-colors hover:bg-glass-press focus-visible:bg-glass-press focus-visible:outline-none"
+            className="flex min-w-0 flex-1 items-center gap-3 py-3 pr-2 pl-4 text-left focus-visible:outline-none"
           >
             <KindIcon artifact={artifact} />
             <span className="grid min-w-0 flex-1 grid-cols-1 gap-0.5">
@@ -74,7 +68,6 @@ export function ArtifactsList({
               {ago(artifact.updatedAt)}
             </time>
           </button>
-          {server && <ArtifactSharing api={api} profileId={profileId} artifact={artifact} />}
           <Menu.Root>
             <Menu.Trigger aria-label={`Actions for ${artifact.title}`} className={iconButton}>
               <Ellipsis size={15} aria-hidden="true" />
