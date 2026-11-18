@@ -3,13 +3,16 @@ import { z } from 'zod';
 /**
  * Where an imported skill came from. Provenance only: the instructions are copied at import
  * time and never refreshed on their own, so a repository that changes later cannot rewrite
- * what an agent has already been told.
+ * what an agent has already been told. The owner copies them again when they choose to, which
+ * moves `importedAt`.
  */
 export const skillOriginSchema = z.strictObject({
   url: z.url().max(600),
   ref: z.string().max(100).optional(),
   marketplace: z.string().max(100).optional(),
   plugin: z.string().max(100).optional(),
+  // As the document's frontmatter names it, when it does.
+  license: z.string().max(100).optional(),
   importedAt: z.iso.datetime(),
 });
 
@@ -50,11 +53,13 @@ export const builtinSkillSchema = skillSchema.extend({
 /**
  * A skill of the installation's library, offered to every agent while `enabled`. Who wrote it
  * stays answerable: `authorProfileId` is the agent that did, the only one whose tools may change
- * or remove it. It is absent once that agent is deleted.
+ * or remove it. It is absent once that agent is deleted. `version` starts at 1 and counts every
+ * change to what the skill says: an edit, an import over it, an update from its source.
  */
 export const librarySkillSchema = skillSchema.extend({
   authorProfileId: z.uuid().optional(),
   enabled: z.boolean(),
+  version: z.number().int().min(1),
   createdAt: z.iso.datetime(),
   updatedAt: z.iso.datetime(),
 });
@@ -76,7 +81,17 @@ export const skillEnabledRecordSchema = z.strictObject({
   enabled: z.boolean(),
 });
 
+/**
+ * Whether an imported skill's source says something else than the library holds, as of
+ * `checkedAt`. A skill edited here after its import differs from its source too.
+ */
+export const skillUpstreamSchema = z.strictObject({
+  changed: z.boolean(),
+  checkedAt: z.iso.datetime(),
+});
+
 export type SkillOrigin = z.infer<typeof skillOriginSchema>;
 export type Skill = z.infer<typeof skillSchema>;
 export type BuiltinSkill = z.infer<typeof builtinSkillSchema>;
 export type LibrarySkill = z.infer<typeof librarySkillSchema>;
+export type SkillUpstream = z.infer<typeof skillUpstreamSchema>;

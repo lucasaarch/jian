@@ -9,7 +9,7 @@ import {
   skillPatchSchema,
   skillSchema,
 } from '@jian/contracts';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import type { Clock } from '../core/clock.js';
 import { GatewayError } from '../core/errors.js';
 import { GATEWAY_SCOPE } from '../security/gateway-vault.js';
@@ -17,6 +17,9 @@ import type { Queryable, Store } from '../storage/database.js';
 import { skills } from '../storage/schema.js';
 import { builtinSkillNames, builtinSkills, type SkillLibraryState } from './builtin/index.js';
 import { readSkillLibrary, writeDisabledSkills } from './repository.js';
+
+/** One more than the row holds: every change to what a skill says is a version of it. */
+const nextVersion = sql`${skills.version} + 1`;
 
 /**
  * The installation's skills: one library every agent is offered, beside the built-in ones. The
@@ -111,7 +114,7 @@ export class SkillLibrary {
       await this.held(tx, name, agent);
       await tx
         .update(skills)
-        .set({ ...patch, updatedAt: new Date(this.clock()) })
+        .set({ ...patch, version: nextVersion, updatedAt: new Date(this.clock()) })
         .where(eq(skills.name, name));
 
       return this.held(tx, name);
@@ -159,7 +162,9 @@ export class SkillLibrary {
 
   /**
    * Adds what the owner imported. One that shares a name with a library skill replaces it,
-   * whoever wrote that one: an import is the owner's, and so is the skill from then on.
+   * whoever wrote that one: an import is the owner's, and so is the skill from then on. It was
+   * last changed when it was imported, to the millisecond, so a later `updatedAt` means someone
+   * edited it here.
    */
   async addImported(input: Skill[]): Promise<LibrarySkill[]> {
     // A document from a repository: its name and sizes are checked here, as a typed one's are.
@@ -181,16 +186,55 @@ export class SkillLibrary {
           instructions,
           origin: origin ?? null,
           writtenBy: null,
-          updatedAt: at,
+          updatedAt: origin ? new Date(origin.importedAt) : at,
         };
 
         await tx
           .insert(skills)
           .values({ name, ...written, authorProfileId: null, createdAt: at })
-          .onConflictDoUpdate({ target: skills.name, set: { ...written, authorProfileId: null } });
+          .onConflictDoUpdate({
+            target: skills.name,
+            set: { ...written, authorProfileId: null, version: nextVersion },
+          });
       }
 
       return (await this.read(tx)).skills.filter((skill) => names.has(skill.name));
+    });
+  }
+
+  /**
+   * Replaces what an imported skill says with its source's document, read by the caller before
+   * the lock is taken. The skill keeps its name, whatever the document calls itself now, and
+   * its place in the library. Refused for a skill that was not imported.
+   */
+  async refreshImported(
+    name: string,
+    document: Pick<Skill, 'description' | 'instructions'> & { license?: string },
+  ): Promise<LibrarySkill> {
+    return this.store.transaction(GATEWAY_SCOPE, async (tx) => {
+      const { origin } = await this.held(tx, name);
+
+      if (!origin) throw new GatewayError(409, `${name} was not imported; it has no source`);
+
+      const at = new Date(this.clock());
+      const { license: _before, ...from } = origin;
+
+      await tx
+        .update(skills)
+        .set({
+          description: document.description,
+          instructions: document.instructions,
+          origin: {
+            ...from,
+            ...(document.license ? { license: document.license } : {}),
+            importedAt: at.toISOString(),
+          },
+          version: nextVersion,
+          updatedAt: at,
+        })
+        .where(eq(skills.name, name));
+
+      return this.held(tx, name);
     });
   }
 }

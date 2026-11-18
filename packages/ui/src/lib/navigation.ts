@@ -33,8 +33,27 @@ export const onArtifacts = (pathname: string) => /^\/agents\/[^/]+\/artifacts\/?
 export const pluginsPath = (profileId: string, tab?: 'connectors' | 'skills') =>
   agentPath(profileId, tab ? `plugins?tab=${tab}` : 'plugins');
 
-/** Whether a pathname is an agent's Plugins. */
-export const onPlugins = (pathname: string) => /^\/agents\/[^/]+\/plugins\/?$/.test(pathname);
+/** One skill's own page, under Plugins: built-in or of the library, by its name. */
+export const skillPath = (profileId: string, name: string) =>
+  agentPath(profileId, `plugins/skills/${encodeURIComponent(name)}`);
+
+const SKILL = /^\/agents\/[^/]+\/plugins\/skills\/([^/]+)\/?$/;
+
+/** The skill whose page a pathname is, by its name; undefined anywhere else. */
+export function skillAt(pathname: string): string | undefined {
+  const name = SKILL.exec(pathname)?.[1];
+
+  try {
+    return name && decodeURIComponent(name);
+  } catch {
+    // An address cut mid-escape names nothing; the page says there is no such skill.
+    return name;
+  }
+}
+
+/** Whether a pathname is an agent's Plugins, or the page of one skill under them. */
+export const onPlugins = (pathname: string) =>
+  /^\/agents\/[^/]+\/plugins\/?$/.test(pathname) || SKILL.test(pathname);
 
 /** Where an agent's new chat opens: its chats, asked to start one, in a project when given. */
 export function newChatPath(profileId: string, projectId?: string): string {

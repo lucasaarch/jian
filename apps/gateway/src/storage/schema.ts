@@ -201,12 +201,13 @@ export const mcpServers = pgTable('mcp_servers', {
  * skill came from: an agent, an import, or with neither the owner. `authorProfileId` is the agent
  * that wrote it, the only one whose tools may change it; it is cleared when that agent is deleted
  * and the skill stays. Which are switched off is the `disabledSkills` setting, shared with the
- * built-in ones.
+ * built-in ones. `version` counts the changes to what a skill says, from 1.
  */
 export const skills = pgTable('skills', {
   name: text('name').primaryKey(),
   description: text('description').notNull(),
   instructions: text('instructions').notNull(),
+  version: integer('version').notNull().default(1),
   origin: jsonb('origin').$type<SkillOrigin>(),
   writtenBy: text('written_by').$type<'agent'>(),
   authorProfileId: uuid('author_profile_id').references(() => profiles.id, {

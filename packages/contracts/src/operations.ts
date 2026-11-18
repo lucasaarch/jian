@@ -180,6 +180,7 @@ import {
   skillImportSchema,
   skillNameSchema,
   skillPatchSchema,
+  skillUpstreamSchema,
 } from './skills.js';
 import { sshKeyCreateSchema, sshKeySchema } from './ssh.js';
 import {
@@ -1235,6 +1236,24 @@ export const operations: Operation[] = [
     params: z.strictObject({ name: skillNameSchema }),
     body: skillEnabledSchema,
     response: skillEnabledRecordSchema,
+  },
+  {
+    // Reads an imported skill's source again, and says whether it differs from the library's.
+    method: 'GET',
+    path: '/v1/skills/:name/upstream',
+    operationId: 'checkSkillUpstream',
+    access: 'admin',
+    params: z.strictObject({ name: skillNameSchema }),
+    response: skillUpstreamSchema,
+  },
+  {
+    // Copies an imported skill from its source again, over what the library holds.
+    method: 'POST',
+    path: '/v1/skills/:name/update',
+    operationId: 'updateSkillFromSource',
+    access: 'admin',
+    params: z.strictObject({ name: skillNameSchema }),
+    response: librarySkillSchema,
   },
   {
     method: 'GET',

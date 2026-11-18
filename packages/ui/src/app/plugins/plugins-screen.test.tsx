@@ -28,6 +28,7 @@ vi.mock('../../lib/workspace', () => ({
     },
     busy: false,
   }),
+  useProfileId: () => 'a1',
   notifyError: vi.fn(),
 }));
 const read = vi.hoisted(() => ({

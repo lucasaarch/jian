@@ -46,8 +46,9 @@ In the main sidebar, in place of the chat: what every agent is given, in tabs, w
   hand, with connection tests, sign-in and switching tools off.
 - **Skills**: one library shared by every agent. The built-in ones are Jian's, marked verified;
   the others, up to 60, were written by the owner or an agent, or imported from GitHub, as each
-  row says. Add creates or imports one. An opened skill shows its instructions, a switch for
-  every agent at once, and Edit and Delete unless it is built-in.
+  row says. Add creates or imports one. A skill opens on its own page: instructions, source,
+  version, a switch for every agent at once and, unless built-in, Edit and Delete. An imported
+  one updates from GitHub there.
 
 ## Agent settings
 

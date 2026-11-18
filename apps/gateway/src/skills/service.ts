@@ -1,8 +1,8 @@
-import type { LibrarySkill, SkillOrigin } from '@jian/contracts';
+import type { LibrarySkill, SkillOrigin, SkillUpstream } from '@jian/contracts';
 import { MAX_LIBRARY_SKILLS, skillImportSchema } from '@jian/contracts';
 import { type Clock, nowIso } from '../core/clock.js';
 import { GatewayError } from '../core/errors.js';
-import { parseSkillDocument } from './document.js';
+import { parseSkillDocument, type SkillDocument } from './document.js';
 import type { SkillLibrary } from './library.js';
 import { contentsUrl, pageUrl, parseSource, rawUrl, type Source } from './source.js';
 
@@ -13,15 +13,19 @@ type Entry = { name: string; type: string };
 
 export class Skills {
   constructor(
-    private readonly library: Pick<SkillLibrary, 'addImported'>,
+    private readonly library: Pick<SkillLibrary, 'addImported' | 'list' | 'refreshImported'>,
     private readonly fetcher: typeof globalThis.fetch,
     private readonly clock: Clock = Date.now,
   ) {}
 
   private async read(url: string): Promise<string | null> {
+    // A host that cannot be reached, or does not answer in time, is the repository's failure
+    // to say, not the gateway's own.
     const response = await this.fetcher(url, {
       headers: { accept: 'text/plain, application/json', 'user-agent': 'jian-gateway' },
       signal: AbortSignal.timeout(15_000),
+    }).catch(() => {
+      throw new GatewayError(502, 'GitHub could not be reached');
     });
 
     if (response.status === 404) {
@@ -84,8 +88,7 @@ export class Skills {
   async importSkill(input: unknown): Promise<LibrarySkill[]> {
     const { url } = skillImportSchema.parse(input);
     const source = parseSource(url);
-    const found: Array<{ name: string; description: string; instructions: string; url: string }> =
-      [];
+    const found: Array<SkillDocument & { url: string }> = [];
 
     const document = await this.read(rawUrl(source, this.documentPath(source.path)));
 
@@ -119,10 +122,11 @@ export class Skills {
       throw new GatewayError(404, 'No SKILL.md found at that URL');
     }
 
-    const origin = (at: string): SkillOrigin => ({
+    const origin = (at: string, license?: string): SkillOrigin => ({
       url: at,
       ref: source.ref,
       plugin: source.path.split('/').filter(Boolean).pop(),
+      ...(license ? { license } : {}),
       importedAt: nowIso(this.clock),
     });
 
@@ -131,8 +135,49 @@ export class Skills {
         name: skill.name,
         description: skill.description,
         instructions: skill.instructions,
-        origin: origin(skill.url),
+        origin: origin(skill.url, skill.license),
       })),
     );
+  }
+
+  /**
+   * The document an imported skill was copied from, read again: its address is the skill's own
+   * folder, or its SKILL.md when it came with a folder of them. A skill that was not imported
+   * has none, and a source that no longer holds the document is a failure to say, never a
+   * reason to change the skill.
+   */
+  private async source(name: string): Promise<{ held: LibrarySkill; document: SkillDocument }> {
+    const held = (await this.library.list()).find((skill) => skill.name === name);
+
+    if (!held) throw new GatewayError(404, `There is no skill named ${name}`);
+    if (!held.origin) throw new GatewayError(409, `${name} was not imported; it has no source`);
+
+    const source = parseSource(held.origin.url);
+    const text = await this.read(rawUrl(source, this.documentPath(source.path)));
+
+    if (!text) throw new GatewayError(502, `${name} is no longer at its source`);
+
+    return { held, document: parseSkillDocument(text, this.folderName(source.path)) };
+  }
+
+  /**
+   * Whether the source says something else than the library holds. A skill edited here after
+   * its import differs too: what the owner is told is that updating would change it.
+   */
+  async upstream(name: string): Promise<SkillUpstream> {
+    const { held, document } = await this.source(name);
+
+    return {
+      changed:
+        document.description !== held.description || document.instructions !== held.instructions,
+      checkedAt: nowIso(this.clock),
+    };
+  }
+
+  /** Copies the source's document over the skill, when the owner asks: never on its own. */
+  async updateFromSource(name: string): Promise<LibrarySkill> {
+    const { document } = await this.source(name);
+
+    return this.library.refreshImported(name, document);
   }
 }

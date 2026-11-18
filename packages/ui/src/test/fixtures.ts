@@ -42,7 +42,7 @@ export const profile: Profile = {
   },
 };
 
-const written = { createdAt: at(60 * 24 * 7), updatedAt: at(60 * 24 * 7) };
+const written = { version: 1, createdAt: at(60 * 24 * 7), updatedAt: at(60 * 24 * 7) };
 
 /**
  * The installation's skill library, one of each way a skill gets there: copied from a
@@ -54,9 +54,15 @@ export const librarySkills: LibrarySkill[] = [
     name: 'concise',
     description: 'Answer in the first sentence; every word earns its place.',
     instructions: 'Lead with the answer.',
-    origin: { url: 'https://github.com/example/skills', importedAt: at(60 * 24 * 7) },
+    origin: {
+      url: 'https://github.com/example/skills',
+      ref: 'main',
+      license: 'MIT',
+      importedAt: at(60 * 24 * 7),
+    },
     enabled: true,
     ...written,
+    version: 3,
   },
   {
     name: 'standup-notes',

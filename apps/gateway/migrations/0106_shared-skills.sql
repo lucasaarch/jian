@@ -3,11 +3,13 @@
 -- same description and instructions becomes one, taken from the newest agent that has it; two
 -- skills with one name and different content both stay, the newest agent's under the plain name
 -- and the others as name_2, name_3… Who wrote each one is kept: an agent's own skill records
--- that agent, the only one whose tools may still change it.
+-- that agent, the only one whose tools may still change it. Each starts at version 1, which
+-- counts the changes to what it says from here on.
 CREATE TABLE skills (
   name text PRIMARY KEY,
   description text NOT NULL,
   instructions text NOT NULL,
+  version integer NOT NULL DEFAULT 1,
   origin jsonb,
   written_by text,
   author_profile_id uuid REFERENCES profiles(id) ON DELETE SET NULL,

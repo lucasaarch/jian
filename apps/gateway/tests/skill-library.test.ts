@@ -212,9 +212,12 @@ describe('moving each agent’s skills into one library', () => {
 });
 
 describe('the owner’s skill routes', () => {
-  async function setup(files: Record<string, string> = {}) {
+  /** `files` is read on every request, so a test changes the repository by changing it. */
+  async function setup(files: Record<string, string> = {}, network = { down: false }) {
     const services = await testServices();
     const fetcher = (async (input: RequestInfo | URL) => {
+      if (network.down) throw new TypeError('fetch failed');
+
       const body = Object.entries(files).find(([path]) => String(input).endsWith(path))?.[1];
 
       return body === undefined
@@ -244,6 +247,8 @@ describe('the owner’s skill routes', () => {
       ['POST', '/v1/skills/import', { url: 'https://github.com/acme/tools' }],
       ['PATCH', '/v1/skills/house-style', { description: 'Changed' }],
       ['PUT', '/v1/skills/house-style/enabled', { enabled: false }],
+      ['GET', '/v1/skills/house-style/upstream'],
+      ['POST', '/v1/skills/house-style/update'],
       ['DELETE', '/v1/skills/house-style'],
     ] as const) {
       const response = await app.inject({ method, url, ...(payload ? { payload } : {}) });
@@ -273,7 +278,7 @@ describe('the owner’s skill routes', () => {
     });
 
     expect(created.statusCode).toBe(201);
-    expect(created.json()).toMatchObject({ name: 'house-style', enabled: true });
+    expect(created.json()).toMatchObject({ name: 'house-style', enabled: true, version: 1 });
     expect(created.json()).not.toHaveProperty('writtenBy');
     expect(created.json()).not.toHaveProperty('authorProfileId');
 
@@ -312,6 +317,8 @@ describe('the owner’s skill routes', () => {
       instructions: 'Numbers first.',
       writtenBy: 'agent',
       authorProfileId: agent.id,
+      // Every edit is a version of the skill.
+      version: 2,
     });
 
     const listed = await app.inject({ method: 'GET', url: '/v1/skills', headers });
@@ -435,6 +442,145 @@ describe('the owner’s skill routes', () => {
       'deploy',
       'house-style',
     ]);
+  });
+
+  const document = (description: string, body: string, name = 'deploy') =>
+    `---\nname: ${name}\ndescription: ${description}\nlicense: MIT\n---\n\n${body}\n`;
+  const address = 'https://github.com/acme/tools/tree/main/skills/deploy';
+
+  it('says when an imported skill’s source changed, and copies it again when asked', async () => {
+    const files = { 'skills/deploy/SKILL.md': document('Ship a release', 'Run the pipeline.') };
+    const { app, services } = await setup(files);
+    await services.skillLibrary.create(skill('house-style'));
+    const send = (method: 'GET' | 'POST' | 'PATCH', url: string, payload?: object) =>
+      app.inject({ method, url, headers, ...(payload ? { payload } : {}) });
+
+    const [imported] = (await send('POST', '/v1/skills/import', { url: address })).json();
+
+    // Last changed when it was imported, to the millisecond: a later edit shows as one.
+    expect(imported).toMatchObject({ version: 1, origin: { url: address, license: 'MIT' } });
+    expect(imported.updatedAt).toBe(imported.origin.importedAt);
+
+    // Only an imported skill has a source to ask.
+    for (const [method, url, status] of [
+      ['GET', '/v1/skills/house-style/upstream', 409],
+      ['POST', '/v1/skills/house-style/update', 409],
+      ['GET', '/v1/skills/missing/upstream', 404],
+      ['POST', '/v1/skills/memory-keeping/update', 404],
+    ] as const) {
+      expect((await send(method, url)).statusCode, `${method} ${url}`).toBe(status);
+    }
+
+    const same = await send('GET', '/v1/skills/deploy/upstream');
+
+    expect(same.statusCode).toBe(200);
+    expect(same.json()).toMatchObject({ changed: false });
+
+    // The repository moves on, and renames the skill while it is at it.
+    files['skills/deploy/SKILL.md'] = document('Ship it', 'Run the new pipeline.', 'shipping');
+
+    expect((await send('GET', '/v1/skills/deploy/upstream')).json()).toMatchObject({
+      changed: true,
+    });
+    // Asking changes nothing.
+    expect((await services.skillLibrary.list()).find((item) => item.name === 'deploy')).toEqual(
+      imported,
+    );
+
+    const updated = await send('POST', '/v1/skills/deploy/update');
+
+    expect(updated.statusCode).toBe(200);
+    // It keeps the name the library knows it by, and where it came from.
+    expect(updated.json()).toMatchObject({
+      name: 'deploy',
+      description: 'Ship it',
+      instructions: 'Run the new pipeline.',
+      version: 2,
+      createdAt: imported.createdAt,
+      origin: { url: address, ref: 'main', license: 'MIT' },
+    });
+    expect(updated.json().updatedAt).toBe(updated.json().origin.importedAt);
+    expect(Date.parse(updated.json().updatedAt)).toBeGreaterThanOrEqual(
+      Date.parse(imported.updatedAt),
+    );
+    expect((await services.skillLibrary.list()).map((item) => item.name).sort()).toEqual([
+      'deploy',
+      'house-style',
+    ]);
+    expect((await send('GET', '/v1/skills/deploy/upstream')).json()).toMatchObject({
+      changed: false,
+    });
+
+    // Edited here, it differs from its source again; importing it once more is a version too.
+    await send('PATCH', '/v1/skills/deploy', { instructions: 'Ask first.' });
+    expect((await send('GET', '/v1/skills/deploy/upstream')).json()).toMatchObject({
+      changed: true,
+    });
+    files['skills/deploy/SKILL.md'] = document('Ship it', 'Run the new pipeline.');
+    const [again] = (await send('POST', '/v1/skills/import', { url: address })).json();
+    expect(again).toMatchObject({
+      name: 'deploy',
+      version: 4,
+      instructions: 'Run the new pipeline.',
+    });
+  });
+
+  it('updates one skill of an imported folder from its own document', async () => {
+    const files = {
+      'contents/skills?ref=main': JSON.stringify([
+        { name: 'deploy', type: 'dir' },
+        { name: 'review', type: 'dir' },
+      ]),
+      'skills/deploy/SKILL.md': document('Ship a release', 'Run the pipeline.'),
+      'skills/review/SKILL.md': document('Review a change', 'Read the diff.', 'review'),
+    };
+    const { app, services } = await setup(files);
+
+    await app.inject({
+      method: 'POST',
+      url: '/v1/skills/import',
+      headers,
+      payload: { url: 'https://github.com/acme/tools/tree/main/skills' },
+    });
+    files['skills/review/SKILL.md'] = document('Review a change', 'Read the tests.', 'review');
+
+    const updated = await app.inject({ method: 'POST', url: '/v1/skills/review/update', headers });
+
+    expect(updated.statusCode).toBe(200);
+    expect(await services.skillLibrary.list()).toMatchObject([
+      { name: 'deploy', instructions: 'Run the pipeline.', version: 1 },
+      { name: 'review', instructions: 'Read the tests.', version: 2 },
+    ]);
+  });
+
+  it('leaves the skill as it was when its source cannot be read', async () => {
+    const files: Record<string, string> = {
+      'skills/deploy/SKILL.md': document('Ship a release', 'Run the pipeline.'),
+    };
+    const network = { down: false };
+    const { app, services } = await setup(files, network);
+    const ask = async () => [
+      (await app.inject({ method: 'GET', url: '/v1/skills/deploy/upstream', headers })).statusCode,
+      (await app.inject({ method: 'POST', url: '/v1/skills/deploy/update', headers })).statusCode,
+    ];
+
+    await app.inject({
+      method: 'POST',
+      url: '/v1/skills/import',
+      headers,
+      payload: { url: address },
+    });
+    const before = await services.skillLibrary.list();
+    files['skills/deploy/SKILL.md'] = document('Ship it', 'Run the new pipeline.');
+
+    // GitHub out of reach, then the document gone from the repository.
+    network.down = true;
+    expect(await ask()).toEqual([502, 502]);
+    network.down = false;
+    delete files['skills/deploy/SKILL.md'];
+    expect(await ask()).toEqual([502, 502]);
+
+    expect(await services.skillLibrary.list()).toEqual(before);
   });
 });
 

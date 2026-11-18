@@ -46,6 +46,15 @@ export function registerSkillRoutes(app: FastifyInstance, deps: SkillRouteServic
     library.setEnabled(request.params.name, request.body),
   );
 
+  // An imported skill and its source: whether the two differ, and copying the source again.
+  app.get<{ Params: SkillParams }>('/v1/skills/:name/upstream', async (request) =>
+    importer(deps).upstream(request.params.name),
+  );
+
+  app.post<{ Params: SkillParams }>('/v1/skills/:name/update', async (request) =>
+    importer(deps).updateFromSource(request.params.name),
+  );
+
   // The instructions travel with the list: the owner cannot edit a built-in, so reading it is
   // the only way to know what their agents were told. Listed against the installation's
   // servers: what a run lends itself, such as GitHub's, is not shown here.

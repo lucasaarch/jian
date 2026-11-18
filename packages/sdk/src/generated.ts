@@ -1583,6 +1583,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/skills/{name}/upstream": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Required permission: admin. */
+        get: operations["checkSkillUpstream"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/skills/{name}/update": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Required permission: admin. */
+        post: operations["updateSkillFromSource"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/built-in-skills": {
         parameters: {
             query?: never;
@@ -16741,6 +16775,7 @@ export interface operations {
                             ref?: string;
                             marketplace?: string;
                             plugin?: string;
+                            license?: string;
                             /** Format: date-time */
                             importedAt: string;
                         };
@@ -16749,6 +16784,7 @@ export interface operations {
                         /** Format: uuid */
                         authorProfileId?: string;
                         enabled: boolean;
+                        version: number;
                         /** Format: date-time */
                         createdAt: string;
                         /** Format: date-time */
@@ -16872,6 +16908,7 @@ export interface operations {
                             ref?: string;
                             marketplace?: string;
                             plugin?: string;
+                            license?: string;
                             /** Format: date-time */
                             importedAt: string;
                         };
@@ -16880,6 +16917,7 @@ export interface operations {
                         /** Format: uuid */
                         authorProfileId?: string;
                         enabled: boolean;
+                        version: number;
                         /** Format: date-time */
                         createdAt: string;
                         /** Format: date-time */
@@ -17002,6 +17040,7 @@ export interface operations {
                             ref?: string;
                             marketplace?: string;
                             plugin?: string;
+                            license?: string;
                             /** Format: date-time */
                             importedAt: string;
                         };
@@ -17010,6 +17049,7 @@ export interface operations {
                         /** Format: uuid */
                         authorProfileId?: string;
                         enabled: boolean;
+                        version: number;
                         /** Format: date-time */
                         createdAt: string;
                         /** Format: date-time */
@@ -17237,6 +17277,7 @@ export interface operations {
                             ref?: string;
                             marketplace?: string;
                             plugin?: string;
+                            license?: string;
                             /** Format: date-time */
                             importedAt: string;
                         };
@@ -17245,6 +17286,7 @@ export interface operations {
                         /** Format: uuid */
                         authorProfileId?: string;
                         enabled: boolean;
+                        version: number;
                         /** Format: date-time */
                         createdAt: string;
                         /** Format: date-time */
@@ -17447,6 +17489,240 @@ export interface operations {
             };
         };
     };
+    checkSkillUpstream: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        changed: boolean;
+                        /** Format: date-time */
+                        checkedAt: string;
+                    };
+                };
+            };
+            /** @description Error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    updateSkillFromSource: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        name: string;
+                        description: string;
+                        instructions: string;
+                        origin?: {
+                            /** Format: uri */
+                            url: string;
+                            ref?: string;
+                            marketplace?: string;
+                            plugin?: string;
+                            license?: string;
+                            /** Format: date-time */
+                            importedAt: string;
+                        };
+                        /** @constant */
+                        writtenBy?: "agent";
+                        /** Format: uuid */
+                        authorProfileId?: string;
+                        enabled: boolean;
+                        version: number;
+                        /** Format: date-time */
+                        createdAt: string;
+                        /** Format: date-time */
+                        updatedAt: string;
+                    };
+                };
+            };
+            /** @description Error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
     listBuiltinSkills: {
         parameters: {
             query?: never;
@@ -17472,6 +17748,7 @@ export interface operations {
                             ref?: string;
                             marketplace?: string;
                             plugin?: string;
+                            license?: string;
                             /** Format: date-time */
                             importedAt: string;
                         };

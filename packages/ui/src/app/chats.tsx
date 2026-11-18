@@ -12,6 +12,7 @@ import {
   onPlugins,
   onPulls,
   pluginsPath,
+  skillAt,
 } from '../lib/navigation';
 import { usePhone } from '../lib/phone';
 import { useProfiles } from '../lib/query/profile';
@@ -39,6 +40,7 @@ import { StageHandoff } from './onboarding/handoff';
 import { rememberWelcome, Welcome, welcomed } from './onboarding/welcome';
 import { PhoneBar } from './phone-bar';
 import { PluginsScreen } from './plugins/plugins-screen';
+import { SkillPage } from './plugins/skill-page';
 import { PullsScreen } from './pulls/pulls-screen';
 import { LoadingMark } from './reload';
 import { movedToPlugins } from './web-addresses';
@@ -252,6 +254,8 @@ function AgentChats({ profileId, phone }: { profileId: string; phone: boolean })
   const remember = useLastProfile((state) => state.remember);
   // The pull requests take the chat's place, as a chat would; the sidebar stays beside them.
   const pathname = usePathname();
+  // Under Plugins, one skill has a page of its own, by its name.
+  const skill = skillAt(pathname);
   useEventStream(profileId);
   useEffect(() => remember(profileId), [profileId, remember]);
 
@@ -264,6 +268,9 @@ function AgentChats({ profileId, phone }: { profileId: string; phone: boolean })
           <PullsScreen profileId={profileId} />
         ) : onArtifacts(pathname) ? (
           <ArtifactsScreen profileId={profileId} />
+        ) : skill !== undefined ? (
+          // By name, so the next skill opened starts on its overview, not mid-edit of the last.
+          <SkillPage key={skill} name={skill} />
         ) : onPlugins(pathname) ? (
           <PluginsScreen />
         ) : onActivity(pathname) ? (

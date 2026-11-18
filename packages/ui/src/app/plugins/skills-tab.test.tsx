@@ -7,10 +7,10 @@ import { librarySkills, profile } from '../../test/fixtures';
 import { PluginsScreen } from './plugins-screen';
 
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
-const address = vi.hoisted(() => ({ query: '', replace: vi.fn() }));
+const address = vi.hoisted(() => ({ query: '', replace: vi.fn(), push: vi.fn() }));
 vi.mock('../../platform/navigation', () => ({
   usePathname: () => '/agents/a1/plugins',
-  useRouter: () => ({ replace: address.replace, push: vi.fn() }),
+  useRouter: () => ({ replace: address.replace, push: address.push }),
   useSearchParams: () => new URLSearchParams(address.query),
 }));
 const actions = vi.hoisted(() => ({ api: {} as GatewayApi }));
@@ -25,6 +25,7 @@ vi.mock('../../lib/workspace', () => ({
       ),
     busy: false,
   }),
+  useProfileId: () => 'a1',
   notifyError: vi.fn(),
 }));
 // No connector of the gateway's own, so a row here is a skill or one of the catalog's apps.
@@ -48,6 +49,7 @@ beforeEach(() => {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
   address.query = 'tab=skills';
   address.replace.mockClear();
+  address.push.mockClear();
 });
 
 afterEach(async () => {
@@ -96,14 +98,11 @@ const press = async (name: string, within?: ParentNode) => {
   if (!found) throw new Error(`no ${name}`);
   await act(async () => found.click());
 };
-/** Opens a skill from its row, as a click on it does, and gives back what opened. */
+/** Opens a skill from its row, as a click on it does. */
 const open = async (name: string) => {
   const found = row(name)?.querySelector('button');
   if (!found) throw new Error(`no row ${name}`);
   await act(async () => found.click());
-  const dialog = document.querySelector('[role="dialog"]');
-  if (!dialog) throw new Error(`${name} did not open`);
-  return dialog;
 };
 const type = (input: HTMLInputElement | null | undefined, value: string) =>
   act(async () => {
@@ -182,56 +181,19 @@ it('shows the first skills on All, the library before the built-in, and the rest
   expect(names('Library')).toHaveLength(librarySkills.length);
 });
 
-it('switches a skill for every agent at once, and puts it back when the gateway refuses', async () => {
-  let refuse: (reason: Error) => void = () => {};
-  const setSkillEnabled = vi.fn(
-    () =>
-      new Promise((_, reject) => {
-        refuse = reject;
-      }),
-  );
-  await show({ setSkillEnabled });
-  const dialog = await open('web-research');
-  const toggle = () => dialog.querySelector<HTMLElement>('[role="switch"]');
-  expect(toggle()?.getAttribute('aria-checked')).toBe('true');
+it('opens a skill on its own page from its row, on the Skills tab and on All', async () => {
+  await show();
 
-  await act(async () => toggle()?.click());
+  await open('trip-planning');
+  expect(address.push).toHaveBeenLastCalledWith('/agents/a1/plugins/skills/trip-planning');
+  await open('web-research');
+  expect(address.push).toHaveBeenLastCalledWith('/agents/a1/plugins/skills/web-research');
+  // A page, not something over this one.
+  expect(document.querySelector('[role="dialog"]')).toBeNull();
 
-  // Shown off while the gateway has not answered, in the dialog and on the row under it.
-  expect(toggle()?.getAttribute('aria-checked')).toBe('false');
-  expect(row('web-research')?.textContent).toContain('Off');
-  expect(setSkillEnabled).toHaveBeenCalledWith('web-research', false);
-
-  await act(async () => refuse(new Error('The gateway is unreachable.')));
-  expect(toggle()?.getAttribute('aria-checked')).toBe('true');
-  expect(row('web-research')?.textContent).not.toContain('Off');
-});
-
-it('switches a skill of the library the same way, whoever wrote it', async () => {
-  const setSkillEnabled = vi.fn(async () => null);
-  await show({ setSkillEnabled });
-  const dialog = await open('invoice-check');
-  expect(dialog.querySelector('[role="switch"]')?.getAttribute('aria-checked')).toBe('false');
-
-  await act(async () => dialog.querySelector<HTMLElement>('[role="switch"]')?.click());
-
-  expect(setSkillEnabled).toHaveBeenCalledWith('invoice-check', true);
-});
-
-it('deletes a skill of the library only once its name is typed', async () => {
-  const deleteSkill = vi.fn(async () => null);
-  await show({ deleteSkill });
-  const dialog = await open('trip-planning');
-
-  await press('Delete', dialog);
-  const confirm = button('Delete skill') as HTMLButtonElement | undefined;
-  expect(confirm?.disabled).toBe(true);
-  expect(deleteSkill).not.toHaveBeenCalled();
-
-  await type(confirm?.closest('[role="dialog"]')?.querySelector('input'), 'trip-planning');
-  await act(async () => confirm?.click());
-
-  expect(deleteSkill).toHaveBeenCalledWith('trip-planning');
+  await press('All', host);
+  await open('concise');
+  expect(address.push).toHaveBeenLastCalledWith('/agents/a1/plugins/skills/concise');
 });
 
 /** The form that opened, once it is there. */
@@ -249,43 +211,6 @@ const submit = (form: HTMLFormElement) =>
       ?.querySelector<HTMLButtonElement>('button[type="submit"]')
       ?.click(),
   );
-
-it('saves an edit to any skill of the library under the name it has', async () => {
-  const updateSkill = vi.fn(async () => null);
-  await show({ updateSkill });
-  // An agent wrote this one; the owner edits it all the same.
-  await press('Edit', await open('trip-planning'));
-
-  const form = await opened();
-  await type(form.querySelector<HTMLInputElement>('input[name="description"]'), 'Dates first.');
-  await submit(form);
-
-  expect(updateSkill).toHaveBeenCalledWith('trip-planning', {
-    description: 'Dates first.',
-    instructions: 'Ask for the dates before anything else.',
-  });
-});
-
-it('reads a built-in skill as Markdown, with nothing to edit or delete', async () => {
-  await show({
-    builtinSkills: async () => [
-      { ...research, instructions: '# Find it\n\nUse **the web** first.\n\n- one\n- two' },
-    ],
-  });
-
-  const dialog = await open('web-research');
-
-  expect(dialog.querySelector('[aria-label="Verified"]')).not.toBeNull();
-  expect(dialog.textContent).toContain('Skill · By Jian');
-  // The skill's name is the dialog's h2; the heading written in the skill is inside `.markdown`.
-  expect(dialog.querySelector('.markdown h3')?.textContent).toBe('Find it');
-  expect(dialog.querySelector('strong')?.textContent).toBe('the web');
-  expect(dialog.querySelectorAll('.markdown li')).toHaveLength(2);
-  // The raw syntax is not what is read.
-  expect(dialog.textContent).not.toContain('**');
-  expect(button('Edit', dialog)).toBeUndefined();
-  expect(button('Delete', dialog)).toBeUndefined();
-});
 
 it('finds a skill by what it says and by who made it, accents and case aside', async () => {
   await show({
@@ -323,8 +248,9 @@ it('narrows the skills by who made them, and to the ones switched off', async ()
   await vi.waitFor(() => expect(names()).toEqual(['invoice-check']));
 });
 
-it('imports a skill from Add, by its address', async () => {
-  const importSkill = vi.fn(async () => null);
+/** Imports from Add what the gateway then answers with. */
+const importing = async (imported: unknown[]) => {
+  const importSkill = vi.fn(async () => imported);
   await show({ importSkill });
 
   await press('Add', host);
@@ -333,17 +259,29 @@ it('imports a skill from Add, by its address', async () => {
   await type(form.querySelector('input'), 'https://github.com/example/skills/tree/main/tidy');
   await submit(form);
 
+  return importSkill;
+};
+
+it('imports a skill from Add, by its address, and opens its page', async () => {
+  const importSkill = await importing([librarySkills[0]]);
+
   expect(importSkill).toHaveBeenCalledWith('https://github.com/example/skills/tree/main/tidy');
+  expect(address.push).toHaveBeenCalledWith('/agents/a1/plugins/skills/concise');
 });
 
-it('writes a new skill from Add, into the library every agent shares', async () => {
-  const createSkill = vi.fn(async () => null);
-  await show({ createSkill });
+it('stays on the list after importing a folder of skills', async () => {
+  await importing(librarySkills.slice(0, 2));
 
+  expect(address.push).not.toHaveBeenCalled();
+  await vi.waitFor(() => expect(document.querySelector('[role="dialog"] form')).toBeNull());
+});
+
+/** Writes a skill in the form Add opens, and sends it. */
+const writing = async (name: string) => {
   await press('Add', host);
   await press('Create skill');
   const form = await opened();
-  await type(form.querySelector<HTMLInputElement>('input[name="name"]'), 'tidy-inbox');
+  await type(form.querySelector<HTMLInputElement>('input[name="name"]'), name);
   await type(form.querySelector<HTMLInputElement>('input[name="description"]'), 'Sort the mail.');
   const instructions = form.querySelector('textarea');
   await act(async () => {
@@ -354,10 +292,29 @@ it('writes a new skill from Add, into the library every agent shares', async () 
     instructions?.dispatchEvent(new Event('input', { bubbles: true }));
   });
   await submit(form);
+};
+
+it('writes a new skill from Add, into the library every agent shares, and opens its page', async () => {
+  const createSkill = vi.fn(async () => null);
+  await show({ createSkill });
+
+  await writing('tidy-inbox');
 
   expect(createSkill).toHaveBeenCalledWith({
     name: 'tidy-inbox',
     description: 'Sort the mail.',
     instructions: 'Oldest first.',
   });
+  expect(address.push).toHaveBeenCalledWith('/agents/a1/plugins/skills/tidy-inbox');
+});
+
+it('stays on the form when the gateway refuses the new skill', async () => {
+  const createSkill = vi.fn(async () => Promise.reject(new Error('That name is taken.')));
+  await show({ createSkill });
+
+  await writing('concise');
+
+  expect(createSkill).toHaveBeenCalled();
+  expect(address.push).not.toHaveBeenCalled();
+  expect(document.querySelector('[role="dialog"] form')).not.toBeNull();
 });

@@ -133,4 +133,8 @@ export const resourceCalls = (client: Client) => ({
       client.PUT('/v1/skills/{name}/enabled', { params: { path: { name } }, body: { enabled } }),
     ),
   importSkill: (url: string) => result(client.POST('/v1/skills/import', { body: { url } })),
+  skillUpstream: (name: string) =>
+    result(client.GET('/v1/skills/{name}/upstream', { params: { path: { name } } })),
+  updateSkillFromSource: (name: string) =>
+    result(client.POST('/v1/skills/{name}/update', { params: { path: { name } } })),
 });

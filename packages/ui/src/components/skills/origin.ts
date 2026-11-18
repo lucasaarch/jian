@@ -12,3 +12,18 @@ export function importedFrom(url: string): string {
 
   return path || host;
 }
+
+/**
+ * An imported skill's address as it is read, not as GitHub writes it: the owner, the repository
+ * and the folder, without the branch in between or the document's own name at the end.
+ */
+export function sourceLabel(url: string): string {
+  const { pathname, host } = new URL(url);
+  const [owner, repository, ...rest] = pathname.split('/').filter(Boolean);
+  // A page address names the branch after `tree` or `blob`; a raw one right after the repository.
+  const folder = rest
+    .slice(host === 'raw.githubusercontent.com' ? 1 : 2)
+    .filter((part) => !/^SKILL\.md$/i.test(part));
+
+  return [owner, repository, ...folder].filter(Boolean).join('/') || host;
+}

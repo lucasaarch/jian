@@ -25,8 +25,12 @@ export type SkillItem = {
   instructions: string;
   /** Who it is owed to, as it is said: "By you", "By Zero Two", "Imported from Anthropic". */
   by: string;
+  /** Who made it, alone: "Jian", "You", an agent's name, "An agent" for one gone, "Imported". */
+  maker: string;
   /** Its place in the library; a built-in skill has none. */
   index?: number;
+  /** As the library holds it, with its source, version and dates; a built-in skill has none. */
+  held?: LibrarySkill;
   /** Whether the agents are offered it: one switch for all of them. */
   enabled: boolean;
 };
@@ -52,20 +56,30 @@ export function skillItems(
     ...own.map((skill, index): SkillItem => {
       // An agent's own first: what it wrote stays its own, wherever the idea came from. Then
       // only a skill with an address was copied from somewhere; the rest the owner wrote.
+      const agent = author(skill.authorProfileId);
       const whose =
         skill.writtenBy === 'agent'
-          ? ({ kind: 'agent', by: `By ${author(skill.authorProfileId) ?? 'an agent'}` } as const)
+          ? ({
+              kind: 'agent',
+              by: `By ${agent ?? 'an agent'}`,
+              maker: agent ?? 'An agent',
+            } as const)
           : skill.origin?.url
-            ? ({ kind: 'imported', by: `Imported from ${importedFrom(skill.origin.url)}` } as const)
-            : ({ kind: 'yours', by: 'By you' } as const);
+            ? ({
+                kind: 'imported',
+                by: `Imported from ${importedFrom(skill.origin.url)}`,
+                maker: 'Imported',
+              } as const)
+            : ({ kind: 'yours', by: 'By you', maker: 'You' } as const);
 
-      return { key: `own:${skill.name}`, ...whose, ...shared(skill), index };
+      return { key: `own:${skill.name}`, ...whose, ...shared(skill), index, held: skill };
     }),
     ...builtIn.map(
       (skill): SkillItem => ({
         key: `built-in:${skill.name}`,
         kind: 'built-in',
         by: 'By Jian',
+        maker: 'Jian',
         ...shared(skill),
       }),
     ),

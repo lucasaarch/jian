@@ -1,10 +1,10 @@
 'use client';
 
-import { ArrowLeft, ChevronLeft } from 'lucide-react';
+import { ChevronLeft } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
 import { usePhone } from '../lib/phone';
 import { useLayout } from '../lib/stores/layout';
-import { PageBody, PageHeading, SectionHeading, surfaceCard } from './page-layout';
+import { BackLink, PageBody, PageHeading, SectionHeading, surfaceCard } from './page-layout';
 import { SearchField } from './search-field';
 
 export type SettingsPage = {
@@ -91,14 +91,9 @@ export function SettingsLayout({
         className="flex min-h-0 w-(--sidebar-width) shrink-0 flex-col gap-3 border-r border-line bg-sidebar px-2 pt-[calc(var(--chrome-top,0px)+0.5rem)] pb-2.5 phone:w-full phone:border-r-0 phone:bg-canvas phone:group-data-[reading=true]/settings:hidden"
       >
         <div className="flex items-center justify-between gap-2">
-          <button
-            type="button"
-            onClick={onBack}
-            className="flex h-8 w-fit items-center gap-2 px-2.5 text-[13px] text-muted transition-colors hover:text-ink"
-          >
-            <ArrowLeft size={15} />
+          <BackLink onClick={onBack} className="px-2.5">
             Back
-          </button>
+          </BackLink>
           {action}
         </div>
         <SearchField

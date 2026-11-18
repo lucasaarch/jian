@@ -18,6 +18,7 @@ function toSkill(row: Row, enabled: boolean): LibrarySkill {
     ...(row.writtenBy ? { writtenBy: row.writtenBy } : {}),
     ...(row.authorProfileId ? { authorProfileId: row.authorProfileId } : {}),
     enabled,
+    version: row.version,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };
