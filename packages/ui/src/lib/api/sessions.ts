@@ -5,6 +5,7 @@ import type {
   DeckExportQuery,
   MediaUpload,
   ModelSelection,
+  ProfileArtifact,
   ProjectChoice,
   ProtectionMode,
   RequestBody,
@@ -317,6 +318,26 @@ export const sessionCalls = (client: Client, origin = '') => ({
     result(
       client.GET('/v1/profiles/{profileId}/sessions/{sessionId}/artifacts', {
         params: { path: { profileId, sessionId } },
+      }),
+    ),
+  /**
+   * Every Artifact of the agent, across its conversations, the one changed last first and a
+   * page at a time: `before` is the cursor the page before answered.
+   */
+  profileArtifacts: (
+    profileId: string,
+    wanted: { q?: string; type?: SessionArtifact['type']; before?: string } = {},
+  ): Promise<{ items: ProfileArtifact[]; nextCursor: string | null }> =>
+    result(
+      client.GET('/v1/profiles/{profileId}/session-artifacts', {
+        params: { path: { profileId }, query: wanted },
+      }),
+    ),
+  /** Gone for good, with every version it had and its public link. */
+  deleteSessionArtifact: (profileId: string, sessionId: string, artifactId: string) =>
+    result(
+      client.DELETE('/v1/profiles/{profileId}/sessions/{sessionId}/artifacts/{artifactId}', {
+        params: { path: { profileId, sessionId, artifactId } },
       }),
     ),
   /** One version of one of them, which never changes once made. */

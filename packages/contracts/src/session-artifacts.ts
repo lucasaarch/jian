@@ -180,6 +180,28 @@ export const sessionArtifactSchema = z.strictObject({
   updatedAt: z.iso.datetime(),
 });
 
+/**
+ * What the agent's page of every Artifact asks for: those of all its conversations, the one
+ * changed last first, a page at a time. `before` is the id of the last one already read.
+ */
+export const profileArtifactsQuerySchema = z.strictObject({
+  before: z.uuid().optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(30),
+  /** Words of its title, in any case. */
+  q: z.string().trim().min(1).max(120).optional(),
+  type: sessionArtifactTypeSchema.optional(),
+});
+
+/** An Artifact as that page lists it: with the stored title of the conversation it belongs to. */
+export const profileArtifactSchema = sessionArtifactSchema.extend({
+  sessionTitle: z.string().nullable(),
+});
+
+export const profileArtifactPageSchema = z.strictObject({
+  items: z.array(profileArtifactSchema),
+  nextCursor: z.string().nullable(),
+});
+
 export const sessionArtifactVersionParamsSchema = z.strictObject({
   profileId: z.uuid(),
   sessionId: z.uuid(),
@@ -269,6 +291,7 @@ export type SessionArtifactFile = z.infer<typeof sessionArtifactFileSchema>;
 export type SessionArtifactVisibility = z.infer<typeof sessionArtifactVisibilitySchema>;
 export type SessionArtifactAuthor = z.infer<typeof sessionArtifactAuthorSchema>;
 export type SessionArtifact = z.infer<typeof sessionArtifactSchema>;
+export type ProfileArtifact = z.infer<typeof profileArtifactSchema>;
 export type SessionArtifactVersion = z.infer<typeof sessionArtifactVersionSchema>;
 export type DeckExportQuery = z.infer<typeof deckExportQuerySchema>;
 export type DeckExport = z.infer<typeof deckExportSchema>;

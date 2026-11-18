@@ -73,6 +73,12 @@ export const keys = {
       sessionId,
       ...(artifactId !== undefined && version !== undefined ? [artifactId, version] : []),
     ] as const,
+  /**
+   * Every Artifact of the agent, as its page lists them: with a filter that reading of them,
+   * with none the head of every reading. Apart from `artifacts`, which one conversation's go by.
+   */
+  profileArtifacts: (profileId: string, filter?: { q: string; type: string }) =>
+    ['profile', profileId, 'all-artifacts', ...(filter ? [filter] : [])] as const,
   schedules: (profileId: string) => ['profile', profileId, 'schedules'] as const,
   scheduleHistory: (profileId: string, scheduleId: string) =>
     ['profile', profileId, 'schedules', scheduleId, 'history'] as const,

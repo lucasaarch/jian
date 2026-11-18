@@ -5,7 +5,7 @@ import { ChatNotices } from '../components/notifications/chat-notices';
 import { Sessions } from '../components/sessions';
 import { Action } from '../kit';
 import type { Profile } from '../lib/api';
-import { agentPath, onActivity, onPulls } from '../lib/navigation';
+import { agentPath, onActivity, onArtifacts, onPulls } from '../lib/navigation';
 import { usePhone } from '../lib/phone';
 import { useProfiles } from '../lib/query/profile';
 import { useEventStream } from '../lib/query/stream';
@@ -19,6 +19,7 @@ import { usePathname, useRouter, useSearchParams } from '../platform/navigation'
 import { ActivityScreen } from './activity/activity-screen';
 import { AgentOverlays } from './agent-overlays';
 import { AgentPicker } from './agent-picker';
+import { ArtifactsScreen } from './artifacts/artifacts-screen';
 import { ChatSearch } from './chat-search';
 import { ChatSidebar } from './chat-sidebar';
 import { ChatsLoading } from './chats-loading';
@@ -70,11 +71,12 @@ export function ChatsApp({
   const pathname = usePathname();
   const search = useSearchParams();
   const phone = usePhone();
-  // Something the sidebar opened: a chat, a new one, or the pull requests.
+  // Something the sidebar opened: a chat, a new one, or a screen in the chat's place.
   const opened =
     /\/sessions\/[^/]+/.test(pathname) ||
     search.has('new') ||
     onPulls(pathname) ||
+    onArtifacts(pathname) ||
     onActivity(pathname);
   const sidebar = !phone || (known && !opened);
   const main = !phone || !sidebar;
@@ -242,6 +244,8 @@ function AgentChats({ profileId, phone }: { profileId: string; phone: boolean })
       <div className="min-h-0 flex-1">
         {onPulls(pathname) ? (
           <PullsScreen profileId={profileId} />
+        ) : onArtifacts(pathname) ? (
+          <ArtifactsScreen profileId={profileId} />
         ) : onActivity(pathname) ? (
           <ActivityScreen />
         ) : (

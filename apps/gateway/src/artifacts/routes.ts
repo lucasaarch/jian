@@ -6,7 +6,7 @@ import {
 } from '@jian/contracts';
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import { GatewayError } from '../core/errors.js';
-import type { SessionParams } from '../http/params.js';
+import type { ProfileParams, SessionParams } from '../http/params.js';
 import { artifactFrame, artifactPolicy, publishedArtifact, publishedFile } from './document.js';
 import type { SessionArtifacts } from './service.js';
 
@@ -28,6 +28,12 @@ export function registerArtifactRoutes(
   app: FastifyInstance,
   deps: { artifacts: SessionArtifacts },
 ): void {
+  // Every Artifact of the agent, for the panel's page of them. Its address is not `artifacts`,
+  // which at this level reads a stored tool result.
+  app.get<{ Params: ProfileParams }>('/v1/profiles/:profileId/session-artifacts', async (request) =>
+    deps.artifacts.listAll(request.params.profileId, request.query),
+  );
+
   app.get<{ Params: SessionParams }>(
     '/v1/profiles/:profileId/sessions/:sessionId/artifacts',
     async (request) => deps.artifacts.list(request.params.profileId, request.params.sessionId),
@@ -97,6 +103,23 @@ export function registerArtifactRoutes(
         request.params.artifactId,
         request.body,
       ),
+  );
+
+  // Removing one is the owner's alone, as editing one by hand is: a paired phone only reads.
+  app.delete<{ Params: ArtifactParams }>(
+    '/v1/profiles/:profileId/sessions/:sessionId/artifacts/:artifactId',
+    async (request, reply) => {
+      if (request.device) {
+        throw new GatewayError(403, 'A paired device cannot delete an Artifact.');
+      }
+      await deps.artifacts.delete(
+        request.params.profileId,
+        request.params.sessionId,
+        request.params.artifactId,
+      );
+
+      return reply.code(204).send();
+    },
   );
 
   // The frame holds no Artifact, so it needs no proof and may be kept: the panel, which read the

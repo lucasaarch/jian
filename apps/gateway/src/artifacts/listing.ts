@@ -1,0 +1,72 @@
+import type { SessionArtifactType } from '@jian/contracts';
+import { and, desc, eq, ilike, sql } from 'drizzle-orm';
+import { assertFound } from '../core/errors.js';
+import type { Queryable } from '../storage/database.js';
+import { sessionArtifacts, sessionArtifactVersions, sessions } from '../storage/schema.js';
+
+/**
+ * Every Artifact of a profile, across its conversations, the one changed last first, a page at
+ * a time: what the panel's Artifacts page lists. Each comes with the stored title of its
+ * conversation and, for a file alone, its latest version's content, which says which file it is.
+ *
+ * `before` is the id of the last Artifact already read. One that is gone by then, deleted
+ * between two pages, is refused rather than answered from the start again.
+ */
+export async function pageProfileArtifacts(
+  db: Queryable,
+  where: {
+    profileId: string;
+    before?: string | undefined;
+    q?: string | undefined;
+    type?: SessionArtifactType | undefined;
+    limit: number;
+  },
+) {
+  const conditions = [eq(sessionArtifacts.profileId, where.profileId)];
+
+  if (where.type) conditions.push(eq(sessionArtifacts.type, where.type));
+  // The words as typed: `%` and `_` are a title's own characters here, not a pattern's.
+  if (where.q) {
+    conditions.push(ilike(sessionArtifacts.title, `%${where.q.replace(/[\\%_]/g, '\\$&')}%`));
+  }
+  if (where.before) {
+    const [cursor] = await db
+      .select({ id: sessionArtifacts.id })
+      .from(sessionArtifacts)
+      .where(
+        and(eq(sessionArtifacts.id, where.before), eq(sessionArtifacts.profileId, where.profileId)),
+      )
+      .limit(1);
+    assertFound(cursor, 'Artifact cursor');
+    // Compared inside the database, where a time keeps the precision it was stored with.
+    conditions.push(
+      sql`(${sessionArtifacts.updatedAt}, ${sessionArtifacts.id}) < (select "updated_at", "id" from "session_artifacts" where "id" = ${where.before})`,
+    );
+  }
+  const rows = await db
+    .select({
+      artifact: sessionArtifacts,
+      content: sessionArtifactVersions.content,
+      sessionTitle: sessions.title,
+    })
+    .from(sessionArtifacts)
+    .innerJoin(sessions, eq(sessions.id, sessionArtifacts.sessionId))
+    // Only a file's version is read, which is a few words: never a page or a deck.
+    .leftJoin(
+      sessionArtifactVersions,
+      and(
+        eq(sessionArtifacts.type, 'file'),
+        eq(sessionArtifactVersions.artifactId, sessionArtifacts.id),
+        eq(sessionArtifactVersions.version, sessionArtifacts.version),
+      ),
+    )
+    .where(and(...conditions))
+    .orderBy(desc(sessionArtifacts.updatedAt), desc(sessionArtifacts.id))
+    .limit(where.limit + 1);
+  const items = rows.slice(0, where.limit);
+
+  return {
+    items,
+    nextCursor: rows.length > where.limit ? (items.at(-1)?.artifact.id ?? null) : null,
+  };
+}

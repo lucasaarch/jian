@@ -8,6 +8,8 @@ import {
   deckSlideMoveSchema,
   deckSlideUpdateSchema,
   EDITABLE_ARTIFACT_TYPES,
+  type ProfileArtifact,
+  profileArtifactsQuerySchema,
   type SessionArtifact,
   type SessionArtifactAuthor,
   type SessionArtifactFile,
@@ -24,12 +26,14 @@ import type { Clock } from '../core/clock.js';
 import { assertFound, GatewayError } from '../core/errors.js';
 import { recordEvent } from '../core/events.js';
 import { findMedia } from '../media/repository.js';
+import { findProfile } from '../profiles/repository.js';
 import type { SessionReader } from '../sessions/port.js';
 import type { Queryable, Store } from '../storage/database.js';
 import { sessionArtifacts, sessionArtifactVersions } from '../storage/schema.js';
 import { changedSlides, deckContent, type SlideChange, slidesOf } from './deck.js';
 import { exportDeck } from './export.js';
 import { fileOf, keptFile } from './file.js';
+import { pageProfileArtifacts } from './listing.js';
 
 /** What a component's frame can hand it; anything else would have to come from the network. */
 const IMPORTABLE = new Set(['react', 'react-dom', 'react-dom/client']);
@@ -441,6 +445,36 @@ export class SessionArtifacts {
       .orderBy(desc(sessionArtifacts.updatedAt));
 
     return rows.map((row) => recordOf(row.artifact, row.content));
+  }
+
+  /** Every Artifact of the profile, whatever conversation it was made in (listing.ts). */
+  async listAll(
+    profileId: string,
+    input: unknown,
+  ): Promise<{ items: ProfileArtifact[]; nextCursor: string | null }> {
+    const query = profileArtifactsQuerySchema.parse(input);
+    assertFound(await findProfile(this.store.db, profileId), 'Profile');
+    const page = await pageProfileArtifacts(this.store.db, { profileId, ...query });
+
+    return {
+      items: page.items.map((row) => ({
+        ...recordOf(row.artifact, row.content),
+        sessionTitle: row.sessionTitle,
+      })),
+      nextCursor: page.nextCursor,
+    };
+  }
+
+  /**
+   * The owner's removal of one, for good: its versions go with it in the database, and its
+   * public link answers nothing from then on. A file's bytes stay, since they are media of the
+   * conversation, which may show them in a message too.
+   */
+  async delete(profileId: string, sessionId: string, artifactId: string): Promise<void> {
+    await this.store.transaction(profileId, async (tx) => {
+      const current = await this.find(tx, profileId, sessionId, artifactId, true);
+      await tx.delete(sessionArtifacts).where(eq(sessionArtifacts.id, current.id));
+    });
   }
 
   async version(

@@ -1,8 +1,13 @@
 'use client';
 
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  type InfiniteData,
+  type QueryClient,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query';
 import { useEffect } from 'react';
-import type { GatewayApi } from '../../../lib/api';
+import type { GatewayApi, ProfileArtifact, SessionArtifact } from '../../../lib/api';
 import { subscribe } from '../../../lib/events';
 import { keys } from '../../../lib/query/keys';
 
@@ -16,6 +21,31 @@ export type ArtifactsApi = Pick<
   // A file's bytes, which are media of the conversation.
   | 'media'
 >;
+
+/** One page of the agent's page of every Artifact, as the gateway answers it. */
+export type ArtifactsPage = { items: ProfileArtifact[]; nextCursor: string | null };
+
+/**
+ * An Artifact as it now stands, after the owner saved an edit or changed who reads it, put
+ * where each list holds it: its conversation's, and every reading of the agent's page of them
+ * (app/artifacts), which keeps what it knows of the conversation.
+ */
+export function artifactChanged(client: QueryClient, profileId: string, next: SessionArtifact) {
+  client.setQueryData<SessionArtifact[]>(keys.sessionArtifacts(profileId, next.sessionId), (all) =>
+    all?.map((item) => (item.id === next.id ? next : item)),
+  );
+  client.setQueriesData<InfiniteData<ArtifactsPage>>(
+    { queryKey: keys.profileArtifacts(profileId) },
+    (all) =>
+      all && {
+        ...all,
+        pages: all.pages.map((page) => ({
+          ...page,
+          items: page.items.map((item) => (item.id === next.id ? { ...item, ...next } : item)),
+        })),
+      },
+  );
+}
 
 /** Every Artifact of the conversation, the one changed last first. */
 export function useSessionArtifacts(
