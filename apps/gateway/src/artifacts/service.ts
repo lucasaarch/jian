@@ -2,6 +2,7 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import {
   type ArtifactFolder,
   type ArtifactFolders,
+  boardContentSchema,
   type DeckExport,
   deckExportQuerySchema,
   deckSlideAddSchema,
@@ -77,6 +78,27 @@ function compiled(content: string): string {
 const drawn = (type: SessionArtifactType, content: string) =>
   type === 'react' ? compiled(content) : content;
 
+/**
+ * A whiteboard is data its frame draws, not code: checked against its form, so a mistake is the
+ * agent's to fix now rather than a board that will not draw.
+ */
+function checkBoard(content: string): void {
+  let given: unknown;
+  try {
+    given = JSON.parse(content);
+  } catch {
+    throw new GatewayError(400, 'A whiteboard is given as JSON: {"items": [ … ]}.');
+  }
+  const checked = boardContentSchema.safeParse(given);
+  const issue = checked.error?.issues[0];
+  if (issue) {
+    throw new GatewayError(
+      400,
+      `The whiteboard does not fit its form at ${issue.path.join('.') || 'its top'}: ${issue.message}`,
+    );
+  }
+}
+
 /** What the agent gives for a version: which of these it takes depends on the type. */
 type Given = {
   content?: string | undefined;
@@ -104,6 +126,7 @@ function kept(type: SessionArtifactType, given: Given): string {
     );
   }
   drawn(type, given.content);
+  if (type === 'board') checkBoard(given.content);
 
   return given.content;
 }
@@ -312,7 +335,8 @@ export class SessionArtifacts {
 
   /**
    * What the owner saved after editing one by hand in the panel: a new version of theirs, made
-   * from the version they were editing. A page is kept as it came; a deck gets that one slide.
+   * from the version they were editing. A source is checked as the agent's is and kept as it
+   * came; a deck gets that one slide.
    * The panel that saved it already shows it, so nothing is told to bring it forward.
    */
   async edit(
@@ -328,13 +352,13 @@ export class SessionArtifacts {
       if (!EDITABLE_ARTIFACT_TYPES.includes(current.type)) {
         throw new GatewayError(
           409,
-          'Only a web page or a deck is edited by hand. Ask the agent for a new version of this one.',
+          'This kind of Artifact is not edited by hand. Ask the agent for a new version of it.',
         );
       }
       const edited = await this.stored(tx, current.id, data.version);
       if (current.type !== 'deck') {
         if (data.slide !== undefined) throw new GatewayError(400, 'Only a deck has slides.');
-        return this.versioned(tx, current, data.content, 'owner');
+        return this.versioned(tx, current, kept(current.type, { content: data.content }), 'owner');
       }
       if (data.slide === undefined) {
         throw new GatewayError(400, 'Say which slide of the deck was edited.');

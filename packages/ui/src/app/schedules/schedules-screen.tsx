@@ -74,7 +74,7 @@ function ScheduleRows({
 /**
  * What the agent does at a time — reminders, summaries, recurring checks — in place of the chat,
  * with the sidebar beside it as every screen there has: a page of the kit's one anatomy, its
- * list searched from the toolbar, a new one written from the heading. One opens in full on the
+ * list searched from the toolbar, a new one written from its end. One opens in full on the
  * same page, its way back in its heading. The one open is in the address (`?schedule=`, `new`
  * for one being written), so the browser's back comes to the list as the heading's does. The
  * owner and the agent manage the same list; removing one asks for its name first.
@@ -183,12 +183,6 @@ export function SchedulesScreen({ profileId }: { profileId: string }) {
           id="schedules-title"
           title="Schedules"
           description="What the agent does at a time: reminders, summaries, recurring checks."
-          actions={
-            <Action tone="outline" size="small" className="h-8" onClick={() => open(NEW)}>
-              <Plus size={14} aria-hidden="true" />
-              New schedule
-            </Action>
-          }
         />
         <PageToolbar>
           <SearchField
@@ -197,6 +191,10 @@ export function SchedulesScreen({ profileId }: { profileId: string }) {
             value={typed}
             onValueChange={setTyped}
           />
+          <Action tone="outline" size="small" className="h-8" onClick={() => open(NEW)}>
+            <Plus size={14} aria-hidden="true" />
+            New schedule
+          </Action>
         </PageToolbar>
         {error && (
           <p role="alert" className="text-sm text-bad">

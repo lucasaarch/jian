@@ -41933,7 +41933,9 @@
                 "markdown",
                 "svg",
                 "mermaid",
-                "deck"
+                "deck",
+                "sheet",
+                "board"
               ]
             }
           },
@@ -42012,7 +42014,9 @@
                               "markdown",
                               "svg",
                               "mermaid",
-                              "deck"
+                              "deck",
+                              "sheet",
+                              "board"
                             ]
                           },
                           "visibility": {
@@ -42258,7 +42262,9 @@
                           "markdown",
                           "svg",
                           "mermaid",
-                          "deck"
+                          "deck",
+                          "sheet",
+                          "board"
                         ]
                       },
                       "visibility": {
@@ -42904,7 +42910,9 @@
                         "markdown",
                         "svg",
                         "mermaid",
-                        "deck"
+                        "deck",
+                        "sheet",
+                        "board"
                       ]
                     },
                     "visibility": {
@@ -43151,7 +43159,9 @@
                         "markdown",
                         "svg",
                         "mermaid",
-                        "deck"
+                        "deck",
+                        "sheet",
+                        "board"
                       ]
                     },
                     "visibility": {
@@ -43505,7 +43515,9 @@
                         "markdown",
                         "svg",
                         "mermaid",
-                        "deck"
+                        "deck",
+                        "sheet",
+                        "board"
                       ]
                     },
                     "visibility": {
@@ -44349,7 +44361,9 @@
                 "markdown",
                 "svg",
                 "mermaid",
-                "deck"
+                "deck",
+                "sheet",
+                "board"
               ]
             }
           },

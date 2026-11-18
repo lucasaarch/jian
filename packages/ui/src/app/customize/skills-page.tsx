@@ -112,33 +112,7 @@ export function SkillsPage() {
         />
       ) : (
         <div className="grid grid-cols-1 gap-4">
-          <PageHeading
-            title="Skills"
-            actions={
-              <>
-                <Action
-                  tone="outline"
-                  size="small"
-                  className="h-8"
-                  onClick={() => setImporting(true)}
-                >
-                  <Plus size={13} />
-                  Import
-                </Action>
-                <Action
-                  tone="outline"
-                  size="small"
-                  className="h-8"
-                  disabled={full}
-                  title={full ? `An agent keeps up to ${SKILL_LIMIT}.` : undefined}
-                  onClick={() => edit('new')}
-                >
-                  <Plus size={13} />
-                  Create
-                </Action>
-              </>
-            }
-          />
+          <PageHeading title="Skills" />
           <PageToolbar>
             <SearchField
               label="Search skills"
@@ -152,6 +126,21 @@ export function SkillsPage() {
               options={skillFilters}
               onValueChange={(next) => setFilter(next as SkillFilter)}
             />
+            <Action tone="outline" size="small" className="h-8" onClick={() => setImporting(true)}>
+              <Plus size={13} />
+              Import
+            </Action>
+            <Action
+              tone="outline"
+              size="small"
+              className="h-8"
+              disabled={full}
+              title={full ? `An agent keeps up to ${SKILL_LIMIT}.` : undefined}
+              onClick={() => edit('new')}
+            >
+              <Plus size={13} />
+              Create
+            </Action>
           </PageToolbar>
           {builtIn.error && (
             <p role="alert" className="text-xs text-bad">

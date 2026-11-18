@@ -144,6 +144,48 @@ describe('what the agent makes', () => {
     expect(version.compiled).toContain("createElement('button'");
     expect(version.compiled).not.toContain('<number>');
   });
+
+  it('refuses a whiteboard that does not fit its form, and keeps one that does', async () => {
+    const { app, at, make } = await setup();
+    const board = (items: unknown[]) =>
+      make({ title: 'Plan', type: 'board', content: JSON.stringify({ items }) });
+
+    await expect(
+      make({ title: 'Plan', type: 'board', content: 'a note here' }),
+    ).rejects.toMatchObject({ statusCode: 400, message: /given as JSON/ });
+    await expect(board([{ kind: 'note', x: 0, y: 0, w: 0, h: 10 }])).rejects.toMatchObject({
+      statusCode: 400,
+      message: /items\.0\.w/,
+    });
+    await expect(
+      board([{ kind: 'line', from: [0, 0], to: [10, 10], color: 'red' }]),
+    ).rejects.toMatchObject({ statusCode: 400, message: /items\.0\.color/ });
+
+    const kept = await board([
+      { kind: 'note', x: 0, y: 0, w: 180, h: 140, text: 'Launch' },
+      { kind: 'arrow', from: [180, 70], to: [320, 70], color: '#2563eb' },
+    ]);
+    // The owner's edit is checked as the agent's was.
+    const save = (content: string) =>
+      app.inject({
+        method: 'POST',
+        url: at(`/${kept.id}/versions`),
+        headers,
+        payload: { version: 1, content },
+      });
+    expect((await save('{"items": [{"kind": "star"}]}')).statusCode).toBe(400);
+    expect((await save('{"items": []}')).statusCode).toBe(201);
+
+    // A spreadsheet is CSV, its formulas included, kept as written.
+    const sheet = await make({
+      title: 'Costs',
+      type: 'sheet',
+      content: 'Item,Cost\nA,2\nB,3\nTotal,=SUM(B2:B3)\n',
+    });
+    expect(
+      (await app.inject({ url: at(`/${sheet.id}/versions/1`), headers })).json().content,
+    ).toContain('=SUM(B2:B3)');
+  });
 });
 
 describe('who reads an Artifact', () => {
@@ -360,7 +402,7 @@ describe('the frame the panel draws one in', () => {
     const { app, make } = await setup();
     await make({ title: 'Secret plan', type: 'markdown', content: 'Only for the owner' });
 
-    for (const type of ['html', 'react', 'markdown', 'svg', 'mermaid', 'deck']) {
+    for (const type of ['html', 'react', 'markdown', 'svg', 'mermaid', 'deck', 'sheet', 'board']) {
       const frame = await app.inject({ url: `/v1/artifact-frames/${type}` });
       expect(frame.statusCode).toBe(200);
       expect(frame.headers['content-type']).toBe('text/html; charset=utf-8');
@@ -395,7 +437,7 @@ describe('the frame the panel draws one in', () => {
       expect(own).not.toContain('allowfullscreen');
     }
     // The others are drawn by a page of the gateway's, which the shell posts the source on to.
-    for (const type of ['react', 'markdown', 'svg', 'mermaid']) {
+    for (const type of ['react', 'markdown', 'svg', 'mermaid', 'sheet', 'board']) {
       const own = (await app.inject({ url: `/v1/artifact-frames/${type}` })).body.replace(
         /srcdoc="[^"]*"/,
         '',
@@ -412,7 +454,7 @@ describe('the frame the panel draws one in', () => {
   it('edits in a frame of its own, as sealed, that only answers its parent', async () => {
     const { app } = await setup();
 
-    for (const type of ['html', 'deck']) {
+    for (const type of ['html', 'deck', 'markdown', 'sheet', 'board']) {
       const frame = await app.inject({ url: `/v1/artifact-frames/${type}?edit=1` });
       expect(frame.statusCode).toBe(200);
       const policy = String(frame.headers['content-security-policy']);
@@ -443,12 +485,13 @@ describe('the frame the panel draws one in', () => {
       expect(inner.match(/postMessage/g)).toHaveLength(1);
       expect(inner).toContain('parent.postMessage(');
       expect(inner).not.toMatch(/fetch\(|XMLHttpRequest|WebSocket|sendBeacon|\.submit\(/);
-      // What it is handed is read as a document, never written into the page to run.
-      expect(inner).toContain('new DOMParser()');
+      // What it is handed is read as a document or as data, never written into the page to run.
+      expect(inner).not.toMatch(/document\.write|eval\(|new Function/);
+      if (['html', 'deck', 'markdown'].includes(type)) expect(inner).toContain('new DOMParser()');
     }
 
     // The types the owner does not edit by hand have no such frame.
-    for (const type of ['react', 'markdown', 'svg', 'mermaid']) {
+    for (const type of ['react', 'svg', 'mermaid']) {
       expect((await app.inject({ url: `/v1/artifact-frames/${type}?edit=1` })).statusCode).toBe(
         400,
       );
@@ -772,7 +815,11 @@ describe('what the owner edits by hand', () => {
     const { services, app, at, make } = await setup();
     const html = await make({ title: 'Page', type: 'html', content: page('Agent') });
     const deck = await make({ title: 'Plan', type: 'deck', slides: [slide('A')] });
-    const notes = await make();
+    const picture = await make({
+      title: 'Logo',
+      type: 'svg',
+      content: '<svg xmlns="http://www.w3.org/2000/svg"/>',
+    });
     const save = async (artifactId: string, payload: Record<string, unknown>) =>
       (await app.inject({ method: 'POST', url: at(`/${artifactId}/versions`), headers, payload }))
         .statusCode;
@@ -793,7 +840,7 @@ describe('what the owner edits by hand', () => {
     expect(await save(deck.id, { version: 1, content: slide('x') })).toBe(400);
     expect(await save(deck.id, { version: 1, content: slide('x'), slide: 2 })).toBe(400);
     // The types that are not edited by hand.
-    expect(await save(notes.id, { version: 1, content: '# Mine' })).toBe(409);
+    expect(await save(picture.id, { version: 1, content: '<svg/>' })).toBe(409);
     expect(await save('not-an-id', { version: 1, content: page('x') })).toBe(400);
     expect(await save(randomUUID(), { version: 1, content: page('x') })).toBe(404);
 

@@ -1,8 +1,13 @@
-import { ARTIFACT_EDIT_MESSAGE } from '@jian/contracts';
+import { ARTIFACT_EDIT_MESSAGE, type SessionArtifactType } from '@jian/contracts';
+import { BOARD } from './board-frame.js';
+import { MARKDOWN } from './markdown-frame.js';
+import { SHEET } from './sheet-frame.js';
 
 /**
  * What the frame runs in place of drawing when the owner edits a page or a slide by hand. It is
- * script for the frame's page, kept as text: `const editing = (source, options) => { … }`.
+ * script for the frame's page, kept as text: `const editPage = (source, options, finish) => …`.
+ * `finish`, when given, is what the edited page is saved as instead of its markup (a
+ * document's Markdown).
  *
  * - The source is read as a document and never run. A page's own scripts are left exactly as
  *   written and stay asleep, so what is saved is the page the agent wrote plus the owner's
@@ -37,8 +42,8 @@ const STYLE = `
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .45); }
 `;
 
-export const EDITING = String.raw`
-const editing = (source, options) => {
+const EDITING = String.raw`
+const editPage = (source, options, finish) => {
   const KEY = ${JSON.stringify(ARTIFACT_EDIT_MESSAGE)};
   const parsed = new DOMParser().parseFromString(source, 'text/html');
   const doctype = parsed.doctype ? '<!doctype html>\n' : '';
@@ -285,7 +290,7 @@ const editing = (source, options) => {
       node.removeAttribute('contenteditable');
       node.removeAttribute('data-jian-editing');
     }
-    return doctype + copy.outerHTML;
+    return finish ? finish(copy) : doctype + copy.outerHTML;
   };
   const told = (ask) => {
     if (!ask) return;
@@ -303,3 +308,48 @@ const editing = (source, options) => {
   });
 };
 `;
+
+/**
+ * How a type drawn by a script of ours (sheet-frame.ts, board-frame.ts) answers: `made` is what
+ * that script returned editable, `{ now, changed }`. As for a page, only when asked, and only
+ * the source; a scale is nothing to it, being drawn at the frame's own size.
+ */
+const ANSWERING = `
+const answering = (options, made) => {
+  const KEY = ${JSON.stringify(ARTIFACT_EDIT_MESSAGE)};
+  const told = (ask) => {
+    if (!ask || typeof ask.collect !== 'string') return;
+    const answer = made.changed() ? { html: made.now() } : { unchanged: true };
+    parent.postMessage({ [KEY]: { collect: ask.collect, ...answer } }, '*');
+  };
+  told(options);
+  addEventListener('message', (event) => {
+    if (event.source === parent && event.data) told(event.data[KEY]);
+  });
+};
+`;
+
+/**
+ * A document is drawn as it always is and edited as a page is, inside the frame's own head (its
+ * style); what is saved is its Markdown again. `run` and `read` are the frame page's.
+ */
+const MARKDOWN_EDITING = `
+const editing = (source, options) => {
+  run(read('libraries')[0]);
+  const page = '<!doctype html><html lang="en">' + document.head.outerHTML +
+    '<body class="markdown"><div id="root">' + marked.parse(source) + '</div></body></html>';
+  editPage(page, options, (copy) => markdownOf(copy.querySelector('#root')));
+};
+`;
+
+/**
+ * What the editing frame of each type runs: `const editing = (source, options) => …`, with the
+ * frame page's `root`, `run` and `read` in reach. Only the types in `EDITABLE_ARTIFACT_TYPES`.
+ */
+export const EDITORS: Partial<Record<SessionArtifactType, string>> = {
+  html: `${EDITING}const editing = editPage;\n`,
+  deck: `${EDITING}const editing = editPage;\n`,
+  markdown: EDITING + MARKDOWN + MARKDOWN_EDITING,
+  sheet: `${SHEET}${ANSWERING}const editing = (source, options) => answering(options, sheet(source, root, true));\n`,
+  board: `${BOARD}${ANSWERING}const editing = (source, options) => answering(options, board(source, root, true));\n`,
+};
