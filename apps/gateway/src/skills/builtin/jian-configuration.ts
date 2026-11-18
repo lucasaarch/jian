@@ -126,7 +126,7 @@ Schedules, it takes the whole window: its pages are listed where the sidebar was
   and any other format as a card with its name and size. Its Download button saves the file as
   it was given; a file has no Copy and no Edit. A deck shows its slides small and
   numbered in a row on top and one of them large under it, dragged or scrolled sideways to the
-  next, with Present in the toolbar, beside Edit, to fill the screen; a deck has no code view. Its Download button saves
+  next, with Present in the toolbar, beside Edit, to fill the screen with the same player its public link has; a deck has no code view. Its Download button saves
   the whole deck as a PDF, a page a slide, or as a PowerPoint file, in the fonts it is shown in
   or in basic ones any computer has, and the slide in view as a web page or as a picture. The
   PowerPoint file holds each slide as a picture with its text in the notes, so it opens the
@@ -138,7 +138,7 @@ Schedules, it takes the whole window: its pages are listed where the sidebar was
   Public gives a link anyone can open without signing in, to read the latest version only,
   and making it private again ends that link for good. A file's link shows a picture, a video,
   a sound, text or a Markdown document, and offers any other format, a PDF included, only to
-  download. A deck's link has Present too: the whole
+  download. A deck's link has Present too, the same player the panel's Present opens: the whole
   screen, stepped through with the arrow keys, space or a click, and left with Escape. Only a
   gateway on a server offers Public; the desktop app's own gateway keeps every Artifact private.
 - **The conversation's badges**, where it runs, show its objective and how many pull requests

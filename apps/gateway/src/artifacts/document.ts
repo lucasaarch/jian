@@ -1,13 +1,14 @@
 import {
   ARTIFACT_EDIT_MESSAGE,
   ARTIFACT_FRAME_MESSAGE,
+  ARTIFACT_PRESENT_MESSAGE,
   type ArtifactFrameType,
   EDITABLE_ARTIFACT_TYPES,
   type SessionArtifactFile,
 } from '@jian/contracts';
 import { GatewayError } from '../core/errors.js';
 import { EDITING } from './edit-frame.js';
-import { PLAYER, PLAYER_STYLE } from './player.js';
+import { PLAYER, PLAYER_EMBEDDED, PLAYER_STYLE } from './player.js';
 import { type RuntimeFile, runtimeSource } from './runtime.js';
 
 /**
@@ -165,8 +166,10 @@ function page(
   type: ArtifactFrameType,
   artifact?: { title: string; source: string },
   editing = false,
+  presented = false,
 ): string {
-  const { libraries, body } = DRAW[type];
+  const { libraries } = DRAW[type];
+  const body = presented ? PLAYER_EMBEDDED : DRAW[type].body;
 
   return `<!doctype html>
 <html lang="en">
@@ -243,9 +246,10 @@ ${editing ? '' : body}
 function shell(
   title: string,
   inner: string | null,
-  hears: 'nothing' | 'once' | 'always',
+  hears: 'nothing' | 'once' | 'always' | 'present',
   fullscreen = false,
 ): string {
+  const out = hears === 'present' ? ARTIFACT_PRESENT_MESSAGE : ARTIFACT_EDIT_MESSAGE;
   const held =
     inner === null
       ? ''
@@ -273,7 +277,7 @@ function shell(
     for (const data of waiting.splice(0)) frame.contentWindow.postMessage(data, '*');
   };
   hold(frame, () => {
-    loaded = true;
+    loaded = true;${hears === 'present' ? '\n    frame.focus();' : ''}
     relay();
   });${
     hears === 'nothing'
@@ -281,18 +285,18 @@ function shell(
       : `
   const hear = (event) => {
     if (event.source !== parent || !event.data) return;
-    ${hears === 'once' ? "removeEventListener('message', hear);" : ''}
+    ${hears === 'always' ? '' : "removeEventListener('message', hear);"}
     waiting.push(event.data);
     relay();
   };
   addEventListener('message', hear);`
   }${
-    hears === 'always'
+    hears === 'always' || hears === 'present'
       ? `
   addEventListener('message', (event) => {
     if (event.source !== frame.contentWindow || !event.data) return;
-    const said = event.data[${JSON.stringify(ARTIFACT_EDIT_MESSAGE)}];
-    if (said) parent.postMessage({ [${JSON.stringify(ARTIFACT_EDIT_MESSAGE)}]: said }, '*');
+    const said = event.data[${JSON.stringify(out)}];
+    if (said) parent.postMessage({ [${JSON.stringify(out)}]: said }, '*');
   });`
       : ''
   }`;
@@ -329,19 +333,25 @@ const frames = new Map<string, string>();
 
 /**
  * The empty frame of a type, the same for every Artifact and every owner. Built once. `editing`
- * is the one the owner edits by hand in, which only a page and a deck's slide have.
+ * is the one the owner edits by hand in, which only a page and a deck's slide have. `present` is
+ * a deck's player, already presenting, for the panel's own presentation of it.
  */
-export function artifactFrame(type: ArtifactFrameType, editing = false): string {
+export function artifactFrame(type: ArtifactFrameType, editing = false, present = false): string {
   if (editing && !EDITABLE_ARTIFACT_TYPES.includes(type)) {
     throw new GatewayError(400, 'Only a web page or a deck is edited by hand.');
   }
-  const key = `${type}:${editing}`;
+  if (present && (type !== 'deck' || editing)) {
+    throw new GatewayError(400, 'Only a deck is presented, and not while it is edited.');
+  }
+  const key = `${type}:${editing}:${present}`;
   let frame = frames.get(key);
 
   if (!frame) {
-    frame = editing
-      ? shell('Artifact', page(type, undefined, true), 'always')
-      : shell('Artifact', DRAW[type].whole ? null : page(type), 'once');
+    frame = present
+      ? shell('Artifact', page(type, undefined, false, true), 'present')
+      : editing
+        ? shell('Artifact', page(type, undefined, true), 'always')
+        : shell('Artifact', DRAW[type].whole ? null : page(type), 'once');
     frames.set(key, frame);
   }
 

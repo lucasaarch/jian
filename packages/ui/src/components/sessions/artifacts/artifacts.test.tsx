@@ -1,4 +1,4 @@
-import { SESSION_ARTIFACT_MAX } from '@jian/contracts';
+import { ARTIFACT_PRESENT_MESSAGE, SESSION_ARTIFACT_MAX } from '@jian/contracts';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -631,33 +631,40 @@ describe('a deck of slides', () => {
     expect(viewed(api)).toBe(2);
   });
 
-  it('is presented over the whole window, and comes back to the slide it ended on', async () => {
+  it('is presented in the gateway’s own player, and ends when the player says so', async () => {
     await opened(deck);
     expect(presented()).toBeNull();
 
     await click(button('Present'));
     await settled(() => Boolean(presented()));
-    // The slide on top: the one it came from stays drawn under it.
-    const shown = () => [...(presented()?.querySelectorAll('iframe') ?? [])].at(-1);
-    expect(shown()?.getAttribute('sandbox')).toBe('allow-scripts');
-    expect(shown()?.title).toBe('Slide 1 of 3');
+    // The player the public link runs, sealed like any Artifact's frame.
+    const player = presented()?.querySelector('iframe') as HTMLIFrameElement;
+    expect(player.getAttribute('sandbox')).toBe('allow-scripts');
+    expect(player.getAttribute('src')).toMatch(/\/v1\/artifact-frames\/deck\?present=1$/);
+    // Nothing of the old panel-only player is drawn.
+    expect(presented()?.querySelectorAll('iframe')).toHaveLength(1);
 
-    const press = (key: string) =>
+    const say = (source: unknown, data: unknown) =>
       act(async () => {
-        presented()?.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }));
+        dispatchEvent(new MessageEvent('message', { source: source as Window, data }));
       });
-    await press('ArrowRight');
-    expect(shown()?.title).toBe('Slide 2 of 3');
-    await press('End');
-    await press('ArrowRight');
-    expect(shown()?.title).toBe('Slide 3 of 3');
-
-    // Escape ends the presentation and stops there: the Inspector stays open under it.
-    await press('Escape');
+    // A message from anyone but the player's frame ends nothing.
+    await say(window, { [ARTIFACT_PRESENT_MESSAGE]: 'end' });
+    expect(presented()).not.toBeNull();
+    await say(player.contentWindow, { [ARTIFACT_PRESENT_MESSAGE]: 'end' });
     await settled(() => !presented());
-    expect(presented()).toBeNull();
     expect(drawer()).not.toBeNull();
-    expect(large()?.title).toBe('Plan, slide 3');
+  });
+
+  it('ends at Escape without closing the Inspector under it', async () => {
+    await opened(deck);
+    await click(button('Present'));
+    await settled(() => Boolean(presented()));
+    await act(async () => {
+      document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    });
+    await settled(() => !presented());
+    expect(drawer()).not.toBeNull();
   });
 
   const entries = () => [...document.querySelectorAll<HTMLElement>('[role=menuitem]')];

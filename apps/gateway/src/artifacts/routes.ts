@@ -127,11 +127,11 @@ export function registerArtifactRoutes(
   // panel may hold the frame, and the panel is served from the gateway's own address.
   app.get('/v1/artifact-frames/:type', async (request, reply) => {
     const { type } = artifactFrameParamsSchema.parse(request.params);
-    const { edit } = artifactFrameQuerySchema.parse(request.query);
+    const { edit, present } = artifactFrameQuerySchema.parse(request.query);
 
     return html(reply, "'self'")
       .header('Cache-Control', 'public, max-age=3600')
-      .send(artifactFrame(type, edit === '1'));
+      .send(artifactFrame(type, edit === '1', present === '1'));
   });
 
   // Never kept, so a link stops answering the moment its Artifact is private again; and never

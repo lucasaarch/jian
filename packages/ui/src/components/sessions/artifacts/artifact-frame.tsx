@@ -32,6 +32,7 @@ export function ArtifactFrame({
   title,
   source,
   editing = false,
+  presenting = false,
   scale = 1,
   frame,
   className = 'min-h-0 w-full flex-1 border-0',
@@ -44,6 +45,11 @@ export function ArtifactFrame({
   /** What the frame runs: the source, a React component compiled, or one slide of a deck. */
   source: string;
   editing?: boolean;
+  /**
+   * A deck's player, the one its public link runs, already presenting (deck/presentation.tsx).
+   * `source` is then the whole deck, and the frame says one thing back, which that file reads.
+   */
+  presenting?: boolean;
   /**
    * How far the panel scales the frame, as a slide's fixed canvas is. Only the editing frame is
    * told, to draw its bar of formatting at a size that reads.
@@ -78,7 +84,7 @@ export function ArtifactFrame({
       sandbox="allow-scripts"
       referrerPolicy="no-referrer"
       {...(lazy ? { loading: 'lazy' as const } : {})}
-      src={`${gatewayConnection().origin}/v1/artifact-frames/${type}${editing ? '?edit=1' : ''}`}
+      src={`${gatewayConnection().origin}/v1/artifact-frames/${type}${editing ? '?edit=1' : presenting ? '?present=1' : ''}`}
       className={className}
       style={style}
       onLoad={(event) => {

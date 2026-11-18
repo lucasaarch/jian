@@ -258,12 +258,11 @@ export function ArtifactView({
           frame={frame}
         />
       )}
-      {presenting && slides && (
+      {presenting && slides && read.data && (
         <Presentation
           title={artifact.title}
-          slides={slides}
-          at={slide ?? 0}
-          onAt={setAt}
+          source={read.data.content}
+          start={slide ?? 0}
           onClose={() => setPresenting(false)}
         />
       )}

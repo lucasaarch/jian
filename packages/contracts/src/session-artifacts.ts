@@ -258,7 +258,14 @@ export const artifactFrameParamsSchema = z.strictObject({ type: artifactFrameTyp
  * `EDITABLE_ARTIFACT_TYPES` does not have. It is a page of its own, so the frame that draws an
  * Artifact holds nothing that answers the panel.
  */
-export const artifactFrameQuerySchema = z.strictObject({ edit: z.literal('1').optional() });
+export const artifactFrameQuerySchema = z.strictObject({
+  edit: z.literal('1').optional(),
+  /**
+   * `present=1` asks for a deck's player, the one its public link runs, already presenting. It is
+   * handed the whole deck and never edits; only a deck has it.
+   */
+  present: z.literal('1').optional(),
+});
 
 /** The whole proof of a public Artifact's reader: 32 random bytes, in base64url. */
 export const publicArtifactParamsSchema = z.strictObject({
@@ -284,6 +291,12 @@ export const ARTIFACT_FRAME_MESSAGE = 'jianArtifact';
  * The frame says nothing it was not asked, and the panel reads nothing else from it.
  */
 export const ARTIFACT_EDIT_MESSAGE = 'jianArtifactEdit';
+
+/**
+ * The one thing the deck's player says to the panel that holds it: `{ [this]: 'end' }`, when the
+ * reader pressed Escape or its end button. The shell relays that and nothing else the frame says.
+ */
+export const ARTIFACT_PRESENT_MESSAGE = 'jianArtifactPresent';
 
 export type SessionArtifactType = z.infer<typeof sessionArtifactTypeSchema>;
 export type ArtifactFrameType = z.infer<typeof artifactFrameTypeSchema>;
