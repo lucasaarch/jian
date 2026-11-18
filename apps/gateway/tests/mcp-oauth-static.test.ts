@@ -91,6 +91,17 @@ describe('MCP OAuth without dynamic client registration', () => {
     ).toMatch(/pre-registered|OAuth App|client id/i);
   });
 
+  it('says a web page in place of JSON in one line, not as the page', () => {
+    const page = `JSON parsing failed: Text: <html><body>${'Too Many Requests 429 '.repeat(50)}</body></html>.`;
+
+    const limited = clarifyOauthError(page);
+    expect(limited).toMatch(/rate limiting.*429/);
+    expect(limited).not.toContain('<html>');
+    expect(clarifyOauthError('Unexpected token \'<\', "<!DOCTYPE "... is not valid JSON')).toMatch(
+      /web page instead of JSON/,
+    );
+  });
+
   it('fails DCR when neither a stored nor a static client is available', async () => {
     const { server } = nonDcrOauthPeer();
 

@@ -38,9 +38,6 @@ export const MCP_APP_ADDRESSES = {
   prisma: ['https://mcp.prisma.io/mcp'],
   huggingface: ['https://huggingface.co/mcp'],
   gitlab: ['https://gitlab.com/api/v4/mcp'],
-  // The query has AWS answer a call with no token by asking for sign-in, which is what starts
-  // it here; without it the first call is answered and sign-in never begins.
-  aws: ['https://aws-mcp.us-east-1.api.aws/mcp?oauth=initialize'],
   railway: ['https://mcp.railway.com'],
   hostinger: ['https://mcp.hostinger.com'],
   expo: ['https://mcp.expo.dev/mcp'],
@@ -62,3 +59,13 @@ export function mcpAppOf(url: string | undefined): McpAppId | undefined {
     MCP_APP_ADDRESSES[id].some((known) => same(url, known)),
   );
 }
+
+/**
+ * AWS is the one app that is no address: each account is the awslabs AWS API MCP server run as a
+ * command with that account's keys in its environment, so a server is AWS's by its command.
+ */
+export const AWS_MCP_COMMAND = 'uvx';
+export const AWS_MCP_PACKAGE = 'awslabs.aws-api-mcp-server@latest';
+
+export const isAwsServer = (server: { command?: string | undefined; args?: readonly string[] }) =>
+  server.command === AWS_MCP_COMMAND && server.args?.[0] === AWS_MCP_PACKAGE;

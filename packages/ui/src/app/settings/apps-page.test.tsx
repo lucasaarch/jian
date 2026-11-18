@@ -249,6 +249,66 @@ it('shows an account under the name its sign-in gave it, once the gateway rename
   );
 });
 
+/** Fills the field with this label. */
+async function fill(label: string, text: string) {
+  const found = [...document.querySelectorAll('label')].find((item) =>
+    item.textContent?.startsWith(label),
+  );
+  const input = found && document.getElementById(found.htmlFor);
+  if (!(input instanceof HTMLInputElement)) throw new Error(`no field ${label}`);
+  await type(input, text);
+}
+
+it('connects an AWS account as its own command server, keys kept as secret values', async () => {
+  read.githubIntegration.mockResolvedValue({ configured: false, accounts: [] });
+  read.xIntegration.mockResolvedValue({ configured: false, accounts: [] });
+  const first = {
+    name: 'aws_prod',
+    transport: 'stdio',
+    command: 'uvx',
+    args: ['awslabs.aws-api-mcp-server@latest'],
+    env: [],
+  };
+  read.mcpServers.mockResolvedValue([first]);
+
+  await show();
+  // An AWS account is the card's alone: the Apps card counts it, the MCP servers page skips it.
+  const configure = await vi.waitFor(() => {
+    const found = button('Configure AWS');
+    if (!found) throw new Error('no Configure');
+    return found;
+  });
+  await act(async () => configure.click());
+  expect(document.querySelector('[aria-label="Remove aws_prod"]')).not.toBeNull();
+
+  const another = [...document.querySelectorAll('button')].find((item) =>
+    item.textContent?.includes('Connect another account'),
+  );
+  await act(async () => another?.click());
+  await fill('Account name', 'Staging EU');
+  await fill('Access key ID', 'AKIAEXAMPLE');
+  await fill('Secret access key', 'shh');
+  await fill('Region', 'eu-west-1');
+  const submit = [...document.querySelectorAll('button')].find((item) => item.type === 'submit');
+  await act(async () => submit?.click());
+
+  expect(api.replaceMcpServers).toHaveBeenCalledWith([
+    first,
+    expect.objectContaining({
+      name: 'aws_staging_eu',
+      transport: 'stdio',
+      command: 'uvx',
+      args: ['awslabs.aws-api-mcp-server@latest'],
+      auth: 'none',
+      env: [
+        { name: 'AWS_ACCESS_KEY_ID', value: 'AKIAEXAMPLE' },
+        { name: 'AWS_SECRET_ACCESS_KEY', value: 'shh' },
+        { name: 'AWS_REGION', value: 'eu-west-1' },
+      ],
+    }),
+  ]);
+});
+
 it('shows a card only for each app the gateway offers', async () => {
   read.githubIntegration.mockResolvedValue({ configured: false, accounts: [] });
   read.xIntegration.mockResolvedValue({ configured: false, callbackUrl: xCallback, accounts: [] });

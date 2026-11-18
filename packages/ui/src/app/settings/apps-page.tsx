@@ -1,5 +1,6 @@
 'use client';
 
+import { isAwsServer } from '@jian/contracts';
 import { useQuery } from '@tanstack/react-query';
 import { type ReactNode, useState } from 'react';
 import {
@@ -13,6 +14,7 @@ import {
 import { queries } from '../../lib/query/profile';
 import { matchesQuery } from '../../lib/search';
 import { useActions } from '../../lib/workspace';
+import { AWS_DESCRIPTION, AwsCard } from './aws-card';
 import { GITHUB_DESCRIPTION, GitHubCard, githubOffered } from './github-card';
 import { McpAppCard } from './mcp-app-card';
 import { CATEGORIES, type Category, MCP_APPS, serversOf } from './mcp-apps';
@@ -74,6 +76,15 @@ export function AppsPage() {
       offered: xOffered(x.data),
       connected: (x.data?.accounts.length ?? 0) > 0,
       card: <XCard api={api} />,
+    },
+    {
+      id: 'aws',
+      name: 'AWS',
+      description: AWS_DESCRIPTION,
+      category: 'development',
+      offered: true,
+      connected: (servers.data ?? []).some(isAwsServer),
+      card: <AwsCard />,
     },
     // A service's own MCP server under a card, which every gateway can connect.
     ...MCP_APPS.map((app) => ({
