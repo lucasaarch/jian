@@ -1,16 +1,16 @@
 'use client';
 
-import { ChevronLeft, ChevronRight, Presentation as PresentIcon } from 'lucide-react';
-import { type KeyboardEvent, type RefObject, useState } from 'react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
+import type { KeyboardEvent, RefObject } from 'react';
 import { HoverTip, iconButton } from '../../../../kit';
-import { Presentation } from './presentation';
 import { SlideCarousel } from './slide-carousel';
 import { SlideRail } from './slide-rail';
 
 /**
  * A deck in the Inspector: its slides small and numbered in a row on top (slide-rail.tsx), the
  * one in view large under them, in a track that is dragged or scrolled to the next
- * (slide-carousel.tsx), and under that the way to step through and to present. The three follow
+ * (slide-carousel.tsx), and under that the way to step through. Present is in the toolbar
+ * (artifact-view.tsx). The three follow
  * one slide in view, `at`. Mount it with a key per version, so a new version's slides are new
  * frames.
  *
@@ -35,7 +35,6 @@ export function DeckView({
   /** The frame of the slide in view, for the one who saves an edit. */
   frame: RefObject<HTMLIFrameElement | null>;
 }) {
-  const [presenting, setPresenting] = useState(false);
   const last = slides.length - 1;
 
   const keyed = (event: KeyboardEvent) => {
@@ -85,28 +84,7 @@ export function DeckView({
             <ChevronRight size={16} aria-hidden="true" />
           </button>
         </HoverTip>
-        <HoverTip tip="Present">
-          <button
-            type="button"
-            aria-label="Present"
-            disabled={editing}
-            className={iconButton}
-            onClick={() => setPresenting(true)}
-          >
-            <PresentIcon size={15} aria-hidden="true" />
-          </button>
-        </HoverTip>
       </div>
-
-      {presenting && (
-        <Presentation
-          title={title}
-          slides={slides}
-          at={at}
-          onAt={onAt}
-          onClose={() => setPresenting(false)}
-        />
-      )}
     </div>
   );
 }
