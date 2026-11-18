@@ -151,7 +151,7 @@ export function PluginsScreen() {
 
   return (
     <div className="flex h-full min-h-0">
-      <PageBody wide labelledBy="plugins-title">
+      <PageBody labelledBy="plugins-title">
         <PageHeading
           id="plugins-title"
           title="Plugins"

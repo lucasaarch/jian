@@ -46,7 +46,6 @@ export function SettingsLayout({
   emptyLabel = 'No setting matches.',
   backLabel = 'Settings',
   action,
-  wide = false,
   ownHeading = false,
   children,
 }: {
@@ -60,8 +59,6 @@ export function SettingsLayout({
   backLabel?: string;
   /** Across from the way back, for what can be added to the list. */
   action?: ReactNode;
-  /** For a page that lays things side by side (cards, a map) instead of one column of rows. */
-  wide?: boolean;
   /** The open page draws its own `PageHeading`, for actions or a way back of its own. */
   ownHeading?: boolean;
   pages: SettingsPage[];
@@ -138,7 +135,6 @@ export function SettingsLayout({
         </div>
       </nav>
       <PageBody
-        wide={wide}
         label={title ?? open?.label}
         className="phone:group-data-[reading=false]/settings:hidden"
       >

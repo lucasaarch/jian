@@ -7,8 +7,8 @@ import { useCoveringPage } from '../lib/stores/screen';
 const FLOATING = '[role=dialog], [aria-modal=true], [role=menu], [role=listbox]';
 
 /**
- * A screen that takes the app's place, sidebar and conversation both, as settings and schedules
- * do: its own list where the sidebar was, with the way back at its top, and what it opens where
+ * A screen that takes the app's place, sidebar and conversation both, as settings do:
+ * its own list where the sidebar was, with the way back at its top, and what it opens where
  * the conversation was. Not a pane over the app: nothing is blurred behind it, and the host's
  * title bar stays over its top, as it is over the sidebar's. The conversation stays mounted
  * underneath, out of reach, with no Inspector, so coming back finds it as it was. Escape goes

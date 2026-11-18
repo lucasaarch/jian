@@ -31,6 +31,7 @@ import {
   artifactsPath,
   newChatPath,
   pluginsPath,
+  schedulesPath,
 } from '../../lib/navigation';
 import { useAgentOverlay } from '../../lib/stores/agent-overlay';
 import { useOnboarding } from '../../lib/stores/onboarding';
@@ -138,14 +139,24 @@ export function useAgentCommands({
         detail: current.name,
         keywords: ['schedule', 'reminder', 'recurring', 'cron', 'later'],
         icon: <AlarmClock size={15} />,
-        run: () => useAgentOverlay.getState().openSchedules(),
+        run: place(schedulesPath(current.id)),
       },
       {
         id: 'artifacts',
         group: 'Agent',
         title: 'Artifacts',
         detail: current.name,
-        keywords: ['artifact', 'page', 'document', 'deck', 'slides', 'diagram', 'file', 'made'],
+        keywords: [
+          'artifact',
+          'page',
+          'document',
+          'deck',
+          'slides',
+          'diagram',
+          'spreadsheet',
+          'whiteboard',
+          'made',
+        ],
         icon: <Shapes size={15} />,
         run: place(artifactsPath(current.id)),
       },

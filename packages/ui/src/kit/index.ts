@@ -8,7 +8,14 @@ export { AgentFace } from './face';
 export { Fold, FoldChevron } from './fold';
 export { iconButton } from './icon-button';
 export { HoverTip, InfoTip } from './info-tip';
-export { MenuChoices, MenuDivider, MenuEntry, MenuSwitch, menuPopup } from './menu';
+export {
+  MenuChoices,
+  MenuDivider,
+  MenuEntry,
+  MenuSubmenu,
+  MenuSwitch,
+  menuPopup,
+} from './menu';
 export { Overlay, OverlayActions } from './overlay';
 export { Page } from './page';
 export {

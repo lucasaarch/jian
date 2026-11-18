@@ -33,6 +33,9 @@ export type SessionFile = JsonResponse<'readSessionFile', 200>;
 export type SessionArtifact = JsonResponse<'listSessionArtifacts', 200>[number];
 /** An Artifact as the agent's page of them lists it, with its conversation's stored title. */
 export type ProfileArtifact = JsonResponse<'listProfileArtifacts', 200>['items'][number];
+/** Where the owner keeps an agent's Artifacts: their folders, and the projects each starts in. */
+export type ArtifactFolders = JsonResponse<'listArtifactFolders', 200>;
+export type ArtifactFolder = ArtifactFolders['folders'][number];
 export type SessionArtifactVersion = JsonResponse<'readSessionArtifactVersion', 200>;
 export type DeckExport = JsonResponse<'exportSessionArtifactVersion', 200>;
 /** The query is generated with every field optional; the format is what is being asked for. */

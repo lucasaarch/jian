@@ -466,6 +466,23 @@ export const sessionWorktrees = pgTable(
 );
 
 /**
+ * A folder the owner made on the Artifacts page to keep some of an agent's Artifacts together.
+ * An Artifact in none of them is shown under the project of its conversation, which needs no row.
+ */
+export const artifactFolders = pgTable(
+  'artifact_folders',
+  {
+    id: uuid('id').primaryKey(),
+    profileId: uuid('profile_id')
+      .notNull()
+      .references(() => profiles.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    createdAt,
+  },
+  (table) => [index('artifact_folders_profile').on(table.profileId, table.name)],
+);
+
+/**
  * An Artifact the agent made for the owner to see drawn in the Inspector, in the conversation it
  * was made in. Not `artifacts`, which holds a run's stored tool results.
  */
@@ -487,6 +504,11 @@ export const sessionArtifacts = pgTable(
     // The whole proof of whoever reads a public one; null while private, and new each time it
     // is made public, so an old link stops working.
     publicToken: text('public_token').unique(),
+    // Kept first on the owner's page of them. Nothing the agent does changes it.
+    pinned: boolean('pinned').notNull().default(false),
+    // The owner's folder it was moved to, of the same profile (the service checks; the key
+    // cannot). Null is where every one starts and where a deleted folder leaves its own.
+    folderId: uuid('folder_id').references(() => artifactFolders.id, { onDelete: 'set null' }),
     createdAt,
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },

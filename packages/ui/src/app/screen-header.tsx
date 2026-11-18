@@ -9,13 +9,25 @@ import { useLayout } from '../lib/stores/layout';
  * and Linux draw there; with no Inspector on such a screen, nothing else is. With the sidebar
  * away, its buttons float over the bar's start. A screen only read, as Activity, has none.
  */
-export function ScreenHeader({ title, children }: { title: string; children: ReactNode }) {
+export function ScreenHeader({
+  title,
+  leading,
+  children,
+}: {
+  title: ReactNode;
+  /** What comes before the title, such as a way back. The title then stays in view on a phone. */
+  leading?: ReactNode;
+  children: ReactNode;
+}) {
   const collapsed = useLayout((state) => state.chatList);
   return (
     <header
       className={`flex h-(--chrome-top) shrink-0 items-center gap-1 border-b border-line pr-[calc(var(--window-controls,0px)+1.25rem)] ${collapsed ? 'pl-52' : 'pl-5'} phone:h-auto phone:py-2 phone:pr-3 phone:pl-3`}
     >
-      <h1 className="min-w-0 flex-1 truncate text-sm font-semibold text-ink phone:invisible">
+      {leading}
+      <h1
+        className={`min-w-0 flex-1 truncate text-sm font-semibold text-ink ${leading ? '' : 'phone:invisible'}`}
+      >
         {title}
       </h1>
       {children}

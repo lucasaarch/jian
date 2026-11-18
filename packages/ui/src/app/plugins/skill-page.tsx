@@ -53,7 +53,7 @@ export function SkillPage({ name }: { name: string }) {
 
   return (
     <div className="flex h-full min-h-0">
-      <PageBody wide {...(item ? { labelledBy: 'skill-title' } : { label: 'Skill' })}>
+      <PageBody {...(item ? { labelledBy: 'skill-title' } : { label: 'Skill' })}>
         <div className="grid grid-cols-1 gap-3">
           <BackLink onClick={() => router.push(plugins)}>Plugins</BackLink>
           {item && (

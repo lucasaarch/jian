@@ -8,16 +8,20 @@ import {
   FilterSelect,
   HoverTip,
   iconButton,
+  PageBody,
+  PageHeading,
+  PageToolbar,
   SearchField,
   Segmented,
   SkeletonLine,
+  SkeletonRegion,
+  surfaceCard,
 } from '../../kit';
 import type { GitHubPullFilter, GitHubPullRow } from '../../lib/api';
 import { agentPath } from '../../lib/navigation';
 import { queries } from '../../lib/query/profile';
 import { useNoInspector } from '../../lib/stores/screen';
 import { useRouter } from '../../platform/navigation';
-import { ScreenHeader } from '../screen-header';
 import { pullKey } from './cells';
 import { PullTable } from './pull-table';
 import { ReviewSettings } from './review-settings';
@@ -27,9 +31,10 @@ import { usePulls, useReviewSettings, useStartReview } from './use-pulls';
 const SEARCH_PAUSE = 400;
 
 /**
- * The open pull requests of every account the GitHub App is installed on, in place of the chat.
- * Each can be handed to an agent to review; the settings say who and how, and whether new ones
- * are reviewed on their own.
+ * The open pull requests of every account the GitHub App is installed on, in place of the chat,
+ * a page of the kit's one anatomy as every other screen is: the filters in its toolbar, the
+ * table in a card. Each can be handed to an agent to review; the settings say who and how, and
+ * whether new ones are reviewed on their own.
  */
 export function PullsScreen({ profileId }: { profileId: string }) {
   const router = useRouter();
@@ -64,40 +69,48 @@ export function PullsScreen({ profileId }: { profileId: string }) {
   const list = pulls.data;
 
   return (
-    <section aria-label="Pull requests" className="flex h-full flex-col overflow-hidden">
-      <ScreenHeader title="Pull requests">
-        <HoverTip tip="Refresh" side="bottom">
-          <button
-            type="button"
-            aria-label="Refresh pull requests"
-            className={iconButton}
-            onClick={() => void pulls.refetch()}
-          >
-            <RefreshCw
-              size={15}
-              className={pulls.isFetching ? 'animate-spin' : ''}
-              aria-hidden="true"
-            />
-          </button>
-        </HoverTip>
-        <HoverTip tip="Review settings" side="bottom" align="end">
-          <button
-            type="button"
-            aria-label="Review settings"
-            className={iconButton}
-            onClick={() => setSettingsOpen(true)}
-          >
-            <Settings2 size={15} aria-hidden="true" />
-          </button>
-        </HoverTip>
-      </ScreenHeader>
-
-      {/* The filters scroll with the list, sticking to its top, so both are as wide as what
-          the scrollbar leaves and their right edges meet. A rule parts them from the list, which
-          lies on the page itself, edge to edge, as a pull request's Changes lies in the
-          Inspector: no card, only the lines between its rows. */}
-      <div className="min-h-0 flex-1 overflow-y-auto">
-        <div className="sticky top-0 z-10 flex flex-wrap items-center gap-2 border-b border-line bg-canvas px-5 py-3 phone:px-3">
+    <div className="flex h-full min-h-0">
+      <PageBody labelledBy="pulls-title">
+        <PageHeading
+          id="pulls-title"
+          title="Pull requests"
+          description="Open pull requests of the connected GitHub accounts, each ready for an agent to review."
+          actions={
+            <>
+              <HoverTip tip="Refresh" side="bottom">
+                <button
+                  type="button"
+                  aria-label="Refresh pull requests"
+                  className={iconButton}
+                  onClick={() => void pulls.refetch()}
+                >
+                  <RefreshCw
+                    size={15}
+                    className={pulls.isFetching ? 'animate-spin' : ''}
+                    aria-hidden="true"
+                  />
+                </button>
+              </HoverTip>
+              <HoverTip tip="Review settings" side="bottom" align="end">
+                <button
+                  type="button"
+                  aria-label="Review settings"
+                  className={iconButton}
+                  onClick={() => setSettingsOpen(true)}
+                >
+                  <Settings2 size={15} aria-hidden="true" />
+                </button>
+              </HoverTip>
+            </>
+          }
+        />
+        <PageToolbar>
+          <SearchField
+            label="Search pull requests"
+            value={typed}
+            onValueChange={setTyped}
+            className="min-w-44 flex-1"
+          />
           <Segmented
             label="Pull requests to show"
             value={filter}
@@ -113,62 +126,60 @@ export function PullsScreen({ profileId }: { profileId: string }) {
             ]}
             onValueChange={setRepository}
           />
-          <SearchField
-            label="Search pull requests"
-            value={typed}
-            onValueChange={setTyped}
-            className="min-w-48 flex-1"
-          />
-        </div>
+        </PageToolbar>
 
-        <div className="pb-6">
-          {list?.unreachable.length ? (
-            <p className="border-b border-line px-5 py-2.5 text-xs text-warn phone:px-3">
-              GitHub did not answer for {list.unreachable.join(', ')}. Their pull requests are left
-              out.
-            </p>
-          ) : null}
-          {pulls.isError && !list ? (
-            <Empty
-              text="The pull requests could not be read from GitHub."
-              action={<Action onClick={() => void pulls.refetch()}>Try again</Action>}
+        {list?.unreachable.length ? (
+          <p className="text-xs text-warn">
+            GitHub did not answer for {list.unreachable.join(', ')}. Their pull requests are left
+            out.
+          </p>
+        ) : null}
+        {pulls.isError && !list ? (
+          <Empty
+            text="The pull requests could not be read from GitHub."
+            action={<Action onClick={() => void pulls.refetch()}>Try again</Action>}
+          />
+        ) : !list ? (
+          <SkeletonRegion
+            label="Loading pull requests…"
+            className={`grid gap-4 p-4 ${surfaceCard}`}
+          >
+            {[0, 1, 2, 3, 4].map((row) => (
+              <SkeletonLine key={row} />
+            ))}
+          </SkeletonRegion>
+        ) : list.pulls.length ? (
+          // The table goes by the card's width, not the window's: it is the container.
+          <div className={`@container overflow-hidden ${surfaceCard}`}>
+            <PullTable
+              pulls={list.pulls}
+              starting={
+                start.isPending && start.variables ? pullKey(start.variables.pull) : undefined
+              }
+              review={review}
+              openChat={openChat}
             />
-          ) : !list ? (
-            <div className="grid gap-4 px-5 pt-4 phone:px-3" aria-busy="true">
-              {[0, 1, 2, 3, 4].map((row) => (
-                <SkeletonLine key={row} />
-              ))}
-            </div>
-          ) : list.pulls.length ? (
-            <div className="@container">
-              <PullTable
-                pulls={list.pulls}
-                starting={
-                  start.isPending && start.variables ? pullKey(start.variables.pull) : undefined
-                }
-                review={review}
-                openChat={openChat}
-              />
-            </div>
-          ) : (
-            <Empty text={q || repository ? 'No pull request matches.' : 'No open pull requests.'} />
-          )}
-          {list?.truncated && (
-            <p className="mt-3 px-5 text-xs text-muted phone:px-3">
-              Only the most recently updated are shown. Search or pick a repository to find others.
-            </p>
-          )}
-        </div>
-      </div>
+          </div>
+        ) : (
+          <Empty text={q || repository ? 'No pull request matches.' : 'No open pull requests.'} />
+        )}
+        {list?.truncated && (
+          <p className="text-xs text-muted">
+            Only the most recently updated are shown. Search or pick a repository to find others.
+          </p>
+        )}
+      </PageBody>
 
       <ReviewSettings open={settingsOpen} onOpenChange={setSettingsOpen} status={reviews.data} />
-    </section>
+    </div>
   );
 }
 
 function Empty({ text, action }: { text: string; action?: ReactNode }) {
   return (
-    <div className="grid justify-items-center gap-3 py-16 text-center text-sm text-muted">
+    <div
+      className={`grid justify-items-start gap-3 px-4 py-3 text-[13px] text-muted ${surfaceCard}`}
+    >
       <p>{text}</p>
       {action}
     </div>

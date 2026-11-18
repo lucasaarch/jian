@@ -1,4 +1,4 @@
-import { SLIDE_HEIGHT, SLIDE_WIDTH } from '@jian/contracts';
+import { ARTIFACT_PRESENT_MESSAGE, SLIDE_HEIGHT, SLIDE_WIDTH } from '@jian/contracts';
 
 /**
  * A whole deck on a page of its own, which is what its public link answers: one slide at a time
@@ -13,6 +13,10 @@ import { SLIDE_HEIGHT, SLIDE_WIDTH } from '@jian/contracts';
  *   Escape ends it, as does leaving the whole screen the browser's own way.
  * - A slide comes in over the one before it, once it has loaded, so there is no flash of an empty
  *   sheet. Whoever asked for less motion gets the next slide at once.
+ *
+ * `embedded` is the same player inside the panel's own presentation: already presenting, filling
+ * the frame the panel made fullscreen, and saying `end` to it (and only that) when the reader
+ * leaves. It never asks the browser for the screen itself, and a public page says nothing at all.
  *
  * It is script for the page (document.ts), kept as text: the body of the page's `draw`, with
  * `source` (the deck as a version keeps it) and `root` in reach. It reads nothing but that and
@@ -65,10 +69,10 @@ body.presenting #steps button#leave { display: grid; }
 const icon = (path: string) =>
   `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${path}"/></svg>`;
 
-export const PLAYER = `const slides = JSON.parse(source).slides;
+const player = (embedded: boolean) => `const slides = JSON.parse(source).slides;
 const last = slides.length - 1;
 let at = -1;
-let presenting = false;
+let presenting = ${embedded};
 const make = (tag, id) => Object.assign(document.createElement(tag), { id });
 const stage = make('div', 'stage');
 const sheet = make('div', 'sheet');
@@ -122,7 +126,13 @@ const go = (to) => {
   next.disabled = at === last;
   fit();
 };
-const leave = () => {
+const leave = () => {${
+  embedded
+    ? `
+  parent.postMessage({ ${ARTIFACT_PRESENT_MESSAGE}: 'end' }, '*');
+  return;`
+    : ''
+}
   if (!presenting) return;
   presenting = false;
   document.body.classList.remove('presenting');
@@ -136,9 +146,13 @@ const enter = () => {
   // The keyboard stays with the page, and the steps stay hidden until they are come for.
   present.blur();
   fit();
-  const whole = document.documentElement;
+${
+  embedded
+    ? ''
+    : `const whole = document.documentElement;
   // Refused, as where a page may not take the screen: it fills the window all the same.
-  if (whole.requestFullscreen) whole.requestFullscreen().catch(() => {});
+  if (whole.requestFullscreen) whole.requestFullscreen().catch(() => {});`
+}
 };
 const back = button('', 'Previous slide', '\\u2039', () => go(at - 1));
 const next = button('', 'Next slide', '\\u203a', () => go(at + 1));
@@ -155,10 +169,14 @@ stage.append(sheet, tap);
 root.append(stage, steps);
 addEventListener('resize', fit);
 // The browser's own Escape leaves the whole screen without a key reaching the page.
-document.addEventListener('fullscreenchange', () => {
+${
+  embedded
+    ? ''
+    : `document.addEventListener('fullscreenchange', () => {
   if (!document.fullscreenElement) leave();
   fit();
-});
+});`
+}
 addEventListener('keydown', (event) => {
   if (event.key === 'Escape') return leave();
   const by = { ArrowRight: 1, ArrowDown: 1, PageDown: 1, ' ': 1, ArrowLeft: -1, ArrowUp: -1, PageUp: -1 }[event.key];
@@ -169,4 +187,14 @@ addEventListener('keydown', (event) => {
   event.preventDefault();
   go(to);
 });
-go(0);`;
+${
+  embedded
+    ? `document.body.classList.add('presenting');
+focus();
+// The panel says where to start; nothing else of what it hands over is read.
+go(Number(JSON.parse(source).start) || 0);`
+    : 'go(0);'
+}`;
+
+export const PLAYER = player(false);
+export const PLAYER_EMBEDDED = player(true);

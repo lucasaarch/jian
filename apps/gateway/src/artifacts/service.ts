@@ -1,6 +1,8 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import {
-  type ArtifactFrameType,
+  type ArtifactFolder,
+  type ArtifactFolders,
+  boardContentSchema,
   type DeckExport,
   deckExportQuerySchema,
   deckSlideAddSchema,
@@ -12,7 +14,7 @@ import {
   profileArtifactsQuerySchema,
   type SessionArtifact,
   type SessionArtifactAuthor,
-  type SessionArtifactFile,
+  type SessionArtifactType,
   type SessionArtifactVersion,
   sessionArtifactCreateSchema,
   sessionArtifactEditSchema,
@@ -25,14 +27,13 @@ import { transform } from 'sucrase';
 import type { Clock } from '../core/clock.js';
 import { assertFound, GatewayError } from '../core/errors.js';
 import { recordEvent } from '../core/events.js';
-import { findMedia } from '../media/repository.js';
 import { findProfile } from '../profiles/repository.js';
 import type { SessionReader } from '../sessions/port.js';
 import type { Queryable, Store } from '../storage/database.js';
 import { sessionArtifacts, sessionArtifactVersions } from '../storage/schema.js';
 import { changedSlides, deckContent, type SlideChange, slidesOf } from './deck.js';
 import { exportDeck } from './export.js';
-import { fileOf, keptFile } from './file.js';
+import { createFolder, deleteFolder, listFolders, ownFolder, renameFolder } from './folders.js';
 import { pageProfileArtifacts } from './listing.js';
 
 /** What a component's frame can hand it; anything else would have to come from the network. */
@@ -74,28 +75,41 @@ function compiled(content: string): string {
 }
 
 /** What a frame is handed for a type: the source itself, but a component compiled. */
-const drawn = (type: ArtifactFrameType, content: string) =>
+const drawn = (type: SessionArtifactType, content: string) =>
   type === 'react' ? compiled(content) : content;
+
+/**
+ * A whiteboard is data its frame draws, not code: checked against its form, so a mistake is the
+ * agent's to fix now rather than a board that will not draw.
+ */
+function checkBoard(content: string): void {
+  let given: unknown;
+  try {
+    given = JSON.parse(content);
+  } catch {
+    throw new GatewayError(400, 'A whiteboard is given as JSON: {"items": [ … ]}.');
+  }
+  const checked = boardContentSchema.safeParse(given);
+  const issue = checked.error?.issues[0];
+  if (issue) {
+    throw new GatewayError(
+      400,
+      `The whiteboard does not fit its form at ${issue.path.join('.') || 'its top'}: ${issue.message}`,
+    );
+  }
+}
 
 /** What the agent gives for a version: which of these it takes depends on the type. */
 type Given = {
   content?: string | undefined;
   slides?: string[] | undefined;
-  path?: string | undefined;
-  mediaId?: string | undefined;
 };
 
 /**
  * What a version keeps for what the agent gave: a deck its slides, any other type its source.
  * Refused here, where the agent can still fix it, rather than drawn broken for the owner.
  */
-function kept(type: ArtifactFrameType, given: Given): string {
-  if (given.path !== undefined || given.mediaId !== undefined) {
-    throw new GatewayError(
-      400,
-      `Only a file Artifact takes \`path\` or \`mediaId\`, and this one is ${type}. Make another Artifact of type file for a file.`,
-    );
-  }
+function kept(type: SessionArtifactType, given: Given): string {
   if (type === 'deck') {
     if (!given.slides || given.content !== undefined) {
       throw new GatewayError(
@@ -112,9 +126,13 @@ function kept(type: ArtifactFrameType, given: Given): string {
     );
   }
   drawn(type, given.content);
+  if (type === 'board') checkBoard(given.content);
 
   return given.content;
 }
+
+/** What the owner's copy of an Artifact is called after the one it was made from. */
+const COPY = ' (copy)';
 
 /** The input each slide tool takes, by what it does to the deck. */
 const SLIDE_INPUT = {
@@ -124,11 +142,7 @@ const SLIDE_INPUT = {
   move: deckSlideMoveSchema,
 };
 
-/** `content` is its latest version's, which only a file needs: it says which file that is. */
-const recordOf = (
-  row: typeof sessionArtifacts.$inferSelect,
-  content?: string | null,
-): SessionArtifact => ({
+const recordOf = (row: typeof sessionArtifacts.$inferSelect): SessionArtifact => ({
   id: row.id,
   sessionId: row.sessionId,
   title: row.title,
@@ -139,7 +153,6 @@ const recordOf = (
     row.visibility === 'public' && row.publicToken
       ? `/v1/public-artifacts/${row.publicToken}`
       : null,
-  ...(row.type === 'file' && content ? { file: fileOf(content) } : {}),
   createdAt: row.createdAt.toISOString(),
   updatedAt: row.updatedAt.toISOString(),
 });
@@ -203,28 +216,6 @@ export class SessionArtifacts {
     return assertFound(row, 'Artifact version');
   }
 
-  /**
-   * What a version keeps for what the agent gave. A file is kept as media of the conversation
-   * (file.ts), in the transaction that makes the version, so neither is left without the other.
-   */
-  private async kept(
-    tx: Queryable,
-    profileId: string,
-    sessionId: string,
-    type: SessionArtifact['type'],
-    given: Given,
-  ): Promise<string> {
-    if (type !== 'file') return kept(type, given);
-    if (given.content !== undefined || given.slides) {
-      throw new GatewayError(
-        400,
-        'A file Artifact is given as `path` or `mediaId`, and takes no `content` or `slides`.',
-      );
-    }
-
-    return keptFile(tx, profileId, sessionId, given);
-  }
-
   /** A new version beside the ones it had: none is ever changed or removed. */
   private async versioned(
     tx: Queryable,
@@ -252,7 +243,7 @@ export class SessionArtifacts {
       createdAt: now,
     });
 
-    return recordOf(revised, content);
+    return recordOf(revised);
   }
 
   /** Tells the panel showing this conversation to bring the Artifact forward, as it now is. */
@@ -267,12 +258,11 @@ export class SessionArtifacts {
   async create(profileId: string, sessionId: string, input: unknown): Promise<SessionArtifact> {
     const data = sessionArtifactCreateSchema.parse(input);
     // Before anything is read or kept: a source that cannot be drawn costs no transaction.
-    if (data.type !== 'file') kept(data.type, data);
+    const content = kept(data.type, data);
     await this.sessions.session(profileId, sessionId);
     const now = new Date(this.clock());
 
     return this.store.transaction(profileId, async (tx) => {
-      const content = await this.kept(tx, profileId, sessionId, data.type, data);
       const [row] = await tx
         .insert(sessionArtifacts)
         .values({
@@ -291,7 +281,7 @@ export class SessionArtifacts {
         .values({ artifactId: made.id, version: 1, content, createdAt: now });
       await this.shown(tx, profileId, sessionId, made.id);
 
-      return recordOf(made, content);
+      return recordOf(made);
     });
   }
 
@@ -304,7 +294,7 @@ export class SessionArtifacts {
       const revised = await this.versioned(
         tx,
         current,
-        await this.kept(tx, profileId, sessionId, current.type, data),
+        kept(current.type, data),
         'agent',
         data.title,
       );
@@ -345,7 +335,8 @@ export class SessionArtifacts {
 
   /**
    * What the owner saved after editing one by hand in the panel: a new version of theirs, made
-   * from the version they were editing. A page is kept as it came; a deck gets that one slide.
+   * from the version they were editing. A source is checked as the agent's is and kept as it
+   * came; a deck gets that one slide.
    * The panel that saved it already shows it, so nothing is told to bring it forward.
    */
   async edit(
@@ -361,13 +352,13 @@ export class SessionArtifacts {
       if (!EDITABLE_ARTIFACT_TYPES.includes(current.type)) {
         throw new GatewayError(
           409,
-          'Only a web page or a deck is edited by hand. Ask the agent for a new version of this one.',
+          'This kind of Artifact is not edited by hand. Ask the agent for a new version of it.',
         );
       }
       const edited = await this.stored(tx, current.id, data.version);
       if (current.type !== 'deck') {
         if (data.slide !== undefined) throw new GatewayError(400, 'Only a deck has slides.');
-        return this.versioned(tx, current, data.content, 'owner');
+        return this.versioned(tx, current, kept(current.type, { content: data.content }), 'owner');
       }
       if (data.slide === undefined) {
         throw new GatewayError(400, 'Say which slide of the deck was edited.');
@@ -406,10 +397,7 @@ export class SessionArtifacts {
           `Only a deck has slides, and this Artifact is ${artifact.type}.`,
         );
       }
-      // A file has no source to read back: what it is, and the media it is kept as.
-      return artifact.type === 'file'
-        ? { ...about, file: fileOf(found.content) }
-        : { ...about, content: found.content };
+      return { ...about, content: found.content };
     }
     const slides = slidesOf(found.content).map((html, index) => ({ slide: index + 1, html }));
     if (data.slide === undefined) return { ...about, slides };
@@ -428,23 +416,14 @@ export class SessionArtifacts {
   async list(profileId: string, sessionId: string): Promise<SessionArtifact[]> {
     await this.sessions.session(profileId, sessionId);
     const rows = await this.store.db
-      .select({ artifact: sessionArtifacts, content: sessionArtifactVersions.content })
+      .select()
       .from(sessionArtifacts)
-      // Only a file's version is read here, which is a few words: never a page or a deck.
-      .leftJoin(
-        sessionArtifactVersions,
-        and(
-          eq(sessionArtifacts.type, 'file'),
-          eq(sessionArtifactVersions.artifactId, sessionArtifacts.id),
-          eq(sessionArtifactVersions.version, sessionArtifacts.version),
-        ),
-      )
       .where(
         and(eq(sessionArtifacts.profileId, profileId), eq(sessionArtifacts.sessionId, sessionId)),
       )
       .orderBy(desc(sessionArtifacts.updatedAt));
 
-    return rows.map((row) => recordOf(row.artifact, row.content));
+    return rows.map((row) => recordOf(row));
   }
 
   /** Every Artifact of the profile, whatever conversation it was made in (listing.ts). */
@@ -458,8 +437,11 @@ export class SessionArtifacts {
 
     return {
       items: page.items.map((row) => ({
-        ...recordOf(row.artifact, row.content),
+        ...recordOf(row.artifact),
         sessionTitle: row.sessionTitle,
+        projectId: row.projectId,
+        pinned: row.artifact.pinned,
+        folderId: row.artifact.folderId,
       })),
       nextCursor: page.nextCursor,
     };
@@ -467,8 +449,7 @@ export class SessionArtifacts {
 
   /**
    * The owner's removal of one, for good: its versions go with it in the database, and its
-   * public link answers nothing from then on. A file's bytes stay, since they are media of the
-   * conversation, which may show them in a message too.
+   * public link answers nothing from then on.
    */
   async delete(profileId: string, sessionId: string, artifactId: string): Promise<void> {
     await this.store.transaction(profileId, async (tx) => {
@@ -490,8 +471,7 @@ export class SessionArtifacts {
       artifactId: artifact.id,
       version: found.version,
       author: found.author,
-      content: artifact.type === 'file' ? '' : found.content,
-      ...(artifact.type === 'file' ? { file: fileOf(found.content) } : {}),
+      content: found.content,
       ...(artifact.type === 'react' ? { compiled: compiled(found.content) } : {}),
       ...(artifact.type === 'deck' ? { slides: slidesOf(found.content) } : {}),
       createdAt: found.createdAt.toISOString(),
@@ -543,16 +523,77 @@ export class SessionArtifacts {
   }
 
   /**
+   * The owner's copy of one, in the same conversation and the same folder: private, unpinned,
+   * and starting again at version 1 with the latest content, whoever wrote it.
+   */
+  async duplicate(
+    profileId: string,
+    sessionId: string,
+    artifactId: string,
+  ): Promise<SessionArtifact> {
+    const now = new Date(this.clock());
+
+    return this.store.transaction(profileId, async (tx) => {
+      const current = await this.find(tx, profileId, sessionId, artifactId);
+      const latest = await this.stored(tx, current.id, current.version);
+      const [row] = await tx
+        .insert(sessionArtifacts)
+        .values({
+          id: randomUUID(),
+          profileId,
+          sessionId,
+          // A title is at most 120 characters, the copy's too.
+          title: `${current.title.slice(0, 120 - COPY.length)}${COPY}`,
+          type: current.type,
+          folderId: current.folderId,
+          createdAt: now,
+          updatedAt: now,
+        })
+        .returning();
+      const made = assertFound(row, 'Artifact');
+      await tx.insert(sessionArtifactVersions).values({
+        artifactId: made.id,
+        version: 1,
+        content: latest.content,
+        author: latest.author,
+        createdAt: now,
+      });
+
+      return recordOf(made);
+    });
+  }
+
+  /** Where the owner keeps this profile's Artifacts on their page of them (folders.ts). */
+  folders(profileId: string): Promise<ArtifactFolders> {
+    return listFolders(this.store.db, profileId);
+  }
+
+  createFolder(profileId: string, input: unknown): Promise<ArtifactFolder> {
+    return createFolder(this.store, this.clock, profileId, input);
+  }
+
+  renameFolder(profileId: string, folderId: string, input: unknown): Promise<ArtifactFolder> {
+    return renameFolder(this.store, profileId, folderId, input);
+  }
+
+  deleteFolder(profileId: string, folderId: string): Promise<void> {
+    return deleteFolder(this.store, profileId, folderId);
+  }
+
+  /**
+   * What the owner changes of one with no new version: who reads it, its name, its pin and its
+   * folder. None of them is a change to what it is, so it keeps its place in the list.
+   *
    * Public gives it a link made of a new secret; private takes the link away, and making it
    * public again gives another, so a link that was once shared never comes back to life.
    */
-  async setVisibility(
+  async update(
     profileId: string,
     sessionId: string,
     artifactId: string,
     input: unknown,
   ): Promise<SessionArtifact> {
-    const { visibility } = sessionArtifactUpdateSchema.parse(input);
+    const { visibility, title, pinned, folderId } = sessionArtifactUpdateSchema.parse(input);
 
     if (visibility === 'public' && this.local) {
       throw new GatewayError(
@@ -563,41 +604,41 @@ export class SessionArtifacts {
 
     return this.store.transaction(profileId, async (tx) => {
       const current = await this.find(tx, profileId, sessionId, artifactId);
-      // A file is answered with the file it is, as the list answers it.
-      const content =
-        current.type === 'file'
-          ? (await this.stored(tx, current.id, current.version)).content
-          : undefined;
-      if (current.visibility === visibility) return recordOf(current, content);
+      // Only a folder of the same profile: another agent's is not found.
+      if (folderId) await ownFolder(tx, profileId, folderId);
+      const change = {
+        ...(visibility !== undefined && visibility !== current.visibility
+          ? {
+              visibility,
+              publicToken: visibility === 'public' ? randomBytes(32).toString('base64url') : null,
+            }
+          : {}),
+        ...(title !== undefined ? { title } : {}),
+        ...(pinned !== undefined ? { pinned } : {}),
+        ...(folderId !== undefined ? { folderId } : {}),
+      };
+      if (Object.keys(change).length === 0) return recordOf(current);
       const [row] = await tx
         .update(sessionArtifacts)
-        .set({
-          visibility,
-          publicToken: visibility === 'public' ? randomBytes(32).toString('base64url') : null,
-        })
+        .set(change)
         .where(eq(sessionArtifacts.id, current.id))
         .returning();
 
-      return recordOf(assertFound(row, 'Artifact'), content);
+      return recordOf(assertFound(row, 'Artifact'));
     });
   }
 
   /**
    * What a link answers: the latest version of the one Artifact that holds this secret while it
-   * is public, and nothing of the conversation, the profile or any other version. For a file
-   * that is the file itself, bytes in base64, and no other media of the conversation.
+   * is public, and nothing of the conversation, the profile or any other version.
    */
   async published(
     token: string,
-  ): Promise<
-    | { type: ArtifactFrameType; title: string; source: string }
-    | { type: 'file'; title: string; file: SessionArtifactFile; data: string }
-  > {
+  ): Promise<{ type: SessionArtifactType; title: string; source: string }> {
     const [row] = this.local
       ? []
       : await this.store.db
           .select({
-            profileId: sessionArtifacts.profileId,
             type: sessionArtifacts.type,
             title: sessionArtifacts.title,
             content: sessionArtifactVersions.content,
@@ -616,12 +657,6 @@ export class SessionArtifacts {
           .limit(1);
     const found = assertFound(row, 'Artifact');
 
-    if (found.type !== 'file') {
-      return { type: found.type, title: found.title, source: drawn(found.type, found.content) };
-    }
-    const file = fileOf(found.content);
-    const { data } = await findMedia(this.store.db, found.profileId, file.mediaId);
-
-    return { type: 'file', title: found.title, file, data };
+    return { type: found.type, title: found.title, source: drawn(found.type, found.content) };
   }
 }

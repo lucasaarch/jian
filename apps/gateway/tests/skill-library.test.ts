@@ -70,7 +70,7 @@ describe('moving each agent’s skills into one library', () => {
     }
 
     const migration = await readFile(
-      new URL('../migrations/0106_shared-skills.sql', import.meta.url),
+      new URL('../migrations/0108_shared-skills.sql', import.meta.url),
       'utf8',
     );
     for (const statement of migration.split('--> statement-breakpoint')) {

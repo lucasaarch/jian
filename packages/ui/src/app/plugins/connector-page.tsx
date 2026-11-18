@@ -101,7 +101,7 @@ export function ConnectorPage({ id }: { id: string }) {
 
   return (
     <div className="flex h-full min-h-0">
-      <PageBody wide {...(connector ? { labelledBy: 'connector-title' } : { label: 'Connector' })}>
+      <PageBody {...(connector ? { labelledBy: 'connector-title' } : { label: 'Connector' })}>
         {connector ? (
           <ConnectorBody
             connector={connector}

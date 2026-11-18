@@ -8,9 +8,14 @@ import { Action, ConfirmDialog, Overlay, OverlayActions, TextField } from '../ki
 import { MenuEntry, menuPopup } from '../kit/menu';
 import { ago } from '../lib/format';
 
-/** How a conversation is renamed: a chat by its title, a person by their name. */
+/**
+ * How something is renamed: a chat by its title, a person by their name, an Artifact or a
+ * folder of them by its own.
+ */
 export type Renaming = {
-  what: 'chat' | 'contact';
+  what: 'chat' | 'contact' | 'Artifact' | 'folder';
+  /** The dialog's heading where it names something new rather than renames it. */
+  heading?: string;
   /** The longest name the gateway keeps for it. */
   maxLength: number;
   /** Whether the name was saved. */
@@ -209,7 +214,12 @@ export function RenameDialog({
   renaming: Renaming;
 }) {
   return (
-    <Overlay open={open} onOpenChange={onOpenChange} title={`Rename ${renaming.what}`} size="form">
+    <Overlay
+      open={open}
+      onOpenChange={onOpenChange}
+      title={renaming.heading ?? `Rename ${renaming.what}`}
+      size="form"
+    >
       {open && <RenameForm name={name} renaming={renaming} close={() => onOpenChange(false)} />}
     </Overlay>
   );
@@ -217,7 +227,7 @@ export function RenameDialog({
 
 function RenameForm({
   name,
-  renaming: { what, maxLength, rename },
+  renaming: { what, heading = `Rename ${what}`, maxLength, rename },
   close,
 }: {
   name: string;
@@ -244,7 +254,7 @@ function RenameForm({
         if (saved) close();
       }}
     >
-      <h2 className="pr-10 text-lg font-semibold tracking-tight">Rename {what}</h2>
+      <h2 className="pr-10 text-lg font-semibold tracking-tight">{heading}</h2>
       <TextField
         label="Name"
         value={title}

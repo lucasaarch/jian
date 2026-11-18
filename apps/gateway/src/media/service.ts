@@ -510,7 +510,7 @@ export class Media {
       }),
       send_file: tool({
         description:
-          'Send a file in this conversation: an attachment from it by media ID, text you write now as a named file (report.md, data.csv, page.html), or a file from the machine by absolute path when you have it. It goes out on the chat this conversation is on. When you have create_artifact (a conversation in the panel), a document, PDF or file you made for the owner to read is an Artifact instead; send a file there only when they ask for the file as an attachment, and always on a chat or email. Never claim delivery before it is confirmed.',
+          'Send a file in this conversation: an attachment from it by media ID, text you write now as a named file (report.md, data.csv, page.html), or a file from the machine by absolute path when you have it. It goes out on the chat this conversation is on. A finished file you made (a PDF, a Word, Excel or PowerPoint file) goes this way, in the panel too; what the owner will look at, use or change there (a page, slides, a document, a diagram) is better made with create_artifact when you have it. Never claim delivery before it is confirmed.',
         inputSchema: z.object({
           source: z
             .enum(['mediaId', 'path', 'content'])

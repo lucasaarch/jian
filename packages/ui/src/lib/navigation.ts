@@ -75,6 +75,12 @@ export const onPlugins = (pathname: string) =>
   SKILL.test(pathname) ||
   CONNECTOR.test(pathname);
 
+/** What the agent does at a time, in place of its chat. */
+export const schedulesPath = (profileId: string) => agentPath(profileId, 'schedules');
+
+/** Whether a pathname is an agent's schedules. */
+export const onSchedules = (pathname: string) => /^\/agents\/[^/]+\/schedules\/?$/.test(pathname);
+
 /** Where an agent's new chat opens: its chats, asked to start one, in a project when given. */
 export function newChatPath(profileId: string, projectId?: string): string {
   const project = projectId ? `&project=${encodeURIComponent(projectId)}` : '';

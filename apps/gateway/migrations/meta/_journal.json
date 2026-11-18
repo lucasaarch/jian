@@ -748,7 +748,21 @@
       "idx": 106,
       "version": "7",
       "when": 1794900000000,
-      "tag": "0106_shared-skills",
+      "tag": "0106_artifact-folders",
+      "breakpoints": true
+    },
+    {
+      "idx": 107,
+      "version": "7",
+      "when": 1795000000000,
+      "tag": "0107_artifact-files-gone",
+      "breakpoints": true
+    },
+    {
+      "idx": 108,
+      "version": "7",
+      "when": 1795100000000,
+      "tag": "0108_shared-skills",
       "breakpoints": true
     }
   ]

@@ -1,8 +1,12 @@
 import { existsSync } from 'node:fs';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { ARTIFACT_FRAME_MESSAGE, type ArtifactFrameType } from '@jian/contracts';
-import { type Browser, chromium, type Page } from 'playwright';
+import {
+  ARTIFACT_EDIT_MESSAGE,
+  ARTIFACT_FRAME_MESSAGE,
+  type SessionArtifactType,
+} from '@jian/contracts';
+import { type Browser, chromium, type Frame, type Page } from 'playwright';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { artifactFrame, artifactPolicy, publishedArtifact } from '../src/artifacts/document.js';
 
@@ -15,13 +19,17 @@ import { artifactFrame, artifactPolicy, publishedArtifact } from '../src/artifac
 const slide = (text: string) =>
   `<!doctype html><html><head><style>body { margin: 0; background: #123; color: #fff; }</style></head><body><h1></h1><script>document.querySelector('h1').textContent = '${text} ran'</script></body></html>`;
 
-const SOURCE: Partial<Record<ArtifactFrameType, string>> = {
+const SOURCE: Partial<Record<SessionArtifactType, string>> = {
   html: slide('A page'),
   deck: slide('One slide'),
   markdown: '# A document',
   svg: '<svg xmlns="http://www.w3.org/2000/svg"><text y="20">A picture</text></svg>',
   // A component as the gateway hands it over: compiled to CommonJS.
   react: `exports.default = () => React.createElement('p', null, 'A component');`,
+  sheet: 'Item,Cost\nA,2\nB,3\nTotal,=SUM(B2:B3)*21\n',
+  board: JSON.stringify({
+    items: [{ kind: 'note', x: 0, y: 0, w: 180, h: 140, text: 'A board' }],
+  }),
 };
 const DECK = JSON.stringify({ slides: [slide('First'), slide('Second'), slide('Third')] });
 
@@ -55,7 +63,7 @@ describe.runIf(existsSync(process.env.PLAYWRIGHT_EXECUTABLE_PATH ?? chromium.exe
       server = createServer((request, response) => {
         const url = new URL(request.url ?? '/', 'http://gateway.test');
         const [, kind, name = ''] = url.pathname.split('/');
-        const type = name as ArtifactFrameType;
+        const type = name as SessionArtifactType;
         const send = (body: string, policy?: string) => {
           response.writeHead(200, {
             'content-type': 'text/html; charset=utf-8',
@@ -65,19 +73,32 @@ describe.runIf(existsSync(process.env.PLAYWRIGHT_EXECUTABLE_PATH ?? chromium.exe
         };
 
         asked.push(url.pathname);
-        if (kind === 'frame') return send(artifactFrame(type), artifactPolicy("'self'"));
+        if (kind === 'frame') {
+          return send(artifactFrame(type, url.searchParams.has('edit')), artifactPolicy("'self'"));
+        }
         if (kind === 'public') {
           const source = type === 'deck' ? DECK : (SOURCE[type] ?? '');
           return send(publishedArtifact(type, 'Shared', source), artifactPolicy("'none'"));
         }
         // The panel's part, as artifact-frame.tsx plays it: the frame, and its source once it loads.
+        // Editing, it also asks for the edit (`collect`) and keeps what the frame answers.
         if (kind === 'panel') {
-          return send(`<!doctype html><body>
-<iframe id="held" sandbox="allow-scripts" src="/frame/${url.searchParams.get('type')}"></iframe>
+          const edit = url.searchParams.has('edit');
+          return send(`<!doctype html><body style="margin:0">
+<iframe id="held" sandbox="allow-scripts" style="border:0;width:900px;height:600px" src="/frame/${url.searchParams.get('type')}${edit ? '?edit=1' : ''}"></iframe>
 <script>
 const held = document.getElementById('held');
+window.answers = [];
+addEventListener('message', (event) => {
+  if (event.source === held.contentWindow) window.answers.push(event.data.${ARTIFACT_EDIT_MESSAGE});
+});
+window.collect = (nonce) =>
+  held.contentWindow.postMessage({ ${ARTIFACT_EDIT_MESSAGE}: { collect: nonce } }, '*');
 held.addEventListener('load', () => {
-  held.contentWindow.postMessage({ ${ARTIFACT_FRAME_MESSAGE}: ${embedded(handed.get(name))} }, '*');
+  held.contentWindow.postMessage({
+    ${ARTIFACT_FRAME_MESSAGE}: ${embedded(handed.get(name))},
+    ${edit ? `${ARTIFACT_EDIT_MESSAGE}: { scale: 1 },` : ''}
+  }, '*');
 }, { once: true });
 </script></body>`);
         }
@@ -99,9 +120,26 @@ held.addEventListener('load', () => {
       await page.goto(`${origin}${path}`);
       return page;
     };
-    const inPanel = (name: string, type: ArtifactFrameType, source: string) => {
+    const inPanel = (name: string, type: SessionArtifactType, source: string, edit = false) => {
       handed.set(name, source);
-      return open(`/panel/${name}?type=${type}`);
+      return open(`/panel/${name}?type=${type}${edit ? '&edit=1' : ''}`);
+    };
+    /** The page the owner edits in, two frames in: the shell's, then its own. */
+    const editing = async (page: Page): Promise<Frame> => {
+      const depth = (frame: Frame | null): number => (frame ? 1 + depth(frame.parentFrame()) : 0);
+      await expect.poll(() => page.frames().some((frame) => depth(frame) === 3)).toBe(true);
+      return page.frames().find((frame) => depth(frame) === 3) as Frame;
+    };
+    /** What the frame answers the panel's asking for the edit, as edit.ts asks. */
+    const collect = async (page: Page, nonce: string) => {
+      await page.evaluate(
+        (said) => (window as never as { collect: (n: string) => void }).collect(said),
+        nonce,
+      );
+      await expect
+        .poll(() => page.evaluate(() => (window as never as { answers: unknown[] }).answers.length))
+        .toBeGreaterThan(0);
+      return page.evaluate(() => (window as never as { answers: unknown[] }).answers.pop());
     };
 
     it('draws in the panel what the panel hands its frame, and keeps it drawn', async () => {
@@ -111,16 +149,90 @@ held.addEventListener('load', () => {
         markdown: 'A document',
         svg: 'A picture',
         react: 'A component',
+        // Worked out by the sheet itself, which runs no code: (2 + 3) * 21.
+        sheet: '105',
+        board: 'A board',
       };
 
       for (const [type, text] of Object.entries(drawn)) {
-        const page = await inPanel(type, type as ArtifactFrameType, SOURCE[type as 'html'] ?? '');
+        const page = await inPanel(type, type as SessionArtifactType, SOURCE[type as 'html'] ?? '');
         await expect.poll(() => read(page), { message: type }).toContain(text);
         // Still there once everything has settled: a frame taken away after it drew is white.
         await page.waitForTimeout(300);
         expect(await read(page), type).toContain(text);
         await page.close();
       }
+    });
+
+    it('edits a spreadsheet cell by cell, works its formulas again, and hands back the CSV', async () => {
+      const page = await inPanel('sheet-edit', 'sheet', SOURCE.sheet ?? '', true);
+      const sheet = await editing(page);
+      const cell = (at: string) => sheet.locator(`td[data-at="${at}"]`);
+      await expect.poll(() => cell('3,1').textContent()).toBe('105');
+      expect(await collect(page, 'untouched')).toEqual({ collect: 'untouched', unchanged: true });
+
+      await cell('1,1').click();
+      await page.keyboard.type('7');
+      await page.keyboard.press('Enter');
+      expect(await cell('3,1').textContent()).toBe('210');
+      // The bar shows the cell picked as written, a formula included.
+      await cell('3,1').click();
+      expect(await sheet.locator('input[aria-label="Cell"]').inputValue()).toBe('=SUM(B2:B3)*21');
+
+      expect(await collect(page, 'edited')).toEqual({
+        collect: 'edited',
+        html: 'Item,Cost\nA,7\nB,3\nTotal,=SUM(B2:B3)*21\n',
+      });
+      await page.close();
+    });
+
+    it('adds a note to a whiteboard and hands back its JSON', async () => {
+      const page = await inPanel('board-edit', 'board', SOURCE.board ?? '', true);
+      const board = await editing(page);
+      await expect.poll(() => board.evaluate(() => document.body.innerText)).toContain('A board');
+
+      await board.click('button[aria-label="Note"]');
+      await board.locator('svg[aria-label="Whiteboard"]').click({ position: { x: 600, y: 400 } });
+      await page.keyboard.type('Mine');
+      await page.keyboard.press('Control+Enter');
+
+      const answer = (await collect(page, 'drawn')) as { html: string };
+      const { items } = JSON.parse(answer.html);
+      expect(items).toHaveLength(2);
+      expect(items[0]).toEqual({ kind: 'note', x: 0, y: 0, w: 180, h: 140, text: 'A board' });
+      expect(items[1]).toMatchObject({ kind: 'note', w: 180, h: 140, text: 'Mine' });
+      await page.close();
+    });
+
+    it('edits a document as it is drawn and hands back Markdown', async () => {
+      const source = [
+        '# Title',
+        '',
+        'Some **bold** text, a [link](https://example.test) and `code`.',
+        '',
+        '- one',
+        '- two',
+        '  1. nested',
+        '',
+        '| a | b |',
+        '| :-: | --: |',
+        '| 1 | 2 |',
+        '',
+        '> Quoted',
+        '',
+      ].join('\n');
+      const page = await inPanel('markdown-edit', 'markdown', source, true);
+      const document = await editing(page);
+
+      await document.click('h1');
+      await page.keyboard.press('End');
+      await page.keyboard.type(' again');
+
+      expect(await collect(page, 'written')).toEqual({
+        collect: 'written',
+        html: source.replace('# Title', '# Title again'),
+      });
+      await page.close();
     });
 
     it('lets a page in the panel go nowhere', async () => {

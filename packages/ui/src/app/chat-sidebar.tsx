@@ -29,8 +29,10 @@ import {
   onArtifacts,
   onPlugins,
   onPulls,
+  onSchedules,
   pluginsPath,
   pullsPath,
+  schedulesPath,
 } from '../lib/navigation';
 import { usePhone } from '../lib/phone';
 import {
@@ -42,7 +44,6 @@ import {
   useSessions,
 } from '../lib/query/agent';
 import { queries } from '../lib/query/profile';
-import { useAgentOverlay } from '../lib/stores/agent-overlay';
 import {
   MAX_SIDEBAR_WIDTH,
   MIN_CHAT_WIDTH,
@@ -189,14 +190,13 @@ const action =
 
 /**
  * The top of the sidebar: a new chat — an action, never shown as the one open — and the agent's
- * Schedules, a page over the app, then every Artifact it made and the Plugins it can use, both in
- * the chat's place. On a server with GitHub connected, the pull requests, which take the chat's
- * place too: GitHub can only reach a gateway with a public address. Its Activity, also in the
- * chat's place, is always last.
+ * Schedules, then every Artifact it made and the Plugins it can use, each in the chat's place. On
+ * a server with GitHub connected, the pull requests, which take the chat's place too: GitHub can
+ * only reach a gateway with a public address. Its Activity, also in the chat's place, is always
+ * last.
  */
 function NewChat({ profileId }: { profileId?: string }) {
   const router = useRouter();
-  const openSchedules = useAgentOverlay((state) => state.openSchedules);
   const server = useGatewayMode() === 'server';
   const github = useQuery({ ...queries.githubIntegration(), enabled: server });
   const pulls = server && Boolean(github.data?.accounts.length);
@@ -215,8 +215,9 @@ function NewChat({ profileId }: { profileId?: string }) {
       </button>
       <button
         type="button"
-        onClick={profileId ? openSchedules : undefined}
+        onClick={profileId ? go(schedulesPath(profileId)) : undefined}
         disabled={!profileId}
+        aria-current={onSchedules(pathname) ? 'page' : undefined}
         className={action}
       >
         <AlarmClock size={15} className="text-muted" aria-hidden="true" />
