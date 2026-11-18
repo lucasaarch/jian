@@ -25,6 +25,7 @@ import { keptBeside, listContextToolCheckpoints } from '../runs/repository.js';
 import { listLoads } from '../sessions/loads.js';
 import type { SessionReader } from '../sessions/port.js';
 import { availableSkills } from '../skills/builtin/index.js';
+import { readSkillLibrary } from '../skills/repository.js';
 import type { Store } from '../storage/database.js';
 import { projects } from '../storage/schema.js';
 import type { FolderSignal, Worktrees } from '../worktrees/service.js';
@@ -300,6 +301,8 @@ export class Contexts {
       ),
     );
 
+    // Read each turn: what the owner or an agent adds to the library is offered from the next.
+    const library = await readSkillLibrary(this.store.db);
     const before = history.findLast(
       (message) => message.role === 'assistant' && message.runId !== run.id,
     )?.content;
@@ -310,7 +313,7 @@ export class Contexts {
             request: run.input,
             ...(before ? { before } : {}),
             memories: rankMemories(run.input, memories).map(({ memory }) => memory),
-            skills: availableSkills(run.profile, servers, {
+            skills: availableSkills(library, servers, {
               worktrees: Boolean(workspaces?.worktrees),
             }).map(({ name, description }) => ({
               name,
@@ -383,6 +386,7 @@ export class Contexts {
       defaultScale(model.provider);
     const built = buildContext(run, {
       servers,
+      library,
       scale,
       ...(workspaces?.worktrees ? { worktrees: true } : {}),
       ...(!worker && workspaces?.machine ? { machine: workspaces.machine } : {}),

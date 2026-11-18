@@ -49,7 +49,7 @@ import type { Schedules } from '../schedules/service.js';
 import { isLoaded, useLoads } from '../sessions/loads.js';
 import type { SessionNamer, SessionReader, SessionSummarizer } from '../sessions/port.js';
 import type { Sessions } from '../sessions/service.js';
-import { findSkill } from '../skills/builtin/index.js';
+import { findSkill, NO_LIBRARY, type SkillLibraryState } from '../skills/builtin/index.js';
 import { longRunningWork, longRunningWorkFor } from '../skills/builtin/long-running-work.js';
 import { managingContext, managingContextFor } from '../skills/builtin/managing-context.js';
 import { ownerAndContacts, ownerAndContactsFor } from '../skills/builtin/owner-and-contacts.js';
@@ -57,6 +57,7 @@ import { remoteControl, remoteControlFor } from '../skills/builtin/remote-contro
 import { type WebAccess, webResearch, webResearchFor } from '../skills/builtin/web-research.js';
 import { worktreesFor, worktrees as worktreesSkill } from '../skills/builtin/worktrees.js';
 import { x, xFor } from '../skills/builtin/x.js';
+import type { SkillLibrary } from '../skills/library.js';
 import { skillTools } from '../skills/tools.js';
 import type { SshKeys } from '../ssh/service.js';
 import type { Stats } from '../stats/service.js';
@@ -123,6 +124,7 @@ export type ToolServices = {
   lifecycle: RunExecution;
   errands: Outreach;
   store: Store;
+  skillLibrary: SkillLibrary;
   decisions?: Pick<Decisions, 'ask' | 'judge'>;
   schedules?: Pick<Schedules, 'list' | 'create' | 'update' | 'remove'>;
   settings?: { timeZone(): Promise<string> };
@@ -178,11 +180,13 @@ export function skillFor(
     /** The run has `send_email`. */
     email?: boolean;
   },
-  /** The skills of the conversation's workspaces, named apart from the profile's already. */
+  /** The skills of the conversation's workspaces, named apart from the library's already. */
   projectSkills: readonly Skill[] = [],
+  /** The installation's library; left out, only the built-in skills are found. */
+  library: SkillLibraryState = NO_LIBRARY,
 ): Skill | undefined {
   const skill =
-    findSkill(run.profile, servers, name, { worktrees: Boolean(can.worktrees) }) ??
+    findSkill(library, servers, name, { worktrees: Boolean(can.worktrees) }) ??
     projectSkills.find((item) => item.name === name);
   if (skill === webResearch) return webResearchFor(can.web);
   if (skill === x) return xFor({ connected: can.xConnected, subagent: Boolean(run.subagent) });
@@ -670,7 +674,7 @@ export function profileTools(
 
     load_skill: tool({
       description:
-        'Load instructions for a skill enabled on this profile. A skill loaded once stays in your instructions for the rest of the conversation: never load one the catalog marks loaded.',
+        'Load instructions for a skill from your catalog. A skill loaded once stays in your instructions for the rest of the conversation: never load one the catalog marks loaded.',
       inputSchema: z.object({ name: z.string() }),
       execute: async ({ name }) => {
         const skill = skillFor(
@@ -685,6 +689,8 @@ export function profileTools(
             ...(remoteTarget ? { machine: { files: Boolean(machineFiles) } } : {}),
           },
           projectSkills,
+          // Read now, not when the turn began: a skill written this turn can be loaded in it.
+          await services.skillLibrary.read(),
         );
 
         if (!skill) {
@@ -1104,9 +1110,9 @@ export function profileTools(
     Object.assign(tools, remoteTools(run, services.remote, services.store, remoteTarget));
   }
 
-  // Writing its own skills is part of every agent's work, not of managing itself: what it
-  // writes is marked as its own, shown to the owner under Skills, and only it can change it.
-  Object.assign(tools, skillTools(services.profiles, run));
+  // Writing skills is part of every agent's work, not of managing itself: what it writes joins
+  // the library every agent is offered, marked as its own, and only it and the owner change it.
+  Object.assign(tools, skillTools(services.skillLibrary, run));
 
   tools.update_identity = tool({
     description:

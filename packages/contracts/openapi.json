@@ -26214,34 +26214,22 @@
         }
       }
     },
-    "/v1/profiles/{profileId}/built-in-skills": {
+    "/v1/skills": {
       "get": {
-        "operationId": "listBuiltinSkills",
+        "operationId": "listSkills",
         "security": [
           {
             "bearerAuth": []
           }
         ],
         "description": "Required permission: admin.",
-        "parameters": [
-          {
-            "name": "profileId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid",
-              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-            }
-          }
-        ],
+        "parameters": [],
         "responses": {
           "200": {
             "description": "Success",
             "content": {
               "application/json": {
                 "schema": {
-                  "maxItems": 50,
                   "type": "array",
                   "items": {
                     "type": "object",
@@ -26296,15 +26284,473 @@
                         "type": "string",
                         "const": "agent"
                       },
+                      "authorProfileId": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
                       "enabled": {
                         "type": "boolean"
+                      },
+                      "createdAt": {
+                        "type": "string",
+                        "format": "date-time",
+                        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                      },
+                      "updatedAt": {
+                        "type": "string",
+                        "format": "date-time",
+                        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
                       }
                     },
                     "required": [
                       "name",
                       "description",
                       "instructions",
-                      "enabled"
+                      "enabled",
+                      "createdAt",
+                      "updatedAt"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "createSkill",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "description": "Required permission: admin.",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "pattern": "^[a-z0-9_-]{1,64}$"
+                  },
+                  "description": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 300
+                  },
+                  "instructions": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 12000
+                  }
+                },
+                "required": [
+                  "name",
+                  "description",
+                  "instructions"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9_-]{1,64}$"
+                    },
+                    "description": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 300
+                    },
+                    "instructions": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 12000
+                    },
+                    "origin": {
+                      "type": "object",
+                      "properties": {
+                        "url": {
+                          "type": "string",
+                          "maxLength": 600,
+                          "format": "uri"
+                        },
+                        "ref": {
+                          "type": "string",
+                          "maxLength": 100
+                        },
+                        "marketplace": {
+                          "type": "string",
+                          "maxLength": 100
+                        },
+                        "plugin": {
+                          "type": "string",
+                          "maxLength": 100
+                        },
+                        "importedAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                        }
+                      },
+                      "required": [
+                        "url",
+                        "importedAt"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "writtenBy": {
+                      "type": "string",
+                      "const": "agent"
+                    },
+                    "authorProfileId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                    },
+                    "updatedAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                    }
+                  },
+                  "required": [
+                    "name",
+                    "description",
+                    "instructions",
+                    "enabled",
+                    "createdAt",
+                    "updatedAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/skills/import": {
+      "post": {
+        "operationId": "importSkill",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "description": "Required permission: admin.",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "url": {
+                    "type": "string",
+                    "maxLength": 600,
+                    "format": "uri"
+                  }
+                },
+                "required": [
+                  "url"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "maxItems": 60,
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string",
+                        "pattern": "^[a-z0-9_-]{1,64}$"
+                      },
+                      "description": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 300
+                      },
+                      "instructions": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 12000
+                      },
+                      "origin": {
+                        "type": "object",
+                        "properties": {
+                          "url": {
+                            "type": "string",
+                            "maxLength": 600,
+                            "format": "uri"
+                          },
+                          "ref": {
+                            "type": "string",
+                            "maxLength": 100
+                          },
+                          "marketplace": {
+                            "type": "string",
+                            "maxLength": 100
+                          },
+                          "plugin": {
+                            "type": "string",
+                            "maxLength": 100
+                          },
+                          "importedAt": {
+                            "type": "string",
+                            "format": "date-time",
+                            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                          }
+                        },
+                        "required": [
+                          "url",
+                          "importedAt"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "writtenBy": {
+                        "type": "string",
+                        "const": "agent"
+                      },
+                      "authorProfileId": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
+                      "enabled": {
+                        "type": "boolean"
+                      },
+                      "createdAt": {
+                        "type": "string",
+                        "format": "date-time",
+                        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                      },
+                      "updatedAt": {
+                        "type": "string",
+                        "format": "date-time",
+                        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                      }
+                    },
+                    "required": [
+                      "name",
+                      "description",
+                      "instructions",
+                      "enabled",
+                      "createdAt",
+                      "updatedAt"
                     ],
                     "additionalProperties": false
                   }
@@ -26405,9 +26851,9 @@
         }
       }
     },
-    "/v1/profiles/{profileId}/skills/import": {
-      "post": {
-        "operationId": "importSkill",
+    "/v1/skills/{name}": {
+      "patch": {
+        "operationId": "updateSkill",
         "security": [
           {
             "bearerAuth": []
@@ -26416,13 +26862,12 @@
         "description": "Required permission: admin.",
         "parameters": [
           {
-            "name": "profileId",
+            "name": "name",
             "in": "path",
             "required": true,
             "schema": {
               "type": "string",
-              "format": "uuid",
-              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              "pattern": "^[a-z0-9_-]{1,64}$"
             }
           }
         ],
@@ -26433,14 +26878,360 @@
               "schema": {
                 "type": "object",
                 "properties": {
-                  "url": {
+                  "description": {
                     "type": "string",
-                    "maxLength": 600,
-                    "format": "uri"
+                    "minLength": 1,
+                    "maxLength": 300
+                  },
+                  "instructions": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 12000
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9_-]{1,64}$"
+                    },
+                    "description": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 300
+                    },
+                    "instructions": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 12000
+                    },
+                    "origin": {
+                      "type": "object",
+                      "properties": {
+                        "url": {
+                          "type": "string",
+                          "maxLength": 600,
+                          "format": "uri"
+                        },
+                        "ref": {
+                          "type": "string",
+                          "maxLength": 100
+                        },
+                        "marketplace": {
+                          "type": "string",
+                          "maxLength": 100
+                        },
+                        "plugin": {
+                          "type": "string",
+                          "maxLength": 100
+                        },
+                        "importedAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                        }
+                      },
+                      "required": [
+                        "url",
+                        "importedAt"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "writtenBy": {
+                      "type": "string",
+                      "const": "agent"
+                    },
+                    "authorProfileId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                    },
+                    "updatedAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                    }
+                  },
+                  "required": [
+                    "name",
+                    "description",
+                    "instructions",
+                    "enabled",
+                    "createdAt",
+                    "updatedAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteSkill",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "description": "Required permission: admin.",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9_-]{1,64}$"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "null"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/skills/{name}/enabled": {
+      "put": {
+        "operationId": "setSkillEnabled",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "description": "Required permission: admin.",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9_-]{1,64}$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "enabled": {
+                    "type": "boolean"
                   }
                 },
                 "required": [
-                  "url"
+                  "enabled"
                 ],
                 "additionalProperties": false
               }
@@ -26457,338 +27248,197 @@
                   "properties": {
                     "name": {
                       "type": "string",
-                      "minLength": 1,
-                      "maxLength": 100
+                      "pattern": "^[a-z0-9_-]{1,64}$"
                     },
-                    "instructions": {
-                      "type": "string",
-                      "minLength": 1,
-                      "maxLength": 8000
-                    },
-                    "summary": {
-                      "default": "",
-                      "type": "string",
-                      "maxLength": 280
-                    },
-                    "avatar": {
-                      "default": null,
-                      "type": [
-                        "string",
-                        "null"
-                      ],
-                      "maxLength": 100000,
-                      "pattern": "^data:image\\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$"
-                    },
-                    "model": {
-                      "default": {
-                        "provider": "openai",
-                        "modelId": "unconfigured"
-                      },
-                      "type": "object",
-                      "properties": {
-                        "provider": {
-                          "type": "string",
-                          "enum": [
-                            "openai",
-                            "anthropic",
-                            "google",
-                            "openrouter",
-                            "ollama",
-                            "openai-compatible",
-                            "openai-codex"
-                          ]
-                        },
-                        "modelId": {
-                          "type": "string",
-                          "minLength": 1,
-                          "maxLength": 160
-                        },
-                        "apiKeyEnv": {
-                          "type": "string",
-                          "pattern": "^(?:JIAN_PROVIDER_[A-Z0-9_]+|ANTHROPIC_API_KEY|ANTHROPIC_API_TOKEN|GEMINI_API_TOKEN|OPENAI_API_KEY)$"
-                        },
-                        "providerId": {
-                          "type": "string",
-                          "format": "uuid",
-                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                        },
-                        "credential": {
-                          "type": "string",
-                          "enum": [
-                            "key",
-                            "subscription"
-                          ]
-                        },
-                        "baseURL": {
-                          "type": "string",
-                          "format": "uri"
-                        },
-                        "reasoningEffort": {
-                          "type": "string",
-                          "enum": [
-                            "none",
-                            "minimal",
-                            "low",
-                            "medium",
-                            "high",
-                            "xhigh",
-                            "max"
-                          ]
-                        },
-                        "fast": {
-                          "type": "boolean"
-                        }
-                      },
-                      "required": [
-                        "provider",
-                        "modelId"
-                      ],
-                      "additionalProperties": false
-                    },
-                    "identity": {
-                      "default": {
-                        "role": "",
-                        "tone": "",
-                        "goals": [],
-                        "boundaries": []
-                      },
-                      "type": "object",
-                      "properties": {
-                        "role": {
-                          "default": "",
-                          "type": "string",
-                          "maxLength": 1000
-                        },
-                        "tone": {
-                          "default": "",
-                          "type": "string",
-                          "maxLength": 1000
-                        },
-                        "goals": {
-                          "default": [],
-                          "maxItems": 10,
-                          "type": "array",
-                          "items": {
-                            "type": "string",
-                            "maxLength": 500
-                          }
-                        },
-                        "boundaries": {
-                          "default": [],
-                          "maxItems": 10,
-                          "type": "array",
-                          "items": {
-                            "type": "string",
-                            "maxLength": 500
-                          }
-                        }
-                      },
-                      "required": [
-                        "role",
-                        "tone",
-                        "goals",
-                        "boundaries"
-                      ],
-                      "additionalProperties": false
-                    },
-                    "contextPolicy": {
-                      "default": {
-                        "inputTokens": 32000,
-                        "outputTokens": 4096,
-                        "memoryTokens": 1500,
-                        "historyTokens": 6000,
-                        "toolResultTokens": 1500,
-                        "maxSteps": 500,
-                        "compactAt": "auto"
-                      },
-                      "type": "object",
-                      "properties": {
-                        "inputTokens": {
-                          "default": 32000,
-                          "type": "integer",
-                          "minimum": 16000,
-                          "maximum": 20000000
-                        },
-                        "outputTokens": {
-                          "default": 4096,
-                          "type": "integer",
-                          "minimum": 256,
-                          "maximum": 1000000
-                        },
-                        "memoryTokens": {
-                          "default": 1500,
-                          "type": "integer",
-                          "minimum": 0,
-                          "maximum": 32000
-                        },
-                        "historyTokens": {
-                          "default": 6000,
-                          "type": "integer",
-                          "minimum": 0,
-                          "maximum": 20000000
-                        },
-                        "toolResultTokens": {
-                          "default": 1500,
-                          "type": "integer",
-                          "minimum": 128,
-                          "maximum": 32000
-                        },
-                        "maxSteps": {
-                          "default": 500,
-                          "type": "integer",
-                          "minimum": 1,
-                          "maximum": 500
-                        },
-                        "compactAt": {
-                          "default": "auto",
-                          "anyOf": [
-                            {
-                              "type": "string",
-                              "const": "auto"
-                            },
-                            {
-                              "type": "integer",
-                              "minimum": 50000,
-                              "maximum": 20000000
-                            }
-                          ]
-                        },
-                        "maxRunTokens": {
-                          "type": "integer",
-                          "minimum": 32000,
-                          "maximum": 20000000
-                        }
-                      },
-                      "required": [
-                        "inputTokens",
-                        "outputTokens",
-                        "memoryTokens",
-                        "historyTokens",
-                        "toolResultTokens",
-                        "maxSteps",
-                        "compactAt"
-                      ],
-                      "additionalProperties": false
-                    },
-                    "skills": {
-                      "default": [],
-                      "maxItems": 20,
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "name": {
-                            "type": "string",
-                            "pattern": "^[a-z0-9_-]{1,64}$"
-                          },
-                          "description": {
-                            "type": "string",
-                            "minLength": 1,
-                            "maxLength": 300
-                          },
-                          "instructions": {
-                            "type": "string",
-                            "minLength": 1,
-                            "maxLength": 12000
-                          },
-                          "origin": {
-                            "type": "object",
-                            "properties": {
-                              "url": {
-                                "type": "string",
-                                "maxLength": 600,
-                                "format": "uri"
-                              },
-                              "ref": {
-                                "type": "string",
-                                "maxLength": 100
-                              },
-                              "marketplace": {
-                                "type": "string",
-                                "maxLength": 100
-                              },
-                              "plugin": {
-                                "type": "string",
-                                "maxLength": 100
-                              },
-                              "importedAt": {
-                                "type": "string",
-                                "format": "date-time",
-                                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
-                              }
-                            },
-                            "required": [
-                              "url",
-                              "importedAt"
-                            ],
-                            "additionalProperties": false
-                          },
-                          "writtenBy": {
-                            "type": "string",
-                            "const": "agent"
-                          }
-                        },
-                        "required": [
-                          "name",
-                          "description",
-                          "instructions"
-                        ],
-                        "additionalProperties": false
-                      }
-                    },
-                    "disabledSkills": {
-                      "default": [
-                        "discernment-nudge"
-                      ],
-                      "maxItems": 20,
-                      "type": "array",
-                      "items": {
-                        "type": "string",
-                        "pattern": "^[a-z0-9_-]{1,64}$"
-                      }
-                    },
-                    "allowShell": {
-                      "default": true,
+                    "enabled": {
                       "type": "boolean"
-                    },
-                    "id": {
-                      "type": "string",
-                      "format": "uuid",
-                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                    },
-                    "version": {
-                      "type": "integer",
-                      "exclusiveMinimum": 0,
-                      "maximum": 9007199254740991
-                    },
-                    "createdAt": {
-                      "type": "string",
-                      "format": "date-time",
-                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
-                    },
-                    "updatedAt": {
-                      "type": "string",
-                      "format": "date-time",
-                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
                     }
                   },
                   "required": [
                     "name",
-                    "instructions",
-                    "summary",
-                    "avatar",
-                    "model",
-                    "identity",
-                    "contextPolicy",
-                    "skills",
-                    "disabledSkills",
-                    "allowShell",
-                    "id",
-                    "version",
-                    "createdAt",
-                    "updatedAt"
+                    "enabled"
                   ],
                   "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/built-in-skills": {
+      "get": {
+        "operationId": "listBuiltinSkills",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "description": "Required permission: admin.",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "maxItems": 50,
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string",
+                        "pattern": "^[a-z0-9_-]{1,64}$"
+                      },
+                      "description": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 300
+                      },
+                      "instructions": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 12000
+                      },
+                      "origin": {
+                        "type": "object",
+                        "properties": {
+                          "url": {
+                            "type": "string",
+                            "maxLength": 600,
+                            "format": "uri"
+                          },
+                          "ref": {
+                            "type": "string",
+                            "maxLength": 100
+                          },
+                          "marketplace": {
+                            "type": "string",
+                            "maxLength": 100
+                          },
+                          "plugin": {
+                            "type": "string",
+                            "maxLength": 100
+                          },
+                          "importedAt": {
+                            "type": "string",
+                            "format": "date-time",
+                            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                          }
+                        },
+                        "required": [
+                          "url",
+                          "importedAt"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "writtenBy": {
+                        "type": "string",
+                        "const": "agent"
+                      },
+                      "enabled": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [
+                      "name",
+                      "description",
+                      "instructions",
+                      "enabled"
+                    ],
+                    "additionalProperties": false
+                  }
                 }
               }
             }
@@ -27121,83 +27771,6 @@
                         ],
                         "additionalProperties": false
                       },
-                      "skills": {
-                        "default": [],
-                        "maxItems": 20,
-                        "type": "array",
-                        "items": {
-                          "type": "object",
-                          "properties": {
-                            "name": {
-                              "type": "string",
-                              "pattern": "^[a-z0-9_-]{1,64}$"
-                            },
-                            "description": {
-                              "type": "string",
-                              "minLength": 1,
-                              "maxLength": 300
-                            },
-                            "instructions": {
-                              "type": "string",
-                              "minLength": 1,
-                              "maxLength": 12000
-                            },
-                            "origin": {
-                              "type": "object",
-                              "properties": {
-                                "url": {
-                                  "type": "string",
-                                  "maxLength": 600,
-                                  "format": "uri"
-                                },
-                                "ref": {
-                                  "type": "string",
-                                  "maxLength": 100
-                                },
-                                "marketplace": {
-                                  "type": "string",
-                                  "maxLength": 100
-                                },
-                                "plugin": {
-                                  "type": "string",
-                                  "maxLength": 100
-                                },
-                                "importedAt": {
-                                  "type": "string",
-                                  "format": "date-time",
-                                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
-                                }
-                              },
-                              "required": [
-                                "url",
-                                "importedAt"
-                              ],
-                              "additionalProperties": false
-                            },
-                            "writtenBy": {
-                              "type": "string",
-                              "const": "agent"
-                            }
-                          },
-                          "required": [
-                            "name",
-                            "description",
-                            "instructions"
-                          ],
-                          "additionalProperties": false
-                        }
-                      },
-                      "disabledSkills": {
-                        "default": [
-                          "discernment-nudge"
-                        ],
-                        "maxItems": 20,
-                        "type": "array",
-                        "items": {
-                          "type": "string",
-                          "pattern": "^[a-z0-9_-]{1,64}$"
-                        }
-                      },
                       "allowShell": {
                         "default": true,
                         "type": "boolean"
@@ -27231,8 +27804,6 @@
                       "model",
                       "identity",
                       "contextPolicy",
-                      "skills",
-                      "disabledSkills",
                       "allowShell",
                       "id",
                       "version",
@@ -27553,83 +28124,6 @@
                     },
                     "additionalProperties": false
                   },
-                  "skills": {
-                    "default": [],
-                    "maxItems": 20,
-                    "type": "array",
-                    "items": {
-                      "type": "object",
-                      "properties": {
-                        "name": {
-                          "type": "string",
-                          "pattern": "^[a-z0-9_-]{1,64}$"
-                        },
-                        "description": {
-                          "type": "string",
-                          "minLength": 1,
-                          "maxLength": 300
-                        },
-                        "instructions": {
-                          "type": "string",
-                          "minLength": 1,
-                          "maxLength": 12000
-                        },
-                        "origin": {
-                          "type": "object",
-                          "properties": {
-                            "url": {
-                              "type": "string",
-                              "maxLength": 600,
-                              "format": "uri"
-                            },
-                            "ref": {
-                              "type": "string",
-                              "maxLength": 100
-                            },
-                            "marketplace": {
-                              "type": "string",
-                              "maxLength": 100
-                            },
-                            "plugin": {
-                              "type": "string",
-                              "maxLength": 100
-                            },
-                            "importedAt": {
-                              "type": "string",
-                              "format": "date-time",
-                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
-                            }
-                          },
-                          "required": [
-                            "url",
-                            "importedAt"
-                          ],
-                          "additionalProperties": false
-                        },
-                        "writtenBy": {
-                          "type": "string",
-                          "const": "agent"
-                        }
-                      },
-                      "required": [
-                        "name",
-                        "description",
-                        "instructions"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "disabledSkills": {
-                    "default": [
-                      "discernment-nudge"
-                    ],
-                    "maxItems": 20,
-                    "type": "array",
-                    "items": {
-                      "type": "string",
-                      "pattern": "^[a-z0-9_-]{1,64}$"
-                    }
-                  },
                   "allowShell": {
                     "default": true,
                     "type": "boolean"
@@ -27867,83 +28361,6 @@
                       ],
                       "additionalProperties": false
                     },
-                    "skills": {
-                      "default": [],
-                      "maxItems": 20,
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "name": {
-                            "type": "string",
-                            "pattern": "^[a-z0-9_-]{1,64}$"
-                          },
-                          "description": {
-                            "type": "string",
-                            "minLength": 1,
-                            "maxLength": 300
-                          },
-                          "instructions": {
-                            "type": "string",
-                            "minLength": 1,
-                            "maxLength": 12000
-                          },
-                          "origin": {
-                            "type": "object",
-                            "properties": {
-                              "url": {
-                                "type": "string",
-                                "maxLength": 600,
-                                "format": "uri"
-                              },
-                              "ref": {
-                                "type": "string",
-                                "maxLength": 100
-                              },
-                              "marketplace": {
-                                "type": "string",
-                                "maxLength": 100
-                              },
-                              "plugin": {
-                                "type": "string",
-                                "maxLength": 100
-                              },
-                              "importedAt": {
-                                "type": "string",
-                                "format": "date-time",
-                                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
-                              }
-                            },
-                            "required": [
-                              "url",
-                              "importedAt"
-                            ],
-                            "additionalProperties": false
-                          },
-                          "writtenBy": {
-                            "type": "string",
-                            "const": "agent"
-                          }
-                        },
-                        "required": [
-                          "name",
-                          "description",
-                          "instructions"
-                        ],
-                        "additionalProperties": false
-                      }
-                    },
-                    "disabledSkills": {
-                      "default": [
-                        "discernment-nudge"
-                      ],
-                      "maxItems": 20,
-                      "type": "array",
-                      "items": {
-                        "type": "string",
-                        "pattern": "^[a-z0-9_-]{1,64}$"
-                      }
-                    },
                     "allowShell": {
                       "default": true,
                       "type": "boolean"
@@ -27977,8 +28394,6 @@
                     "model",
                     "identity",
                     "contextPolicy",
-                    "skills",
-                    "disabledSkills",
                     "allowShell",
                     "id",
                     "version",
@@ -28327,83 +28742,6 @@
                       ],
                       "additionalProperties": false
                     },
-                    "skills": {
-                      "default": [],
-                      "maxItems": 20,
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "name": {
-                            "type": "string",
-                            "pattern": "^[a-z0-9_-]{1,64}$"
-                          },
-                          "description": {
-                            "type": "string",
-                            "minLength": 1,
-                            "maxLength": 300
-                          },
-                          "instructions": {
-                            "type": "string",
-                            "minLength": 1,
-                            "maxLength": 12000
-                          },
-                          "origin": {
-                            "type": "object",
-                            "properties": {
-                              "url": {
-                                "type": "string",
-                                "maxLength": 600,
-                                "format": "uri"
-                              },
-                              "ref": {
-                                "type": "string",
-                                "maxLength": 100
-                              },
-                              "marketplace": {
-                                "type": "string",
-                                "maxLength": 100
-                              },
-                              "plugin": {
-                                "type": "string",
-                                "maxLength": 100
-                              },
-                              "importedAt": {
-                                "type": "string",
-                                "format": "date-time",
-                                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
-                              }
-                            },
-                            "required": [
-                              "url",
-                              "importedAt"
-                            ],
-                            "additionalProperties": false
-                          },
-                          "writtenBy": {
-                            "type": "string",
-                            "const": "agent"
-                          }
-                        },
-                        "required": [
-                          "name",
-                          "description",
-                          "instructions"
-                        ],
-                        "additionalProperties": false
-                      }
-                    },
-                    "disabledSkills": {
-                      "default": [
-                        "discernment-nudge"
-                      ],
-                      "maxItems": 20,
-                      "type": "array",
-                      "items": {
-                        "type": "string",
-                        "pattern": "^[a-z0-9_-]{1,64}$"
-                      }
-                    },
                     "allowShell": {
                       "default": true,
                       "type": "boolean"
@@ -28437,8 +28775,6 @@
                     "model",
                     "identity",
                     "contextPolicy",
-                    "skills",
-                    "disabledSkills",
                     "allowShell",
                     "id",
                     "version",
@@ -28748,79 +29084,6 @@
                     },
                     "additionalProperties": false
                   },
-                  "skills": {
-                    "maxItems": 20,
-                    "type": "array",
-                    "items": {
-                      "type": "object",
-                      "properties": {
-                        "name": {
-                          "type": "string",
-                          "pattern": "^[a-z0-9_-]{1,64}$"
-                        },
-                        "description": {
-                          "type": "string",
-                          "minLength": 1,
-                          "maxLength": 300
-                        },
-                        "instructions": {
-                          "type": "string",
-                          "minLength": 1,
-                          "maxLength": 12000
-                        },
-                        "origin": {
-                          "type": "object",
-                          "properties": {
-                            "url": {
-                              "type": "string",
-                              "maxLength": 600,
-                              "format": "uri"
-                            },
-                            "ref": {
-                              "type": "string",
-                              "maxLength": 100
-                            },
-                            "marketplace": {
-                              "type": "string",
-                              "maxLength": 100
-                            },
-                            "plugin": {
-                              "type": "string",
-                              "maxLength": 100
-                            },
-                            "importedAt": {
-                              "type": "string",
-                              "format": "date-time",
-                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
-                            }
-                          },
-                          "required": [
-                            "url",
-                            "importedAt"
-                          ],
-                          "additionalProperties": false
-                        },
-                        "writtenBy": {
-                          "type": "string",
-                          "const": "agent"
-                        }
-                      },
-                      "required": [
-                        "name",
-                        "description",
-                        "instructions"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "disabledSkills": {
-                    "maxItems": 20,
-                    "type": "array",
-                    "items": {
-                      "type": "string",
-                      "pattern": "^[a-z0-9_-]{1,64}$"
-                    }
-                  },
                   "allowShell": {
                     "type": "boolean"
                   },
@@ -29061,83 +29324,6 @@
                       ],
                       "additionalProperties": false
                     },
-                    "skills": {
-                      "default": [],
-                      "maxItems": 20,
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "name": {
-                            "type": "string",
-                            "pattern": "^[a-z0-9_-]{1,64}$"
-                          },
-                          "description": {
-                            "type": "string",
-                            "minLength": 1,
-                            "maxLength": 300
-                          },
-                          "instructions": {
-                            "type": "string",
-                            "minLength": 1,
-                            "maxLength": 12000
-                          },
-                          "origin": {
-                            "type": "object",
-                            "properties": {
-                              "url": {
-                                "type": "string",
-                                "maxLength": 600,
-                                "format": "uri"
-                              },
-                              "ref": {
-                                "type": "string",
-                                "maxLength": 100
-                              },
-                              "marketplace": {
-                                "type": "string",
-                                "maxLength": 100
-                              },
-                              "plugin": {
-                                "type": "string",
-                                "maxLength": 100
-                              },
-                              "importedAt": {
-                                "type": "string",
-                                "format": "date-time",
-                                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
-                              }
-                            },
-                            "required": [
-                              "url",
-                              "importedAt"
-                            ],
-                            "additionalProperties": false
-                          },
-                          "writtenBy": {
-                            "type": "string",
-                            "const": "agent"
-                          }
-                        },
-                        "required": [
-                          "name",
-                          "description",
-                          "instructions"
-                        ],
-                        "additionalProperties": false
-                      }
-                    },
-                    "disabledSkills": {
-                      "default": [
-                        "discernment-nudge"
-                      ],
-                      "maxItems": 20,
-                      "type": "array",
-                      "items": {
-                        "type": "string",
-                        "pattern": "^[a-z0-9_-]{1,64}$"
-                      }
-                    },
                     "allowShell": {
                       "default": true,
                       "type": "boolean"
@@ -29171,8 +29357,6 @@
                     "model",
                     "identity",
                     "contextPolicy",
-                    "skills",
-                    "disabledSkills",
                     "allowShell",
                     "id",
                     "version",
@@ -29816,83 +30000,6 @@
                             ],
                             "additionalProperties": false
                           },
-                          "skills": {
-                            "default": [],
-                            "maxItems": 20,
-                            "type": "array",
-                            "items": {
-                              "type": "object",
-                              "properties": {
-                                "name": {
-                                  "type": "string",
-                                  "pattern": "^[a-z0-9_-]{1,64}$"
-                                },
-                                "description": {
-                                  "type": "string",
-                                  "minLength": 1,
-                                  "maxLength": 300
-                                },
-                                "instructions": {
-                                  "type": "string",
-                                  "minLength": 1,
-                                  "maxLength": 12000
-                                },
-                                "origin": {
-                                  "type": "object",
-                                  "properties": {
-                                    "url": {
-                                      "type": "string",
-                                      "maxLength": 600,
-                                      "format": "uri"
-                                    },
-                                    "ref": {
-                                      "type": "string",
-                                      "maxLength": 100
-                                    },
-                                    "marketplace": {
-                                      "type": "string",
-                                      "maxLength": 100
-                                    },
-                                    "plugin": {
-                                      "type": "string",
-                                      "maxLength": 100
-                                    },
-                                    "importedAt": {
-                                      "type": "string",
-                                      "format": "date-time",
-                                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
-                                    }
-                                  },
-                                  "required": [
-                                    "url",
-                                    "importedAt"
-                                  ],
-                                  "additionalProperties": false
-                                },
-                                "writtenBy": {
-                                  "type": "string",
-                                  "const": "agent"
-                                }
-                              },
-                              "required": [
-                                "name",
-                                "description",
-                                "instructions"
-                              ],
-                              "additionalProperties": false
-                            }
-                          },
-                          "disabledSkills": {
-                            "default": [
-                              "discernment-nudge"
-                            ],
-                            "maxItems": 20,
-                            "type": "array",
-                            "items": {
-                              "type": "string",
-                              "pattern": "^[a-z0-9_-]{1,64}$"
-                            }
-                          },
                           "allowShell": {
                             "default": true,
                             "type": "boolean"
@@ -29926,8 +30033,6 @@
                           "model",
                           "identity",
                           "contextPolicy",
-                          "skills",
-                          "disabledSkills",
                           "allowShell",
                           "id",
                           "version",

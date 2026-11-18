@@ -1,4 +1,4 @@
-import type { Profile } from '../lib/api';
+import type { LibrarySkill, Profile } from '../lib/api';
 
 /**
  * The synthetic agent and usage the unit tests render with. Fictional from end to end; nothing
@@ -22,7 +22,6 @@ const profileBase = {
     maxRunTokens: 500000,
     compactAt: 'auto' as const,
   },
-  disabledSkills: [],
   allowShell: false,
   version: 3,
   createdAt: at(60 * 24 * 30),
@@ -41,15 +40,20 @@ export const profile: Profile = {
     goals: ['Keep the day moving', 'Close loops without being asked twice'],
     boundaries: ['Never send money', 'Ask before writing to someone new'],
   },
-  skills: [
-    {
-      name: 'concise',
-      description: 'Answer in the first sentence; every word earns its place.',
-      instructions: 'Lead with the answer.',
-      origin: { url: 'https://github.com/example/skills', importedAt: at(60 * 24 * 7) },
-    },
-  ],
 };
+
+/** The installation's skill library: one skill, copied from a repository. */
+export const librarySkills: LibrarySkill[] = [
+  {
+    name: 'concise',
+    description: 'Answer in the first sentence; every word earns its place.',
+    instructions: 'Lead with the answer.',
+    origin: { url: 'https://github.com/example/skills', importedAt: at(60 * 24 * 7) },
+    enabled: true,
+    createdAt: at(60 * 24 * 7),
+    updatedAt: at(60 * 24 * 7),
+  },
+];
 
 export const statsFor = (days: number) => {
   const shown = Math.min(days, 90);

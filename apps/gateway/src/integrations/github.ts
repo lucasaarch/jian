@@ -563,7 +563,7 @@ export class GitHubIntegrations {
     if (!(await this.config())) {
       throw new GatewayError(
         503,
-        'No GitHub App is connected to Jian. The owner can register one and connect an account under Settings → Apps → GitHub; until then git reaches GitHub only with the SSH keys.',
+        'No GitHub App is connected to Jian. The owner can register one and connect an account under Plugins → Connectors → GitHub; until then git reaches GitHub only with the SSH keys.',
       );
     }
     const wanted = fullName.toLowerCase();
@@ -583,7 +583,7 @@ export class GitHubIntegrations {
     if (!accounts.length) {
       throw new GatewayError(
         503,
-        'The GitHub App is registered, but no GitHub account is connected. The owner can connect one under Settings → Apps → GitHub.',
+        'The GitHub App is registered, but no GitHub account is connected. The owner can connect one under Plugins → Connectors → GitHub.',
       );
     }
     const owner = wanted.split('/')[0];
@@ -591,7 +591,7 @@ export class GitHubIntegrations {
     if (!account) {
       throw new GatewayError(
         404,
-        `The Jian GitHub App is not installed on ${fullName.split('/')[0]}, so it cannot reach ${fullName}. The owner can install it on that account from Settings → Apps → GitHub and grant it the repository.`,
+        `The Jian GitHub App is not installed on ${fullName.split('/')[0]}, so it cannot reach ${fullName}. The owner can install it on that account from Plugins → Connectors → GitHub and grant it the repository.`,
       );
     }
     const repository = (await this.repositories(account.id)).find(
@@ -842,7 +842,8 @@ export class GitHubIntegrations {
 
   private async requireConfig() {
     const config = await this.config();
-    if (!config) throw new GatewayError(503, 'Register a GitHub App from Settings → Apps first.');
+    if (!config)
+      throw new GatewayError(503, 'Register a GitHub App from Plugins → Connectors first.');
     return config;
   }
 

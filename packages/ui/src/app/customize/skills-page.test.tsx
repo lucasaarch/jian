@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { afterEach, expect, it, vi } from 'vitest';
 import type { BuiltinSkill, GatewayApi } from '../../lib/api';
 import { AgentCache } from '../../test/agent';
-import { profile } from '../../test/fixtures';
+import { librarySkills, profile } from '../../test/fixtures';
 import { SkillsPage } from './skills-page';
 
 const actions = vi.hoisted(() => ({ api: {} as GatewayApi }));
@@ -35,7 +35,11 @@ afterEach(() => {
 
 async function render(api: Record<string, unknown>) {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
-  actions.api = { builtinSkills: async () => [research], ...api } as unknown as GatewayApi;
+  actions.api = {
+    skills: async () => librarySkills,
+    builtinSkills: async () => [research],
+    ...api,
+  } as unknown as GatewayApi;
   const host = document.createElement('div');
   document.body.append(host);
   const root = createRoot(host);
@@ -47,7 +51,7 @@ async function render(api: Record<string, unknown>) {
       </AgentCache>,
     ),
   );
-  // The built-in list arrives after the first render.
+  // The library and the built-in list arrive after the first render.
   await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
   const button = (name: string) =>
     [...document.querySelectorAll('button')].find(
@@ -63,13 +67,13 @@ async function render(api: Record<string, unknown>) {
 
 it('switches a built-in skill at once, and puts it back when the gateway refuses', async () => {
   let refuse: (reason: Error) => void = () => {};
-  const updateProfile = vi.fn(
+  const setSkillEnabled = vi.fn(
     () =>
       new Promise((_, reject) => {
         refuse = reject;
       }),
   );
-  await render({ updateProfile });
+  await render({ setSkillEnabled });
   const toggle = () => document.querySelector('[role="switch"][aria-label="web-research"]');
   expect(toggle()?.getAttribute('aria-checked')).toBe('true');
 
@@ -77,18 +81,15 @@ it('switches a built-in skill at once, and puts it back when the gateway refuses
 
   // Shown off while the gateway has not answered.
   expect(toggle()?.getAttribute('aria-checked')).toBe('false');
-  expect(updateProfile).toHaveBeenCalledWith(profile.id, {
-    expectedVersion: profile.version,
-    disabledSkills: ['web-research'],
-  });
+  expect(setSkillEnabled).toHaveBeenCalledWith('web-research', false);
 
-  await act(async () => refuse(new Error('The profile changed meanwhile.')));
+  await act(async () => refuse(new Error('The gateway is unreachable.')));
   expect(toggle()?.getAttribute('aria-checked')).toBe('true');
 });
 
-it('removes a skill of its own only once its name is typed', async () => {
-  const updateProfile = vi.fn(async () => profile);
-  const view = await render({ updateProfile });
+it('removes a skill of the library only once its name is typed', async () => {
+  const deleteSkill = vi.fn(async () => null);
+  const view = await render({ deleteSkill });
 
   await act(async () => view.button('Actions for concise')?.click());
   await act(async () =>
@@ -102,10 +103,7 @@ it('removes a skill of its own only once its name is typed', async () => {
   await view.type(confirm?.closest('[role="dialog"]')?.querySelector('input'), 'concise');
   await act(async () => confirm?.click());
 
-  expect(updateProfile).toHaveBeenCalledWith(profile.id, {
-    expectedVersion: profile.version,
-    skills: [],
-  });
+  expect(deleteSkill).toHaveBeenCalledWith('concise');
 });
 
 const skill = (name: string, description: string) =>

@@ -162,7 +162,7 @@ export async function createGateway(options: GatewayOptions): Promise<Gateway> {
   services.work.useTiers(new TierModels(services.providers, providerModels, catalog));
 
   // Skill import reaches GitHub through the same guarded client, and only for the owner.
-  const skills = new Skills(services.profiles, outbound.fetch);
+  const skills = new Skills(services.skillLibrary, outbound.fetch);
 
   // An MCP server that wants OAuth sends the owner's browser back here, so a gateway with no
   // public address configured cannot offer that sign-in at all.

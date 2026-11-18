@@ -15,7 +15,6 @@ export type RequestBody<K extends keyof operations> = operations[K] extends {
 export type Profile = JsonResponse<'getProfile', 200>;
 export type McpServer = JsonResponse<'listMcpServers', 200>[number];
 export type McpValue = McpServer['headers'][number];
-export type Skill = Profile['skills'][number];
 export type Session = JsonResponse<'listSessions', 200>[number];
 export type Project = JsonResponse<'listProjects', 200>[number];
 export type ProjectChoice = RequestBody<'ensureProject'>;
@@ -43,6 +42,9 @@ export type DeckExportQuery = NonNullable<
 export type SessionWorktree = JsonResponse<'listSessionWorktrees', 200>[number];
 export type SubscriptionUsage = JsonResponse<'listSubscriptionUsage', 200>[number];
 export type BuiltinSkill = JsonResponse<'listBuiltinSkills', 200>[number];
+export type LibrarySkill = JsonResponse<'listSkills', 200>[number];
+/** A skill as a form writes it, without what the gateway adds to one it keeps. */
+export type Skill = Omit<BuiltinSkill, 'enabled'>;
 export type McpStatus = JsonResponse<'checkMcpServer', 200>;
 export type Run = JsonResponse<'getRun', 200>;
 export type Message = JsonResponse<'listMessages', 200>[number];

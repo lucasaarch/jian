@@ -7,7 +7,7 @@ import { eq } from 'drizzle-orm';
 import { afterEach, beforeEach, expect, it } from 'vitest';
 import { localPlace } from '../src/agent/github-git-place.js';
 import { Contexts } from '../src/context/service.js';
-import { availableSkills } from '../src/skills/builtin/index.js';
+import { availableSkills, NO_LIBRARY } from '../src/skills/builtin/index.js';
 import { projects, sessions } from '../src/storage/schema.js';
 import { Workspaces } from '../src/workspaces/service.js';
 import { insertWorktree } from '../src/worktrees/repository.js';
@@ -168,9 +168,8 @@ it('project instructions come from the worktree, not its source', async () => {
 });
 
 it('offers the worktrees skill only to a run with the tools', async () => {
-  const { profile } = await setup();
   const names = (worktrees: boolean) =>
-    availableSkills(profile, [], { worktrees }).map((skill) => skill.name);
+    availableSkills(NO_LIBRARY, [], { worktrees }).map((skill) => skill.name);
 
   expect(names(true)).toContain('worktrees');
   expect(names(false)).not.toContain('worktrees');

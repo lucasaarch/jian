@@ -120,13 +120,17 @@ export const resourceCalls = (client: Client) => ({
         params: { path: { profileId, scheduleId } },
       }),
     ),
-  builtinSkills: (profileId: string) =>
-    result(client.GET('/v1/profiles/{profileId}/built-in-skills', { params: profile(profileId) })),
-  importSkill: (profileId: string, url: string) =>
+  skills: () => result(client.GET('/v1/skills')),
+  builtinSkills: () => result(client.GET('/v1/built-in-skills')),
+  createSkill: (body: { name: string; description: string; instructions: string }) =>
+    result(client.POST('/v1/skills', { body })),
+  updateSkill: (name: string, body: { description?: string; instructions?: string }) =>
+    result(client.PATCH('/v1/skills/{name}', { params: { path: { name } }, body })),
+  deleteSkill: (name: string) =>
+    result(client.DELETE('/v1/skills/{name}', { params: { path: { name } } })),
+  setSkillEnabled: (name: string, enabled: boolean) =>
     result(
-      client.POST('/v1/profiles/{profileId}/skills/import', {
-        params: profile(profileId),
-        body: { url },
-      }),
+      client.PUT('/v1/skills/{name}/enabled', { params: { path: { name } }, body: { enabled } }),
     ),
+  importSkill: (url: string) => result(client.POST('/v1/skills/import', { body: { url } })),
 });
