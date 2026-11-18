@@ -5,6 +5,7 @@ import {
   sessionArtifactVersionParamsSchema,
 } from '@jian/contracts';
 import type { FastifyInstance, FastifyReply } from 'fastify';
+import { GatewayError } from '../core/errors.js';
 import type { SessionParams } from '../http/params.js';
 import { artifactFrame, artifactPolicy, publishedArtifact } from './document.js';
 import type { SessionArtifacts } from './service.js';
@@ -48,12 +49,16 @@ export function registerArtifactRoutes(
 
   // The owner's edit by hand, saved by the panel as a new version. It asks for the owner's
   // credential like every route of a conversation: the frame the edit was made in has none and
-  // reaches nothing, and a public link only reads.
+  // reaches nothing, and a public link only reads. A paired phone only reads too: the owner
+  // decided editing by hand belongs to the panel, on a browser or the desktop app.
   app.post<{ Params: ArtifactParams }>(
     '/v1/profiles/:profileId/sessions/:sessionId/artifacts/:artifactId/versions',
     { bodyLimit: EDIT_BODY_LIMIT },
-    async (request, reply) =>
-      reply
+    async (request, reply) => {
+      if (request.device) {
+        throw new GatewayError(403, 'A paired device cannot edit an Artifact.');
+      }
+      return reply
         .code(201)
         .send(
           await deps.artifacts.edit(
@@ -62,7 +67,8 @@ export function registerArtifactRoutes(
             request.params.artifactId,
             request.body,
           ),
-        ),
+        );
+    },
   );
 
   app.patch<{ Params: ArtifactParams }>(

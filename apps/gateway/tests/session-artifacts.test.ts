@@ -31,7 +31,13 @@ afterEach(async () => {
 
 async function setup(mode: 'server' | 'local' = 'server') {
   const services = await testServices(undefined, undefined, undefined, mode);
-  const app = createApp({ ...services, token, logger: false, mode });
+  const app = createApp({
+    ...services,
+    token,
+    logger: false,
+    mode,
+    publicUrl: 'https://jian.example.test',
+  });
   apps.push(app);
   const owner = await services.profiles.createProfile({
     name: 'Owner',
@@ -564,6 +570,21 @@ describe('what the owner edits by hand', () => {
         expect((await app.inject({ method, url, headers, payload })).statusCode).toBe(404);
       }
     }
+
+    // A paired phone reads the conversation but never edits by hand.
+    const pairing = await app.inject({ method: 'POST', url: '/v1/devices/pairings', headers });
+    const phone = (
+      await app.inject({
+        method: 'POST',
+        url: '/v1/devices/pair',
+        payload: { code: pairing.json().code, name: 'Pixel', platform: 'android' },
+      })
+    ).json() as { token: string };
+    const device = { authorization: `Bearer ${phone.token}` };
+    expect((await app.inject({ url: at(), headers: device })).statusCode).toBe(200);
+    expect((await app.inject({ method: 'POST', url, headers: device, payload })).statusCode).toBe(
+      403,
+    );
 
     // Nor through another conversation or another profile, with the credential.
     const elsewhere = await services.sessions.createSession(owner.id, { channel: 'api' });
