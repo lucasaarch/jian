@@ -449,7 +449,7 @@ export function profileTools(
       ? {
           create_artifact: tool({
             description:
-              'Make an Artifact: something the owner sees drawn in the Inspector beside this conversation, under its Artifacts tab, instead of reading its source in your reply. Worth it for what the owner looks at, uses or changes and keeps working on — a page, an interactive component, a document, a picture, a diagram, a presentation — not for a short answer or a snippet, and not for a finished file (a PDF, a Word or Excel file), which send_file sends. `type` says how `content` is drawn: html is a whole page with its own styles and scripts; react is one component, the default export, importing only react and react-dom and styled with its own CSS or inline styles; markdown is a document; svg is one svg element; mermaid is a diagram’s source. deck is a presentation and takes `slides` instead of `content`: each slide a whole HTML page of its own, styles included, laid out for a fixed 1280x720 canvas that is scaled to fit. It runs sealed: nothing loads from the network (no CDN script, stylesheet, font or remote image, and no fetch — embed a picture as a data: address), and it cannot call your tools or Jian. Returns the artifactId the other Artifact tools take.',
+              'Make an Artifact: something the owner sees drawn in the Inspector beside this conversation, under its Artifacts tab, instead of reading its source in your reply. Worth it for what the owner looks at, uses or changes and keeps working on — a page, an interactive component, a document, a spreadsheet, a whiteboard, a picture, a diagram, a presentation — not for a short answer or a snippet, and not for a finished file (a PDF, a Word or Excel file), which send_file sends. `type` says how `content` is drawn: html is a whole page with its own styles and scripts; react is one component, the default export, importing only react and react-dom and styled with its own CSS or inline styles; markdown is a document; sheet is a spreadsheet as CSV, one row a line, where a cell starting with = is a formula (=SUM(B2:B9), =B2*C2, =IF(A2>0,"yes","no"); SUM, AVERAGE, MIN, MAX, COUNT, COUNTA, ROUND, ABS, IF, AND, OR, NOT, CONCAT); board is a whiteboard as JSON, {"items": [...]} drawn in order, each one {kind: note|text|box|ellipse, x, y, w, h, text?, color?}, {kind: arrow|line, from: [x, y], to: [x, y], color?} or {kind: pen, points: [[x, y], ...], color?}, in pixels with y going down and color as #rrggbb (a note about 180x140); svg is one svg element; mermaid is a diagram’s source. deck is a presentation and takes `slides` instead of `content`: each slide a whole HTML page of its own, styles included, laid out for a fixed 1280x720 canvas that is scaled to fit. It runs sealed: nothing loads from the network (no CDN script, stylesheet, font or remote image, and no fetch — embed a picture as a data: address), and it cannot call your tools or Jian. Returns the artifactId the other Artifact tools take.',
             inputSchema: sessionArtifactCreateSchema,
             execute: async (input) =>
               madeArtifact(await services.artifacts?.create(run.profileId, run.sessionId, input)),
@@ -463,7 +463,7 @@ export function profileTools(
           }),
           read_artifact_source: tool({
             description:
-              'Read an Artifact of this conversation back: its source as it now stands, or as a version of it was, and whether you or the owner wrote that version. The owner edits a web page and a deck’s slides by hand in the panel, which makes a version you have never seen, so read before you update one you did not just write. A deck answers its slides, numbered from 1, or with `slide` that one alone.',
+              'Read an Artifact of this conversation back: its source as it now stands, or as a version of it was, and whether you or the owner wrote that version. The owner edits a web page, a deck’s slides, a document, a spreadsheet and a whiteboard by hand in the panel, which makes a version you have never seen, so read before you update one you did not just write. A deck answers its slides, numbered from 1, or with `slide` that one alone.',
             inputSchema: sessionArtifactReadSchema,
             execute: async (input) => services.artifacts?.read(run.profileId, run.sessionId, input),
           }),
@@ -1266,7 +1266,7 @@ export const TOOL_GROUPS = {
   },
   artifacts: {
     summary:
-      'make something the owner sees drawn beside this conversation — a web page, a React component, a Markdown document, an SVG, a Mermaid diagram, a deck of slides or a file of any format — read it back, give it new versions, and add, rewrite, remove or move one slide of a deck',
+      'make something the owner sees drawn beside this conversation — a web page, a React component, a Markdown document, a spreadsheet, a whiteboard, an SVG, a Mermaid diagram or a deck of slides — read it back, give it new versions, and add, rewrite, remove or move one slide of a deck',
     tools: [
       'create_artifact',
       'update_artifact',

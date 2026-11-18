@@ -6,9 +6,11 @@ import {
   type SessionArtifactType,
 } from '@jian/contracts';
 import { GatewayError } from '../core/errors.js';
-import { EDITING } from './edit-frame.js';
+import { BOARD } from './board-frame.js';
+import { EDITORS } from './edit-frame.js';
 import { PLAYER, PLAYER_EMBEDDED, PLAYER_STYLE } from './player.js';
 import { type RuntimeFile, runtimeSource } from './runtime.js';
+import { SHEET } from './sheet-frame.js';
 
 /**
  * The page an Artifact is drawn in. It is the only thing that ever runs what an agent wrote, so
@@ -36,9 +38,9 @@ import { type RuntimeFile, runtimeSource } from './runtime.js';
  * `eval` stays refused, which none of the libraries needs.
  *
  * The page takes its source and gives nothing back: it posts no message, and the panel listens
- * for none. The one exception is the frame the owner opens to edit a page by hand
- * (edit-frame.ts), which runs nothing of the Artifact and answers the panel's request for the
- * edited markup; a public link never serves it.
+ * for none. The one exception is the frame the owner opens to edit by hand (edit-frame.ts),
+ * which runs nothing the agent wrote and answers the panel's request for the edited source; a
+ * public link never serves it.
  */
 export function artifactPolicy(ancestors: "'self'" | "'none'"): string {
   return [
@@ -62,7 +64,7 @@ const STYLE = `
 html, body { margin: 0; }
 body { padding: 16px; font: 15px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif;
   overflow-wrap: anywhere; }
-body.react, body.deck { padding: 0; }
+body.react, body.deck, body.sheet, body.board { padding: 0; }
 #failure { margin: 12px; padding: 12px; border-radius: 8px; white-space: pre-wrap;
   font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; color: #b42318;
   background: color-mix(in srgb, #b42318 12%, transparent); }
@@ -114,6 +116,9 @@ mermaid.initialize({
 });
 root.innerHTML = (await mermaid.render('diagram', source)).svg;`,
   },
+  // Drawn by scripts of the gateway's own, which read the source as data and never run it.
+  sheet: { libraries: [], body: `${SHEET}\nsheet(source, root, false);` },
+  board: { libraries: [], body: `${BOARD}\nboard(source, root, false);` },
   // React ships as CommonJS, and the component arrives compiled to it: each is wrapped in a
   // function and handed a require that knows these few names and nothing else.
   react: {
@@ -156,7 +161,7 @@ export const escaped = (value: string) =>
  * The page for one type. With no `artifact` it is the empty frame: it draws the first source its
  * parent posts to it, and only its parent's. With one it draws that, and listens to no one.
  * `editing` is the empty frame the owner edits in: it opens what it is handed for editing
- * (edit-frame.ts) and never draws, so nothing of the Artifact runs in it.
+ * (edit-frame.ts) and never runs it, so nothing the agent wrote runs in it.
  */
 function page(
   type: SessionArtifactType,
@@ -198,7 +203,7 @@ function page(
   };
   const draw = async (source, libraries) => {
 ${editing ? '' : body}
-  };${editing ? EDITING : ''}
+  };${editing ? (EDITORS[type] ?? '') : ''}
   const show = (source) => draw(source, read('libraries')).catch(fail);
   const given = read('artifact');
   if (given !== null) return show(given);
@@ -329,12 +334,12 @@ const frames = new Map<string, string>();
 
 /**
  * The empty frame of a type, the same for every Artifact and every owner. Built once. `editing`
- * is the one the owner edits by hand in, which only a page and a deck's slide have. `present` is
+ * is the one the owner edits by hand in, which only `EDITABLE_ARTIFACT_TYPES` have. `present` is
  * a deck's player, already presenting, for the panel's own presentation of it.
  */
 export function artifactFrame(type: SessionArtifactType, editing = false, present = false): string {
-  if (editing && !EDITABLE_ARTIFACT_TYPES.includes(type)) {
-    throw new GatewayError(400, 'Only a web page or a deck is edited by hand.');
+  if (editing && !(EDITABLE_ARTIFACT_TYPES.includes(type) && EDITORS[type])) {
+    throw new GatewayError(400, 'This kind of Artifact is not edited by hand.');
   }
   if (present && (type !== 'deck' || editing)) {
     throw new GatewayError(400, 'Only a deck is presented, and not while it is edited.');

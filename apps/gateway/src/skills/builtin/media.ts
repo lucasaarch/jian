@@ -67,7 +67,8 @@ an image or a voice note asked for here and meant for someone there. \`generate_
 \`generate_speech\` take it too.
 
 In a conversation in the panel, what the owner will look at, use or change there (a page,
-slides, a Markdown document, a diagram) is better made with \`create_artifact\`, as its own type.
+slides, a Markdown document, a spreadsheet to work in, a whiteboard, a diagram) is better made
+with \`create_artifact\`, as its own type.
 A finished file (a PDF, a Word, Excel or PowerPoint file, a picture) is sent with \`send_file\`.
 
 Send a file when the answer is a file: a spreadsheet, a report someone will keep or forward,

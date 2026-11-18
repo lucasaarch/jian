@@ -22,6 +22,12 @@ import { collectEdit } from './edit';
 import { fileName, LANGUAGE } from './source';
 import { type ArtifactsApi, artifactChanged, useArtifactVersion } from './use-artifacts';
 
+/** What Edit changes, by type: the words of a page, a sheet's cells, a board's notes and shapes. */
+const EDIT_TIP: Partial<Record<SessionArtifact['type'], string>> = {
+  sheet: 'Edit the cells',
+  board: 'Edit the board',
+};
+
 /**
  * One Artifact, in the Inspector or in the agent's page of every Artifact (app/artifacts): drawn
  * in its sealed frame, or as its source, at the version the owner picks from its history. With none picked it is the latest, and follows the agent's
@@ -31,9 +37,10 @@ import { type ArtifactsApi, artifactChanged, useArtifactVersion } from './use-ar
  * A deck is read as slides, never as code: a slide's markup is still copied from the options,
  * and the deck is taken away as a file from a menu of its own (deck/deck-download.tsx).
  *
- * A page and a deck's slide can be edited by hand: Edit opens the version in view in the frame
- * that edits (artifact-frame.tsx), and Save asks that frame for the markup and hands it to the
- * gateway, which keeps it as a new version of the owner's. The frame saves nothing itself.
+ * A page, a deck's slide, a document, a spreadsheet and a whiteboard can be edited by hand: Edit
+ * opens the version in view in the frame that edits (artifact-frame.tsx), and Save asks that
+ * frame for the source and hands it to the gateway, which keeps it as a new version of the
+ * owner's. The frame saves nothing itself.
  */
 export function ArtifactView({
   api,
@@ -171,7 +178,11 @@ export function ArtifactView({
               )}
               {editable && (
                 <HoverTip
-                  tip={slide === undefined ? 'Edit the text' : 'Edit this slide’s text'}
+                  tip={
+                    slide === undefined
+                      ? (EDIT_TIP[artifact.type] ?? 'Edit the text')
+                      : 'Edit this slide’s text'
+                  }
                   side="bottom"
                   align="end"
                 >

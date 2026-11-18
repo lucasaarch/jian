@@ -170,17 +170,6 @@ export function ArtifactsScreen({
           id="artifacts-title"
           title="Artifacts"
           description="Everything this agent made to look at, in any conversation."
-          actions={
-            <Action
-              tone="outline"
-              size="small"
-              className="h-8"
-              onClick={() => name({ kind: 'new' })}
-            >
-              <FolderPlus size={14} aria-hidden="true" />
-              New folder
-            </Action>
-          }
         />
         <PageToolbar>
           <SearchField
@@ -197,6 +186,10 @@ export function ArtifactsScreen({
               setFilter((was) => ({ ...was, type: type as SessionArtifact['type'] | '' }))
             }
           />
+          <Action tone="outline" size="small" className="h-8" onClick={() => name({ kind: 'new' })}>
+            <FolderPlus size={14} aria-hidden="true" />
+            New folder
+          </Action>
         </PageToolbar>
         {places.length > 1 && (
           <ArtifactFolders

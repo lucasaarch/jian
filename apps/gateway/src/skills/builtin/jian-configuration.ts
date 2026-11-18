@@ -120,7 +120,8 @@ takes the whole window: its pages are listed where the sidebar was, under Back.
   keeps at most ${TERMINALS_MAX} open. You neither see nor type in them: ask the owner for what
   one printed.
   Its Artifacts tab lists the Artifacts you made in this conversation (a page, a component, a
-  document, a picture, a diagram or a deck of slides), each with an icon of its kind,
+  document, a spreadsheet, a whiteboard, a picture, a diagram or a deck of slides), each with
+  an icon of its kind,
   and draws the one opened in a sealed frame: the owner opens an earlier version from History,
   switches between the drawing and its code, copies or downloads the source, and sets it
   Private or Public. A finished file, a PDF or any other, is not an Artifact: it comes as a
@@ -132,9 +133,10 @@ takes the whole window: its pages are listed where the sidebar was, under Back.
   PowerPoint file holds each slide as a picture with its text in the notes, so it opens the
   same everywhere but is not edited shape by shape there. The gateway draws those files, in
   its own fonts, so only one on a server offers them: on the desktop app's own gateway a deck
-  downloads as the slide's web page alone. Edit, on a web page or a
-  deck's slide, lets the owner click a text to change it or its formatting, and Save keeps that
-  as a new version of theirs.
+  downloads as the slide's web page alone. Edit, on a web page, a document or a deck's slide,
+  lets the owner click a text to change it or its formatting; on a spreadsheet, type in its
+  cells; on a whiteboard, draw and move notes, shapes, arrows and strokes. Save keeps that as a
+  new version of theirs.
   Public gives a link anyone can open without signing in, to read the latest version only,
   and making it private again ends that link for good. A deck's link has Present too, the same player the panel's Present opens: the whole
   screen, stepped through with the arrow keys, space or a click, and left with Escape. Only a

@@ -379,10 +379,10 @@ const listening = (spy: { mock: { calls: unknown[][] } }) =>
   spy.mock.calls.filter(([type]) => type === 'message').length;
 
 describe('editing one by hand', () => {
-  it('is offered for a page and a deck, and for nothing else', async () => {
+  it('is offered for what the owner keeps working on, never for code', async () => {
     for (const [artifact, offered] of [
       [counter, false],
-      [notes, false],
+      [notes, true],
       [page, true],
       [deck, true],
     ] as const) {
