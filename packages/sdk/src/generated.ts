@@ -6226,6 +6226,13 @@ export interface operations {
                                 scrollDirection?: "up" | "down" | "left" | "right";
                                 scrollAmount?: number;
                                 duration?: number;
+                                /** @constant */
+                                protocol?: 2;
+                                session?: {
+                                    id: string;
+                                    name: string;
+                                    color: string;
+                                };
                             };
                             update?: {
                                 version: string;
@@ -6525,6 +6532,12 @@ export interface operations {
                             imageToPointY: number;
                         };
                         error?: string;
+                        /** @enum {string} */
+                        code?: "perm_denied" | "invalid_args" | "timeout" | "policy_denied" | "screen_changed" | "failed";
+                        /** @enum {string} */
+                        delivery?: "not_delivered" | "uncertain";
+                        /** @enum {string} */
+                        permission?: "accessibility" | "screen_recording" | "elevation";
                     };
                     update?: {
                         from: string;

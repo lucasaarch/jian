@@ -1,11 +1,13 @@
-//! The Jian pointer on X11: an override-redirect window the window manager never touches, with
-//! an empty input shape so every click goes through to what is under it. Under a compositor it
-//! is a 32-bit window blended per pixel and faded through `_NET_WM_WINDOW_OPACITY`; without one
-//! a bounding shape cuts the sprite out of its square, and idle cannot fade it.
+//! An agent's pointer on X11: an override-redirect window the window manager never touches,
+//! with an empty input shape so every click goes through to what is under it. Under a
+//! compositor it is a 32-bit window blended per pixel and faded through
+//! `_NET_WM_WINDOW_OPACITY`; without one a bounding shape cuts the pointer out of its
+//! rectangle, and idle cannot fade it.
 //!
-//! The window's background is a pixmap holding the sprite, so the server repaints it on every
+//! The window's background is a pixmap holding the pointer, so the server repaints it on every
 //! expose by itself and nothing here reads events. A thread of its own draws the click ripple
-//! into that pixmap while the request that clicked goes on.
+//! into that pixmap while the request that clicked goes on, and takes the window away when
+//! the pointer is dropped.
 
 use std::sync::mpsc::{Receiver, Sender, channel};
 use std::thread::sleep;
@@ -14,25 +16,27 @@ use std::time::Duration;
 use x11rb::connection::Connection;
 use x11rb::protocol::shape::{self, SK, SO};
 use x11rb::protocol::xproto::{
-    AtomEnum, ClipOrdering, ColormapAlloc, ConfigureWindowAux, ConnectionExt, CreateGCAux,
-    CreateWindowAux, Gcontext, ImageFormat, Pixmap, PropMode, StackMode, VisualClass, Visualid,
-    Window, WindowClass,
+    AtomEnum, ClipOrdering, Colormap, ColormapAlloc, ConfigureWindowAux, ConnectionExt,
+    CreateGCAux, CreateWindowAux, Gcontext, ImageFormat, Pixmap, PropMode, StackMode, VisualClass,
+    Visualid, Window, WindowClass,
 };
 use x11rb::wrapper::ConnectionExt as _;
 
 use super::display::{Display, display, x_error};
+use super::label;
 use super::pixels::Layout;
-use super::sprite::{self, HOTSPOT, Pixels, SIZE};
+use super::shape::shown;
+use crate::cursor::{Art, Look};
 use crate::platform::{Pointer, Presence};
 use crate::protocol::Point;
 
 const ACTIVE_ALPHA: f64 = 0.94;
 const IDLE_ALPHA: f64 = 0.18;
-const RIPPLE: Duration = Duration::from_millis(160);
-const RIPPLE_FRAMES: u32 = 10;
+const RIPPLE: Duration = Duration::from_millis(300);
+const RIPPLE_FRAMES: u32 = 18;
 
-#[derive(Default)]
 pub struct LinuxPointer {
+    look: Look,
     /// Made on first show; `Err` once it could not be, so the reason is logged only once and
     /// input goes on without a pointer, as it must on a server without SHAPE.
     overlay: Option<Result<Overlay, ()>>,
@@ -45,13 +49,17 @@ struct Overlay {
     window: Window,
     translucent: bool,
     opacity: u32,
+    /// The tip's pixel in the window, from its top-left corner on both axes.
+    tip: i32,
+    /// Dropping it ends the ripple thread, which frees the window on its way out.
     flashes: Sender<()>,
 }
 
 impl LinuxPointer {
     fn overlay(&mut self) -> Option<&Overlay> {
+        let look = &self.look;
         let overlay = self.overlay.get_or_insert_with(|| {
-            Overlay::new().map_err(|reason| {
+            Overlay::new(look).map_err(|reason| {
                 eprintln!("computer-helper: no pointer overlay: {reason}");
             })
         });
@@ -64,8 +72,8 @@ impl LinuxPointer {
             return;
         };
         // The tip's pixel is the one input lands on: `floor`, as in `input`.
-        let x = tip.x.floor() as i32 - i32::from(HOTSPOT.0);
-        let y = tip.y.floor() as i32 - i32::from(HOTSPOT.1);
+        let x = tip.x.floor() as i32 - overlay.tip;
+        let y = tip.y.floor() as i32 - overlay.tip;
         // Raised on every move: a window mapped since would otherwise cover the pointer.
         let placed = ConfigureWindowAux::new()
             .x(x)
@@ -76,6 +84,15 @@ impl LinuxPointer {
 }
 
 impl Pointer for LinuxPointer {
+    fn new(look: &Look) -> Self {
+        Self {
+            look: look.clone(),
+            overlay: None,
+            mapped: false,
+            tip: None,
+        }
+    }
+
     fn show(&mut self, presence: Presence) {
         let has_tip = self.tip.is_some();
         let Some(overlay) = self.overlay() else {
@@ -132,7 +149,7 @@ impl Pointer for LinuxPointer {
 }
 
 impl Overlay {
-    fn new() -> Result<Self, String> {
+    fn new(look: &Look) -> Result<Self, String> {
         let display = display()?;
         if !display.shape {
             return Err("the X server lacks the SHAPE extension".into());
@@ -165,28 +182,33 @@ impl Overlay {
             .ok_or("the screen keeps pixels in a format the pointer cannot draw")?;
         let opacity = atom(display, b"_NET_WM_WINDOW_OPACITY")?;
 
-        let sprite = sprite::sprite()?;
+        // X11 counts in pixels: a point is a pixel, whatever the screen's density.
+        let art = Art::draw(look.color, label::mask(display, &look.label).as_ref(), 1.0);
+        let size = |side: usize| u16::try_from(side).map_err(|_| "the pointer is too large");
+        let (width, height) = (size(art.width)?, size(art.height)?);
         let pixmap = conn.generate_id().map_err(x_error)?;
-        conn.create_pixmap(depth, pixmap, display.root, SIZE, SIZE)
+        conn.create_pixmap(depth, pixmap, display.root, width, height)
             .map_err(x_error)?;
         let gc = conn.generate_id().map_err(x_error)?;
         conn.create_gc(gc, pixmap, &CreateGCAux::new())
+            .map_err(x_error)?;
+        // A window of another depth than its parent needs its own colormap and border pixel.
+        let colormap = conn.generate_id().map_err(x_error)?;
+        conn.create_colormap(ColormapAlloc::NONE, colormap, display.root, visual)
             .map_err(x_error)?;
         let canvas = Canvas {
             display,
             window: 0,
             pixmap,
             gc,
+            colormap,
             layout,
             depth,
+            width,
+            height,
             translucent,
         };
-        canvas.draw(&sprite)?;
-
-        // A window of another depth than its parent needs its own colormap and border pixel.
-        let colormap = conn.generate_id().map_err(x_error)?;
-        conn.create_colormap(ColormapAlloc::NONE, colormap, display.root, visual)
-            .map_err(x_error)?;
+        canvas.draw(&art.pixels)?;
         let window = conn.generate_id().map_err(x_error)?;
         let attributes = CreateWindowAux::new()
             .background_pixmap(pixmap)
@@ -199,8 +221,8 @@ impl Overlay {
             display.root,
             0,
             0,
-            SIZE,
-            SIZE,
+            width,
+            height,
             0,
             WindowClass::INPUT_OUTPUT,
             visual,
@@ -239,16 +261,21 @@ impl Overlay {
         )
         .map_err(x_error)?;
         let canvas = Canvas { window, ..canvas };
-        canvas.cut(&sprite)?;
+        canvas.cut(&art.pixels)?;
         display.flush()?;
 
+        let tip = art.tip();
         let (flashes, requests) = channel();
-        std::thread::spawn(move || canvas.ripples(&sprite, &requests));
+        std::thread::spawn(move || {
+            canvas.ripples(&art, &requests);
+            canvas.close();
+        });
         Ok(Self {
             display,
             window,
             translucent,
             opacity,
+            tip,
             flashes,
         })
     }
@@ -291,20 +318,24 @@ struct Canvas {
     window: Window,
     pixmap: Pixmap,
     gc: Gcontext,
+    colormap: Colormap,
     layout: Layout,
     depth: u8,
+    width: u16,
+    height: u16,
     translucent: bool,
 }
 
 impl Canvas {
-    /// Replays the ripple for each flash; a flash during one starts it over.
-    fn ripples(&self, sprite: &Pixels, flashes: &Receiver<()>) {
+    /// Replays the ripple for each flash; a flash during one starts it over. Returns when the
+    /// pointer is dropped.
+    fn ripples(&self, art: &Art, flashes: &Receiver<()>) {
         let pause = RIPPLE / RIPPLE_FRAMES;
         while flashes.recv().is_ok() {
             let mut frame = 1;
             while frame <= RIPPLE_FRAMES {
                 let progress = f64::from(frame) / f64::from(RIPPLE_FRAMES);
-                let pixels = sprite::ripple(sprite, progress, self.translucent);
+                let pixels = art.ripple(progress, self.translucent);
                 if let Err(error) = self.draw(&pixels).and_then(|()| self.cut(&pixels)) {
                     eprintln!("computer-helper: pointer: {error}");
                 }
@@ -326,8 +357,8 @@ impl Canvas {
             ImageFormat::Z_PIXMAP,
             self.pixmap,
             self.gc,
-            SIZE,
-            SIZE,
+            self.width,
+            self.height,
             0,
             0,
             0,
@@ -342,12 +373,26 @@ impl Canvas {
         self.display.flush()
     }
 
-    /// Without a compositor, the window's own outline is the sprite's.
+    /// Takes the window and what it was drawn with off the server.
+    fn close(&self) {
+        let conn = &self.display.conn;
+        let closed = conn
+            .destroy_window(self.window)
+            .and_then(|_| conn.free_pixmap(self.pixmap))
+            .and_then(|_| conn.free_gc(self.gc))
+            .and_then(|_| conn.free_colormap(self.colormap))
+            .and_then(|_| conn.flush());
+        if let Err(error) = closed {
+            eprintln!("computer-helper: pointer: {error}");
+        }
+    }
+
+    /// Without a compositor, the window's own outline is the pointer's.
     fn cut(&self, pixels: &[u8]) -> Result<(), String> {
         if self.translucent || self.window == 0 {
             return Ok(());
         }
-        let runs = sprite::shown(pixels);
+        let runs = shown(pixels, usize::from(self.width));
         shape::rectangles(
             &self.display.conn,
             SO::SET,

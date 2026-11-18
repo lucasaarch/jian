@@ -11,9 +11,10 @@
 mod display;
 mod input;
 mod keyboard;
+mod label;
 mod pixels;
 mod pointer;
-mod sprite;
+mod shape;
 
 use serde_json::Value;
 
@@ -21,12 +22,12 @@ pub use input::Linux;
 use pointer::LinuxPointer;
 
 use crate::Helper;
-use crate::protocol::Request;
+use crate::protocol::Envelope;
 
 /// Runs the helper: `serve` reads the requests and gets each answered, and when it returns the
 /// process ends, and the X server takes the pointer's window with it.
-pub fn run(serve: impl FnOnce(&mut dyn FnMut(Request) -> Value) + Send + 'static) {
-    let mut helper = Helper::new(Linux, LinuxPointer::default());
+pub fn run(serve: impl FnOnce(&mut dyn FnMut(Envelope) -> Value) + Send + 'static) {
+    let mut helper = Helper::<Linux, LinuxPointer>::new(Linux);
     serve(&mut |request| {
         let reply = helper.handle(request);
         display::drain();

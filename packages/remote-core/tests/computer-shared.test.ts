@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
+  REMOTE_COMPUTER_RESULT_CAPABILITY,
+  REMOTE_COMPUTER_SESSIONS_CAPABILITY,
+} from '@jian/contracts';
+import {
   COMPUTER_CAPABILITIES,
+  COMPUTER_PROTOCOL_CAPABILITIES,
   capabilityForPlatform,
   imagePixelToPoint,
   isComputerCapability,
@@ -20,6 +25,13 @@ describe('computer-shared', () => {
     assert.ok(isComputerCapability('computer-windows-v1'));
     assert.equal(isComputerCapability('shell'), false);
     assert.equal(isComputerCapability(undefined), false);
+  });
+
+  it('names its result and session capabilities as the contract does', () => {
+    assert.deepEqual(
+      [...COMPUTER_PROTOCOL_CAPABILITIES],
+      [REMOTE_COMPUTER_RESULT_CAPABILITY, REMOTE_COMPUTER_SESSIONS_CAPABILITY],
+    );
   });
 
   it('maps image pixels into display points with half-pixel centering', () => {

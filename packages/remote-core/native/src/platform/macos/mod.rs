@@ -16,7 +16,7 @@ pub use input::Mac;
 use pointer::MacPointer;
 
 use crate::Helper;
-use crate::protocol::Request;
+use crate::protocol::Envelope;
 
 thread_local! {
     /// Lives on the main thread only: the pointer's window cannot leave it.
@@ -25,12 +25,12 @@ thread_local! {
 
 /// Runs the helper: `serve` reads the requests and gets each answered, and when it returns the
 /// process ends. The main thread stays in AppKit's run loop until then.
-pub fn run(serve: impl FnOnce(&mut dyn FnMut(Request) -> Value) + Send + 'static) {
+pub fn run(serve: impl FnOnce(&mut dyn FnMut(Envelope) -> Value) + Send + 'static) {
     let mtm = MainThreadMarker::new().expect("the helper starts on the main thread");
     let app = NSApplication::sharedApplication(mtm);
     // No Dock icon and no menu bar: the helper is a part of the worker, not an app of its own.
     app.setActivationPolicy(NSApplicationActivationPolicy::Accessory);
-    HELPER.with(|helper| *helper.borrow_mut() = Some(Helper::new(Mac, MacPointer::new(mtm))));
+    HELPER.with(|helper| *helper.borrow_mut() = Some(Helper::new(Mac)));
 
     std::thread::spawn(move || {
         serve(&mut |request| {

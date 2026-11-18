@@ -28,6 +28,26 @@ function platformOf(machine: { platform: string }) {
   return 'linux' as const;
 }
 
+type ComputerFailure = { ok?: boolean; code?: string; delivery?: string; permission?: string };
+
+/**
+ * What a failed computer action lets the agent do next. `retry` is the worker's word on whether
+ * anything reached the screen: `safe` to send the same action again, `unsafe` until the screen
+ * has been looked at. A worker from before it says neither, and the agent is told nothing.
+ */
+export function retryAdvice(computer: ComputerFailure | undefined): {
+  code?: string;
+  permission?: string;
+  retry?: 'safe' | 'unsafe';
+} {
+  if (computer?.ok !== false || !computer.delivery) return {};
+  return {
+    code: computer.code,
+    ...(computer.permission ? { permission: computer.permission } : {}),
+    retry: computer.delivery === 'not_delivered' ? 'safe' : 'unsafe',
+  };
+}
+
 /** JPEG SOI…EOI — truncated channel payloads usually lack EOI and decode as grey garbage. */
 export function isCompleteJpeg(bytes: Buffer): boolean {
   return (
@@ -229,7 +249,7 @@ export function remoteTools(
     }),
     remote_computer: tool({
       description:
-        'Control a connected machine (macOS, Linux X11, or Windows) with Anthropic-style actions: screenshot the primary display, move/click/drag the pointer, type text, press keys, scroll, wait, or end_session (hides the Jian overlay). Coordinates are pixels in the last screenshot image (origin top-left). Screenshot first; use returned widthPx/heightPx. Call end_session when finished with the GUI.',
+        'Control a connected machine (macOS, Linux X11, or Windows) with Anthropic-style actions: screenshot the primary display, move/click/drag the pointer, type text, press keys, scroll, wait, or end_session (removes your pointer from the screen). Coordinates are pixels in your last screenshot image (origin top-left). Screenshot first; use returned widthPx/heightPx. A failure may carry retry: "safe" means nothing reached the screen and the same action can be sent again; "unsafe" means part of it may have, so take a screenshot before anything else. Call end_session when finished with the GUI.',
       inputSchema: z.object({
         machineId: z.uuid(),
         action: remoteComputerActionSchema,
@@ -238,7 +258,7 @@ export function remoteTools(
         text: z.string().min(1).max(4000).optional(),
         key: z.string().min(1).max(100).optional(),
         scroll_direction: z.enum(['up', 'down', 'left', 'right']).optional(),
-        scroll_amount: z.number().int().min(1).max(20).optional(),
+        scroll_amount: z.number().int().min(1).max(100).optional(),
         duration: z.number().min(0).max(5).optional(),
         timeoutMs: z.number().int().min(1000).max(120000).default(30000),
       }),
@@ -266,12 +286,13 @@ export function remoteTools(
             timeoutMs: input.timeoutMs,
           },
           abortSignal,
+          run.sessionId,
         );
 
         if (input.action !== 'screenshot') {
           const computer = (
             result as {
-              computer?: { ok?: boolean; error?: string };
+              computer?: ComputerFailure & { ok?: boolean; error?: string };
               timedOut?: boolean;
               exitCode?: number | null;
               stderr?: string;
@@ -284,6 +305,7 @@ export function remoteTools(
             stderr: result.stderr,
             timedOut: result.timedOut,
             error: computer?.error,
+            ...retryAdvice(computer),
             machineId: input.machineId,
             machineName: machine.name,
           };
@@ -296,6 +318,7 @@ export function remoteTools(
             exitCode: result.exitCode,
             stderr: result.stderr,
             timedOut: result.timedOut,
+            ...retryAdvice((result as { computer?: ComputerFailure }).computer),
             machineId: input.machineId,
           };
         }

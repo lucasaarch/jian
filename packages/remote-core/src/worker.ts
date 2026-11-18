@@ -51,10 +51,11 @@ export const SECRET_ENV_CAPABILITY = 'shell-secret-env-v1';
  */
 export async function detectCapabilities(): Promise<string[]> {
   try {
-    const { probeComputerCapability, computerCapabilityName } = await import('./computer/index.ts');
+    const { probeComputerCapability, computerCapabilityName, COMPUTER_PROTOCOL_CAPABILITIES } =
+      await import('./computer/index.ts');
     const name = computerCapabilityName();
     return name && (await probeComputerCapability())
-      ? [SECRET_ENV_CAPABILITY, FILES_CAPABILITY, name]
+      ? [SECRET_ENV_CAPABILITY, FILES_CAPABILITY, name, ...COMPUTER_PROTOCOL_CAPABILITIES]
       : [SECRET_ENV_CAPABILITY, FILES_CAPABILITY];
   } catch {
     // Computer Use unavailable until its helper is ready; shell tasks still work.

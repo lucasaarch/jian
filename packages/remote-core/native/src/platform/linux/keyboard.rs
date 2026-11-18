@@ -198,13 +198,20 @@ impl<'a> Keyboard<'a> {
     }
 
     fn press(&self, keycodes: &[Keycode]) -> Result<(), String> {
-        for keycode in keycodes {
-            self.fake(KEY_PRESS_EVENT, *keycode)?;
-        }
-        for keycode in keycodes.iter().rev() {
-            self.fake(KEY_RELEASE_EVENT, *keycode)?;
-        }
-        self.display.flush()
+        let mut down = Vec::with_capacity(keycodes.len());
+        let pressed = keycodes.iter().try_for_each(|&keycode| {
+            self.fake(KEY_PRESS_EVENT, keycode)?;
+            down.push(keycode);
+            Ok(())
+        });
+        // Every key that went down comes up, also when a later one failed: a modifier left
+        // held would turn whatever the user types next into shortcuts.
+        let released = down
+            .iter()
+            .rev()
+            .map(|&keycode| self.fake(KEY_RELEASE_EVENT, keycode))
+            .fold(Ok(()), Result::and);
+        pressed.and(released).and(self.display.flush())
     }
 
     /// Binds `keysym` to a free keycode for the rest of this request.

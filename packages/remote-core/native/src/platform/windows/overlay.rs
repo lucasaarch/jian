@@ -1,4 +1,4 @@
-//! The window the pointer is drawn in: layered, so each pixel has its own alpha and the glow
+//! The window a pointer is drawn in: layered, so each pixel has its own alpha and the shadow
 //! fades into whatever is beneath; transparent to the mouse, so clicks reach that instead;
 //! topmost, never activated and off the taskbar and Alt+Tab, so the user's focus stays put.
 
@@ -22,7 +22,7 @@ const CLASS: [u16; 18] = utf16("JianRemotePointer");
 
 pub struct Overlay {
     window: HWND,
-    /// The last frame, kept at the canvas's size; replaced when the display's scale changes.
+    /// The last frame, kept at the pointer's size; replaced when the display's scale changes.
     surface: Option<Surface>,
 }
 
@@ -68,20 +68,28 @@ impl Overlay {
         })
     }
 
-    /// Puts `pixels` — `side` x `side` premultiplied BGRA rows — on screen with its top-left at
-    /// `origin`, in physical pixels, at `opacity` over all.
+    /// Puts `pixels` — premultiplied BGRA rows of `size`, width by height — on screen with
+    /// its top-left at `origin`, in physical pixels, at `opacity` over all.
     pub fn present(
         &mut self,
         pixels: &[u8],
-        side: i32,
+        size: (i32, i32),
         origin: (i32, i32),
         opacity: f64,
     ) -> Result<(), String> {
-        if self.surface.as_ref().is_none_or(|s| s.width() != side) {
-            self.surface = Some(Surface::new(side, side)?);
+        if self
+            .surface
+            .as_ref()
+            .is_none_or(|s| (s.width(), s.height()) != size)
+        {
+            self.surface = Some(Surface::new(size.0, size.1)?);
         }
         let surface = self.surface.as_mut().expect("set above");
-        surface.pixels_mut().copy_from_slice(pixels);
+        let target = surface.pixels_mut();
+        if target.len() != pixels.len() {
+            return Err("the pointer's frame is not the size of its window".into());
+        }
+        target.copy_from_slice(pixels);
         let blend = BLENDFUNCTION {
             BlendOp: AC_SRC_OVER as u8,
             BlendFlags: 0,
@@ -97,7 +105,10 @@ impl Overlay {
                     x: origin.0,
                     y: origin.1,
                 },
-                &SIZE { cx: side, cy: side },
+                &SIZE {
+                    cx: size.0,
+                    cy: size.1,
+                },
                 surface.dc(),
                 &POINT { x: 0, y: 0 },
                 0,

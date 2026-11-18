@@ -1,9 +1,39 @@
 import type { ChildProcessWithoutNullStreams } from 'node:child_process';
+import { ActionError, type Failure } from './outcome.ts';
 
 /** What a native helper answers to every request: one JSON object per line. */
 export type HelperReply = { ok?: boolean; error?: string } & Record<string, unknown>;
 
 type Pending = { resolve(reply: HelperReply): void; reject(error: Error): void };
+
+const CODES: ReadonlySet<string> = new Set([
+  'perm_denied',
+  'invalid_args',
+  'timeout',
+  'policy_denied',
+  'screen_changed',
+  'failed',
+]);
+const PERMISSIONS: ReadonlySet<string> = new Set([
+  'accessibility',
+  'screen_recording',
+  'elevation',
+]);
+
+/**
+ * What the helper said of its own failure. Anything it left out, or worded in a way this worker
+ * does not know, reads as the cautious case: failed, and maybe delivered.
+ */
+function failureOfReply(reply: HelperReply): Failure {
+  const { code, delivery, permission } = reply;
+  return {
+    code: typeof code === 'string' && CODES.has(code) ? (code as Failure['code']) : 'failed',
+    delivery: delivery === 'not_delivered' ? 'not_delivered' : 'uncertain',
+    ...(typeof permission === 'string' && PERMISSIONS.has(permission)
+      ? { permission: permission as Failure['permission'] }
+      : {}),
+  };
+}
 
 /**
  * The conversation with a native helper process. The helpers answer strictly in order, one line
@@ -14,6 +44,8 @@ export class HelperChannel {
   private readonly pending: Pending[] = [];
   private buffer = '';
   private closed = false;
+  /** Why the helper was stopped, when this worker stopped it: told to whoever was waiting. */
+  private stopped: ActionError | null = null;
 
   /** `onClose` runs once, whether the helper exits, fails to start, or is closed. */
   constructor(child: ChildProcessWithoutNullStreams, onClose: () => void) {
@@ -27,7 +59,7 @@ export class HelperChannel {
     const ended = (message: string) => {
       if (this.closed) return;
       this.closed = true;
-      this.failAll(message);
+      this.failAll(this.stopped ?? new Error(message));
       onClose();
     };
     child.on('exit', () => ended('Computer-use helper exited unexpectedly.'));
@@ -50,13 +82,13 @@ export class HelperChannel {
         reject(new Error('Computer-use helper is not running.'));
         return;
       }
-      const entry = { resolve, reject };
+      const entry: Pending = { resolve, reject };
       this.pending.push(entry);
       this.child.stdin.write(`${JSON.stringify(payload)}\n`, (error) => {
         if (!error) return;
         const index = this.pending.indexOf(entry);
         if (index >= 0) this.pending.splice(index, 1);
-        reject(error);
+        entry.reject(error);
       });
     });
   }
@@ -64,12 +96,26 @@ export class HelperChannel {
   /** A request whose `ok: false` reply is an error, worded by the helper or by `failure`. */
   async call(payload: Record<string, unknown>, failure: string): Promise<HelperReply> {
     const reply = await this.request(payload);
-    if (!reply.ok) throw new Error(reply.error || failure);
+    if (!reply.ok) throw new ActionError(reply.error || failure, failureOfReply(reply));
     return reply;
   }
 
   kill(): void {
     this.child.kill('SIGTERM');
+  }
+
+  /**
+   * Stops a helper that is not answering, at once: SIGKILL, since one stuck in a system call
+   * may never act on SIGTERM. The replies come in order, so nothing behind the stuck request
+   * could be answered either: whoever waits is told `message` as a timeout, and that what the
+   * helper was doing may have reached the screen.
+   */
+  stop(message: string): void {
+    if (this.closed) return;
+    this.stopped = new ActionError(message, { code: 'timeout', delivery: 'uncertain' });
+    this.child.kill('SIGKILL');
+    // The exit event is what closes the channel; whoever waits need not wait for it too.
+    this.failAll(this.stopped);
   }
 
   private receive(chunk: string): void {
@@ -85,8 +131,8 @@ export class HelperChannel {
     }
   }
 
-  private failAll(message: string): void {
-    for (const entry of this.pending.splice(0)) entry.reject(new Error(message));
+  private failAll(error: Error): void {
+    for (const entry of this.pending.splice(0)) entry.reject(error);
   }
 }
 

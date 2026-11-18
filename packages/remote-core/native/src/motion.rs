@@ -40,6 +40,26 @@ pub fn glide(from: Point, to: Point) -> Vec<(Point, Duration)> {
         .collect()
 }
 
+/// A drag as a hand does it. Apps tell a drag from a click by the button staying down before
+/// the pointer moves, and take the drop where the pointer rests before the button comes up:
+/// pressing, sweeping and releasing in a few milliseconds reads as a click, or drops nothing.
+pub const DRAG_GRAB: Duration = Duration::from_millis(200);
+pub const DRAG_STEP: Duration = Duration::from_millis(16);
+pub const DRAG_SETTLE: Duration = Duration::from_millis(100);
+
+/// The most lines one wheel event carries, where an event can carry more than one.
+#[cfg(any(target_os = "macos", windows, test))]
+const SCROLL_LINES_PER_EVENT: u32 = 10;
+
+/// `amount` lines as the lines of each wheel event: a hundred lines are ten events, not a
+/// hundred with a pause after each.
+#[cfg(any(target_os = "macos", windows, test))]
+pub fn scroll_steps(amount: u32) -> impl Iterator<Item = u32> {
+    let amount = amount.max(1);
+    (0..amount.div_ceil(SCROLL_LINES_PER_EVENT))
+        .map(move |step| (amount - step * SCROLL_LINES_PER_EVENT).min(SCROLL_LINES_PER_EVENT))
+}
+
 /// The points a drag passes through after pressing at `from`, ending on `to`. Apps follow a
 /// drag by its intermediate events: one jump reads as a click somewhere else.
 pub fn drag_path(from: Point, to: Point) -> Vec<Point> {
@@ -72,6 +92,15 @@ mod tests {
     #[test]
     fn a_pointer_already_there_does_not_move() {
         assert_eq!(glide(ORIGIN, Point { x: 1.0, y: 0.0 }).len(), 1);
+    }
+
+    #[test]
+    fn a_long_scroll_is_a_few_events_that_add_up_to_it() {
+        assert_eq!(scroll_steps(1).collect::<Vec<_>>(), [1]);
+        assert_eq!(scroll_steps(0).collect::<Vec<_>>(), [1]);
+        assert_eq!(scroll_steps(10).collect::<Vec<_>>(), [10]);
+        assert_eq!(scroll_steps(23).collect::<Vec<_>>(), [10, 10, 3]);
+        assert_eq!(scroll_steps(100).count(), 10);
     }
 
     #[test]

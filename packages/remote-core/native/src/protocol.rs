@@ -1,9 +1,21 @@
 //! What the worker asks and what the helper answers: one JSON object per line each way, in
 //! order. The same messages the Swift, Python and PowerShell helpers speak, so the worker's
 //! session drives any of them, plus `screenshot`, which the others leave to a shell.
+//!
+//! A request may name the `session` it acts for: each has a pointer of its own on the screen. A
+//! worker from before sessions names none, and every request of its moves the same pointer.
 
 use serde::Deserialize;
 use serde_json::{Value, json};
+
+/// One line from the worker: what to do, and for which session.
+#[derive(Debug, Deserialize)]
+pub struct Envelope {
+    #[serde(default)]
+    pub session: String,
+    #[serde(flatten)]
+    pub request: Request,
+}
 
 #[derive(Debug, Deserialize)]
 #[serde(tag = "cmd", rename_all = "camelCase", rename_all_fields = "camelCase")]
@@ -15,7 +27,12 @@ pub enum Request {
     Screenshot {
         max_bytes: Option<usize>,
     },
-    EnsureSession,
+    /// Shows the session's pointer. `label` is the name written beside it and `color` its body,
+    /// as `#rrggbb`; without them it is the plain pointer in the default colour.
+    EnsureSession {
+        label: Option<String>,
+        color: Option<String>,
+    },
     SetIdle,
     EndSession,
     /// Moves the drawn pointer only; the user's cursor stays where it is.
@@ -88,14 +105,86 @@ pub fn ok(extra: Value) -> Value {
 }
 
 pub fn error(message: impl Into<String>) -> Value {
-    json!({ "ok": false, "error": message.into() })
+    Failure::unsent(message).reply()
+}
+
+/// Why a request failed, in the words the worker passes on: `code` says what kind of failure,
+/// and `delivery` whether any input may have reached the screen. The agent sends an action
+/// again only when it is `not_delivered`; after `uncertain` it has to look first.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Failure {
+    pub message: String,
+    pub code: &'static str,
+    pub delivery: &'static str,
+    /// What the user has to grant, with `perm_denied`.
+    pub permission: Option<&'static str>,
+}
+
+impl Failure {
+    fn not_delivered(code: &'static str, message: impl Into<String>) -> Self {
+        Self {
+            message: message.into(),
+            code,
+            delivery: "not_delivered",
+            permission: None,
+        }
+    }
+
+    /// The request itself was wrong: nothing was tried.
+    pub fn invalid(message: impl Into<String>) -> Self {
+        Self::not_delivered("invalid_args", message)
+    }
+
+    /// Jian never does this, whoever asks.
+    pub fn policy(message: impl Into<String>) -> Self {
+        Self::not_delivered("policy_denied", message)
+    }
+
+    /// The system does not let the helper act, found out before it tried.
+    pub fn permission(permission: &'static str, message: impl Into<String>) -> Self {
+        Self {
+            permission: Some(permission),
+            ..Self::not_delivered("perm_denied", message)
+        }
+    }
+
+    /// It failed where no input is posted: reading the display, or before the first event.
+    pub fn unsent(message: impl Into<String>) -> Self {
+        Self::not_delivered("failed", message)
+    }
+
+    pub fn reply(&self) -> Value {
+        let mut body = json!({
+            "ok": false,
+            "error": self.message,
+            "code": self.code,
+            "delivery": self.delivery,
+        });
+        if let (Some(body), Some(permission)) = (body.as_object_mut(), self.permission) {
+            body.insert("permission".into(), permission.into());
+        }
+        body
+    }
+}
+
+/// A failure while posting input, which is what a platform's plain message is: some of it may
+/// have landed.
+impl From<String> for Failure {
+    fn from(message: String) -> Self {
+        Self {
+            message,
+            code: "failed",
+            delivery: "uncertain",
+            permission: None,
+        }
+    }
 }
 
 /// Clicks are single or double; anything else is refused before the screen is touched.
-pub fn click_count(count: Option<u8>) -> Result<u8, String> {
+pub fn click_count(count: Option<u8>) -> Result<u8, Failure> {
     match count.unwrap_or(1) {
         count @ (1 | 2) => Ok(count),
-        _ => Err("count must be 1 or 2".into()),
+        _ => Err(Failure::invalid("count must be 1 or 2")),
     }
 }
 
@@ -116,6 +205,50 @@ mod tests {
         ));
         let request: Request = serde_json::from_str(r#"{"cmd":"screenshot"}"#).unwrap();
         assert!(matches!(request, Request::Screenshot { max_bytes: None }));
+    }
+
+    #[test]
+    fn reads_whose_pointer_a_request_moves() {
+        let line = r##"{"cmd":"ensureSession","session":"a","label":"Mia","color":"#ff6b5e"}"##;
+        let envelope: Envelope = serde_json::from_str(line).unwrap();
+        assert_eq!(envelope.session, "a");
+        assert!(matches!(
+            envelope.request,
+            Request::EnsureSession { label: Some(label), color: Some(color) }
+                if label == "Mia" && color == "#ff6b5e"
+        ));
+        // A worker from before sessions: one pointer, plain.
+        let old: Envelope = serde_json::from_str(r#"{"cmd":"ensureSession"}"#).unwrap();
+        assert_eq!(old.session, "");
+        assert!(matches!(
+            old.request,
+            Request::EnsureSession {
+                label: None,
+                color: None
+            }
+        ));
+        let moved: Envelope =
+            serde_json::from_str(r#"{"cmd":"move","session":"b","pointX":3,"pointY":4.5}"#)
+                .unwrap();
+        assert!(matches!(
+            moved.request,
+            Request::Move { point_x, point_y } if point_x == 3.0 && point_y == 4.5
+        ));
+    }
+
+    #[test]
+    fn a_failure_says_whether_anything_reached_the_screen() {
+        let refused = Failure::permission("accessibility", "Not allowed.").reply();
+        assert_eq!(refused["code"], "perm_denied");
+        assert_eq!(refused["delivery"], "not_delivered");
+        assert_eq!(refused["permission"], "accessibility");
+        // What a platform reports while posting input may have half happened.
+        let posting = Failure::from(String::from("The key was not taken.")).reply();
+        assert_eq!(posting["ok"], false);
+        assert_eq!(posting["code"], "failed");
+        assert_eq!(posting["delivery"], "uncertain");
+        assert!(posting.get("permission").is_none());
+        assert_eq!(click_count(Some(3)).unwrap_err().code, "invalid_args");
     }
 
     #[test]

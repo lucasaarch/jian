@@ -22,19 +22,50 @@ use core_graphics::geometry::{CGPoint, CGRect, CGSize};
 use core_graphics::image::CGImage;
 
 use crate::keys::{Chord, Key, Named};
-use crate::platform::{Geometry, Platform, SessionStatus};
-use crate::protocol::{Button, Direction, Point};
+use crate::motion::{DRAG_GRAB, DRAG_SETTLE, DRAG_STEP, scroll_steps};
+use crate::platform::{Geometry, Held, Need, Platform, SessionStatus};
+use crate::protocol::{Button, Direction, Failure, Point};
 use crate::screenshot::Frame;
+use crate::text::{self, Piece};
 
 unsafe extern "C" {
     fn CGSessionCopyCurrentDictionary() -> CFDictionaryRef;
     fn CGDisplayIsAsleep(display: u32) -> u32;
+    /// Whether Screen Recording is granted, without asking for it (macOS 10.15 and later).
+    fn CGPreflightScreenCaptureAccess() -> bool;
+}
+
+#[link(name = "ApplicationServices", kind = "framework")]
+unsafe extern "C" {
+    /// Whether Accessibility is granted, without asking for it. A C `Boolean`, one byte.
+    fn AXIsProcessTrusted() -> u8;
 }
 
 pub struct Mac;
 
 impl Platform for Mac {
     type Capture = CGImage;
+
+    /// Without Accessibility macOS drops posted events without a word, and without Screen
+    /// Recording a capture shows the wallpaper and no window: both look like success. Asking
+    /// first is the only way to tell the agent the truth, and neither call shows a prompt.
+    fn preflight(&self, need: Need) -> Result<(), Failure> {
+        match need {
+            Need::Screen if !unsafe { CGPreflightScreenCaptureAccess() } => {
+                Err(Failure::permission(
+                    "screen_recording",
+                    "Jian Remote needs the Screen Recording permission: System Settings, Privacy & Security, Screen Recording. Restart Jian Remote after granting it.",
+                ))
+            }
+            Need::Keyboard | Need::Mouse(_) if unsafe { AXIsProcessTrusted() } == 0 => {
+                Err(Failure::permission(
+                    "accessibility",
+                    "Jian Remote needs the Accessibility permission: System Settings, Privacy & Security, Accessibility.",
+                ))
+            }
+            _ => Ok(()),
+        }
+    }
 
     fn geometry(&self) -> Result<Geometry, String> {
         let display = CGDisplay::main();
@@ -116,8 +147,11 @@ impl Platform for Mac {
         with_user_cursor_kept(|| {
             post_mouse(CGEventType::MouseMoved, at, CGMouseButton::Left, None)?;
             for click in 1..=i64::from(count) {
-                post_mouse(down, at, cg_button, Some(click))?;
-                post_mouse(up, at, cg_button, Some(click))?;
+                // Both made before either is posted: a press is never left without its release.
+                let press = mouse_event(down, at, cg_button, Some(click))?;
+                let release = mouse_event(up, at, cg_button, Some(click))?;
+                press.post(CGEventTapLocation::HID);
+                release.post(CGEventTapLocation::HID);
                 if click < i64::from(count) {
                     sleep(Duration::from_millis(40));
                 }
@@ -127,16 +161,26 @@ impl Platform for Mac {
     }
 
     fn drag(&self, from: Point, path: &[Point], step: &mut dyn FnMut(Point)) -> Result<(), String> {
-        let to = cg(*path.last().unwrap_or(&from));
         with_user_cursor_kept(|| {
             post_mouse(CGEventType::MouseMoved, cg(from), CGMouseButton::Left, None)?;
             sleep(Duration::from_millis(12));
+            // The release exists before the press is posted, and follows the pointer.
+            let release = mouse_event(
+                CGEventType::LeftMouseUp,
+                cg(from),
+                CGMouseButton::Left,
+                None,
+            )?;
             post_mouse(
                 CGEventType::LeftMouseDown,
                 cg(from),
                 CGMouseButton::Left,
                 None,
             )?;
+            // From here the button comes up however this ends: a move that fails half way
+            // must not leave it down, dragging whatever the user touches next.
+            let _held = Held(|| release.post(CGEventTapLocation::HID));
+            sleep(DRAG_GRAB);
             for &point in path {
                 post_mouse(
                     CGEventType::LeftMouseDragged,
@@ -144,29 +188,25 @@ impl Platform for Mac {
                     CGMouseButton::Left,
                     None,
                 )?;
+                release.set_location(cg(point));
                 step(point);
-                sleep(Duration::from_millis(6));
+                sleep(DRAG_STEP);
             }
-            post_mouse(CGEventType::LeftMouseUp, to, CGMouseButton::Left, None)
+            sleep(DRAG_SETTLE);
+            Ok(())
         })
     }
 
     fn type_text(&self, text: &str) -> Result<(), String> {
-        let units: Vec<u16> = text.encode_utf16().collect();
-        let mut index = 0;
-        while index < units.len() {
-            match units[index] {
-                // CRLF is one Return, not two.
-                0x0D if units.get(index + 1) == Some(&0x0A) => {
-                    post_key(RETURN, CGEventFlags::empty())?;
-                    index += 1;
-                }
-                0x0A | 0x0D => post_key(RETURN, CGEventFlags::empty())?,
-                0x09 => post_key(TAB, CGEventFlags::empty())?,
-                unit => post_unicode(unit)?,
+        for piece in text::pieces(text) {
+            match piece {
+                Piece::Return => post_key(RETURN, CGEventFlags::empty(), None)?,
+                Piece::Tab => post_key(TAB, CGEventFlags::empty(), None)?,
+                // The characters themselves, whatever the keyboard layout.
+                Piece::Text(units) => post_key(0, CGEventFlags::empty(), Some(&units))?,
             }
-            index += 1;
-            sleep(Duration::from_millis(2));
+            // Apps read a run as it arrives; without a breath between runs some drop one.
+            sleep(Duration::from_millis(4));
         }
         Ok(())
     }
@@ -178,7 +218,7 @@ impl Platform for Mac {
         flags.set(CGEventFlags::CGEventFlagControl, modifiers.control);
         flags.set(CGEventFlags::CGEventFlagAlternate, modifiers.option);
         flags.set(CGEventFlags::CGEventFlagShift, modifiers.shift);
-        post_key(key_code(chord.key), flags)
+        post_key(key_code(chord.key), flags, None)
     }
 
     fn scroll(&self, at: Point, direction: Direction, amount: u32) -> Result<(), String> {
@@ -190,10 +230,18 @@ impl Platform for Mac {
         };
         with_user_cursor_kept(|| {
             post_mouse(CGEventType::MouseMoved, cg(at), CGMouseButton::Left, None)?;
-            for _ in 0..amount.max(1) {
-                CGEvent::new_scroll_event(source()?, ScrollEventUnit::LINE, 2, dy, dx, 0)
-                    .map_err(|_| "could not create a scroll event")?
-                    .post(CGEventTapLocation::HID);
+            for lines in scroll_steps(amount) {
+                let lines = lines as i32;
+                CGEvent::new_scroll_event(
+                    source()?,
+                    ScrollEventUnit::LINE,
+                    2,
+                    dy * lines,
+                    dx * lines,
+                    0,
+                )
+                .map_err(|_| "could not create a scroll event")?
+                .post(CGEventTapLocation::HID);
                 sleep(Duration::from_millis(12));
             }
             Ok(())
@@ -235,18 +283,27 @@ fn source() -> Result<CGEventSource, String> {
         .map_err(|_| "could not create an input event source".into())
 }
 
+fn mouse_event(
+    kind: CGEventType,
+    at: CGPoint,
+    button: CGMouseButton,
+    click_state: Option<i64>,
+) -> Result<CGEvent, String> {
+    let event = CGEvent::new_mouse_event(source()?, kind, at, button)
+        .map_err(|_| "could not create a mouse event")?;
+    if let Some(click) = click_state {
+        event.set_integer_value_field(EventField::MOUSE_EVENT_CLICK_STATE, click);
+    }
+    Ok(event)
+}
+
 fn post_mouse(
     kind: CGEventType,
     at: CGPoint,
     button: CGMouseButton,
     click_state: Option<i64>,
 ) -> Result<(), String> {
-    let event = CGEvent::new_mouse_event(source()?, kind, at, button)
-        .map_err(|_| "could not create a mouse event")?;
-    if let Some(click) = click_state {
-        event.set_integer_value_field(EventField::MOUSE_EVENT_CLICK_STATE, click);
-    }
-    event.post(CGEventTapLocation::HID);
+    mouse_event(kind, at, button, click_state)?.post(CGEventTapLocation::HID);
     Ok(())
 }
 
@@ -264,24 +321,23 @@ fn with_user_cursor_kept(act: impl FnOnce() -> Result<(), String>) -> Result<(),
     acted.and(restored)
 }
 
-fn post_key(code: CGKeyCode, flags: CGEventFlags) -> Result<(), String> {
-    for down in [true, false] {
+/// One key press and its release, carrying `text` when it types characters instead of a key.
+/// The flags are always set, to none when there are none: an event made from the HID state
+/// would otherwise carry a modifier the user happens to hold, and typed text would run their
+/// shortcuts. Both events are made before either is posted, so a key never stays down.
+fn post_key(code: CGKeyCode, flags: CGEventFlags, text: Option<&[u16]>) -> Result<(), String> {
+    let event = |down: bool| {
         let event = CGEvent::new_keyboard_event(source()?, code, down)
             .map_err(|_| "could not create a keyboard event")?;
         event.set_flags(flags);
-        event.post(CGEventTapLocation::HID);
-    }
-    Ok(())
-}
-
-/// Text goes in as the characters themselves, whatever the keyboard layout.
-fn post_unicode(unit: u16) -> Result<(), String> {
-    for down in [true, false] {
-        let event = CGEvent::new_keyboard_event(source()?, 0, down)
-            .map_err(|_| "could not create a keyboard event")?;
-        event.set_string_from_utf16_unchecked(&[unit]);
-        event.post(CGEventTapLocation::HID);
-    }
+        if let Some(units) = text {
+            event.set_string_from_utf16_unchecked(units);
+        }
+        Ok::<_, String>(event)
+    };
+    let (press, release) = (event(true)?, event(false)?);
+    press.post(CGEventTapLocation::HID);
+    release.post(CGEventTapLocation::HID);
     Ok(())
 }
 

@@ -3,11 +3,12 @@
  * backend that runs its tasks, loaded only on the platform it serves.
  */
 import type { RemoteResult, RemoteTask } from '@jian/contracts';
-import { failed } from './outcome.ts';
+import { failed, forProtocol, refused } from './outcome.ts';
 import { capabilityForPlatform, isComputerCapability } from './shared.ts';
 
 export {
   COMPUTER_CAPABILITIES,
+  COMPUTER_PROTOCOL_CAPABILITIES,
   type ComputerCapability,
   capabilityForPlatform,
   imagePixelToPoint,
@@ -38,10 +39,11 @@ async function loadBackend(): Promise<ComputerBackend | null> {
 export async function executeComputerTask(task: RemoteTask): Promise<RemoteResult> {
   const backend = await loadBackend();
   if (!backend) {
-    return {
-      taskId: task.id,
-      ...failed(`Computer use is not supported on platform ${process.platform}.`),
-    };
+    const { message, failure } = refused(
+      `Computer use is not supported on platform ${process.platform}.`,
+      'failed',
+    );
+    return { taskId: task.id, ...forProtocol(failed(message, failure), task.computer?.protocol) };
   }
   return backend.executeComputerTask(task);
 }

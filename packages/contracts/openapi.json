@@ -6233,12 +6233,41 @@
                             "scrollAmount": {
                               "type": "integer",
                               "minimum": 1,
-                              "maximum": 20
+                              "maximum": 100
                             },
                             "duration": {
                               "type": "number",
                               "minimum": 0,
                               "maximum": 5
+                            },
+                            "protocol": {
+                              "type": "number",
+                              "const": 2
+                            },
+                            "session": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 100
+                                },
+                                "name": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 60
+                                },
+                                "color": {
+                                  "type": "string",
+                                  "pattern": "^#[0-9a-fA-F]{6}$"
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "name",
+                                "color"
+                              ],
+                              "additionalProperties": false
                             }
                           },
                           "required": [
@@ -6961,6 +6990,32 @@
                       "error": {
                         "type": "string",
                         "maxLength": 2000
+                      },
+                      "code": {
+                        "type": "string",
+                        "enum": [
+                          "perm_denied",
+                          "invalid_args",
+                          "timeout",
+                          "policy_denied",
+                          "screen_changed",
+                          "failed"
+                        ]
+                      },
+                      "delivery": {
+                        "type": "string",
+                        "enum": [
+                          "not_delivered",
+                          "uncertain"
+                        ]
+                      },
+                      "permission": {
+                        "type": "string",
+                        "enum": [
+                          "accessibility",
+                          "screen_recording",
+                          "elevation"
+                        ]
                       }
                     },
                     "required": [

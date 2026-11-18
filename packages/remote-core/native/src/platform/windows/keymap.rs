@@ -70,36 +70,6 @@ pub fn modifier_keys(modifiers: Modifiers) -> Vec<VirtualKey> {
     .collect()
 }
 
-/// One keystroke of typed text.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Stroke {
-    /// Line breaks and tabs are the keys themselves: an editor reads a typed U+000A as nothing.
-    Key(VirtualKey),
-    /// A UTF-16 code unit, sent as itself whatever the keyboard layout; a character outside
-    /// the BMP is its two surrogates, one after the other.
-    Unit(u16),
-}
-
-pub fn strokes(text: &str) -> Vec<Stroke> {
-    let units: Vec<u16> = text.encode_utf16().collect();
-    let mut strokes = Vec::with_capacity(units.len());
-    let mut index = 0;
-    while index < units.len() {
-        strokes.push(match units[index] {
-            // CRLF is one Return, not two.
-            0x0D if units.get(index + 1) == Some(&0x0A) => {
-                index += 1;
-                Stroke::Key(RETURN)
-            }
-            0x0A | 0x0D => Stroke::Key(RETURN),
-            0x09 => Stroke::Key(TAB),
-            unit => Stroke::Unit(unit),
-        });
-        index += 1;
-    }
-    strokes
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -140,29 +110,5 @@ mod tests {
         assert_eq!(codes, [0x11, 0x12, 0x10, 0x5B]);
         assert!(held[3].extended);
         assert!(modifier_keys(parse_chord("t").unwrap().modifiers).is_empty());
-    }
-
-    #[test]
-    fn typed_text_keeps_its_characters_and_turns_line_breaks_into_keys() {
-        assert_eq!(
-            strokes("a\r\nb\nc\rd\te"),
-            [
-                Stroke::Unit(u16::from(b'a')),
-                Stroke::Key(RETURN),
-                Stroke::Unit(u16::from(b'b')),
-                Stroke::Key(RETURN),
-                Stroke::Unit(u16::from(b'c')),
-                Stroke::Key(RETURN),
-                Stroke::Unit(u16::from(b'd')),
-                Stroke::Key(TAB),
-                Stroke::Unit(u16::from(b'e')),
-            ]
-        );
-        // Accents are one unit; an emoji outside the BMP is its surrogate pair.
-        assert_eq!(strokes("é"), [Stroke::Unit(0xE9)]);
-        assert_eq!(
-            strokes("\u{1F600}"),
-            [Stroke::Unit(0xD83D), Stroke::Unit(0xDE00)]
-        );
     }
 }
