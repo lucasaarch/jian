@@ -210,6 +210,21 @@
   .session-agent:focus-visible {
     background: var(--glass-press);
   }
+  /* The marker sits on the name's line. Queued breathes as a dot; a tool in use is green and
+     thinking stays muted, so what each agent is on reads before its text does. */
+  .session-agent > .work-mark {
+    @apply mt-px;
+  }
+  .session-agent > .work-mark[data-activity="breathing"] .work-spinner {
+    @apply border-transparent motion-safe:animate-pulse;
+    background: var(--warn);
+  }
+  .session-agent
+    > .work-mark:not([data-activity="composing"], [data-activity="breathing"])
+    .work-spinner {
+    border-color: color-mix(in srgb, var(--good) 25%, transparent);
+    border-top-color: var(--good);
+  }
   .session-agent-text {
     @apply grid min-w-0 flex-1;
   }
