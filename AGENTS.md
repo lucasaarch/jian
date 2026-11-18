@@ -28,6 +28,7 @@ make install && make setup   # dependencies, then .env with local credentials
 make db-up && make dev       # gateway on :4310, panel on :3000
 pnpm --filter @jian/desktop dev --watch   # the desktop app; a main process change restarts it
 make check                   # everything CI checks, slowly
+make preview-up PR=157       # a pull request on Cubeship, to try; preview-down deletes it
 make release VERSION=1.2.3   # only when asked; needs docs/releases/1.2.3.md
 ```
 

@@ -1,0 +1,204 @@
+name: Preview
+# A pull request to try end to end before it is released. The `preview` label builds the gateway
+# and web images of its head commit, for linux/amd64 alone, and pushes them as `pr-<number>` and
+# `sha-<commit>`; every push to a labelled pull request does it again. Run by hand on a branch, it
+# pushes `branch-<name>` instead. Nothing here is a release: no version, no `latest`, no npm
+# package, no desktop app.
+#
+# With the repository variable CUBESHIP_URL and the secret CUBESHIP_API_KEY set, the images are
+# then deployed with scripts/preview.mjs to an environment of their own on that Cubeship instance,
+# and the address is left in a comment. Closing the pull request or taking the label off deletes
+# the environment and its database. Without them the images are only pushed, for
+# `make preview-up PR=<number>` from a checkout.
+#
+# A pull request from a fork gets nothing: this runs on `pull_request`, never
+# `pull_request_target`, so a fork's code never meets the registry token or the Cubeship key, and
+# only someone who may label a pull request of a branch in this repository starts a preview.
+on:
+  pull_request:
+    types: [labeled, unlabeled, synchronize, reopened, closed]
+  workflow_dispatch:
+    inputs:
+      action:
+        description: Deploy this branch's preview, or delete it
+        type: choice
+        options: [up, down]
+        default: up
+permissions: {}
+jobs:
+  # What this event asks for: a preview brought up, taken down, or nothing at all.
+  plan:
+    runs-on: ubuntu-24.04
+    outputs:
+      action: ${{ steps.plan.outputs.action }}
+      id: ${{ steps.plan.outputs.id }}
+      name: ${{ steps.plan.outputs.name }}
+      sha: ${{ steps.plan.outputs.sha }}
+      deploy: ${{ steps.plan.outputs.deploy }}
+    steps:
+      - id: plan
+        env:
+          EVENT_ACTION: ${{ github.event.action }}
+          LABEL: ${{ github.event.label.name }}
+          LABELLED: ${{ contains(github.event.pull_request.labels.*.name, 'preview') }}
+          OURS: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          ASKED: ${{ inputs.action }}
+          SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          CUBESHIP: ${{ vars.CUBESHIP_URL != '' && secrets.CUBESHIP_API_KEY != '' }}
+        run: |
+          action=none
+          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then
+            action="$ASKED"
+            # The name scripts/preview.mjs would make of the branch, so both name one preview.
+            id=$(printf '%s' "$GITHUB_REF_NAME" | tr '[:upper:]' '[:lower:]' \
+              | sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//' | cut -c1-40 | sed -E 's/-+$//')
+            name="branch-$id"
+          elif [ "$OURS" != true ]; then
+            if [ "$LABEL" = preview ]; then
+              echo '::notice::A pull request from a fork gets no preview. Push its branch to this repository and run this workflow on it.'
+            fi
+          else
+            id="$PR"
+            name="pr-$PR"
+            case "$EVENT_ACTION" in
+              labeled) if [ "$LABEL" = preview ]; then action=up; fi ;;
+              unlabeled) if [ "$LABEL" = preview ]; then action=down; fi ;;
+              closed) if [ "$LABELLED" = true ]; then action=down; fi ;;
+              *) if [ "$LABELLED" = true ]; then action=up; fi ;;
+            esac
+          fi
+          if [ "$action" != none ] && [ "$CUBESHIP" != true ]; then
+            echo '::notice::No CUBESHIP_URL variable or CUBESHIP_API_KEY secret: nothing is deployed or deleted here.'
+          fi
+          {
+            echo "action=$action"
+            echo "id=$id"
+            echo "name=$name"
+            echo "sha=$SHA"
+            echo "deploy=$CUBESHIP"
+          } >> "$GITHUB_OUTPUT"
+
+  # One architecture, on its native runner: a preview runs on one server, and a second
+  # architecture would double the wait for an image nobody pulls.
+  build:
+    needs: plan
+    if: needs.plan.outputs.action == 'up'
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [gateway, web]
+    runs-on: ubuntu-24.04
+    # A newer push replaces the build of an older one.
+    concurrency:
+      group: preview-build-${{ needs.plan.outputs.name }}-${{ matrix.image }}
+      cancel-in-progress: true
+    permissions:
+      contents: read
+      packages: write
+    env:
+      IMAGE: ghcr.io/lucasaarch/jian-${{ matrix.image }}
+    steps:
+      # The head commit, not its merge with main: the tag names the commit that was built.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.plan.outputs.sha }}
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: tags
+        env:
+          SHA: ${{ needs.plan.outputs.sha }}
+        run: echo "sha=sha-${SHA:0:7}" >> "$GITHUB_OUTPUT"
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/${{ matrix.image }}/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ${{ env.IMAGE }}:${{ needs.plan.outputs.name }}
+            ${{ env.IMAGE }}:${{ steps.tags.outputs.sha }}
+          # No release: the panel, the desktop app and remote workers compare versions only
+          # between releases, so a developer's image works with any of them.
+          build-args: |
+            JIAN_VERSION=0.0.0-dev
+            JIAN_REVISION=${{ needs.plan.outputs.sha }}
+          # One manifest per tag, which is what the registry lists and Cubeship pulls.
+          provenance: false
+          sbom: false
+          cache-from: type=gha,scope=preview-${{ matrix.image }}
+          cache-to: type=gha,mode=max,scope=preview-${{ matrix.image }}
+
+  # Brings the preview up once both images are pushed, or takes it down. One at a time for a
+  # preview, in the order asked.
+  cubeship:
+    needs: [plan, build]
+    if: ${{ !cancelled() && needs.plan.outputs.deploy == 'true' && (needs.plan.outputs.action == 'down' || needs.plan.outputs.action == 'up' && needs.build.result == 'success') }}
+    runs-on: ubuntu-24.04
+    concurrency:
+      group: preview-${{ needs.plan.outputs.name }}
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      pull-requests: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      ACTION: ${{ needs.plan.outputs.action }}
+      ID: ${{ needs.plan.outputs.id }}
+      SHA: ${{ needs.plan.outputs.sha }}
+      PR: ${{ github.event.pull_request.number }}
+    steps:
+      # The head commit when deleting too: a closed pull request's merge ref may be gone, and the
+      # script that made the preview is the one that knows what to delete.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.plan.outputs.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - id: preview
+        env:
+          CUBESHIP_URL: ${{ vars.CUBESHIP_URL }}
+          CUBESHIP_API_KEY: ${{ secrets.CUBESHIP_API_KEY }}
+          # Optional: the host token every preview signs in with. Without it each preview
+          # generates its own, which `make preview-token` prints.
+          PREVIEW_API_TOKEN: ${{ secrets.PREVIEW_API_TOKEN }}
+        run: |
+          if [ "$ACTION" = down ]; then
+            node scripts/preview.mjs down "$ID"
+            exit 0
+          fi
+          # The images took minutes to build. A pull request closed or unlabelled meanwhile has
+          # already had its preview deleted, and deploying now would leave one nobody deletes.
+          if [ -n "$PR" ] && [ "$(gh pr view "$PR" --repo "$GITHUB_REPOSITORY" --json state,labels \
+            --jq '.state == "OPEN" and any(.labels[]; .name == "preview")')" != true ]; then
+            echo '::notice::The pull request was closed or lost its label while this built: nothing is deployed.'
+            exit 0
+          fi
+          node scripts/preview.mjs up "$ID" --tag "sha-${SHA:0:7}"
+      # One comment per pull request, rewritten as its preview changes.
+      - name: Say where the preview is
+        if: ${{ env.PR != '' && (env.ACTION == 'down' || steps.preview.outputs.url != '') }}
+        env:
+          URL: ${{ steps.preview.outputs.url }}
+        run: |
+          marker='<!-- jian-preview -->'
+          if [ "$ACTION" = down ]; then
+            text='The preview of this pull request was deleted, its database included.'
+          else
+            text="Preview of \`${SHA:0:7}\`: $URL
+          Sign in with its host token: \`make preview-token PR=$PR\`. The desktop app reaches it through **Connect a gateway**, with that address and token.
+          Closing this pull request or removing the \`preview\` label deletes it."
+          fi
+          comment=$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --paginate \
+            --jq "map(select(.body | startswith(\"$marker\"))) | .[0].id // empty" | head -n 1)
+          if [ -n "$comment" ]; then
+            gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$comment" \
+              -f body="$marker"$'\n'"$text" > /dev/null
+          else
+            gh pr comment "$PR" --repo "$GITHUB_REPOSITORY" --body "$marker"$'\n'"$text"
+          fi
