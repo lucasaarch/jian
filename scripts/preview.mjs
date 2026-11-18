@@ -96,15 +96,30 @@ async function ensureApp(name, image) {
   return api('POST', '/apps', { name, project, environment, source: 'external', image, tag });
 }
 
+// A freshly pushed image often fails its first pull from GHCR with "connection reset by peer";
+// a deploy that fails is started again, this many times in all, before the script gives up.
+const DEPLOY_ATTEMPTS = 3;
+
 /** Deploys the tag and waits for the new container to pass its health check. */
 async function deploy(name) {
-  console.log(`Deploying ${name}:${tag}`);
+  for (let attempt = 1; ; attempt++) {
+    console.log(`Deploying ${name}:${tag}${attempt > 1 ? ` (attempt ${attempt})` : ''}`);
+    const failure = await deployOnce(name);
+    if (!failure) return;
+    if (attempt >= DEPLOY_ATTEMPTS) stop(failure);
+    console.log(`${failure} Trying again in 15 seconds.`);
+    await sleep(15_000);
+  }
+}
+
+/** One deploy: undefined when it succeeded, otherwise why it did not. */
+async function deployOnce(name) {
   const started = await api('POST', `${appPath(name)}/deploy`, { tag });
   for (let waited = 0; waited < 600; waited += 3) {
     const deployment = await api('GET', `${appPath(name)}/deployments/${started.id}`);
     if (deployment?.status === 'succeeded' || deployment?.status === 'skipped') return;
     if (deployment?.status !== 'pending') {
-      stop(`The deploy of ${name} ${deployment?.status ?? 'vanished'}: ${deployment?.error ?? ''}`);
+      return `The deploy of ${name} ${deployment?.status ?? 'vanished'}: ${deployment?.error ?? ''}`;
     }
     await sleep(3_000);
   }
