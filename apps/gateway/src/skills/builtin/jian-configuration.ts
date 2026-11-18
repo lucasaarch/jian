@@ -33,8 +33,7 @@ Shared by the whole installation.
 
 ## Plugins
 
-In the main sidebar, in place of the chat: what every agent of the installation is given. All
-shows the first of each kind under one search; each kind has its own tab, with a filter.
+In the main sidebar, in place of the chat: what every agent is given, in tabs, with a search.
 
 - **Connectors**: the apps and MCP servers every agent reaches. The ones from Jian's catalog
   are marked verified. GitHub and X are Jian's own, with accounts to connect and configure; one
@@ -46,10 +45,9 @@ shows the first of each kind under one search; each kind has its own tab, with a
   another; its tools cannot be switched off. A custom one is an MCP server the owner adds by
   hand, with connection tests, sign-in and switching tools off.
 - **Skills**: one library shared by every agent. The built-in ones are Jian's, marked verified;
-  the others, up to 60, were written by the owner, written by an agent, or imported from GitHub,
-  and each row says which. Add → Create skill writes one and Add → Import skill copies one from
-  GitHub. Opening a skill shows its instructions, with a switch that turns it off or on for
-  every agent at once, built-in included, and Edit and Delete for any that is not built-in.
+  the others, up to 60, were written by the owner or an agent, or imported from GitHub, as each
+  row says. Add creates or imports one. An opened skill shows its instructions, a switch for
+  every agent at once, and Edit and Delete unless it is built-in.
 
 ## Agent settings
 

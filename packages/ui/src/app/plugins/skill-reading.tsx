@@ -55,7 +55,7 @@ export function SkillReadingDialog({
           <SettingsGroup>
             <Toggle
               label="On for every agent"
-              detail="Switched off, no agent is offered it."
+              detail={item.enabled ? 'Every agent is offered it.' : 'No agent is offered it.'}
               checked={item.enabled}
               onCheckedChange={(on) => onSwitch(item, on)}
             />
