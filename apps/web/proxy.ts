@@ -24,12 +24,15 @@ export function policy(nonce: string, development = process.env.NODE_ENV === 'de
     "media-src 'self' data: blob:",
     // The viewer opens a PDF from a blob address the panel itself creates, in a frame. That
     // document inherits this policy, and the browser's reader draws it as an embedded object,
-    // so both have to accept the panel's own blobs or the page stays blank.
+    // so both have to accept the panel's own blobs or the page stays blank. That inherited
+    // policy also names who may frame the document, and Safari checks the blob against it:
+    // `'none'` refused the panel itself. `'self'` admits only this origin; the panel's own
+    // pages stay unframeable because X-Frame-Options: DENY (next.config.mjs) still applies.
     "frame-src 'self' blob:",
     "object-src 'self' blob:",
     "worker-src 'self'",
     "base-uri 'none'",
-    "frame-ancestors 'none'",
+    "frame-ancestors 'self'",
     // Registering the GitHub App posts its manifest to github.com, the one way GitHub accepts
     // one. That is the only other place a form of this panel may be sent.
     "form-action 'self' https://github.com",
