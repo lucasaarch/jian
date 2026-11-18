@@ -94,15 +94,20 @@ export function registerArtifactRoutes(
     },
   );
 
+  // Making one public publishes it to anyone with the link: the owner's alone, from the panel.
   app.patch<{ Params: ArtifactParams }>(
     '/v1/profiles/:profileId/sessions/:sessionId/artifacts/:artifactId',
-    async (request) =>
-      deps.artifacts.setVisibility(
+    async (request) => {
+      if (request.device) {
+        throw new GatewayError(403, 'A paired device cannot change who sees an Artifact.');
+      }
+      return deps.artifacts.setVisibility(
         request.params.profileId,
         request.params.sessionId,
         request.params.artifactId,
         request.body,
-      ),
+      );
+    },
   );
 
   // Removing one is the owner's alone, as editing one by hand is: a paired phone only reads.
