@@ -1,22 +1,40 @@
 'use client';
 
-import { ArrowLeft, Code, Copy, Download, Eye } from 'lucide-react';
-import { type RefObject, useState } from 'react';
-import { HoverTip, iconButton, SelectButton, SkeletonLine, SkeletonRegion } from '../../../kit';
+import { EDITABLE_ARTIFACT_TYPES } from '@jian/contracts';
+import { useQueryClient } from '@tanstack/react-query';
+import { ArrowLeft, Code, Eye, Pencil } from 'lucide-react';
+import { type RefObject, useRef, useState } from 'react';
+import { toast } from 'sonner';
+import {
+  Action,
+  HoverTip,
+  iconButton,
+  SelectButton,
+  SkeletonLine,
+  SkeletonRegion,
+} from '../../../kit';
 import type { SessionArtifact } from '../../../lib/api';
 import { useGatewayMode } from '../../../lib/gateway-mode';
+import { keys } from '../../../lib/query/keys';
 import { useCrew } from '../../../lib/stores/crew';
 import { CodeBlock } from '../../ui/code-block';
 import { InspectorBar, InspectorBody } from '../inspector';
 import { ArtifactFrame } from './artifact-frame';
+import { ArtifactOptions } from './artifact-options';
 import { ArtifactSharing } from './artifact-sharing';
-import { copy, download, fileName, LANGUAGE } from './source';
+import { DeckView } from './deck/deck-view';
+import { collectEdit } from './edit';
+import { fileName, LANGUAGE } from './source';
 import { type ArtifactsApi, useArtifactVersion } from './use-artifacts';
 
 /**
  * One Artifact in the Inspector: drawn in its sealed frame, or as its source, at the version
  * the owner picks. With none picked it is the latest, and follows the agent's updates. Mount it
  * with the Artifact's id as its key, so another one starts drawn and at its latest.
+ *
+ * A page and a deck's slide can be edited by hand: Edit opens the version in view in the frame
+ * that edits (artifact-frame.tsx), and Save asks that frame for the markup and hands it to the
+ * gateway, which keeps it as a new version of the owner's. The frame saves nothing itself.
  */
 export function ArtifactView({
   api,
@@ -29,14 +47,26 @@ export function ArtifactView({
   artifact: SessionArtifact;
   closer: RefObject<HTMLButtonElement | null>;
 }) {
+  const client = useQueryClient();
   const [picked, setPicked] = useState<number>();
   const [code, setCode] = useState(false);
+  // The slide of a deck in view, counted from 0.
+  const [at, setAt] = useState(0);
+  // The version open for editing. It is held while it is: an update of the agent's meanwhile
+  // must not take the page from under the owner's hands.
+  const [editing, setEditing] = useState<number>();
+  const [saving, setSaving] = useState(false);
+  const frame = useRef<HTMLIFrameElement>(null);
   // Only a server gateway makes one public, so nothing else offers it; until the gateway says
   // which it is, neither does this.
   const shareable = useGatewayMode() === 'server';
-  const version = picked ?? artifact.version;
+  const version = editing ?? picked ?? artifact.version;
   const read = useArtifactVersion(api, profileId, artifact.sessionId, artifact.id, version);
-  const content = read.data?.content;
+  const slides = artifact.type === 'deck' ? read.data?.slides : undefined;
+  const slide = slides ? Math.min(at, slides.length - 1) : undefined;
+  // What is read as code, copied and downloaded: the source as written, or the slide in view.
+  const source = slide === undefined ? read.data?.content : slides?.[slide];
+  const editable = EDITABLE_ARTIFACT_TYPES.includes(artifact.type);
   const versions = Array.from({ length: artifact.version }, (_, index) => {
     const number = artifact.version - index;
     return {
@@ -46,53 +76,100 @@ export function ArtifactView({
     };
   });
 
+  const save = async () => {
+    if (editing === undefined || saving) return;
+    setSaving(true);
+    try {
+      const html = await collectEdit(frame.current);
+      if (html === null) {
+        toast('Nothing was changed.');
+      } else {
+        const next = await api.editSessionArtifact(profileId, artifact.sessionId, artifact.id, {
+          version: editing,
+          content: html,
+          ...(slide === undefined ? {} : { slide: slide + 1 }),
+        });
+        client.setQueryData<SessionArtifact[]>(
+          keys.sessionArtifacts(profileId, artifact.sessionId),
+          (all) => all?.map((item) => (item.id === next.id ? next : item)),
+        );
+        toast.success(`Saved as version ${next.version}.`);
+      }
+      // Back to the latest, which is now the one just saved.
+      setPicked(undefined);
+      setEditing(undefined);
+    } catch (error) {
+      // The edit stays open: nothing typed is lost to a save that failed.
+      toast.error(error instanceof Error ? error.message : 'The edit could not be saved.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <>
       <InspectorBar
         closer={closer}
         options={
-          <>
-            <HoverTip tip={code ? 'Show it drawn' : 'View code'} side="bottom" align="end">
-              <button
-                type="button"
-                aria-label="View code"
-                aria-pressed={code}
-                className={iconButton}
-                onClick={() => setCode(!code)}
+          editing !== undefined ? (
+            <>
+              <Action
+                size="small"
+                tone="quiet"
+                disabled={saving}
+                onClick={() => setEditing(undefined)}
               >
-                {code ? (
-                  <Eye size={15} aria-hidden="true" />
-                ) : (
-                  <Code size={15} aria-hidden="true" />
-                )}
-              </button>
-            </HoverTip>
-            <HoverTip tip="Copy source" side="bottom" align="end">
-              <button
-                type="button"
-                aria-label="Copy source"
-                disabled={content === undefined}
-                className={iconButton}
-                onClick={() => content !== undefined && void copy(content, 'Source')}
-              >
-                <Copy size={14} aria-hidden="true" />
-              </button>
-            </HoverTip>
-            <HoverTip tip="Download" side="bottom" align="end">
-              <button
-                type="button"
-                aria-label="Download"
-                disabled={content === undefined}
-                className={iconButton}
-                onClick={() =>
-                  content !== undefined && download(fileName(artifact, version), content)
-                }
-              >
-                <Download size={15} aria-hidden="true" />
-              </button>
-            </HoverTip>
-            {shareable && <ArtifactSharing api={api} profileId={profileId} artifact={artifact} />}
-          </>
+                Cancel
+              </Action>
+              <Action size="small" tone="primary" busy={saving} onClick={() => void save()}>
+                Save
+              </Action>
+            </>
+          ) : (
+            <>
+              <HoverTip tip={code ? 'Show it drawn' : 'View code'} side="bottom" align="end">
+                <button
+                  type="button"
+                  aria-label="View code"
+                  aria-pressed={code}
+                  className={iconButton}
+                  onClick={() => setCode(!code)}
+                >
+                  {code ? (
+                    <Eye size={15} aria-hidden="true" />
+                  ) : (
+                    <Code size={15} aria-hidden="true" />
+                  )}
+                </button>
+              </HoverTip>
+              {editable && (
+                <HoverTip
+                  tip={slide === undefined ? 'Edit the text' : 'Edit this slide’s text'}
+                  side="bottom"
+                  align="end"
+                >
+                  <button
+                    type="button"
+                    aria-label="Edit"
+                    disabled={source === undefined}
+                    className={iconButton}
+                    onClick={() => {
+                      setCode(false);
+                      setEditing(version);
+                    }}
+                  >
+                    <Pencil size={14} aria-hidden="true" />
+                  </button>
+                </HoverTip>
+              )}
+              {shareable && <ArtifactSharing api={api} profileId={profileId} artifact={artifact} />}
+              <ArtifactOptions
+                source={source}
+                file={fileName(artifact, version, slide === undefined ? undefined : slide + 1)}
+                what={slide === undefined ? 'Source' : 'Slide'}
+              />
+            </>
+          )
         }
       >
         <HoverTip tip="All artifacts" hoverOnly side="bottom">
@@ -110,6 +187,7 @@ export function ArtifactView({
           label="Version"
           value={String(version)}
           options={versions}
+          disabled={editing !== undefined}
           onValueChange={(next) =>
             setPicked(Number(next) === artifact.version ? undefined : Number(next))
           }
@@ -133,14 +211,26 @@ export function ArtifactView({
         </SkeletonRegion>
       ) : code ? (
         <InspectorBody className="px-(--inspector-inset)">
-          <CodeBlock text={read.data.content} language={LANGUAGE[artifact.type]} wrapped />
+          <CodeBlock text={source ?? ''} language={LANGUAGE[artifact.type]} wrapped />
         </InspectorBody>
+      ) : slides && slide !== undefined ? (
+        <DeckView
+          key={version}
+          title={artifact.title}
+          slides={slides}
+          at={slide}
+          onAt={setAt}
+          editing={editing !== undefined}
+          frame={frame}
+        />
       ) : (
         <ArtifactFrame
-          key={version}
+          key={`${version}:${editing !== undefined}`}
           type={artifact.type}
           title={artifact.title}
           source={read.data.compiled ?? read.data.content}
+          editing={editing !== undefined}
+          frame={frame}
         />
       )}
     </>

@@ -1,9 +1,17 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import {
+  deckSlideAddSchema,
+  deckSlideDeleteSchema,
+  deckSlideMoveSchema,
+  deckSlideUpdateSchema,
+  EDITABLE_ARTIFACT_TYPES,
   type SessionArtifact,
+  type SessionArtifactAuthor,
   type SessionArtifactType,
   type SessionArtifactVersion,
   sessionArtifactCreateSchema,
+  sessionArtifactEditSchema,
+  sessionArtifactReadSchema,
   sessionArtifactRevisionSchema,
   sessionArtifactUpdateSchema,
 } from '@jian/contracts';
@@ -15,6 +23,7 @@ import { recordEvent } from '../core/events.js';
 import type { SessionReader } from '../sessions/port.js';
 import type { Queryable, Store } from '../storage/database.js';
 import { sessionArtifacts, sessionArtifactVersions } from '../storage/schema.js';
+import { changedSlides, deckContent, type SlideChange, slidesOf } from './deck.js';
 
 /** What a component's frame can hand it; anything else would have to come from the network. */
 const IMPORTABLE = new Set(['react', 'react-dom', 'react-dom/client']);
@@ -58,6 +67,42 @@ function compiled(content: string): string {
 const drawn = (type: SessionArtifactType, content: string) =>
   type === 'react' ? compiled(content) : content;
 
+/**
+ * What a version keeps for what the agent gave: a deck its slides, any other type its source.
+ * Refused here, where the agent can still fix it, rather than drawn broken for the owner.
+ */
+function kept(
+  type: SessionArtifactType,
+  given: { content?: string | undefined; slides?: string[] | undefined },
+): string {
+  if (type === 'deck') {
+    if (!given.slides || given.content !== undefined) {
+      throw new GatewayError(
+        400,
+        'A deck is given as `slides`, each a whole HTML page, and takes no `content`.',
+      );
+    }
+    return deckContent(given.slides);
+  }
+  if (given.content === undefined || given.slides) {
+    throw new GatewayError(
+      400,
+      `A ${type} Artifact is given as \`content\`. Only a deck takes \`slides\`.`,
+    );
+  }
+  drawn(type, given.content);
+
+  return given.content;
+}
+
+/** The input each slide tool takes, by what it does to the deck. */
+const SLIDE_INPUT = {
+  add: deckSlideAddSchema,
+  update: deckSlideUpdateSchema,
+  delete: deckSlideDeleteSchema,
+  move: deckSlideMoveSchema,
+};
+
 const recordOf = (row: typeof sessionArtifacts.$inferSelect): SessionArtifact => ({
   id: row.id,
   sessionId: row.sessionId,
@@ -89,8 +134,19 @@ export class SessionArtifacts {
     private readonly local = false,
   ) {}
 
-  private async find(reader: Queryable, profileId: string, sessionId: string, id: string) {
-    const [row] = await reader
+  /**
+   * `lock` holds the Artifact until the transaction ends. A version made from the one before it,
+   * as a deck's is when one slide changes, needs it: two changes at once would otherwise each
+   * start from the same slides, and the later would undo the earlier.
+   */
+  private async find(
+    reader: Queryable,
+    profileId: string,
+    sessionId: string,
+    id: string,
+    lock = false,
+  ) {
+    const query = reader
       .select()
       .from(sessionArtifacts)
       .where(
@@ -101,8 +157,54 @@ export class SessionArtifacts {
         ),
       )
       .limit(1);
+    const [row] = await (lock ? query.for('update') : query);
 
     return assertFound(row, 'Artifact');
+  }
+
+  private async stored(reader: Queryable, artifactId: string, version: number) {
+    const [row] = await reader
+      .select()
+      .from(sessionArtifactVersions)
+      .where(
+        and(
+          eq(sessionArtifactVersions.artifactId, artifactId),
+          eq(sessionArtifactVersions.version, version),
+        ),
+      )
+      .limit(1);
+
+    return assertFound(row, 'Artifact version');
+  }
+
+  /** A new version beside the ones it had: none is ever changed or removed. */
+  private async versioned(
+    tx: Queryable,
+    current: typeof sessionArtifacts.$inferSelect,
+    content: string,
+    author: SessionArtifactAuthor,
+    title?: string,
+  ): Promise<SessionArtifact> {
+    const now = new Date(this.clock());
+    const [row] = await tx
+      .update(sessionArtifacts)
+      .set({
+        version: sql`${sessionArtifacts.version} + 1`,
+        updatedAt: now,
+        ...(title ? { title } : {}),
+      })
+      .where(eq(sessionArtifacts.id, current.id))
+      .returning();
+    const revised = assertFound(row, 'Artifact');
+    await tx.insert(sessionArtifactVersions).values({
+      artifactId: revised.id,
+      version: revised.version,
+      content,
+      author,
+      createdAt: now,
+    });
+
+    return recordOf(revised);
   }
 
   /** Tells the panel showing this conversation to bring the Artifact forward, as it now is. */
@@ -116,8 +218,7 @@ export class SessionArtifacts {
 
   async create(profileId: string, sessionId: string, input: unknown): Promise<SessionArtifact> {
     const data = sessionArtifactCreateSchema.parse(input);
-    // Refused here, where the agent can still fix it, rather than drawn broken for the owner.
-    drawn(data.type, data.content);
+    const content = kept(data.type, data);
     await this.sessions.session(profileId, sessionId);
     const now = new Date(this.clock());
 
@@ -137,41 +238,137 @@ export class SessionArtifacts {
       const made = assertFound(row, 'Artifact');
       await tx
         .insert(sessionArtifactVersions)
-        .values({ artifactId: made.id, version: 1, content: data.content, createdAt: now });
+        .values({ artifactId: made.id, version: 1, content, createdAt: now });
       await this.shown(tx, profileId, sessionId, made.id);
 
       return recordOf(made);
     });
   }
 
-  /** A new version beside the ones it had: none is ever changed or removed. */
+  /** The agent's new version of one: the whole content again, or every slide of a deck. */
   async revise(profileId: string, sessionId: string, input: unknown): Promise<SessionArtifact> {
     const data = sessionArtifactRevisionSchema.parse(input);
-    const now = new Date(this.clock());
 
     return this.store.transaction(profileId, async (tx) => {
       const current = await this.find(tx, profileId, sessionId, data.artifactId);
-      drawn(current.type, data.content);
-      const [row] = await tx
-        .update(sessionArtifacts)
-        .set({
-          version: sql`${sessionArtifacts.version} + 1`,
-          updatedAt: now,
-          ...(data.title ? { title: data.title } : {}),
-        })
-        .where(eq(sessionArtifacts.id, current.id))
-        .returning();
-      const revised = assertFound(row, 'Artifact');
-      await tx.insert(sessionArtifactVersions).values({
-        artifactId: revised.id,
-        version: revised.version,
-        content: data.content,
-        createdAt: now,
-      });
+      const revised = await this.versioned(
+        tx,
+        current,
+        kept(current.type, data),
+        'agent',
+        data.title,
+      );
       await this.shown(tx, profileId, sessionId, revised.id);
 
-      return recordOf(revised);
+      return revised;
     });
+  }
+
+  /**
+   * The agent's change to one slide of a deck, or to where one stands: a new version holding
+   * every slide, made from the latest. Answers how many slides the deck then has.
+   */
+  async changeSlide(
+    profileId: string,
+    sessionId: string,
+    op: keyof typeof SLIDE_INPUT,
+    input: unknown,
+  ): Promise<SessionArtifact & { slides: number }> {
+    const { artifactId, ...change } = SLIDE_INPUT[op].parse(input);
+
+    return this.store.transaction(profileId, async (tx) => {
+      const current = await this.find(tx, profileId, sessionId, artifactId, true);
+      if (current.type !== 'deck') {
+        throw new GatewayError(
+          400,
+          `Only a deck has slides, and this Artifact is ${current.type}. Give it a new version with update_artifact.`,
+        );
+      }
+      const latest = await this.stored(tx, current.id, current.version);
+      const slides = changedSlides(slidesOf(latest.content), { op, ...change } as SlideChange);
+      const revised = await this.versioned(tx, current, deckContent(slides), 'agent');
+      await this.shown(tx, profileId, sessionId, revised.id);
+
+      return { ...revised, slides: slides.length };
+    });
+  }
+
+  /**
+   * What the owner saved after editing one by hand in the panel: a new version of theirs, made
+   * from the version they were editing. A page is kept as it came; a deck gets that one slide.
+   * The panel that saved it already shows it, so nothing is told to bring it forward.
+   */
+  async edit(
+    profileId: string,
+    sessionId: string,
+    artifactId: string,
+    input: unknown,
+  ): Promise<SessionArtifact> {
+    const data = sessionArtifactEditSchema.parse(input);
+
+    return this.store.transaction(profileId, async (tx) => {
+      const current = await this.find(tx, profileId, sessionId, artifactId, true);
+      if (!EDITABLE_ARTIFACT_TYPES.includes(current.type)) {
+        throw new GatewayError(
+          409,
+          'Only a web page or a deck is edited by hand. Ask the agent for a new version of this one.',
+        );
+      }
+      const edited = await this.stored(tx, current.id, data.version);
+      if (current.type !== 'deck') {
+        if (data.slide !== undefined) throw new GatewayError(400, 'Only a deck has slides.');
+        return this.versioned(tx, current, data.content, 'owner');
+      }
+      if (data.slide === undefined) {
+        throw new GatewayError(400, 'Say which slide of the deck was edited.');
+      }
+      const slides = changedSlides(slidesOf(edited.content), {
+        op: 'update',
+        slide: data.slide,
+        html: data.content,
+      });
+
+      return this.versioned(tx, current, deckContent(slides), 'owner');
+    });
+  }
+
+  /**
+   * What the agent reads back before changing one: the source of a version, the latest unless
+   * another is named, and who wrote it, since the owner may have edited it by hand since.
+   */
+  async read(profileId: string, sessionId: string, input: unknown) {
+    const data = sessionArtifactReadSchema.parse(input);
+    const artifact = await this.find(this.store.db, profileId, sessionId, data.artifactId);
+    const found = await this.stored(this.store.db, artifact.id, data.version ?? artifact.version);
+    const about = {
+      artifactId: artifact.id,
+      title: artifact.title,
+      type: artifact.type,
+      version: found.version,
+      latestVersion: artifact.version,
+      writtenBy: found.author,
+    };
+
+    if (artifact.type !== 'deck') {
+      if (data.slide !== undefined) {
+        throw new GatewayError(
+          400,
+          `Only a deck has slides, and this Artifact is ${artifact.type}.`,
+        );
+      }
+      return { ...about, content: found.content };
+    }
+    const slides = slidesOf(found.content).map((html, index) => ({ slide: index + 1, html }));
+    if (data.slide === undefined) return { ...about, slides };
+    const one = slides[data.slide - 1];
+    if (!one) {
+      throw new GatewayError(
+        400,
+        `The deck has ${slides.length} slides, so there is no slide ${data.slide}.`,
+      );
+    }
+
+    return { ...about, slideCount: slides.length, ...one };
   }
 
   /** The conversation's Artifacts, the one changed last first. */
@@ -195,23 +392,15 @@ export class SessionArtifacts {
     version: number,
   ): Promise<SessionArtifactVersion> {
     const artifact = await this.find(this.store.db, profileId, sessionId, artifactId);
-    const [row] = await this.store.db
-      .select()
-      .from(sessionArtifactVersions)
-      .where(
-        and(
-          eq(sessionArtifactVersions.artifactId, artifact.id),
-          eq(sessionArtifactVersions.version, version),
-        ),
-      )
-      .limit(1);
-    const found = assertFound(row, 'Artifact version');
+    const found = await this.stored(this.store.db, artifact.id, version);
 
     return {
       artifactId: artifact.id,
       version: found.version,
+      author: found.author,
       content: found.content,
       ...(artifact.type === 'react' ? { compiled: compiled(found.content) } : {}),
+      ...(artifact.type === 'deck' ? { slides: slidesOf(found.content) } : {}),
       createdAt: found.createdAt.toISOString(),
     };
   }

@@ -16,6 +16,7 @@ import type {
   RunProgress,
   RunQuestion,
   Schedule,
+  SessionArtifactAuthor,
   SessionArtifactType,
   SessionArtifactVisibility,
   SessionObjective,
@@ -473,7 +474,10 @@ export const sessionArtifacts = pgTable(
   (table) => [index('session_artifacts_session').on(table.sessionId, table.createdAt)],
 );
 
-/** Every content an Artifact had, numbered from 1; an update adds one and changes none. */
+/**
+ * Every content an Artifact had, numbered from 1; an update adds one and changes none. A deck's
+ * content is its slides in JSON (`deckContentSchema`), so a version is always the whole deck.
+ */
 export const sessionArtifactVersions = pgTable(
   'session_artifact_versions',
   {
@@ -482,6 +486,8 @@ export const sessionArtifactVersions = pgTable(
       .references(() => sessionArtifacts.id, { onDelete: 'cascade' }),
     version: integer('version').notNull(),
     content: text('content').notNull(),
+    // Who wrote it: the agent with its tools, or the owner editing it by hand in the panel.
+    author: text('author').$type<SessionArtifactAuthor>().notNull().default('agent'),
     createdAt,
   },
   (table) => [primaryKey({ columns: [table.artifactId, table.version] })],

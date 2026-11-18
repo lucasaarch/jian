@@ -2132,6 +2132,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/profiles/{profileId}/sessions/{sessionId}/artifacts/{artifactId}/versions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Required permission: admin. */
+        post: operations["editSessionArtifact"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/profiles/{profileId}/sessions/{sessionId}/artifacts/{artifactId}": {
         parameters: {
             query?: never;
@@ -23599,7 +23616,7 @@ export interface operations {
                         sessionId: string;
                         title: string;
                         /** @enum {string} */
-                        type: "html" | "react" | "markdown" | "svg" | "mermaid";
+                        type: "html" | "react" | "markdown" | "svg" | "mermaid" | "deck";
                         /** @enum {string} */
                         visibility: "private" | "public";
                         version: number;
@@ -23718,10 +23735,142 @@ export interface operations {
                         /** Format: uuid */
                         artifactId: string;
                         version: number;
+                        /** @enum {string} */
+                        author: "agent" | "owner";
                         content: string;
                         compiled?: string;
+                        slides?: string[];
                         /** Format: date-time */
                         createdAt: string;
+                    };
+                };
+            };
+            /** @description Error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    editSessionArtifact: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                profileId: string;
+                sessionId: string;
+                artifactId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    version: number;
+                    content: string;
+                    slide?: number;
+                };
+            };
+        };
+        responses: {
+            /** @description Success */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** Format: uuid */
+                        id: string;
+                        /** Format: uuid */
+                        sessionId: string;
+                        title: string;
+                        /** @enum {string} */
+                        type: "html" | "react" | "markdown" | "svg" | "mermaid" | "deck";
+                        /** @enum {string} */
+                        visibility: "private" | "public";
+                        version: number;
+                        publicPath: string | null;
+                        /** Format: date-time */
+                        createdAt: string;
+                        /** Format: date-time */
+                        updatedAt: string;
                     };
                 };
             };
@@ -23841,7 +23990,7 @@ export interface operations {
                         sessionId: string;
                         title: string;
                         /** @enum {string} */
-                        type: "html" | "react" | "markdown" | "svg" | "mermaid";
+                        type: "html" | "react" | "markdown" | "svg" | "mermaid" | "deck";
                         /** @enum {string} */
                         visibility: "private" | "public";
                         version: number;
@@ -23938,10 +24087,12 @@ export interface operations {
     };
     artifactFrame: {
         parameters: {
-            query?: never;
+            query?: {
+                edit?: "1";
+            };
             header?: never;
             path: {
-                type: "html" | "react" | "markdown" | "svg" | "mermaid";
+                type: "html" | "react" | "markdown" | "svg" | "mermaid" | "deck";
             };
             cookie?: never;
         };

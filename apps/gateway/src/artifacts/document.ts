@@ -1,4 +1,13 @@
-import { ARTIFACT_FRAME_MESSAGE, type SessionArtifactType } from '@jian/contracts';
+import {
+  ARTIFACT_EDIT_MESSAGE,
+  ARTIFACT_FRAME_MESSAGE,
+  EDITABLE_ARTIFACT_TYPES,
+  type SessionArtifactType,
+  SLIDE_HEIGHT,
+  SLIDE_WIDTH,
+} from '@jian/contracts';
+import { GatewayError } from '../core/errors.js';
+import { EDITING } from './edit-frame.js';
 import { type RuntimeFile, runtimeSource } from './runtime.js';
 
 /**
@@ -10,13 +19,16 @@ import { type RuntimeFile, runtimeSource } from './runtime.js';
  * - Nothing loads from anywhere: scripts and styles are the ones written in the page, pictures
  *   and fonts only `data:` and `blob:`. `connect-src 'none'` is what keeps it from calling the
  *   gateway, or anyone.
- * - No form is sent and no frame is opened inside it.
+ * - No form is sent and no frame is loaded inside it. A public deck holds each slide in a frame
+ *   written into the page itself, which is bound by this same policy and sandbox.
  *
  * `'unsafe-inline'` is the point, not a hole: the page exists to run the Artifact's own script.
  * `eval` stays refused, which none of the libraries needs.
  *
  * The page takes its source and gives nothing back: it posts no message, and the panel listens
- * for none.
+ * for none. The one exception is the frame the owner opens to edit a page by hand
+ * (edit-frame.ts), which runs nothing of the Artifact and answers the panel's request for the
+ * edited markup; a public link never serves it.
  */
 export function artifactPolicy(ancestors: "'self'" | "'none'"): string {
   return [
@@ -39,7 +51,19 @@ const STYLE = `
 html, body { margin: 0; }
 body { padding: 16px; font: 15px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif;
   overflow-wrap: anywhere; }
-body.react { padding: 0; }
+body.react, body.deck { padding: 0; }
+body.deck #root { display: grid; grid-template-rows: minmax(0, 1fr) auto; height: 100vh; }
+#stage { display: grid; place-items: center; min-height: 0; overflow: hidden; }
+#sheet { position: relative; overflow: hidden; background: #fff;
+  box-shadow: 0 0 0 1px color-mix(in srgb, CanvasText 15%, transparent); }
+#sheet iframe { position: absolute; top: 0; left: 0; width: ${SLIDE_WIDTH}px;
+  height: ${SLIDE_HEIGHT}px; max-width: none; border: 0; transform-origin: 0 0; }
+#steps { display: flex; justify-content: center; align-items: center; gap: 12px; padding: 8px;
+  font-variant-numeric: tabular-nums; }
+#steps button { width: 32px; height: 32px; border: 0; border-radius: 999px; font: inherit;
+  font-size: 18px; color: inherit; background: color-mix(in srgb, CanvasText 8%, transparent);
+  cursor: pointer; }
+#steps button:disabled { opacity: .4; cursor: default; }
 #failure { margin: 12px; padding: 12px; border-radius: 8px; white-space: pre-wrap;
   font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; color: #b42318;
   background: color-mix(in srgb, #b42318 12%, transparent); }
@@ -54,16 +78,73 @@ blockquote { margin-inline: 0; padding-inline-start: 12px;
   border-inline-start: 3px solid color-mix(in srgb, CanvasText 25%, transparent); }
 `;
 
+// A whole page takes the document's place. The policy came with the response and stays.
+const WRITE = `document.open(); document.write(source); document.close();`;
+
+/**
+ * A whole deck on a page of its own, which is what its public link answers: one slide at a time
+ * on its fixed canvas, scaled to the window, with the arrows to step through. Each slide is a
+ * frame written into this page, never loaded, so it is bound by the page's policy and sandbox.
+ * `source` is the deck as a version keeps it.
+ */
+const PLAYER = `const slides = JSON.parse(source).slides;
+let at = 0;
+const make = (tag, id) => Object.assign(document.createElement(tag), { id });
+const stage = make('div', 'stage');
+const sheet = make('div', 'sheet');
+const steps = make('nav', 'steps');
+const count = make('span', 'count');
+const step = (label, glyph, by) => {
+  const button = Object.assign(make('button', ''), { type: 'button', textContent: glyph });
+  button.setAttribute('aria-label', label);
+  button.addEventListener('click', () => go(at + by));
+  return button;
+};
+const back = step('Previous slide', '\\u2039', -1);
+const next = step('Next slide', '\\u203a', 1);
+const fit = () => {
+  const scale = Math.min((stage.clientWidth - 32) / ${SLIDE_WIDTH}, (stage.clientHeight - 32) / ${SLIDE_HEIGHT});
+  sheet.style.width = ${SLIDE_WIDTH} * scale + 'px';
+  sheet.style.height = ${SLIDE_HEIGHT} * scale + 'px';
+  if (sheet.firstChild) sheet.firstChild.style.transform = 'scale(' + scale + ')';
+};
+const go = (to) => {
+  at = Math.max(0, Math.min(slides.length - 1, to));
+  const slide = document.createElement('iframe');
+  slide.setAttribute('sandbox', 'allow-scripts');
+  slide.title = 'Slide ' + (at + 1);
+  slide.srcdoc = slides[at];
+  sheet.replaceChildren(slide);
+  count.textContent = at + 1 + ' / ' + slides.length;
+  back.disabled = at === 0;
+  next.disabled = at === slides.length - 1;
+  fit();
+};
+steps.setAttribute('aria-label', 'Slides');
+steps.append(back, count, next);
+stage.append(sheet);
+root.append(stage, steps);
+addEventListener('resize', fit);
+addEventListener('keydown', (event) => {
+  const by = { ArrowRight: 1, ArrowDown: 1, PageDown: 1, ' ': 1, ArrowLeft: -1, ArrowUp: -1, PageUp: -1 }[event.key];
+  if (!by) return;
+  event.preventDefault();
+  go(at + by);
+});
+go(0);`;
+
 /**
  * How each type is drawn, as the body of `async (source, libraries) => { … }` in the page, with
- * `root` and `run` in reach. `libraries` are the type's files below, in their order.
+ * `root` and `run` in reach. `libraries` are the type's files below, in their order. `published`
+ * is how its public page draws it, where that differs from the frame the panel holds.
  */
-const DRAW: Record<SessionArtifactType, { libraries: readonly RuntimeFile[]; body: string }> = {
-  // A whole page takes the document's place. The policy came with the response and stays.
-  html: {
-    libraries: [],
-    body: `document.open(); document.write(source); document.close();`,
-  },
+const DRAW: Record<
+  SessionArtifactType,
+  { libraries: readonly RuntimeFile[]; body: string; published?: string }
+> = {
+  html: { libraries: [], body: WRITE },
+  // The panel hands its frame one slide, a page like any other; the public page holds them all.
+  deck: { libraries: [], body: WRITE, published: PLAYER },
   // Markup set this way runs no script element of its own.
   svg: { libraries: [], body: `root.innerHTML = source;` },
   markdown: {
@@ -120,9 +201,15 @@ const escaped = (value: string) => value.replace(/[&<>"']/g, (char) => `&#${char
 /**
  * The page for one type. With no `artifact` it is the empty frame: it draws the first source its
  * parent posts to it, and only its parent's. With one it draws that, and listens to no one.
+ * `editing` is the empty frame the owner edits in: it opens what it is handed for editing
+ * (edit-frame.ts) and never draws, so nothing of the Artifact runs in it.
  */
-function page(type: SessionArtifactType, artifact?: { title: string; source: string }): string {
-  const { libraries, body } = DRAW[type];
+function page(
+  type: SessionArtifactType,
+  artifact?: { title: string; source: string },
+  editing = false,
+): string {
+  const { libraries, body, published } = DRAW[type];
 
   return `<!doctype html>
 <html lang="en">
@@ -154,8 +241,8 @@ function page(type: SessionArtifactType, artifact?: { title: string; source: str
     script.remove();
   };
   const draw = async (source, libraries) => {
-${body}
-  };
+${artifact ? (published ?? body) : body}
+  };${editing ? EDITING : ''}
   const show = (source) => draw(source, read('libraries')).catch(fail);
   const given = read('artifact');
   if (given !== null) return show(given);
@@ -163,7 +250,7 @@ ${body}
     const source = event.source === parent && event.data && event.data.${ARTIFACT_FRAME_MESSAGE};
     if (typeof source !== 'string') return;
     removeEventListener('message', hear);
-    show(source);
+    ${editing ? `editing(source, event.data.${ARTIFACT_EDIT_MESSAGE});` : 'show(source);'}
   };
   addEventListener('message', hear);
 })();
@@ -173,15 +260,22 @@ ${body}
 `;
 }
 
-const frames = new Map<SessionArtifactType, string>();
+const frames = new Map<string, string>();
 
-/** The empty frame of a type, the same for every Artifact and every owner. Built once. */
-export function artifactFrame(type: SessionArtifactType): string {
-  let frame = frames.get(type);
+/**
+ * The empty frame of a type, the same for every Artifact and every owner. Built once. `editing`
+ * is the one the owner edits by hand in, which only a page and a deck's slide have.
+ */
+export function artifactFrame(type: SessionArtifactType, editing = false): string {
+  if (editing && !EDITABLE_ARTIFACT_TYPES.includes(type)) {
+    throw new GatewayError(400, 'Only a web page or a deck is edited by hand.');
+  }
+  const key = `${type}:${editing}`;
+  let frame = frames.get(key);
 
   if (!frame) {
-    frame = page(type);
-    frames.set(type, frame);
+    frame = page(type, undefined, editing);
+    frames.set(key, frame);
   }
 
   return frame;

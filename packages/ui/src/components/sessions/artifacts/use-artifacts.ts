@@ -8,7 +8,10 @@ import { keys } from '../../../lib/query/keys';
 
 export type ArtifactsApi = Pick<
   GatewayApi,
-  'sessionArtifacts' | 'sessionArtifactVersion' | 'setSessionArtifactVisibility'
+  | 'sessionArtifacts'
+  | 'sessionArtifactVersion'
+  | 'setSessionArtifactVisibility'
+  | 'editSessionArtifact'
 >;
 
 /** Every Artifact of the conversation, the one changed last first. */

@@ -1,7 +1,7 @@
 'use client';
 
-import { ARTIFACT_FRAME_MESSAGE } from '@jian/contracts';
-import { useRef } from 'react';
+import { ARTIFACT_EDIT_MESSAGE, ARTIFACT_FRAME_MESSAGE } from '@jian/contracts';
+import { type CSSProperties, type RefObject, useEffect, useRef } from 'react';
 import type { SessionArtifact } from '../../../lib/api';
 import { gatewayConnection } from '../../../platform/gateway';
 
@@ -15,29 +15,63 @@ import { gatewayConnection } from '../../../platform/gateway';
  *   fetched from anywhere, the gateway included. The frame's address holds no Artifact, so
  *   opening it needs no credential and gives nothing away.
  * - The source goes in as one message, once. The panel listens for nothing back: no message
- *   from a frame is ever read, so an Artifact has no way to ask the panel for anything.
+ *   from a frame that draws is ever read, so an Artifact has no way to ask the panel for
+ *   anything.
  *
- * Mount it with a key per Artifact and version: a new source is a new frame.
+ * `editing` loads the other frame of the type, the one the owner edits by hand in. It is as
+ * sealed, and runs nothing of the Artifact. The panel reads one thing from it, and only when
+ * the owner saves: the edited markup, asked for and checked in edit.ts.
+ *
+ * Mount it with a key per Artifact, version and way of showing it: a new source is a new frame.
  */
 export function ArtifactFrame({
   type,
   title,
   source,
+  editing = false,
+  scale = 1,
+  frame,
+  className = 'min-h-0 w-full flex-1 border-0',
+  style,
+  lazy = false,
 }: {
   type: SessionArtifact['type'];
   title: string;
-  /** What the frame runs: the source, or a React component compiled by the gateway. */
+  /** What the frame runs: the source, a React component compiled, or one slide of a deck. */
   source: string;
+  editing?: boolean;
+  /**
+   * How far the panel scales the frame, as a slide's fixed canvas is. Only the editing frame is
+   * told, to draw its bar of formatting at a size that reads.
+   */
+  scale?: number;
+  /** The element, for the one who asks the editing frame for its markup. */
+  frame?: RefObject<HTMLIFrameElement | null>;
+  className?: string;
+  style?: CSSProperties;
+  /** Loaded only once it is near the screen, as one of many slides in a rail is. */
+  lazy?: boolean;
 }) {
+  const own = useRef<HTMLIFrameElement>(null);
+  const element = frame ?? own;
   const handed = useRef(false);
+
+  // The panel being resized changes the scale while a page is open for editing.
+  useEffect(() => {
+    if (!editing || !handed.current) return;
+    element.current?.contentWindow?.postMessage({ [ARTIFACT_EDIT_MESSAGE]: { scale } }, '*');
+  }, [editing, scale, element]);
 
   return (
     <iframe
+      ref={element}
       title={title}
       sandbox="allow-scripts"
       referrerPolicy="no-referrer"
-      src={`${gatewayConnection().origin}/v1/artifact-frames/${type}`}
-      className="min-h-0 w-full flex-1 border-0"
+      {...(lazy ? { loading: 'lazy' as const } : {})}
+      src={`${gatewayConnection().origin}/v1/artifact-frames/${type}${editing ? '?edit=1' : ''}`}
+      className={className}
+      style={style}
       onLoad={(event) => {
         // Only the first load is the gateway's frame. A page that loads again, or takes itself
         // somewhere else, is handed nothing.
@@ -45,7 +79,13 @@ export function ArtifactFrame({
         handed.current = true;
         // A sealed frame's origin cannot be named, so the target is `*`. What is sent is only
         // the Artifact's own source.
-        event.currentTarget.contentWindow?.postMessage({ [ARTIFACT_FRAME_MESSAGE]: source }, '*');
+        event.currentTarget.contentWindow?.postMessage(
+          {
+            [ARTIFACT_FRAME_MESSAGE]: source,
+            ...(editing ? { [ARTIFACT_EDIT_MESSAGE]: { scale } } : {}),
+          },
+          '*',
+        );
       }}
     />
   );
