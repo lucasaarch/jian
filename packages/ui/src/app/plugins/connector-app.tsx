@@ -73,7 +73,6 @@ export function AppConnector({
         ['Type', 'MCP server'],
         ['Address', app.url],
         ['Auth', 'OAuth'],
-        ['Accounts', accounts.length],
       ]}
     >
       {accounts.length > 0 && (

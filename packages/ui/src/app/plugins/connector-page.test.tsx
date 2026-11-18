@@ -184,7 +184,8 @@ it('offers to connect GitHub until an account is in, and to add another after', 
   expect(button('Disconnect harbor-labs', host)).toBeDefined();
   expect(detail('Status')).toBe('Connected');
   expect(detail('App')).toBe('Jian for Harbor');
-  expect(detail('Accounts')).toBe('1');
+  // Its accounts are listed once, in the page, not counted again beside it.
+  expect(detail('Accounts')).toBeUndefined();
   expect(detail('Added')).toBe('November 2026');
   // The whole of it is the page: nothing opens over it.
   expect(document.querySelector('[role="dialog"]')).toBeNull();

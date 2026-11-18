@@ -73,7 +73,6 @@ export function GithubConnector({
         ['Type', 'Jian app'],
         ['Auth', 'GitHub App'],
         ['App', app?.name],
-        ['Accounts', accounts.length],
         ['Added', since(accounts.map((account) => account.connectedAt))],
       ]}
     >

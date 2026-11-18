@@ -63,7 +63,12 @@ export function ConnectorFrame({
           icon={<ConnectorIcon connector={connector} large />}
           name={connector.name}
           verified={verified}
-          subline={`${connectorMeta(connector)} · ${connector.description}`}
+          // A custom connector's description is its address, which its Connection says.
+          subline={
+            connector.source.kind === 'custom'
+              ? connectorMeta(connector)
+              : `${connectorMeta(connector)} · ${connector.description}`
+          }
         >
           {actions}
         </PluginHeader>

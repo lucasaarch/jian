@@ -182,7 +182,6 @@ export function AwsConnector({ connector, back }: { connector: Connector; back: 
         ['Status', accountsStatus(accounts, checks)],
         ['Type', 'MCP server'],
         ['Auth', 'Access keys'],
-        ['Accounts', accounts.length],
       ]}
     >
       {accounts.length > 0 && (

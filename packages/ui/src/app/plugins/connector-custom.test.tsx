@@ -124,6 +124,10 @@ const detail = (label: string) =>
   [...host.querySelectorAll('dl[aria-label="Details"] dt')].find(
     (term) => term.textContent === label,
   )?.nextElementSibling?.textContent;
+const connection = () =>
+  [...host.querySelectorAll('section')].find((section) =>
+    section.textContent?.startsWith('Connection'),
+  );
 const offer = (tool: string) =>
   host.querySelector<HTMLElement>(`[role="switch"][aria-label="Offer ${tool}"]`);
 const fields = () => [
@@ -149,10 +153,16 @@ it('reads a server the owner added: where it is, how it stands and what it offer
   expect(host.querySelector('header')?.textContent).toContain('Connector · Custom');
   expect(detail('Made by')).toBe('You');
   expect(detail('Type')).toBe('MCP server');
-  expect(detail('Address')).toBe('https://tickets.example.test/mcp');
   expect(detail('Auth')).toBe('None');
-  await vi.waitFor(() => expect(detail('Tools')).toBe('2'));
-  expect(detail('Status')).toBe('Connected');
+  // Where it is, how it stands and its tools are said once, in its Connection and its list.
+  expect(connection()?.textContent).toContain('https://tickets.example.test/mcp');
+  expect(host.querySelector('header')?.textContent).not.toContain('tickets.example.test');
+  expect(detail('Address')).toBeUndefined();
+  await vi.waitFor(() => expect(offer('search_tickets')).not.toBeNull());
+  expect(connection()?.querySelector('[role="status"]')?.textContent).toBe('Connected');
+  expect(connection()?.textContent).not.toContain('tools of');
+  expect(detail('Status')).toBeUndefined();
+  expect(detail('Tools')).toBeUndefined();
   expect(api.checkMcpServer).toHaveBeenCalledWith('harbor_tickets');
   expect(host.textContent).toContain('Finds tickets by their words.');
   expect(offer('search_tickets')?.getAttribute('aria-checked')).toBe('true');
@@ -203,7 +213,7 @@ it('leaves an edit without saving it', async () => {
 
   expect(api.replaceMcpServers).not.toHaveBeenCalled();
   expect(fields()).toEqual([]);
-  expect(detail('Address')).toBe('https://tickets.example.test/mcp');
+  expect(connection()?.textContent).toContain('https://tickets.example.test/mcp');
 });
 
 it('goes on to the address of its new name when the server is renamed', async () => {

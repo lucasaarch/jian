@@ -14,7 +14,7 @@ import {
 } from '../../kit';
 import type { McpServer } from '../../lib/api';
 import { useActions } from '../../lib/workspace';
-import { accountsStatus, ToolList, toolsOf, useAccountChecks } from './connector-accounts';
+import { ToolList, toolsOf, useAccountChecks } from './connector-accounts';
 import { ConnectorFrame, reading } from './connector-frame';
 import type { Connector } from './connectors';
 import { McpFields, useMcpDraft } from './mcp-fields';
@@ -82,12 +82,10 @@ export function CustomConnector({
             </>
           )
         }
+        // How it stands, where it is and its tools are said once, in the page beside this.
         details={[
-          ['Status', accountsStatus([server], checks)],
           ['Type', 'MCP server'],
-          [server.transport === 'stdio' ? 'Command' : 'Address', address],
           ['Auth', AUTH[server.auth ?? 'none']],
-          ['Tools', tools?.length],
         ]}
       >
         {editing ? (
@@ -113,7 +111,12 @@ export function CustomConnector({
             <SettingsGroup title="Connection">
               <SettingsRow
                 title={<span className="font-mono [overflow-wrap:anywhere]">{address}</span>}
-                description={health?.tools ?? (check.error || check.status?.error)}
+                description={
+                  check.error ||
+                  check.status?.error ||
+                  // The tools' own list counts them when it shows.
+                  (tools?.length ? undefined : health?.tools)
+                }
               >
                 {health && (
                   <span role="status">

@@ -74,7 +74,6 @@ export function XConnector({
         ],
         ['Type', 'Jian app'],
         ['Auth', 'OAuth'],
-        ['Accounts', connected.length],
         ['Added', since(connected.map((account) => account.connectedAt))],
       ]}
     >
