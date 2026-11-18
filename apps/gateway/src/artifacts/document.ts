@@ -147,7 +147,9 @@ createRoot(root).render(React.createElement(Component));`,
 /** Inside a script element nothing may read as markup, and `<` is all that could. */
 const embedded = (value: unknown) => JSON.stringify(value).replaceAll('<', '\\u003c');
 
-const escaped = (value: string) => value.replace(/[&<>"']/g, (char) => `&#${char.charCodeAt(0)};`);
+/** Text as it stands inside markup or a quoted attribute, a frame's `srcdoc` included. */
+export const escaped = (value: string) =>
+  value.replace(/[&<>"']/g, (char) => `&#${char.charCodeAt(0)};`);
 
 /**
  * The page for one type. With no `artifact` it is the empty frame: it draws the first source its

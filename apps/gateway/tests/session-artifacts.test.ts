@@ -286,6 +286,73 @@ describe('who reads an Artifact', () => {
       .where(eq(sessionArtifacts.id, artifact.id));
     expect((await app.inject({ url: `/v1/public-artifacts/${secret}` })).statusCode).toBe(404);
   });
+
+  // What the files hold is in artifact-export.test.ts, which needs a browser. Everything here is
+  // refused before one is started.
+  it('draws a deck into a file for its owner alone, and only what a deck has', async () => {
+    const { services, app, owner, at, make, setVisibility } = await setup();
+    const deck = await make({
+      title: 'Plan',
+      type: 'deck',
+      slides: ['A', 'B'].map((text) => `<!doctype html><html><body>${text}</body></html>`),
+    });
+    const notes = await make();
+    const file = (id: string, query: string, version = 1) =>
+      at(`/${id}/versions/${version}/export?${query}`);
+    const answered = async (url: string, authorization = headers.authorization) => {
+      const answer = await app.inject({ url, headers: { authorization } });
+      return `${answer.statusCode} ${answer.json().error}`;
+    };
+
+    expect((await app.inject({ url: file(deck.id, 'format=pdf') })).statusCode).toBe(401);
+    // A public link reads the deck and is proof of nothing else: it draws no file.
+    const { publicPath } = (await setVisibility(deck.id, 'public')).json();
+    const secret = publicPath.split('/').at(-1);
+    expect(await answered(file(deck.id, 'format=pdf'), `Bearer ${secret}`)).toMatch(/^401 /);
+    expect((await app.inject({ url: `${publicPath}/export?format=pdf` })).statusCode).toBe(401);
+    expect(await answered(`${publicPath}/export?format=pdf`)).toMatch(/^404 /);
+
+    // Nor through another conversation, with the credential.
+    const elsewhere = await services.sessions.createSession(owner.id, { channel: 'api' });
+    expect(await answered(at(`/${deck.id}/versions/1/export?format=pdf`, elsewhere.id))).toMatch(
+      /^404 /,
+    );
+    expect(await answered(file(deck.id, 'format=pdf', 2))).toMatch(/^404 /);
+
+    expect(await answered(file(notes.id, 'format=pdf'))).toMatch(/^400 Only a deck/);
+    expect(await answered(file(deck.id, 'format=png'))).toMatch(/^400 .*say which/);
+    expect(await answered(file(deck.id, 'format=png&slide=3'))).toMatch(
+      /^400 The deck has 2 slides, so there is no slide 3/,
+    );
+    for (const query of [
+      '',
+      'format=docx',
+      'format=pdf&fonts=comic',
+      'format=png&slide=0',
+      'format=png&slide=first',
+      'format=pdf&to=https://example.test',
+    ]) {
+      expect(await answered(file(deck.id, query))).toBe('400 Invalid request');
+    }
+  });
+
+  it('draws no deck on the gateway a desktop app runs, which has no browser to', async () => {
+    const { app, at, make } = await setup('local');
+    const deck = await make({
+      title: 'Plan',
+      type: 'deck',
+      slides: ['<!doctype html><html><body>A</body></html>'],
+    });
+
+    const refused = await app.inject({
+      url: at(`/${deck.id}/versions/1/export?format=pdf`),
+      headers,
+    });
+    expect(refused.statusCode).toBe(409);
+    expect(refused.json().error).toMatch(/only on a server gateway/);
+    // The deck itself is read there as anywhere.
+    expect((await app.inject({ url: at(`/${deck.id}/versions/1`), headers })).statusCode).toBe(200);
+  });
 });
 
 describe('the frame the panel draws one in', () => {

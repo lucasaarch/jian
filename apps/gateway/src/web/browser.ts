@@ -1,5 +1,5 @@
 import { tmpdir } from 'node:os';
-import type { Page } from 'playwright';
+import type { Browser, Page } from 'playwright';
 
 const MAX_RESOURCE_BYTES = 5 * 1024 * 1024;
 const MAX_TOTAL_BYTES = 50 * 1024 * 1024;
@@ -17,18 +17,17 @@ const MAX_REQUESTS = 200;
 export type PageResource = { url: string; mimeType: string; data: Buffer };
 export type BlockedResource = { url: string; reason: string };
 
-export async function withPage<T>(
-  url: string,
-  fetcher: typeof fetch,
-  signal: AbortSignal,
-  viewport: { width: number; height: number },
-  inspect: (page: Page, resources: PageResource[], blocked: BlockedResource[]) => Promise<T>,
-): Promise<T> {
+/**
+ * The gateway's temporary browser, confined as said above, for whoever runs a page in it: an
+ * inspection here, and a deck's slides drawn to be exported (artifacts/export.ts). The caller
+ * closes it, and decides what its pages may load.
+ */
+export async function launchChromium(): Promise<Browser> {
   const { chromium } = await import('playwright');
-  signal.throwIfAborted();
   const confined = process.env.JIAN_BROWSER_PATH;
   const executable = confined || process.env.PLAYWRIGHT_EXECUTABLE_PATH;
-  const browser = await chromium
+
+  return chromium
     .launch({
       chromiumSandbox: !confined,
       ...(executable ? { executablePath: executable } : {}),
@@ -50,6 +49,17 @@ export async function withPage<T>(
         `The browser could not start on this gateway: ${(error instanceof Error ? error.message : String(error)).split('\n')[0]}`,
       );
     });
+}
+
+export async function withPage<T>(
+  url: string,
+  fetcher: typeof fetch,
+  signal: AbortSignal,
+  viewport: { width: number; height: number },
+  inspect: (page: Page, resources: PageResource[], blocked: BlockedResource[]) => Promise<T>,
+): Promise<T> {
+  signal.throwIfAborted();
+  const browser = await launchChromium();
   const close = () => {
     void browser.close().catch(() => {});
   };

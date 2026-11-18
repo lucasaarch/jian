@@ -114,7 +114,13 @@ Schedules, it takes the whole window: its pages are listed where the sidebar was
   opens an earlier version from History, switches between the drawing and its code, copies or
   downloads the source, and sets it Private or Public. A deck shows its slides small and
   numbered in a row on top and one of them large under it, dragged or scrolled sideways to the
-  next, with Present to fill the screen; a deck has no code view. Edit, on a web page or a
+  next, with Present to fill the screen; a deck has no code view. Its Download button saves
+  the whole deck as a PDF, a page a slide, or as a PowerPoint file, in the fonts it is shown in
+  or in basic ones any computer has, and the slide in view as a web page or as a picture. The
+  PowerPoint file holds each slide as a picture with its text in the notes, so it opens the
+  same everywhere but is not edited shape by shape there. The gateway draws those files, in
+  its own fonts, so only one on a server offers them: on the desktop app's own gateway a deck
+  downloads as the slide's web page alone. Edit, on a web page or a
   deck's slide, lets the owner click a text to change it or its formatting, and Save keeps that
   as a new version of theirs.
   Public gives a link anyone can open without signing in, to read the latest version only,

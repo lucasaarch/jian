@@ -1,6 +1,8 @@
 import { type Client, profile } from './params';
 import { GatewayAnswer, result } from './result';
 import type {
+  DeckExport,
+  DeckExportQuery,
   MediaUpload,
   ModelSelection,
   ProjectChoice,
@@ -328,6 +330,23 @@ export const sessionCalls = (client: Client, origin = '') => ({
       client.GET(
         '/v1/profiles/{profileId}/sessions/{sessionId}/artifacts/{artifactId}/versions/{version}',
         { params: { path: { profileId, sessionId, artifactId, version } } },
+      ),
+    ),
+  /**
+   * A deck's version drawn into a file by the gateway, in base64: every slide as a PDF or a
+   * PowerPoint file, or the one `slide` numbers from 1 as a picture. Only a server draws one.
+   */
+  exportSessionArtifact: (
+    profileId: string,
+    sessionId: string,
+    artifactId: string,
+    version: number,
+    wanted: DeckExportQuery,
+  ): Promise<DeckExport> =>
+    result(
+      client.GET(
+        '/v1/profiles/{profileId}/sessions/{sessionId}/artifacts/{artifactId}/versions/{version}/export',
+        { params: { path: { profileId, sessionId, artifactId, version }, query: wanted } },
       ),
     ),
   /** Public gives it a link anyone can open; private ends that link. Only a server offers it. */

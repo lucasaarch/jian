@@ -171,6 +171,25 @@ export const sessionArtifactUpdateSchema = z.strictObject({
   visibility: sessionArtifactVisibilitySchema,
 });
 
+/**
+ * A deck taken away as a file, its slides drawn by the gateway's own browser: `pdf` is every
+ * slide, a page each, `png` one slide as a picture, and `pptx` every slide as a picture that
+ * fills its page, with the slide's text in its notes.
+ */
+export const deckExportQuerySchema = z.strictObject({
+  format: z.enum(['pdf', 'png', 'pptx']),
+  /** `png` only, and required for it: the slide, counting from 1. */
+  slide: z.coerce.number().int().min(1).max(DECK_SLIDES_MAX).optional(),
+  /**
+   * `basic` draws every slide again in fonts any computer has, whatever the slide asked for;
+   * absent or `current`, in the fonts it is shown in.
+   */
+  fonts: z.enum(['current', 'basic']).optional(),
+});
+
+/** The file, in base64, as media is answered. */
+export const deckExportSchema = z.strictObject({ mimeType: z.string(), data: z.string() });
+
 /** The frame an Artifact of each type is drawn in, with nothing of any Artifact in it. */
 export const artifactFrameParamsSchema = z.strictObject({ type: sessionArtifactTypeSchema });
 
@@ -211,6 +230,8 @@ export type SessionArtifactVisibility = z.infer<typeof sessionArtifactVisibility
 export type SessionArtifactAuthor = z.infer<typeof sessionArtifactAuthorSchema>;
 export type SessionArtifact = z.infer<typeof sessionArtifactSchema>;
 export type SessionArtifactVersion = z.infer<typeof sessionArtifactVersionSchema>;
+export type DeckExportQuery = z.infer<typeof deckExportQuerySchema>;
+export type DeckExport = z.infer<typeof deckExportSchema>;
 
 /** The types the owner edits by hand in the panel: a page, and a deck one slide at a time. */
 export const EDITABLE_ARTIFACT_TYPES: readonly SessionArtifactType[] = ['html', 'deck'];

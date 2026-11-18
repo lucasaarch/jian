@@ -7,7 +7,8 @@ import { copy, download } from './source';
 
 /**
  * What else the open Artifact's bar can do, behind its one button: take its source away, as
- * text or as a file. For a deck that is the slide in view, which is the page being read.
+ * text or as a file. For a deck that is the slide in view, which is the page being read, and
+ * only as text: a deck's files have a menu of their own (deck/deck-download.tsx).
  */
 export function ArtifactOptions({
   source,
@@ -16,8 +17,8 @@ export function ArtifactOptions({
 }: {
   /** The source as written; undefined until it is read. */
   source: string | undefined;
-  /** The name it downloads as. */
-  file: string;
+  /** The name it downloads as; with none it is not downloaded from here. */
+  file?: string;
   /** What is copied, as the owner is told: "Source", or "Slide". */
   what: string;
 }) {
@@ -36,13 +37,15 @@ export function ArtifactOptions({
             >
               Copy source
             </MenuEntry>
-            <MenuEntry
-              icon={<Download size={14} />}
-              disabled={source === undefined}
-              onClick={() => source !== undefined && download(file, source)}
-            >
-              Download
-            </MenuEntry>
+            {file !== undefined && (
+              <MenuEntry
+                icon={<Download size={14} />}
+                disabled={source === undefined}
+                onClick={() => source !== undefined && download(file, source)}
+              >
+                Download
+              </MenuEntry>
+            )}
           </Menu.Popup>
         </Menu.Positioner>
       </Menu.Portal>

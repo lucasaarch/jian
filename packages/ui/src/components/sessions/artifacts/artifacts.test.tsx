@@ -76,6 +76,15 @@ function gateway(artifacts: SessionArtifact[] = [counter, notes, page, deck]) {
         createdAt: at,
       }),
     ),
+    exportSessionArtifact: vi.fn(
+      async (
+        _profile: string,
+        _session: string,
+        _artifactId: string,
+        _version: number,
+        wanted: { format: 'pdf' | 'png' | 'pptx'; slide?: number; fonts?: 'current' | 'basic' },
+      ) => ({ mimeType: `test/${wanted.format}`, data: btoa(`drawn as ${wanted.format}`) }),
+    ),
     editSessionArtifact: vi.fn(
       async (
         _profile: string,
@@ -641,6 +650,104 @@ describe('a deck of slides', () => {
     expect(drawer()).not.toBeNull();
     expect(large()?.title).toBe('Plan, slide 3');
   });
+
+  const entries = () => [...document.querySelectorAll<HTMLElement>('[role=menuitem]')];
+  const menu = async (label: string) => {
+    await settled(() => entries().length === 0);
+    await click(button(label));
+    await settled(() => entries().length > 0);
+    return entries();
+  };
+
+  it('is taken away as a file the gateway draws, or as the page of the slide in view', async () => {
+    // What the browser was handed to save: each file's name, type and text.
+    const saved: string[] = [];
+    let made: Blob | undefined;
+    const address = vi.spyOn(URL, 'createObjectURL').mockImplementation((blob) => {
+      made = blob as Blob;
+      return 'blob:deck';
+    });
+    const taken = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (
+      this: HTMLAnchorElement,
+    ) {
+      const file = made as Blob;
+      void file.text().then((text) => saved.push(`${this.download} ${file.type} ${text}`));
+    });
+    const api = await opened(deck);
+    await click(button('Slide 2'));
+    const pick = async (name: string) => {
+      const files = saved.length;
+      await click((await menu('Download')).find((entry) => entry.textContent === name));
+      await settled(() => saved.length > files);
+    };
+
+    expect((await menu('Download')).map((entry) => entry.textContent)).toEqual([
+      'PDF (.pdf)',
+      'Web page (.html)',
+      'Current slide as an image (.png)',
+      'PowerPoint, current fonts (.pptx)',
+      'PowerPoint, basic fonts (.pptx)',
+    ]);
+    const popup = entries()[0]?.parentElement as HTMLElement;
+    // The two PowerPoint files stand apart, under a line, with what tells them apart said last.
+    expect(popup.querySelectorAll('[role=separator]')).toHaveLength(1);
+    expect(popup.lastElementChild?.textContent).toBe('Basic fonts work on any computer');
+    await click(entries()[1]);
+    await settled(() => saved.length === 1);
+    // The page is the panel's own to save: the gateway is asked for nothing.
+    expect(api.exportSessionArtifact).not.toHaveBeenCalled();
+
+    await pick('PDF (.pdf)');
+    await pick('Current slide as an image (.png)');
+    await pick('PowerPoint, current fonts (.pptx)');
+    await pick('PowerPoint, basic fonts (.pptx)');
+    expect(api.exportSessionArtifact.mock.calls.map((call) => call.slice(2))).toEqual([
+      [deck.id, 1, { format: 'pdf' }],
+      [deck.id, 1, { format: 'png', slide: 2 }],
+      [deck.id, 1, { format: 'pptx' }],
+      [deck.id, 1, { format: 'pptx', fonts: 'basic' }],
+    ]);
+    expect(saved).toEqual([
+      `Plan-v1-slide-2.html text/plain;charset=utf-8 ${SLIDES[1]}`,
+      'Plan-v1.pdf test/pdf drawn as pdf',
+      'Plan-v1-slide-2.png test/png drawn as png',
+      'Plan-v1.pptx test/pptx drawn as pptx',
+      'Plan-v1.basic-fonts.pptx test/pptx drawn as pptx',
+    ]);
+    // Its files are in that menu alone; the options still copy the slide.
+    expect((await menu('Artifact options')).map((entry) => entry.textContent)).toEqual([
+      'Copy source',
+    ]);
+
+    // A deck the gateway could not draw saves nothing, and the menu is there to try again.
+    api.exportSessionArtifact.mockRejectedValueOnce(new Error('The deck could not be drawn.'));
+    await click(button('Artifact options'));
+    await click((await menu('Download'))[0]);
+    await settled(() => button('Download')?.disabled === false);
+    expect(saved).toHaveLength(5);
+    expect(button('Download')?.disabled).toBe(false);
+    address.mockRestore();
+    taken.mockRestore();
+  });
+
+  it('offers only the page on the gateway a desktop app runs, which draws no deck', async () => {
+    await opened(deck, gateway(), 'local');
+
+    expect((await menu('Download')).map((entry) => entry.textContent)).toEqual([
+      'Web page (.html)',
+    ]);
+    expect(document.body.textContent).not.toContain('Basic fonts');
+  });
+
+  it('leaves every other Artifact its one download, behind the options', async () => {
+    await opened(page);
+
+    expect(button('Download')).toBeUndefined();
+    expect((await menu('Artifact options')).map((entry) => entry.textContent)).toEqual([
+      'Copy source',
+      'Download',
+    ]);
+  });
 });
 
 describe('what a frame answers when asked for an edit', () => {
@@ -705,7 +812,8 @@ describe('the file a version downloads as', () => {
     );
     expect(fileName({ title: '../../etc/passwd', type: 'html' }, 1)).toBe('etc-passwd-v1.html');
     expect(fileName({ title: '???', type: 'react' }, 1)).toBe('artifact-v1.tsx');
-    // A deck is taken away one slide at a time, and a slide is a page.
+    // A deck's page is one slide's; drawn into another kind of file, it is named as that.
     expect(fileName({ title: 'Plan', type: 'deck' }, 4, 2)).toBe('Plan-v4-slide-2.html');
+    expect(fileName({ title: 'Plan', type: 'deck' }, 4, undefined, 'pdf')).toBe('Plan-v4.pdf');
   });
 });

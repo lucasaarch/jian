@@ -1,5 +1,7 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import {
+  type DeckExport,
+  deckExportQuerySchema,
   deckSlideAddSchema,
   deckSlideDeleteSchema,
   deckSlideMoveSchema,
@@ -24,6 +26,7 @@ import type { SessionReader } from '../sessions/port.js';
 import type { Queryable, Store } from '../storage/database.js';
 import { sessionArtifacts, sessionArtifactVersions } from '../storage/schema.js';
 import { changedSlides, deckContent, type SlideChange, slidesOf } from './deck.js';
+import { exportDeck } from './export.js';
 
 /** What a component's frame can hand it; anything else would have to come from the network. */
 const IMPORTABLE = new Set(['react', 'react-dom', 'react-dom/client']);
@@ -403,6 +406,50 @@ export class SessionArtifacts {
       ...(artifact.type === 'deck' ? { slides: slidesOf(found.content) } : {}),
       createdAt: found.createdAt.toISOString(),
     };
+  }
+
+  /**
+   * A deck's version as a file to keep, drawn by the gateway's browser (export.ts): a PDF or a
+   * PowerPoint file of every slide, or one slide as a picture. It reads and changes nothing.
+   * Whatever can be refused is refused before a browser is started.
+   */
+  async export(
+    profileId: string,
+    sessionId: string,
+    artifactId: string,
+    version: number,
+    input: unknown,
+  ): Promise<DeckExport> {
+    const wanted = deckExportQuerySchema.parse(input);
+    const artifact = await this.find(this.store.db, profileId, sessionId, artifactId);
+
+    if (artifact.type !== 'deck') {
+      throw new GatewayError(400, 'Only a deck is exported as slides.');
+    }
+    if (this.local) {
+      throw new GatewayError(
+        409,
+        'A deck is drawn for a PDF, a picture or PowerPoint only on a server gateway. This one runs inside the desktop app, which has no browser of its own to draw with.',
+      );
+    }
+    const slides = slidesOf((await this.stored(this.store.db, artifact.id, version)).content);
+    let drawn: readonly string[] = slides;
+
+    if (wanted.format === 'png') {
+      const slide = wanted.slide === undefined ? undefined : slides[wanted.slide - 1];
+      if (slide === undefined) {
+        throw new GatewayError(
+          400,
+          wanted.slide === undefined
+            ? 'A picture is of one slide: say which, counting from 1.'
+            : `The deck has ${slides.length} ${slides.length === 1 ? 'slide' : 'slides'}, so there is no slide ${wanted.slide}.`,
+        );
+      }
+      drawn = [slide];
+    }
+    const file = await exportDeck(artifact.title, drawn, wanted);
+
+    return { mimeType: file.mimeType, data: file.data.toString('base64') };
   }
 
   /**

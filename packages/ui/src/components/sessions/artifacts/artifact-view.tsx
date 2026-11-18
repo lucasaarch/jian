@@ -16,6 +16,7 @@ import { ArtifactFrame } from './artifact-frame';
 import { ArtifactHistory } from './artifact-history';
 import { ArtifactOptions } from './artifact-options';
 import { ArtifactSharing } from './artifact-sharing';
+import { DeckDownload } from './deck/deck-download';
 import { DeckView } from './deck/deck-view';
 import { collectEdit } from './edit';
 import { fileName, LANGUAGE } from './source';
@@ -27,8 +28,8 @@ import { type ArtifactsApi, useArtifactVersion } from './use-artifacts';
  * updates; an older one in view is named beside the title. Mount it with the Artifact's id as
  * its key, so another one starts drawn and at its latest.
  *
- * A deck is read as slides, never as code: a slide's markup is still copied and downloaded from
- * the options.
+ * A deck is read as slides, never as code: a slide's markup is still copied from the options,
+ * and the deck is taken away as a file from a menu of its own (deck/deck-download.tsx).
  *
  * A page and a deck's slide can be edited by hand: Edit opens the version in view in the frame
  * that edits (artifact-frame.tsx), and Save asks that frame for the markup and hands it to the
@@ -55,9 +56,9 @@ export function ArtifactView({
   const [editing, setEditing] = useState<number>();
   const [saving, setSaving] = useState(false);
   const frame = useRef<HTMLIFrameElement>(null);
-  // Only a server gateway makes one public, so nothing else offers it; until the gateway says
-  // which it is, neither does this.
-  const shareable = useGatewayMode() === 'server';
+  // Only a server gateway makes one public, or draws a deck into a file, so nothing else offers
+  // either; until the gateway says which it is, neither does this.
+  const server = useGatewayMode() === 'server';
   const version = editing ?? picked ?? artifact.version;
   const read = useArtifactVersion(api, profileId, artifact.sessionId, artifact.id, version);
   const slides = artifact.type === 'deck' ? read.data?.slides : undefined;
@@ -159,12 +160,23 @@ export function ArtifactView({
                 version={version}
                 onPick={(next) => setPicked(next === artifact.version ? undefined : next)}
               />
-              {shareable && <ArtifactSharing api={api} profileId={profileId} artifact={artifact} />}
-              <ArtifactOptions
-                source={source}
-                file={fileName(artifact, version, slide === undefined ? undefined : slide + 1)}
-                what={slide === undefined ? 'Source' : 'Slide'}
-              />
+              {server && <ArtifactSharing api={api} profileId={profileId} artifact={artifact} />}
+              {artifact.type === 'deck' ? (
+                <>
+                  <DeckDownload
+                    api={api}
+                    profileId={profileId}
+                    artifact={artifact}
+                    version={version}
+                    slide={slide}
+                    source={source}
+                    drawn={server}
+                  />
+                  <ArtifactOptions source={source} what="Slide" />
+                </>
+              ) : (
+                <ArtifactOptions source={source} file={fileName(artifact, version)} what="Source" />
+              )}
             </>
           )
         }

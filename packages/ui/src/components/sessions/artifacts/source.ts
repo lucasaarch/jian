@@ -34,24 +34,34 @@ const EXTENSION: Record<Kind, string> = {
 
 /**
  * The file a version downloads as: its title in words a file system takes, its version, and
- * for a deck the number of the slide it is.
+ * for a deck the number of the slide it is. `extension` is for a deck drawn into another kind
+ * of file than its source's.
  */
 export function fileName(
   artifact: Pick<SessionArtifact, 'title' | 'type'>,
   version: number,
   slide?: number,
+  extension: string = EXTENSION[artifact.type],
 ) {
   const name = artifact.title
     .replace(/[^\p{L}\p{N}]+/gu, '-')
     .replace(/^-+|-+$/g, '')
     .slice(0, 60);
 
-  return `${name || 'artifact'}-v${version}${slide ? `-slide-${slide}` : ''}.${EXTENSION[artifact.type]}`;
+  return `${name || 'artifact'}-v${version}${slide ? `-slide-${slide}` : ''}.${extension}`;
 }
 
-/** Saves text as a file, from an address only this page can make. */
-export function download(name: string, text: string) {
-  const url = URL.createObjectURL(new Blob([text], { type: 'text/plain;charset=utf-8' }));
+/** A file the gateway answered in base64, as the browser saves one. */
+export const fileOf = ({ mimeType, data }: { mimeType: string; data: string }) =>
+  new Blob([Uint8Array.from(atob(data), (char) => char.charCodeAt(0))], { type: mimeType });
+
+/** Saves text, or a file already made, from an address only this page can make. */
+export function download(name: string, content: string | Blob) {
+  const url = URL.createObjectURL(
+    typeof content === 'string'
+      ? new Blob([content], { type: 'text/plain;charset=utf-8' })
+      : content,
+  );
   const link = document.createElement('a');
 
   link.href = url;
