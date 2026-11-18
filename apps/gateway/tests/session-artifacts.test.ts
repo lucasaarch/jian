@@ -454,6 +454,35 @@ describe('the frame the panel draws one in', () => {
       );
     }
     expect((await app.inject({ url: '/v1/artifact-frames/html?edit=yes' })).statusCode).toBe(400);
+    // Presenting is a deck's alone, and never while it is edited.
+    expect((await app.inject({ url: '/v1/artifact-frames/html?present=1' })).statusCode).toBe(400);
+    expect(
+      (await app.inject({ url: '/v1/artifact-frames/deck?present=1&edit=1' })).statusCode,
+    ).toBe(400);
+  });
+
+  it('serves a deck its player, already presenting, and relays only the end back', async () => {
+    const { app } = await setup();
+    const frame = await app.inject({ url: '/v1/artifact-frames/deck?present=1' });
+    expect(frame.statusCode).toBe(200);
+    // The same policy as every frame: nothing loads, and the shell is where frames are checked.
+    const policy = String(frame.headers['content-security-policy']);
+    expect(policy).toContain("frame-src 'none'");
+    expect(policy).toContain('sandbox allow-scripts');
+    // The frame may not take the screen: the panel takes it for the layer that holds the frame.
+    expect(frame.body).not.toMatch(/allowfullscreen/);
+    const inner = (/srcdoc="([^"]*)"/.exec(frame.body)?.[1] ?? '').replace(/&#(\d+);/g, (_, code) =>
+      String.fromCharCode(Number(code)),
+    );
+    // The player the public link runs, saying one thing to the panel and asking for no screen.
+    expect(inner).toContain('prefers-reduced-motion: reduce');
+    expect(inner).toContain("parent.postMessage({ jianArtifactPresent: 'end' }");
+    expect(inner.match(/postMessage/g)).toHaveLength(1);
+    expect(inner).not.toContain('requestFullscreen');
+    expect(inner).toContain("setAttribute('sandbox', 'allow-scripts')");
+    // The shell relays the end key out, and no other.
+    expect(frame.body).toContain('"jianArtifactPresent"');
+    expect(frame.body).not.toContain('jianArtifactEdit');
   });
 });
 

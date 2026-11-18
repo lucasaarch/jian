@@ -20,9 +20,8 @@ export const SLIDE_HEIGHT = 720;
 
 /**
  * What it is drawn as: a whole page, one React component, a Markdown document, an SVG picture,
- * a Mermaid diagram, or a deck of slides, each a page of its own. A `file` is none of these: it
- * is a file as it was, of any format, which the panel reads with the reader of that format and
- * no frame runs.
+ * a Mermaid diagram, or a deck of slides, each a page of its own. Always a source the agent
+ * wrote, never a file as it was: a file it made is sent as a file.
  */
 export const sessionArtifactTypeSchema = z.enum([
   'html',
@@ -31,11 +30,7 @@ export const sessionArtifactTypeSchema = z.enum([
   'svg',
   'mermaid',
   'deck',
-  'file',
 ]);
-
-/** The types a frame draws, which is every type whose source the agent wrote. */
-export const artifactFrameTypeSchema = sessionArtifactTypeSchema.exclude(['file']);
 
 /** `private` is read by the owner alone; `public` by anyone holding its link. */
 export const sessionArtifactVisibilitySchema = z.enum(['private', 'public']);
@@ -57,27 +52,6 @@ const slidesSchema = z.array(slideHtmlSchema).min(1).max(DECK_SLIDES_MAX);
 
 const slideNumberSchema = z.number().int().min(1).max(DECK_SLIDES_MAX);
 
-const filePathSchema = z
-  .string()
-  .min(1)
-  .max(4096)
-  .describe('For a file, in place of content: the absolute path of a file within your reach.');
-
-const fileMediaIdSchema = z
-  .uuid()
-  .describe('For a file, in place of content: the media ID of an attachment of this conversation.');
-
-/**
- * The file of a `file` Artifact's version: where its bytes are kept, which is with the
- * conversation's media, and what the panel needs to choose a reader before it has them.
- */
-export const sessionArtifactFileSchema = z.strictObject({
-  mediaId: z.uuid(),
-  name: z.string(),
-  mimeType: z.string(),
-  bytes: z.number().int().min(0),
-});
-
 /** How a deck's version is kept: its slides in order, as that version's `content`, in JSON. */
 export const deckContentSchema = z.strictObject({ slides: slidesSchema });
 
@@ -90,10 +64,8 @@ export const sessionArtifactCreateSchema = z.strictObject({
     .min(1)
     .max(SESSION_ARTIFACT_MAX)
     .optional()
-    .describe('The whole source. For every type but deck and file.'),
+    .describe('The whole source. For every type but deck.'),
   slides: slidesSchema.optional().describe('For a deck, in place of content: its slides in order.'),
-  path: filePathSchema.optional(),
-  mediaId: fileMediaIdSchema.optional(),
 });
 
 /** A new version of one: the whole content again, never a patch. */
@@ -104,12 +76,10 @@ export const sessionArtifactRevisionSchema = z.strictObject({
     .min(1)
     .max(SESSION_ARTIFACT_MAX)
     .optional()
-    .describe('The whole source, replaced. For every type but deck and file.'),
+    .describe('The whole source, replaced. For every type but deck.'),
   slides: slidesSchema
     .optional()
     .describe('For a deck, in place of content: every slide again, in order.'),
-  path: filePathSchema.optional(),
-  mediaId: fileMediaIdSchema.optional(),
   title: z.string().trim().min(1).max(120).optional().describe('Only to rename it.'),
 });
 
@@ -174,11 +144,12 @@ export const sessionArtifactSchema = z.strictObject({
    * null while it is private. The link changes each time it is made public again.
    */
   publicPath: z.string().nullable(),
-  /** A file only: the file of its latest version. */
-  file: sessionArtifactFileSchema.optional(),
   createdAt: z.iso.datetime(),
   updatedAt: z.iso.datetime(),
 });
+
+/** In place of a project's id: the conversations that are in no project. */
+export const NO_PROJECT = 'none';
 
 /**
  * What the agent's page of every Artifact asks for: those of all its conversations, the one
@@ -190,11 +161,28 @@ export const profileArtifactsQuerySchema = z.strictObject({
   /** Words of its title, in any case. */
   q: z.string().trim().min(1).max(120).optional(),
   type: sessionArtifactTypeSchema.optional(),
+  /** Only those the owner moved to this folder of theirs. */
+  folder: z.uuid().optional(),
+  /**
+   * Only those in no folder of the owner's whose conversation is in this project, or with
+   * `none` in no project: where each one is until it is moved.
+   */
+  project: z.union([z.uuid(), z.literal(NO_PROJECT)]).optional(),
+  /** Only the pinned ones, or only the rest; absent for both. */
+  pinned: z.enum(['true', 'false']).optional(),
 });
 
-/** An Artifact as that page lists it: with the stored title of the conversation it belongs to. */
+/**
+ * An Artifact as that page lists it: with the stored title and the project of the conversation
+ * it belongs to, and where the owner keeps it on the page.
+ */
 export const profileArtifactSchema = sessionArtifactSchema.extend({
   sessionTitle: z.string().nullable(),
+  /** The project of its conversation, which names the folder it is in until it is moved. */
+  projectId: z.uuid().nullable(),
+  pinned: z.boolean(),
+  /** The owner's folder it was moved to; null while it is where it started. */
+  folderId: z.uuid().nullable(),
 });
 
 export const profileArtifactPageSchema = z.strictObject({
@@ -213,13 +201,8 @@ export const sessionArtifactVersionSchema = z.strictObject({
   artifactId: z.uuid(),
   version: z.number().int().min(1),
   author: sessionArtifactAuthorSchema,
-  /**
-   * The source as it was written. A deck's is its slides as they are kept, in JSON. A file has
-   * none and answers it empty: its bytes are read as media, by `file.mediaId`.
-   */
+  /** The source as it was written. A deck's is its slides as they are kept, in JSON. */
   content: z.string(),
-  /** A file only: the file this version is. */
-  file: sessionArtifactFileSchema.optional(),
   /** A React component as plain script, which is what its frame runs; absent for the rest. */
   compiled: z.string().optional(),
   /** A deck's slides in order, each a page of its own; absent for the rest. */
@@ -227,8 +210,48 @@ export const sessionArtifactVersionSchema = z.strictObject({
   createdAt: z.iso.datetime(),
 });
 
-export const sessionArtifactUpdateSchema = z.strictObject({
-  visibility: sessionArtifactVisibilitySchema,
+/**
+ * What the owner changes of one without making a version: who reads it, its name, whether it is
+ * pinned on their page of them, and the folder of theirs it is kept in (`null` puts it back
+ * where it started, under its conversation's project). At least one of them.
+ */
+export const sessionArtifactUpdateSchema = z
+  .strictObject({
+    visibility: sessionArtifactVisibilitySchema.optional(),
+    title: z.string().trim().min(1).max(120).optional(),
+    pinned: z.boolean().optional(),
+    folderId: z.uuid().nullable().optional(),
+  })
+  .refine((change) => Object.values(change).some((value) => value !== undefined), {
+    message: 'Say what to change.',
+  });
+
+/** A folder the owner made to keep Artifacts in, with how many it holds. */
+export const artifactFolderSchema = z.strictObject({
+  id: z.uuid(),
+  name: z.string(),
+  artifacts: z.number().int().min(0),
+  createdAt: z.iso.datetime(),
+});
+
+export const artifactFolderInputSchema = z.strictObject({
+  name: z.string().trim().min(1).max(80),
+});
+
+/**
+ * Where an agent's Artifacts are kept: the owner's folders, by name, and the ones every Artifact
+ * starts in, which are the projects of the conversations they were made in. Only a project that
+ * still holds one is answered; `projectId` null is the conversations in no project.
+ */
+export const artifactFoldersSchema = z.strictObject({
+  folders: z.array(artifactFolderSchema),
+  projects: z.array(
+    z.strictObject({
+      projectId: z.uuid().nullable(),
+      name: z.string().nullable(),
+      artifacts: z.number().int().min(1),
+    }),
+  ),
 });
 
 /**
@@ -251,14 +274,21 @@ export const deckExportQuerySchema = z.strictObject({
 export const deckExportSchema = z.strictObject({ mimeType: z.string(), data: z.string() });
 
 /** The frame an Artifact of each type is drawn in, with nothing of any Artifact in it. */
-export const artifactFrameParamsSchema = z.strictObject({ type: artifactFrameTypeSchema });
+export const artifactFrameParamsSchema = z.strictObject({ type: sessionArtifactTypeSchema });
 
 /**
  * `edit=1` asks for the frame the owner edits by hand in, which a type outside
  * `EDITABLE_ARTIFACT_TYPES` does not have. It is a page of its own, so the frame that draws an
  * Artifact holds nothing that answers the panel.
  */
-export const artifactFrameQuerySchema = z.strictObject({ edit: z.literal('1').optional() });
+export const artifactFrameQuerySchema = z.strictObject({
+  edit: z.literal('1').optional(),
+  /**
+   * `present=1` asks for a deck's player, the one its public link runs, already presenting. It is
+   * handed the whole deck and never edits; only a deck has it.
+   */
+  present: z.literal('1').optional(),
+});
 
 /** The whole proof of a public Artifact's reader: 32 random bytes, in base64url. */
 export const publicArtifactParamsSchema = z.strictObject({
@@ -285,13 +315,19 @@ export const ARTIFACT_FRAME_MESSAGE = 'jianArtifact';
  */
 export const ARTIFACT_EDIT_MESSAGE = 'jianArtifactEdit';
 
+/**
+ * The one thing the deck's player says to the panel that holds it: `{ [this]: 'end' }`, when the
+ * reader pressed Escape or its end button. The shell relays that and nothing else the frame says.
+ */
+export const ARTIFACT_PRESENT_MESSAGE = 'jianArtifactPresent';
+
 export type SessionArtifactType = z.infer<typeof sessionArtifactTypeSchema>;
-export type ArtifactFrameType = z.infer<typeof artifactFrameTypeSchema>;
-export type SessionArtifactFile = z.infer<typeof sessionArtifactFileSchema>;
 export type SessionArtifactVisibility = z.infer<typeof sessionArtifactVisibilitySchema>;
 export type SessionArtifactAuthor = z.infer<typeof sessionArtifactAuthorSchema>;
 export type SessionArtifact = z.infer<typeof sessionArtifactSchema>;
 export type ProfileArtifact = z.infer<typeof profileArtifactSchema>;
+export type ArtifactFolder = z.infer<typeof artifactFolderSchema>;
+export type ArtifactFolders = z.infer<typeof artifactFoldersSchema>;
 export type SessionArtifactVersion = z.infer<typeof sessionArtifactVersionSchema>;
 export type DeckExportQuery = z.infer<typeof deckExportQuerySchema>;
 export type DeckExport = z.infer<typeof deckExportSchema>;

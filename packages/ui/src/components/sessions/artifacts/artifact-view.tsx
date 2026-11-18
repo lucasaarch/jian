@@ -9,7 +9,8 @@ import { Action, HoverTip, iconButton, SkeletonLine, SkeletonRegion } from '../.
 import type { SessionArtifact } from '../../../lib/api';
 import { useGatewayMode } from '../../../lib/gateway-mode';
 import { CodeBlock } from '../../ui/code-block';
-import { InspectorBar, InspectorBody } from '../inspector';
+import { InspectorBody } from '../inspector';
+import { ArtifactBar } from './artifact-bar';
 import { ArtifactFrame } from './artifact-frame';
 import { ArtifactHistory } from './artifact-history';
 import { ArtifactOptions } from './artifact-options';
@@ -18,7 +19,6 @@ import { DeckDownload } from './deck/deck-download';
 import { DeckView } from './deck/deck-view';
 import { Presentation } from './deck/presentation';
 import { collectEdit } from './edit';
-import { FileDownload, FileView, fileHasSource } from './file-view';
 import { fileName, LANGUAGE } from './source';
 import { type ArtifactsApi, artifactChanged, useArtifactVersion } from './use-artifacts';
 
@@ -31,9 +31,6 @@ import { type ArtifactsApi, artifactChanged, useArtifactVersion } from './use-ar
  * A deck is read as slides, never as code: a slide's markup is still copied from the options,
  * and the deck is taken away as a file from a menu of its own (deck/deck-download.tsx).
  *
- * A file is read with the reader of its format and no frame (file-view.tsx): it has versions
- * and a link like the rest, is downloaded as it was given, and is never edited here.
- *
  * A page and a deck's slide can be edited by hand: Edit opens the version in view in the frame
  * that edits (artifact-frame.tsx), and Save asks that frame for the markup and hands it to the
  * gateway, which keeps it as a new version of the owner's. The frame saves nothing itself.
@@ -43,18 +40,18 @@ export function ArtifactView({
   profileId,
   artifact,
   closer,
+  page = false,
   onBack,
-  startEditing = false,
 }: {
   api: ArtifactsApi;
   profileId: string;
   artifact: SessionArtifact;
   /** The Inspector's way out, which the page of every Artifact has none of. */
   closer?: RefObject<HTMLButtonElement | null>;
+  /** On the agent's page of every Artifact: its bar is the screen's, not the Inspector's. */
+  page?: boolean;
   /** Back to the list it was opened from. */
   onBack: () => void;
-  /** Opens already being edited, for a list whose Edit asked for it. */
-  startEditing?: boolean;
 }) {
   const client = useQueryClient();
   const [picked, setPicked] = useState<number>();
@@ -63,7 +60,7 @@ export function ArtifactView({
   const [at, setAt] = useState(0);
   // The version open for editing. It is held while it is: an update of the agent's meanwhile
   // must not take the page from under the owner's hands.
-  const [editing, setEditing] = useState(startEditing ? artifact.version : undefined);
+  const [editing, setEditing] = useState<number>();
   const [saving, setSaving] = useState(false);
   const [presenting, setPresenting] = useState(false);
   const frame = useRef<HTMLIFrameElement>(null);
@@ -77,11 +74,8 @@ export function ArtifactView({
   // What is read as code, copied and downloaded: the source as written, or the slide in view.
   const source = slide === undefined ? read.data?.content : slides?.[slide];
   const editable = EDITABLE_ARTIFACT_TYPES.includes(artifact.type);
-  // The file of the version in view, once that version is read.
-  const file = artifact.type === 'file' ? read.data?.file : undefined;
-  // What has a drawing and a source to switch between: not a deck, and of files only a page
-  // or a document.
-  const sourced = artifact.type === 'file' ? file && fileHasSource(file) : artifact.type !== 'deck';
+  // What has a drawing and a source to switch between: all but a deck.
+  const sourced = artifact.type !== 'deck';
 
   const save = async () => {
     if (editing === undefined || saving) return;
@@ -112,8 +106,23 @@ export function ArtifactView({
 
   return (
     <>
-      <InspectorBar
+      <ArtifactBar
+        page={page}
         closer={closer}
+        title={artifact.title}
+        old={version === artifact.version ? undefined : version}
+        back={
+          <HoverTip tip="All artifacts" hoverOnly side="bottom">
+            <button
+              type="button"
+              aria-label="All artifacts"
+              className={iconButton}
+              onClick={onBack}
+            >
+              <ArrowLeft size={15} aria-hidden="true" />
+            </button>
+          </HoverTip>
+        }
         options={
           editing !== undefined ? (
             <>
@@ -199,25 +208,13 @@ export function ArtifactView({
                   />
                   <ArtifactOptions source={source} what="Slide" />
                 </>
-              ) : artifact.type === 'file' ? (
-                file && <FileDownload api={api} profileId={profileId} file={file} />
               ) : (
                 <ArtifactOptions source={source} file={fileName(artifact, version)} what="Source" />
               )}
             </>
           )
         }
-      >
-        <HoverTip tip="All artifacts" hoverOnly side="bottom">
-          <button type="button" aria-label="All artifacts" className={iconButton} onClick={onBack}>
-            <ArrowLeft size={15} aria-hidden="true" />
-          </button>
-        </HoverTip>
-        <h2 className="min-w-0 truncate text-[13px] font-medium text-ink">{artifact.title}</h2>
-        {version !== artifact.version && (
-          <span className="shrink-0 text-xs text-muted tabular-nums">v{version}</span>
-        )}
-      </InspectorBar>
+      />
 
       {read.isError ? (
         <p role="alert" className="px-(--inspector-inset) pt-3 text-sm text-muted">
@@ -232,8 +229,6 @@ export function ArtifactView({
             <SkeletonLine key={width} className={width} />
           ))}
         </SkeletonRegion>
-      ) : artifact.type === 'file' ? (
-        file && <FileView key={version} api={api} profileId={profileId} file={file} source={code} />
       ) : code ? (
         <InspectorBody className="px-(--inspector-inset)">
           <CodeBlock text={source ?? ''} language={LANGUAGE[artifact.type]} wrapped />
@@ -258,12 +253,11 @@ export function ArtifactView({
           frame={frame}
         />
       )}
-      {presenting && slides && (
+      {presenting && slides && read.data && (
         <Presentation
           title={artifact.title}
-          slides={slides}
-          at={slide ?? 0}
-          onAt={setAt}
+          source={read.data.content}
+          start={slide ?? 0}
           onClose={() => setPresenting(false)}
         />
       )}

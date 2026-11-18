@@ -11,8 +11,6 @@ export const TYPE_NAME: Record<Kind, string> = {
   svg: 'Picture',
   mermaid: 'Diagram',
   deck: 'Deck',
-  // What a file of no known format is called; one of a known format goes by it (kind.tsx).
-  file: 'File',
 };
 
 /** The highlighter's grammar for a type's source; a diagram's has none. A deck's is a slide's. */
@@ -32,8 +30,6 @@ const EXTENSION: Record<Kind, string> = {
   mermaid: 'mmd',
   // A deck is read, copied and downloaded one slide at a time, and a slide is a page.
   deck: 'html',
-  // Never asked for: a file is downloaded under its own name (file-view.tsx).
-  file: 'bin',
 };
 
 /**

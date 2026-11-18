@@ -5,7 +5,7 @@ import { ChatNotices } from '../components/notifications/chat-notices';
 import { Sessions } from '../components/sessions';
 import { Action } from '../kit';
 import type { Profile } from '../lib/api';
-import { agentPath, onActivity, onArtifacts, onPulls } from '../lib/navigation';
+import { agentPath, onActivity, onArtifacts, onPulls, onSchedules } from '../lib/navigation';
 import { usePhone } from '../lib/phone';
 import { useProfiles } from '../lib/query/profile';
 import { useEventStream } from '../lib/query/stream';
@@ -33,6 +33,7 @@ import { rememberWelcome, Welcome, welcomed } from './onboarding/welcome';
 import { PhoneBar } from './phone-bar';
 import { PullsScreen } from './pulls/pulls-screen';
 import { LoadingMark } from './reload';
+import { SchedulesScreen } from './schedules/schedules-screen';
 
 /** How long the mark covers the window for a gateway that does not answer, in milliseconds. */
 const LOADING_PATIENCE = 15_000;
@@ -75,6 +76,7 @@ export function ChatsApp({
   const opened =
     /\/sessions\/[^/]+/.test(pathname) ||
     search.has('new') ||
+    onSchedules(pathname) ||
     onPulls(pathname) ||
     onArtifacts(pathname) ||
     onActivity(pathname);
@@ -232,7 +234,8 @@ function Chats({ phone, createAgent }: { phone: boolean; createAgent: () => void
 function AgentChats({ profileId, phone }: { profileId: string; phone: boolean }) {
   const actions = useActions();
   const remember = useLastProfile((state) => state.remember);
-  // The pull requests take the chat's place, as a chat would; the sidebar stays beside them.
+  // The schedules, the Artifacts, the pull requests and the activity take the chat's place, as
+  // a chat would; the sidebar stays beside them.
   const pathname = usePathname();
   useEventStream(profileId);
   useEffect(() => remember(profileId), [profileId, remember]);
@@ -242,7 +245,9 @@ function AgentChats({ profileId, phone }: { profileId: string; phone: boolean })
       <ChatNotices profileId={profileId} />
       {phone && <PhoneBar profileId={profileId} />}
       <div className="min-h-0 flex-1">
-        {onPulls(pathname) ? (
+        {onSchedules(pathname) ? (
+          <SchedulesScreen profileId={profileId} />
+        ) : onPulls(pathname) ? (
           <PullsScreen profileId={profileId} />
         ) : onArtifacts(pathname) ? (
           <ArtifactsScreen profileId={profileId} />

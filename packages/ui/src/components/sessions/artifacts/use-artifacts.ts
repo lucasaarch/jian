@@ -18,8 +18,6 @@ export type ArtifactsApi = Pick<
   | 'exportSessionArtifact'
   | 'setSessionArtifactVisibility'
   | 'editSessionArtifact'
-  // A file's bytes, which are media of the conversation.
-  | 'media'
 >;
 
 /** One page of the agent's page of every Artifact, as the gateway answers it. */

@@ -2,7 +2,14 @@
 
 import { ChevronLeft, SquarePen } from 'lucide-react';
 import { conversationName } from '../lib/conversation-name';
-import { agentPath, newChatPath, onActivity, onArtifacts, onPulls } from '../lib/navigation';
+import {
+  agentPath,
+  newChatPath,
+  onActivity,
+  onArtifacts,
+  onPulls,
+  onSchedules,
+} from '../lib/navigation';
 import { useAgents, useContacts, useProjects, useSessions } from '../lib/query/agent';
 import { useParams, usePathname, useRouter } from '../platform/navigation';
 
@@ -24,13 +31,15 @@ export function PhoneBar({ profileId }: { profileId: string }) {
   const pathname = usePathname();
   const title = session
     ? conversationName(session, { projects, contacts, profiles })
-    : onPulls(pathname)
-      ? 'Pull requests'
-      : onArtifacts(pathname)
-        ? 'Artifacts'
-        : onActivity(pathname)
-          ? 'Activity'
-          : 'New chat';
+    : onSchedules(pathname)
+      ? 'Schedules'
+      : onPulls(pathname)
+        ? 'Pull requests'
+        : onArtifacts(pathname)
+          ? 'Artifacts'
+          : onActivity(pathname)
+            ? 'Activity'
+            : 'New chat';
 
   return (
     <header className="glass-bar flex shrink-0 items-center gap-1 border-b border-line px-1.5 pt-[env(safe-area-inset-top)]">

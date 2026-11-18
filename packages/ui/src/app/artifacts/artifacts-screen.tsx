@@ -1,35 +1,40 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { toast } from 'sonner';
+import { FolderPlus } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArtifactView } from '../../components/sessions/artifacts/artifact-view';
 import { TYPE_NAME } from '../../components/sessions/artifacts/source';
 import {
   Action,
-  ConfirmDialog,
   FilterSelect,
   PageBody,
   PageHeading,
   PageToolbar,
   SearchField,
-  SettingsGroup,
-  SettingsRowsSkeleton,
+  SectionHeading,
   SkeletonRegion,
+  surfaceCard,
 } from '../../kit';
 import type { ProfileArtifact, SessionArtifact } from '../../lib/api';
-import { conversationName } from '../../lib/conversation-name';
-import { useGatewayMode } from '../../lib/gateway-mode';
-import { agentPath } from '../../lib/navigation';
-import { useAgents, useContacts, useProjects, useSessions } from '../../lib/query/agent';
+import { agentPath, artifactsPath, newChatPath } from '../../lib/navigation';
+import { useProjects } from '../../lib/query/agent';
 import { panelApi } from '../../lib/query/client';
 import { useCrew } from '../../lib/stores/crew';
+import { draftKey, useDrafts } from '../../lib/stores/drafts';
 import { useNoInspector } from '../../lib/stores/screen';
-import { useRouter } from '../../platform/navigation';
-import { ArtifactsList } from './artifacts-list';
+import { useRouter, useSearchParams } from '../../platform/navigation';
+import type { CardActions } from './artifact-card';
+import { attempt, useArtifactDialogs } from './artifact-dialogs';
+import { ArtifactFolders } from './artifact-folders';
+import { ArtifactStarters } from './artifact-starters';
+import { ArtifactsGrid, ArtifactsGridSkeleton } from './artifacts-grid';
+import { ALL, EVERYTHING, homeName, placeProject, placeQuery, placesOf } from './folders';
 import {
   type ArtifactsFilter,
   type ArtifactsPageApi,
-  useDeleteArtifact,
+  useArtifactFolders,
+  useArtifactKeeping,
+  useArtifactsPageFollow,
   useProfileArtifacts,
 } from './use-profile-artifacts';
 
@@ -44,10 +49,13 @@ const TYPES = [
 
 /**
  * Every Artifact the agent made, whatever the conversation, in place of the chat as its activity
- * is: a page of the kit's one anatomy, searched by title and narrowed to one type. One opens here
- * as it does in the Inspector, drawn by the same view (artifact-view.tsx), which then takes the
- * page's whole room; its conversation is one step away, and it can be deleted for good. It goes
- * with no conversation, so it has no Inspector beside it.
+ * is: a page of the kit's one anatomy, searched by title and narrowed to one type. They are
+ * cards in a grid, the pinned ones first, kept in folders: the project of the conversation each
+ * was made in until the owner moves it to a folder of their own. A row of shortcuts starts a
+ * conversation that asks for a new one. One opens here as it does in the Inspector, drawn by the
+ * same view (artifact-view.tsx), which then takes the page's whole room. It goes with no
+ * conversation, so it has no Inspector beside it. The one open is in the address
+ * (`?artifact=`), so the browser's back comes to the cards as the view's own back does.
  */
 export function ArtifactsScreen({
   profileId,
@@ -57,12 +65,9 @@ export function ArtifactsScreen({
   api?: ArtifactsPageApi;
 }) {
   useNoInspector();
+  useArtifactsPageFollow(profileId);
   const router = useRouter();
-  const server = useGatewayMode() === 'server';
-  const sessions = useSessions();
   const projects = useProjects();
-  const contacts = useContacts();
-  const profiles = useAgents();
   const [typed, setTyped] = useState('');
   const [filter, setFilter] = useState<ArtifactsFilter>({ q: '', type: ALL_TYPES });
   useEffect(() => {
@@ -72,73 +77,110 @@ export function ArtifactsScreen({
     );
     return () => clearTimeout(timer);
   }, [typed]);
-  // The one being read, and whether it opened to be edited.
-  const [opened, setOpened] = useState<{ id: string; editing: boolean }>();
-  const [doomed, setDoomed] = useState<ProfileArtifact>();
-  const [asking, setAsking] = useState(false);
-  const [deleting, setDeleting] = useState(false);
-  const read = useProfileArtifacts(api, profileId, filter);
-  const remove = useDeleteArtifact(api, profileId);
-  const artifacts = read.data?.pages.flatMap((page) => page.items);
-  // One deleted meanwhile, by the agent's conversation going, is no longer listed: the list.
-  const artifact = opened && artifacts?.find((item) => item.id === opened.id);
+  const [placeKey, setPlaceKey] = useState(ALL);
+  const opened = useSearchParams().get('artifact') ?? undefined;
+  // The one last opened from the cards, whose way back is the history's step back; one the
+  // address opened has nothing behind it here, and the cards take its place instead.
+  const pushed = useRef<string>(undefined);
+  const open = (id: string) => {
+    pushed.current = id;
+    router.push(`${artifactsPath(profileId)}?artifact=${encodeURIComponent(id)}`);
+  };
+  const close = () => {
+    const back = opened !== undefined && pushed.current === opened;
+    pushed.current = undefined;
+    if (back) router.back();
+    else router.replace(artifactsPath(profileId));
+  };
+
+  const found = useArtifactFolders(api, profileId).data;
+  const places = useMemo(() => placesOf(found), [found]);
+  // A place that is gone, as a folder just deleted, leaves the page looking at all of them.
+  const place = places.find((one) => one.key === placeKey) ?? EVERYTHING;
+  const reading = { ...filter, ...placeQuery(place) };
+  const pinned = useProfileArtifacts(api, profileId, { ...reading, pinned: 'true' });
+  const rest = useProfileArtifacts(api, profileId, { ...reading, pinned: 'false' });
+  const first = pinned.data?.pages.flatMap((page) => page.items);
+  const others = rest.data?.pages.flatMap((page) => page.items);
   const narrowed = Boolean(filter.q || filter.type);
+  // One deleted meanwhile, by the agent's conversation going, is no longer listed: the grid.
+  const artifact = opened
+    ? [...(first ?? []), ...(others ?? [])].find((item) => item.id === opened)
+    : undefined;
 
-  const conversation = (item: ProfileArtifact) => {
-    const session = sessions.find((one) => one.id === item.sessionId);
-    return session
-      ? conversationName(session, { projects, contacts, profiles })
-      : (item.sessionTitle ?? 'Untitled conversation');
+  const keeping = useArtifactKeeping(api, profileId);
+  const { name, doom, dialogs } = useArtifactDialogs(keeping, (folder) =>
+    setPlaceKey(`folder:${folder.id}`),
+  );
+  const home = (item: ProfileArtifact) => homeName(item, projects);
+
+  const on: CardActions = {
+    open: (item) => open(item.id),
+    pin: (item) => void attempt(() => keeping.change(item, { pinned: !item.pinned })),
+    rename: (item) => name({ kind: 'artifact', artifact: item }),
+    duplicate: (item) => void attempt(() => keeping.duplicate(item), `Duplicated ${item.title}.`),
+    go: (item) => {
+      useCrew.getState().showArtifactIn(item.sessionId, item.id);
+      router.push(agentPath(profileId, `sessions/${encodeURIComponent(item.sessionId)}`));
+    },
+    move: (item, folderId) => {
+      const to = folderId
+        ? found?.folders.find((folder) => folder.id === folderId)?.name
+        : home(item);
+      void attempt(() => keeping.change(item, { folderId }), `Moved to ${to ?? 'the folder'}.`);
+    },
+    moveToNew: (item) => name({ kind: 'new', moving: item }),
+    delete: (item) => doom({ artifact: item }),
   };
 
-  const go = (item: ProfileArtifact) => {
-    useCrew.getState().showArtifactIn(item.sessionId, item.id);
-    router.push(agentPath(profileId, `sessions/${encodeURIComponent(item.sessionId)}`));
+  // The new conversation's field reads what was left written for it, which is how a request
+  // begun here is found there; in a project's folder, it starts in that project.
+  const start = (prompt: string) => {
+    useDrafts.getState().write(draftKey(profileId), prompt);
+    router.push(newChatPath(profileId, placeProject(place)));
   };
 
-  const destroy = async () => {
-    if (!doomed || deleting) return;
-    setDeleting(true);
-    try {
-      await remove(doomed);
-      toast.success(`Deleted ${doomed.title}.`);
-      setAsking(false);
-    } catch (error) {
-      // The gateway's own sentence, as when a paired phone asks.
-      toast.error(error instanceof Error ? error.message : 'The Artifact could not be deleted.');
-    } finally {
-      setDeleting(false);
-    }
-  };
-
-  if (artifact && opened) {
+  if (artifact) {
     return (
-      // The view is the Inspector's, whose bar keeps clear of the window's buttons at the very
-      // top: here it lies under the host's title bar, where there are none, and on a page's
-      // wider edge.
+      // The view is the Inspector's, but its bar is the screen's own (screen-header.tsx), in the
+      // host's title bar; what lies under it keeps a page's wider edge.
       <section
         aria-label={artifact.title}
-        className="flex h-full min-h-0 flex-col pt-(--chrome-top) [--inspector-inset:1rem] [--window-controls:0px] phone:[--inspector-inset:0.5rem]"
+        className="flex h-full min-h-0 flex-col [--inspector-inset:1rem] phone:[--inspector-inset:0.5rem]"
       >
         <ArtifactView
           key={artifact.id}
           api={api}
           profileId={profileId}
           artifact={artifact}
-          onBack={() => setOpened(undefined)}
-          startEditing={opened.editing}
+          page
+          onBack={close}
         />
       </section>
     );
   }
 
+  const failed = pinned.isError ? pinned.error : rest.isError ? rest.error : undefined;
+  const grid = { api, profileId, folders: found?.folders ?? [], home, on };
+
   return (
     <div className="flex h-full min-h-0">
-      <PageBody wide labelledBy="artifacts-title">
+      <PageBody labelledBy="artifacts-title">
         <PageHeading
           id="artifacts-title"
           title="Artifacts"
           description="Everything this agent made to look at, in any conversation."
+          actions={
+            <Action
+              tone="outline"
+              size="small"
+              className="h-8"
+              onClick={() => name({ kind: 'new' })}
+            >
+              <FolderPlus size={14} aria-hidden="true" />
+              New folder
+            </Action>
+          }
         />
         <PageToolbar>
           <SearchField
@@ -156,45 +198,56 @@ export function ArtifactsScreen({
             }
           />
         </PageToolbar>
-        {read.isError && !artifacts ? (
+        {places.length > 1 && (
+          <ArtifactFolders
+            places={places}
+            at={place}
+            onGo={setPlaceKey}
+            onRename={(folder) => name({ kind: 'folder', folder })}
+            onDelete={(folder) => doom({ folder })}
+          />
+        )}
+        {!narrowed && <ArtifactStarters onStart={start} />}
+        {failed && !(first && others) ? (
           <div className="grid justify-items-start gap-3">
             <p role="alert" className="text-sm text-muted">
-              {read.error instanceof Error
-                ? read.error.message
-                : 'The Artifacts could not be read.'}
+              {failed instanceof Error ? failed.message : 'The Artifacts could not be read.'}
             </p>
-            <Action onClick={() => void read.refetch()}>Try again</Action>
+            <Action onClick={() => void Promise.all([pinned.refetch(), rest.refetch()])}>
+              Try again
+            </Action>
           </div>
-        ) : !artifacts ? (
+        ) : !(first && others) ? (
           <SkeletonRegion label="Loading artifacts…">
-            <SettingsGroup>
-              <SettingsRowsSkeleton count={4} />
-            </SettingsGroup>
+            <ArtifactsGridSkeleton />
           </SkeletonRegion>
         ) : (
           <>
-            <ArtifactsList
-              api={api}
-              profileId={profileId}
-              artifacts={artifacts}
-              server={server}
-              empty={
-                narrowed
-                  ? 'No Artifact matches.'
-                  : 'Nothing here yet. What the agent makes to look at, such as a page, a document, a diagram or a deck of slides, is kept here.'
-              }
-              conversation={conversation}
-              onOpen={(item) => setOpened({ id: item.id, editing: false })}
-              onEdit={(item) => setOpened({ id: item.id, editing: true })}
-              onGo={go}
-              onDelete={(item) => {
-                setDoomed(item);
-                setAsking(true);
-              }}
-            />
-            {read.hasNextPage && (
+            {first.length > 0 && (
+              <section aria-label="Pinned" className="grid min-w-0 grid-cols-1 gap-2">
+                <SectionHeading title="Pinned" />
+                <ArtifactsGrid label="Pinned artifacts" artifacts={first} {...grid} />
+              </section>
+            )}
+            {others.length > 0 ? (
+              <section aria-label="Artifacts" className="grid min-w-0 grid-cols-1 gap-2">
+                {first.length > 0 && <SectionHeading title="Everything else" />}
+                <ArtifactsGrid label="Artifacts" artifacts={others} {...grid} />
+              </section>
+            ) : (
+              first.length === 0 && (
+                <p className={`px-4 py-3 text-[13px] text-muted ${surfaceCard}`}>
+                  {narrowed
+                    ? 'No Artifact matches.'
+                    : place.key === ALL
+                      ? 'Nothing here yet. What the agent makes to look at, such as a page, a document, a diagram or a deck of slides, is kept here.'
+                      : 'Nothing in this folder yet. Move an Artifact here from the menu on its card.'}
+                </p>
+              )
+            )}
+            {rest.hasNextPage && (
               <div className="flex justify-center">
-                <Action busy={read.isFetchingNextPage} onClick={() => void read.fetchNextPage()}>
+                <Action busy={rest.isFetchingNextPage} onClick={() => void rest.fetchNextPage()}>
                   Load more
                 </Action>
               </div>
@@ -202,18 +255,7 @@ export function ArtifactsScreen({
           </>
         )}
       </PageBody>
-      <ConfirmDialog
-        open={asking}
-        onOpenChange={setAsking}
-        title={`Delete ${doomed?.title ?? ''}?`}
-        action="Delete Artifact"
-        busy={deleting}
-        run={() => void destroy()}
-      >
-        {doomed
-          ? `It is deleted for good with ${doomed.version === 1 ? 'its one version' : `all ${doomed.version} of its versions`}${doomed.visibility === 'public' ? ', and its public link stops working' : ''}. The conversation it was made in stays as it is.`
-          : ''}
-      </ConfirmDialog>
+      {dialogs}
     </div>
   );
 }

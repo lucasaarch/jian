@@ -36,7 +36,9 @@ export function Segmented<T extends string>({
           key={option.value}
           value={option.value}
           onClick={(event) => onChange(option.value, { x: event.clientX, y: event.clientY })}
-          className="inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-xs text-muted transition-colors hover:text-ink data-pressed:bg-glass-press data-pressed:text-ink"
+          // A choice is never broken over two lines: in a row too narrow for them all, it is the
+          // row that scrolls (ScrollStrip).
+          className="inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-xs whitespace-nowrap text-muted transition-colors hover:text-ink data-pressed:bg-glass-press data-pressed:text-ink"
         >
           {option.icon}
           {option.label}

@@ -7,10 +7,11 @@ import {
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import { GatewayError } from '../core/errors.js';
 import type { ProfileParams, SessionParams } from '../http/params.js';
-import { artifactFrame, artifactPolicy, publishedArtifact, publishedFile } from './document.js';
+import { artifactFrame, artifactPolicy, publishedArtifact } from './document.js';
 import type { SessionArtifacts } from './service.js';
 
 type ArtifactParams = SessionParams & { artifactId: string };
+type FolderParams = ProfileParams & { folderId: string };
 
 /**
  * An edited page is at most `SESSION_ARTIFACT_MAX` characters, which in JSON and UTF-8 can be
@@ -18,11 +19,11 @@ type ArtifactParams = SessionParams & { artifactId: string };
  */
 const EDIT_BODY_LIMIT = 2 * 1024 * 1024;
 
-const html = (reply: FastifyReply, ancestors: "'self'" | "'none'", downloads = false) =>
+const html = (reply: FastifyReply, ancestors: "'self'" | "'none'") =>
   reply
     .type('text/html; charset=utf-8')
     // Over the policy the gateway gives every answer, which would let the page reach its origin.
-    .header('Content-Security-Policy', artifactPolicy(ancestors, downloads));
+    .header('Content-Security-Policy', artifactPolicy(ancestors));
 
 export function registerArtifactRoutes(
   app: FastifyInstance,
@@ -94,14 +95,18 @@ export function registerArtifactRoutes(
     },
   );
 
-  // Making one public publishes it to anyone with the link: the owner's alone, from the panel.
+  // Its name, its pin and its folder are how the owner keeps their page of them, which a paired
+  // phone may do too. Making one public publishes it to anyone with the link: that is the
+  // owner's alone, from the panel, in the same request or any other.
   app.patch<{ Params: ArtifactParams }>(
     '/v1/profiles/:profileId/sessions/:sessionId/artifacts/:artifactId',
     async (request) => {
-      if (request.device) {
+      const asked = (request.body ?? {}) as { visibility?: unknown };
+      if (request.device && asked.visibility !== undefined) {
         throw new GatewayError(403, 'A paired device cannot change who sees an Artifact.');
       }
-      return deps.artifacts.setVisibility(
+
+      return deps.artifacts.update(
         request.params.profileId,
         request.params.sessionId,
         request.params.artifactId,
@@ -110,13 +115,52 @@ export function registerArtifactRoutes(
     },
   );
 
-  // Removing one is the owner's alone, as editing one by hand is: a paired phone only reads.
+  app.post<{ Params: ArtifactParams }>(
+    '/v1/profiles/:profileId/sessions/:sessionId/artifacts/:artifactId/duplicate',
+    async (request, reply) =>
+      reply
+        .code(201)
+        .send(
+          await deps.artifacts.duplicate(
+            request.params.profileId,
+            request.params.sessionId,
+            request.params.artifactId,
+          ),
+        ),
+  );
+
+  // Folders are how the owner keeps them, from the panel or a paired phone alike.
+  app.get<{ Params: ProfileParams }>('/v1/profiles/:profileId/artifact-folders', async (request) =>
+    deps.artifacts.folders(request.params.profileId),
+  );
+
+  app.post<{ Params: ProfileParams }>(
+    '/v1/profiles/:profileId/artifact-folders',
+    async (request, reply) =>
+      reply
+        .code(201)
+        .send(await deps.artifacts.createFolder(request.params.profileId, request.body)),
+  );
+
+  app.patch<{ Params: FolderParams }>(
+    '/v1/profiles/:profileId/artifact-folders/:folderId',
+    async (request) =>
+      deps.artifacts.renameFolder(request.params.profileId, request.params.folderId, request.body),
+  );
+
+  app.delete<{ Params: FolderParams }>(
+    '/v1/profiles/:profileId/artifact-folders/:folderId',
+    async (request, reply) => {
+      await deps.artifacts.deleteFolder(request.params.profileId, request.params.folderId);
+
+      return reply.code(204).send();
+    },
+  );
+
+  // Removing one is the owner's from a paired phone too: only editing one by hand is not.
   app.delete<{ Params: ArtifactParams }>(
     '/v1/profiles/:profileId/sessions/:sessionId/artifacts/:artifactId',
     async (request, reply) => {
-      if (request.device) {
-        throw new GatewayError(403, 'A paired device cannot delete an Artifact.');
-      }
       await deps.artifacts.delete(
         request.params.profileId,
         request.params.sessionId,
@@ -132,28 +176,21 @@ export function registerArtifactRoutes(
   // panel may hold the frame, and the panel is served from the gateway's own address.
   app.get('/v1/artifact-frames/:type', async (request, reply) => {
     const { type } = artifactFrameParamsSchema.parse(request.params);
-    const { edit } = artifactFrameQuerySchema.parse(request.query);
+    const { edit, present } = artifactFrameQuerySchema.parse(request.query);
 
     return html(reply, "'self'")
       .header('Cache-Control', 'public, max-age=3600')
-      .send(artifactFrame(type, edit === '1'));
+      .send(artifactFrame(type, edit === '1', present === '1'));
   });
 
   // Never kept, so a link stops answering the moment its Artifact is private again; and never
-  // inside another site's page. A file is answered inside a page too, never as its own bytes.
+  // inside another site's page.
   app.get('/v1/public-artifacts/:token', async (request, reply) => {
     const { token } = publicArtifactParamsSchema.parse(request.params);
     const found = await deps.artifacts.published(token);
-    // Only the page that offers the file to take away may save one: a Markdown file is drawn
-    // as a document, with no download.
-    const saves = found.type === 'file' && found.file.mimeType !== 'text/markdown';
 
-    return html(reply, "'none'", saves)
+    return html(reply, "'none'")
       .header('Cache-Control', 'no-store')
-      .send(
-        found.type === 'file'
-          ? publishedFile(found.title, found.file, found.data)
-          : publishedArtifact(found.type, found.title, found.source),
-      );
+      .send(publishedArtifact(found.type, found.title, found.source));
   });
 }

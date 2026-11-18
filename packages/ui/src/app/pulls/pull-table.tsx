@@ -14,9 +14,9 @@ const since = (value: string) => {
   return when === 'now' ? 'just now' : `${when} ago`;
 };
 
-// The table lies on the page, edge to edge: its outer cells keep the page's own margin, so the
-// rows line up with the filters above them.
-const edges = 'px-3 first:pl-5 last:pr-5 phone:first:pl-3 phone:last:pr-3';
+// The table lies in a card of the page (kit/page-layout.tsx): its outer cells keep a card's own
+// inset, as a card's rows do.
+const edges = 'px-3 first:pl-4 last:pr-4 phone:first:pl-3 phone:last:pr-3';
 const head = `${edges} py-2.5 text-left text-[11px] font-medium tracking-wide text-muted uppercase`;
 const cell = `${edges} py-3 align-middle`;
 
@@ -91,7 +91,7 @@ function PullRow({
   const Icon = pull.draft ? GitPullRequestDraft : GitPullRequest;
 
   return (
-    <tr className="border-b border-line/60 transition-colors last:border-b-0 hover:bg-glass-hover">
+    <tr className="border-b border-line/60 transition-colors last:border-b-0 hover:bg-glass-press">
       <td className={`${cell} font-mono text-xs text-muted`}>
         <span className="inline-flex items-center gap-1.5">
           <Icon size={14} className={pull.draft ? 'text-muted' : 'text-good'} aria-hidden="true" />#

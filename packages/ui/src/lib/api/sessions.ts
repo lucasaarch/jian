@@ -1,6 +1,8 @@
 import { type Client, profile } from './params';
 import { GatewayAnswer, result } from './result';
 import type {
+  ArtifactFolder,
+  ArtifactFolders,
   DeckExport,
   DeckExportQuery,
   MediaUpload,
@@ -322,15 +324,81 @@ export const sessionCalls = (client: Client, origin = '') => ({
     ),
   /**
    * Every Artifact of the agent, across its conversations, the one changed last first and a
-   * page at a time: `before` is the cursor the page before answered.
+   * page at a time: `before` is the cursor the page before answered. `folder` is one of the
+   * owner's folders; `project` what nobody moved out of a project's conversations, or with
+   * `none` out of those in no project.
    */
   profileArtifacts: (
     profileId: string,
-    wanted: { q?: string; type?: SessionArtifact['type']; before?: string } = {},
+    wanted: {
+      q?: string;
+      type?: SessionArtifact['type'];
+      before?: string;
+      folder?: string;
+      project?: string;
+      pinned?: 'true' | 'false';
+      limit?: number;
+    } = {},
   ): Promise<{ items: ProfileArtifact[]; nextCursor: string | null }> =>
     result(
       client.GET('/v1/profiles/{profileId}/session-artifacts', {
         params: { path: { profileId }, query: wanted },
+      }),
+    ),
+  /**
+   * How the owner keeps one on their page of them, with no new version: its name, its pin, and
+   * the folder of theirs it is in (`null` for where it started).
+   */
+  updateSessionArtifact: (
+    profileId: string,
+    sessionId: string,
+    artifactId: string,
+    change: { title?: string; pinned?: boolean; folderId?: string | null },
+  ): Promise<SessionArtifact> =>
+    result(
+      client.PATCH('/v1/profiles/{profileId}/sessions/{sessionId}/artifacts/{artifactId}', {
+        params: { path: { profileId, sessionId, artifactId } },
+        body: change,
+      }),
+    ),
+  /** A copy of one in the same conversation: private, unpinned, its latest version alone. */
+  duplicateSessionArtifact: (
+    profileId: string,
+    sessionId: string,
+    artifactId: string,
+  ): Promise<SessionArtifact> =>
+    result(
+      client.POST(
+        '/v1/profiles/{profileId}/sessions/{sessionId}/artifacts/{artifactId}/duplicate',
+        { params: { path: { profileId, sessionId, artifactId } } },
+      ),
+    ),
+  /** The owner's folders of Artifacts, and the projects that hold what nobody moved. */
+  artifactFolders: (profileId: string): Promise<ArtifactFolders> =>
+    result(client.GET('/v1/profiles/{profileId}/artifact-folders', { params: profile(profileId) })),
+  createArtifactFolder: (profileId: string, name: string): Promise<ArtifactFolder> =>
+    result(
+      client.POST('/v1/profiles/{profileId}/artifact-folders', {
+        params: profile(profileId),
+        body: { name },
+      }),
+    ),
+  renameArtifactFolder: (
+    profileId: string,
+    folderId: string,
+    name: string,
+  ): Promise<ArtifactFolder> =>
+    result(
+      client.PATCH('/v1/profiles/{profileId}/artifact-folders/{folderId}', {
+        params: { path: { profileId, folderId } },
+        body: { name },
+      }),
+    ),
+  /** Only the folder: what it held goes back under the project of its conversation. */
+  deleteArtifactFolder: (profileId: string, folderId: string) =>
+    result(
+      client.DELETE('/v1/profiles/{profileId}/artifact-folders/{folderId}', {
+        params: { path: { profileId, folderId } },
       }),
     ),
   /** Gone for good, with every version it had and its public link. */
