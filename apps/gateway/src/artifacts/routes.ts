@@ -4,13 +4,22 @@ import {
   publicArtifactParamsSchema,
   sessionArtifactVersionParamsSchema,
 } from '@jian/contracts';
-import type { FastifyInstance, FastifyReply } from 'fastify';
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { GatewayError } from '../core/errors.js';
 import type { ProfileParams, SessionParams } from '../http/params.js';
 import { artifactFrame, artifactPolicy, publishedArtifact, publishedFile } from './document.js';
 import type { SessionArtifacts } from './service.js';
 
 type ArtifactParams = SessionParams & { artifactId: string };
+type FolderParams = ProfileParams & { folderId: string };
+
+/**
+ * How the owner keeps their Artifacts is theirs alone, as editing and deleting one are: a paired
+ * phone only reads. `doing` ends the sentence it is refused with.
+ */
+function ownerOnly(request: FastifyRequest, doing: string) {
+  if (request.device) throw new GatewayError(403, `A paired device cannot ${doing}.`);
+}
 
 /**
  * An edited page is at most `SESSION_ARTIFACT_MAX` characters, which in JSON and UTF-8 can be
@@ -94,15 +103,76 @@ export function registerArtifactRoutes(
     },
   );
 
+  // Who reads one is changed from a paired phone too, as it always was. Its name, its pin and
+  // its folder are how the owner keeps their page of them, which a phone does not change.
   app.patch<{ Params: ArtifactParams }>(
     '/v1/profiles/:profileId/sessions/:sessionId/artifacts/:artifactId',
-    async (request) =>
-      deps.artifacts.setVisibility(
+    async (request) => {
+      const asked = Object.keys((request.body ?? {}) as object);
+      if (asked.some((key) => key !== 'visibility')) ownerOnly(request, 'organise Artifacts');
+
+      return deps.artifacts.update(
         request.params.profileId,
         request.params.sessionId,
         request.params.artifactId,
         request.body,
-      ),
+      );
+    },
+  );
+
+  app.post<{ Params: ArtifactParams }>(
+    '/v1/profiles/:profileId/sessions/:sessionId/artifacts/:artifactId/duplicate',
+    async (request, reply) => {
+      ownerOnly(request, 'duplicate an Artifact');
+
+      return reply
+        .code(201)
+        .send(
+          await deps.artifacts.duplicate(
+            request.params.profileId,
+            request.params.sessionId,
+            request.params.artifactId,
+          ),
+        );
+    },
+  );
+
+  app.get<{ Params: ProfileParams }>('/v1/profiles/:profileId/artifact-folders', async (request) =>
+    deps.artifacts.folders(request.params.profileId),
+  );
+
+  app.post<{ Params: ProfileParams }>(
+    '/v1/profiles/:profileId/artifact-folders',
+    async (request, reply) => {
+      ownerOnly(request, 'organise Artifacts');
+
+      return reply
+        .code(201)
+        .send(await deps.artifacts.createFolder(request.params.profileId, request.body));
+    },
+  );
+
+  app.patch<{ Params: FolderParams }>(
+    '/v1/profiles/:profileId/artifact-folders/:folderId',
+    async (request) => {
+      ownerOnly(request, 'organise Artifacts');
+
+      return deps.artifacts.renameFolder(
+        request.params.profileId,
+        request.params.folderId,
+        request.body,
+      );
+    },
+  );
+
+  app.delete<{ Params: FolderParams }>(
+    '/v1/profiles/:profileId/artifact-folders/:folderId',
+    async (request, reply) => {
+      ownerOnly(request, 'organise Artifacts');
+      await deps.artifacts.deleteFolder(request.params.profileId, request.params.folderId);
+
+      return reply.code(204).send();
+    },
   );
 
   // Removing one is the owner's alone, as editing one by hand is: a paired phone only reads.

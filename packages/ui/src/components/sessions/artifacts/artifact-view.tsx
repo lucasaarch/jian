@@ -46,7 +46,6 @@ export function ArtifactView({
   closer,
   page = false,
   onBack,
-  startEditing = false,
 }: {
   api: ArtifactsApi;
   profileId: string;
@@ -57,8 +56,6 @@ export function ArtifactView({
   page?: boolean;
   /** Back to the list it was opened from. */
   onBack: () => void;
-  /** Opens already being edited, for a list whose Edit asked for it. */
-  startEditing?: boolean;
 }) {
   const client = useQueryClient();
   const [picked, setPicked] = useState<number>();
@@ -67,7 +64,7 @@ export function ArtifactView({
   const [at, setAt] = useState(0);
   // The version open for editing. It is held while it is: an update of the agent's meanwhile
   // must not take the page from under the owner's hands.
-  const [editing, setEditing] = useState(startEditing ? artifact.version : undefined);
+  const [editing, setEditing] = useState<number>();
   const [saving, setSaving] = useState(false);
   const [presenting, setPresenting] = useState(false);
   const frame = useRef<HTMLIFrameElement>(null);

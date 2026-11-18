@@ -1,5 +1,7 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import {
+  type ArtifactFolder,
+  type ArtifactFolders,
   type ArtifactFrameType,
   type DeckExport,
   deckExportQuerySchema,
@@ -33,6 +35,7 @@ import { sessionArtifacts, sessionArtifactVersions } from '../storage/schema.js'
 import { changedSlides, deckContent, type SlideChange, slidesOf } from './deck.js';
 import { exportDeck } from './export.js';
 import { fileOf, keptFile } from './file.js';
+import { createFolder, deleteFolder, listFolders, ownFolder, renameFolder } from './folders.js';
 import { pageProfileArtifacts } from './listing.js';
 
 /** What a component's frame can hand it; anything else would have to come from the network. */
@@ -115,6 +118,9 @@ function kept(type: ArtifactFrameType, given: Given): string {
 
   return given.content;
 }
+
+/** What the owner's copy of an Artifact is called after the one it was made from. */
+const COPY = ' (copy)';
 
 /** The input each slide tool takes, by what it does to the deck. */
 const SLIDE_INPUT = {
@@ -460,6 +466,9 @@ export class SessionArtifacts {
       items: page.items.map((row) => ({
         ...recordOf(row.artifact, row.content),
         sessionTitle: row.sessionTitle,
+        projectId: row.projectId,
+        pinned: row.artifact.pinned,
+        folderId: row.artifact.folderId,
       })),
       nextCursor: page.nextCursor,
     };
@@ -543,16 +552,78 @@ export class SessionArtifacts {
   }
 
   /**
+   * The owner's copy of one, in the same conversation and the same folder: private, unpinned,
+   * and starting again at version 1 with the latest content, whoever wrote it. A file's copy is
+   * the same media of the conversation, which is never written twice.
+   */
+  async duplicate(
+    profileId: string,
+    sessionId: string,
+    artifactId: string,
+  ): Promise<SessionArtifact> {
+    const now = new Date(this.clock());
+
+    return this.store.transaction(profileId, async (tx) => {
+      const current = await this.find(tx, profileId, sessionId, artifactId);
+      const latest = await this.stored(tx, current.id, current.version);
+      const [row] = await tx
+        .insert(sessionArtifacts)
+        .values({
+          id: randomUUID(),
+          profileId,
+          sessionId,
+          // A title is at most 120 characters, the copy's too.
+          title: `${current.title.slice(0, 120 - COPY.length)}${COPY}`,
+          type: current.type,
+          folderId: current.folderId,
+          createdAt: now,
+          updatedAt: now,
+        })
+        .returning();
+      const made = assertFound(row, 'Artifact');
+      await tx.insert(sessionArtifactVersions).values({
+        artifactId: made.id,
+        version: 1,
+        content: latest.content,
+        author: latest.author,
+        createdAt: now,
+      });
+
+      return recordOf(made, latest.content);
+    });
+  }
+
+  /** Where the owner keeps this profile's Artifacts on their page of them (folders.ts). */
+  folders(profileId: string): Promise<ArtifactFolders> {
+    return listFolders(this.store.db, profileId);
+  }
+
+  createFolder(profileId: string, input: unknown): Promise<ArtifactFolder> {
+    return createFolder(this.store, this.clock, profileId, input);
+  }
+
+  renameFolder(profileId: string, folderId: string, input: unknown): Promise<ArtifactFolder> {
+    return renameFolder(this.store, profileId, folderId, input);
+  }
+
+  deleteFolder(profileId: string, folderId: string): Promise<void> {
+    return deleteFolder(this.store, profileId, folderId);
+  }
+
+  /**
+   * What the owner changes of one with no new version: who reads it, its name, its pin and its
+   * folder. None of them is a change to what it is, so it keeps its place in the list.
+   *
    * Public gives it a link made of a new secret; private takes the link away, and making it
    * public again gives another, so a link that was once shared never comes back to life.
    */
-  async setVisibility(
+  async update(
     profileId: string,
     sessionId: string,
     artifactId: string,
     input: unknown,
   ): Promise<SessionArtifact> {
-    const { visibility } = sessionArtifactUpdateSchema.parse(input);
+    const { visibility, title, pinned, folderId } = sessionArtifactUpdateSchema.parse(input);
 
     if (visibility === 'public' && this.local) {
       throw new GatewayError(
@@ -568,13 +639,23 @@ export class SessionArtifacts {
         current.type === 'file'
           ? (await this.stored(tx, current.id, current.version)).content
           : undefined;
-      if (current.visibility === visibility) return recordOf(current, content);
+      // Only a folder of the same profile: another agent's is not found.
+      if (folderId) await ownFolder(tx, profileId, folderId);
+      const change = {
+        ...(visibility !== undefined && visibility !== current.visibility
+          ? {
+              visibility,
+              publicToken: visibility === 'public' ? randomBytes(32).toString('base64url') : null,
+            }
+          : {}),
+        ...(title !== undefined ? { title } : {}),
+        ...(pinned !== undefined ? { pinned } : {}),
+        ...(folderId !== undefined ? { folderId } : {}),
+      };
+      if (Object.keys(change).length === 0) return recordOf(current, content);
       const [row] = await tx
         .update(sessionArtifacts)
-        .set({
-          visibility,
-          publicToken: visibility === 'public' ? randomBytes(32).toString('base64url') : null,
-        })
+        .set(change)
         .where(eq(sessionArtifacts.id, current.id))
         .returning();
 

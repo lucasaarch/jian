@@ -1,13 +1,17 @@
-import type { SessionArtifactType } from '@jian/contracts';
-import { and, desc, eq, ilike, sql } from 'drizzle-orm';
+import { NO_PROJECT, type SessionArtifactType } from '@jian/contracts';
+import { and, desc, eq, ilike, isNull, sql } from 'drizzle-orm';
 import { assertFound } from '../core/errors.js';
 import type { Queryable } from '../storage/database.js';
 import { sessionArtifacts, sessionArtifactVersions, sessions } from '../storage/schema.js';
 
 /**
  * Every Artifact of a profile, across its conversations, the one changed last first, a page at
- * a time: what the panel's Artifacts page lists. Each comes with the stored title of its
- * conversation and, for a file alone, its latest version's content, which says which file it is.
+ * a time: what the panel's Artifacts page lists. Each comes with the stored title and the project
+ * of its conversation and, for a file alone, its latest version's content, which says which file
+ * it is.
+ *
+ * `folder` narrows it to one folder of the owner's, and `project` to what nobody moved out of a
+ * project's conversations (`none`: of those in no project), which is where each one starts.
  *
  * `before` is the id of the last Artifact already read. One that is gone by then, deleted
  * between two pages, is refused rather than answered from the start again.
@@ -19,12 +23,25 @@ export async function pageProfileArtifacts(
     before?: string | undefined;
     q?: string | undefined;
     type?: SessionArtifactType | undefined;
+    folder?: string | undefined;
+    project?: string | undefined;
+    pinned?: 'true' | 'false' | undefined;
     limit: number;
   },
 ) {
   const conditions = [eq(sessionArtifacts.profileId, where.profileId)];
 
   if (where.type) conditions.push(eq(sessionArtifacts.type, where.type));
+  if (where.pinned) conditions.push(eq(sessionArtifacts.pinned, where.pinned === 'true'));
+  if (where.folder) conditions.push(eq(sessionArtifacts.folderId, where.folder));
+  if (where.project) {
+    conditions.push(
+      isNull(sessionArtifacts.folderId),
+      where.project === NO_PROJECT
+        ? isNull(sessions.projectId)
+        : eq(sessions.projectId, where.project),
+    );
+  }
   // The words as typed: `%` and `_` are a title's own characters here, not a pattern's.
   if (where.q) {
     conditions.push(ilike(sessionArtifacts.title, `%${where.q.replace(/[\\%_]/g, '\\$&')}%`));
@@ -48,6 +65,7 @@ export async function pageProfileArtifacts(
       artifact: sessionArtifacts,
       content: sessionArtifactVersions.content,
       sessionTitle: sessions.title,
+      projectId: sessions.projectId,
     })
     .from(sessionArtifacts)
     .innerJoin(sessions, eq(sessions.id, sessionArtifacts.sessionId))

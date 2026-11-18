@@ -73,12 +73,12 @@ Schedules, it takes the whole window: its pages are listed where the sidebar was
 
 - **Schedules** open from the top of the sidebar.
 - **Artifacts**, below Schedules, in place of the chat: every Artifact you made, whatever the
-  conversation, the one changed last first, each with its kind, version, conversation and when
-  it last changed. The owner searches them by title and narrows them to one type, and opens one
-  there as the Inspector's Artifacts tab shows it, with History, the code, Download and Edit.
-  The menu at the end of a row also goes to its conversation with the Artifact open beside it,
-  and deletes it for good, after asking: every version goes and a public link stops working.
-  A phone paired by QR code reads them but cannot edit or delete one.
+  conversation, as cards, pinned ones first, searched by title or narrowed to a type; one opens
+  as the Inspector's Artifacts tab shows it. Each is kept under its conversation's project, or
+  No project, until moved to a folder the owner made (New folder). A card's pin and menu pin,
+  rename, duplicate or move it, copy its public link, go to its conversation, or delete it for
+  good with every version. Create something new starts a chat with the request begun, unsent.
+  A phone paired by QR code reads them but cannot edit, delete or organise them.
 - **Pull requests**, below Artifacts on a server gateway with GitHub connected, list the open
   pull requests of every connected account in place of the chat. Review there hands one to an
   agent; Review settings choose the reviewing agent, its instructions, and whether new pull

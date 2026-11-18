@@ -157,6 +157,9 @@ import {
 } from './schedules.js';
 import { panelSessionEndSchema, panelSessionInputSchema, panelSessionSchema } from './security.js';
 import {
+  artifactFolderInputSchema,
+  artifactFolderSchema,
+  artifactFoldersSchema,
   artifactFrameParamsSchema,
   artifactFrameQuerySchema,
   deckExportQuerySchema,
@@ -1548,13 +1551,60 @@ export const operations: Operation[] = [
     response: sessionArtifactSchema,
   },
   {
-    // Only a server gateway makes one public; a desktop app's own refuses with a 409.
+    // Only a server gateway makes one public; a desktop app's own refuses with a 409. Its name,
+    // its pin and its folder are the owner's alone: a paired phone that asks to change one of
+    // those is refused with a 403.
     method: 'PATCH',
     path: `${session}/artifacts/:artifactId`,
     operationId: 'updateSessionArtifact',
     access: 'admin',
     body: sessionArtifactUpdateSchema,
     response: sessionArtifactSchema,
+  },
+  {
+    // Another Artifact of the same conversation, private and unpinned, whose one version is the
+    // latest of this one. The owner's alone: a paired phone is refused with a 403.
+    method: 'POST',
+    path: `${session}/artifacts/:artifactId/duplicate`,
+    operationId: 'duplicateSessionArtifact',
+    access: 'admin',
+    status: 201,
+    response: sessionArtifactSchema,
+  },
+  {
+    // Where the owner keeps an agent's Artifacts on their page of them.
+    method: 'GET',
+    path: `${profile}/artifact-folders`,
+    operationId: 'listArtifactFolders',
+    access: 'admin',
+    response: artifactFoldersSchema,
+  },
+  {
+    // Folders are made, renamed and deleted by the owner alone: a paired phone gets a 403.
+    method: 'POST',
+    path: `${profile}/artifact-folders`,
+    operationId: 'createArtifactFolder',
+    access: 'admin',
+    status: 201,
+    body: artifactFolderInputSchema,
+    response: artifactFolderSchema,
+  },
+  {
+    method: 'PATCH',
+    path: `${profile}/artifact-folders/:folderId`,
+    operationId: 'renameArtifactFolder',
+    access: 'admin',
+    body: artifactFolderInputSchema,
+    response: artifactFolderSchema,
+  },
+  {
+    // Only the folder goes: what it held is back under the project of its conversation.
+    method: 'DELETE',
+    path: `${profile}/artifact-folders/:folderId`,
+    operationId: 'deleteArtifactFolder',
+    access: 'admin',
+    response: z.null(),
+    status: 204,
   },
   {
     // Gone with every version it had, and with its public link. The owner's alone: a paired

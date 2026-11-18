@@ -1,7 +1,7 @@
 'use client';
 
 import { Menu } from '@base-ui/react/menu';
-import { Check } from 'lucide-react';
+import { Check, ChevronRight } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 /** The popup every menu of the kit is drawn in, from a button or a right click alike. */
@@ -113,6 +113,38 @@ export function MenuChoices({
         </Menu.RadioItem>
       ))}
     </Menu.RadioGroup>
+  );
+}
+
+/**
+ * An entry that opens more entries beside it: a choice among things that are not known until
+ * asked for, as the folders something can be moved to. It reads as an entry does, with an arrow
+ * at its end; what it opens is a menu of the kit like the one it is in.
+ */
+export function MenuSubmenu({
+  icon,
+  label,
+  children,
+}: {
+  icon?: ReactNode;
+  label: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <Menu.SubmenuRoot>
+      <Menu.SubmenuTrigger className="flex h-8 cursor-pointer items-center gap-2.5 rounded-lg px-2.5 outline-none select-none data-highlighted:bg-glass-press data-popup-open:bg-glass-press">
+        {icon && <span className="grid size-4 place-items-center text-current">{icon}</span>}
+        <span className="min-w-0 flex-1 truncate">{label}</span>
+        <ChevronRight size={14} aria-hidden="true" className="shrink-0 text-muted" />
+      </Menu.SubmenuTrigger>
+      <Menu.Portal>
+        <Menu.Positioner sideOffset={4} alignOffset={-4} className="z-50">
+          <Menu.Popup className={`max-h-72 max-w-64 overflow-y-auto ${menuPopup}`}>
+            {children}
+          </Menu.Popup>
+        </Menu.Positioner>
+      </Menu.Portal>
+    </Menu.SubmenuRoot>
   );
 }
 

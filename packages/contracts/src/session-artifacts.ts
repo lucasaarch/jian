@@ -180,6 +180,9 @@ export const sessionArtifactSchema = z.strictObject({
   updatedAt: z.iso.datetime(),
 });
 
+/** In place of a project's id: the conversations that are in no project. */
+export const NO_PROJECT = 'none';
+
 /**
  * What the agent's page of every Artifact asks for: those of all its conversations, the one
  * changed last first, a page at a time. `before` is the id of the last one already read.
@@ -190,11 +193,28 @@ export const profileArtifactsQuerySchema = z.strictObject({
   /** Words of its title, in any case. */
   q: z.string().trim().min(1).max(120).optional(),
   type: sessionArtifactTypeSchema.optional(),
+  /** Only those the owner moved to this folder of theirs. */
+  folder: z.uuid().optional(),
+  /**
+   * Only those in no folder of the owner's whose conversation is in this project, or with
+   * `none` in no project: where each one is until it is moved.
+   */
+  project: z.union([z.uuid(), z.literal(NO_PROJECT)]).optional(),
+  /** Only the pinned ones, or only the rest; absent for both. */
+  pinned: z.enum(['true', 'false']).optional(),
 });
 
-/** An Artifact as that page lists it: with the stored title of the conversation it belongs to. */
+/**
+ * An Artifact as that page lists it: with the stored title and the project of the conversation
+ * it belongs to, and where the owner keeps it on the page.
+ */
 export const profileArtifactSchema = sessionArtifactSchema.extend({
   sessionTitle: z.string().nullable(),
+  /** The project of its conversation, which names the folder it is in until it is moved. */
+  projectId: z.uuid().nullable(),
+  pinned: z.boolean(),
+  /** The owner's folder it was moved to; null while it is where it started. */
+  folderId: z.uuid().nullable(),
 });
 
 export const profileArtifactPageSchema = z.strictObject({
@@ -227,8 +247,48 @@ export const sessionArtifactVersionSchema = z.strictObject({
   createdAt: z.iso.datetime(),
 });
 
-export const sessionArtifactUpdateSchema = z.strictObject({
-  visibility: sessionArtifactVisibilitySchema,
+/**
+ * What the owner changes of one without making a version: who reads it, its name, whether it is
+ * pinned on their page of them, and the folder of theirs it is kept in (`null` puts it back
+ * where it started, under its conversation's project). At least one of them.
+ */
+export const sessionArtifactUpdateSchema = z
+  .strictObject({
+    visibility: sessionArtifactVisibilitySchema.optional(),
+    title: z.string().trim().min(1).max(120).optional(),
+    pinned: z.boolean().optional(),
+    folderId: z.uuid().nullable().optional(),
+  })
+  .refine((change) => Object.values(change).some((value) => value !== undefined), {
+    message: 'Say what to change.',
+  });
+
+/** A folder the owner made to keep Artifacts in, with how many it holds. */
+export const artifactFolderSchema = z.strictObject({
+  id: z.uuid(),
+  name: z.string(),
+  artifacts: z.number().int().min(0),
+  createdAt: z.iso.datetime(),
+});
+
+export const artifactFolderInputSchema = z.strictObject({
+  name: z.string().trim().min(1).max(80),
+});
+
+/**
+ * Where an agent's Artifacts are kept: the owner's folders, by name, and the ones every Artifact
+ * starts in, which are the projects of the conversations they were made in. Only a project that
+ * still holds one is answered; `projectId` null is the conversations in no project.
+ */
+export const artifactFoldersSchema = z.strictObject({
+  folders: z.array(artifactFolderSchema),
+  projects: z.array(
+    z.strictObject({
+      projectId: z.uuid().nullable(),
+      name: z.string().nullable(),
+      artifacts: z.number().int().min(1),
+    }),
+  ),
 });
 
 /**
@@ -305,6 +365,8 @@ export type SessionArtifactVisibility = z.infer<typeof sessionArtifactVisibility
 export type SessionArtifactAuthor = z.infer<typeof sessionArtifactAuthorSchema>;
 export type SessionArtifact = z.infer<typeof sessionArtifactSchema>;
 export type ProfileArtifact = z.infer<typeof profileArtifactSchema>;
+export type ArtifactFolder = z.infer<typeof artifactFolderSchema>;
+export type ArtifactFolders = z.infer<typeof artifactFoldersSchema>;
 export type SessionArtifactVersion = z.infer<typeof sessionArtifactVersionSchema>;
 export type DeckExportQuery = z.infer<typeof deckExportQuerySchema>;
 export type DeckExport = z.infer<typeof deckExportSchema>;

@@ -21,7 +21,7 @@ export const fileHasSource = (file: ArtifactFile) => RENDERED.has(file.mimeType)
  * version's file never changes, so it is read once. The key is its own: a message that carries
  * the same attachment keeps it under the media's key in another shape (media.tsx).
  */
-function useArtifactFile(api: ArtifactsApi, profileId: string, file: ArtifactFile) {
+export function useArtifactFile(api: ArtifactsApi, profileId: string, file: ArtifactFile) {
   return useQuery({
     queryKey: [...keys.media(profileId, file.mediaId), 'artifact'],
     queryFn: () => api.media(profileId, file.mediaId),
