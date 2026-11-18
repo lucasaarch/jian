@@ -2,6 +2,7 @@ import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
 import { MAX_PATH_PARAM, operationSchema, operations } from '@jian/contracts';
 import Fastify, { LogController } from 'fastify';
+import { registerArtifactRoutes } from './artifacts/routes.js';
 import { registerOpenAiRoutes } from './channels/openai/routes.js';
 import { registerChannelRoutes } from './channels/routes.js';
 import type { Channels } from './channels/service.js';
@@ -194,6 +195,7 @@ export function createApp(
     registerProfileRoutes(routes, options);
     registerProjectRoutes(routes, options.projects);
     registerSessionRoutes(routes, { ...options, coordination });
+    registerArtifactRoutes(routes, options);
     registerWorktreeRoutes(routes, options);
     registerTerminalRoutes(routes, { ...options, terminals });
     registerMemoryRoutes(routes, options);

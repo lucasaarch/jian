@@ -97,6 +97,10 @@ describe('public API contracts', () => {
         'startPanelSession',
         'pairDevice',
         'completeMcpLogin',
+        // The sandboxed frame shell holds no content, and a public Artifact proves itself
+        // with its unguessable id; a private one never answers here.
+        'artifactFrame',
+        'readPublicArtifact',
       ]);
     } finally {
       await app.close();

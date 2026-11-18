@@ -63,6 +63,8 @@ const toolLabels: Record<string, string> = {
   cancel_subagent: 'stopping an agent it started',
   browser_control: 'using the browser',
   open_in_inspector: 'opening it in the Inspector',
+  create_artifact: 'making an Artifact',
+  update_artifact: 'updating an Artifact',
   react_to_message: 'reacting to a message',
   read_activity_stats: 'reading its activity',
   read_usage_runs: 'reading its runs',

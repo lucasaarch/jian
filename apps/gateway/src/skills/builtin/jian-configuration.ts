@@ -109,6 +109,12 @@ Schedules, it takes the whole window: its pages are listed where the sidebar was
   starting in the conversation's worktree or checkout when the gateway has it, and the gateway
   keeps at most ${TERMINALS_MAX} open. You neither see nor type in them: ask the owner for what
   one printed.
+  Its Artifacts tab lists the Artifacts you made in this conversation (a page, a component, a
+  document, a picture or a diagram), each drawn in a sealed frame: the owner picks a version,
+  switches between the drawing and its code, copies or downloads the source, and sets it Private
+  or Public. Public gives a link anyone can open without signing in, to the latest version only,
+  and making it private again ends that link for good. Only a gateway on a server offers Public;
+  the desktop app's own gateway keeps every Artifact private.
 - **The conversation's badges**, where it runs, show its objective and how many pull requests
   you created in it through GitHub's MCP server, your subagents' included; one you only linked or
   read is not counted. That one opens the list of them with how each stands — Watching while the

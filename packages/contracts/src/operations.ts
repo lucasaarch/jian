@@ -156,6 +156,14 @@ import {
   scheduleRunSchema,
 } from './schedules.js';
 import { panelSessionEndSchema, panelSessionInputSchema, panelSessionSchema } from './security.js';
+import {
+  artifactFrameParamsSchema,
+  publicArtifactParamsSchema,
+  sessionArtifactSchema,
+  sessionArtifactUpdateSchema,
+  sessionArtifactVersionParamsSchema,
+  sessionArtifactVersionSchema,
+} from './session-artifacts.js';
 import { sessionFileQuerySchema, sessionFileSchema, sessionFilesSchema } from './session-files.js';
 import { skillImportSchema } from './skills.js';
 import { sshKeyCreateSchema, sshKeySchema } from './ssh.js';
@@ -1483,6 +1491,50 @@ export const operations: Operation[] = [
     access: 'admin',
     query: sessionFileQuerySchema,
     response: sessionFileSchema,
+  },
+  {
+    method: 'GET',
+    path: `${session}/artifacts`,
+    operationId: 'listSessionArtifacts',
+    access: 'admin',
+    response: z.array(sessionArtifactSchema),
+  },
+  {
+    method: 'GET',
+    path: `${session}/artifacts/:artifactId/versions/:version`,
+    operationId: 'readSessionArtifactVersion',
+    access: 'admin',
+    params: sessionArtifactVersionParamsSchema,
+    response: sessionArtifactVersionSchema,
+  },
+  {
+    // Only a server gateway makes one public; a desktop app's own refuses with a 409.
+    method: 'PATCH',
+    path: `${session}/artifacts/:artifactId`,
+    operationId: 'updateSessionArtifact',
+    access: 'admin',
+    body: sessionArtifactUpdateSchema,
+    response: sessionArtifactSchema,
+  },
+  {
+    // Public because it holds nothing of anyone's: the empty frame the panel hands an Artifact
+    // to. It answers HTML, in a sandbox that reaches neither the gateway nor the panel.
+    method: 'GET',
+    path: '/v1/artifact-frames/:type',
+    operationId: 'artifactFrame',
+    access: 'public',
+    params: artifactFrameParamsSchema,
+    response: z.string(),
+  },
+  {
+    // Public because the token in the path is the proof: only an Artifact its owner made public
+    // has one. It answers that Artifact alone, as HTML in the same sandbox.
+    method: 'GET',
+    path: '/v1/public-artifacts/:token',
+    operationId: 'readPublicArtifact',
+    access: 'public',
+    params: publicArtifactParamsSchema,
+    response: z.string(),
   },
   {
     method: 'GET',
