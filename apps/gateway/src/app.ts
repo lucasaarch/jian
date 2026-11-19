@@ -12,6 +12,7 @@ import { registerCoordinationRoutes } from './coordination/routes.js';
 import { Coordination } from './coordination/service.js';
 import { registerDecisionRoutes } from './decisions/routes.js';
 import { registerDeviceRoutes } from './devices/routes.js';
+import { registerFileLinkRoutes } from './file-links/routes.js';
 import { registerEventRoutes } from './http/events.js';
 import { registerMetaRoutes } from './http/meta.js';
 import { registerReturnPages } from './http/returned.js';
@@ -203,6 +204,7 @@ export function createApp(
     registerProjectRoutes(routes, options.projects);
     registerSessionRoutes(routes, { ...options, coordination });
     registerArtifactRoutes(routes, options);
+    registerFileLinkRoutes(routes, options);
     registerWorktreeRoutes(routes, options);
     registerTerminalRoutes(routes, { ...options, terminals });
     registerMemoryRoutes(routes, options);

@@ -7,6 +7,7 @@ import type { Clock } from './core/clock.js';
 import { Decisions } from './decisions/service.js';
 import { Devices } from './devices/service.js';
 import { Errands } from './errands/service.js';
+import { FileLinks } from './file-links/service.js';
 import type { GitHubIntegrations } from './integrations/github.js';
 import { Learning } from './learning/service.js';
 import { McpServers } from './mcp/service.js';
@@ -80,6 +81,8 @@ export type Services = {
   remote: Remote;
   push: PushNotifications;
   mobilePush: MobilePush;
+  /** Absent unless this is a server gateway the internet reaches at an https:// address. */
+  fileLinks?: FileLinks;
 };
 
 /**
@@ -254,6 +257,11 @@ export function buildServices({
     skillLibrary: new SkillLibrary(store, clock),
     remote,
     push,
+    // A link is only worth making where its reader can reach it: a server, over https. The
+    // desktop app's own gateway listens on loopback, and its agents send files instead.
+    ...(mode !== 'local' && publicUrl?.startsWith('https://')
+      ? { fileLinks: new FileLinks(store, publicUrl, clock) }
+      : {}),
   };
 
   return services;

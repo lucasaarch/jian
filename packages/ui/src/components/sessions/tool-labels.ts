@@ -42,6 +42,8 @@ const toolLabels: Record<string, string> = {
   find_files: 'finding files',
   search_files: 'searching files',
   list_directory: 'listing a directory',
+  share_file_link: 'sharing a file by link',
+  revoke_file_link: 'ending a file link',
   web_search: 'searching the web',
   fetch_url: 'reading a page',
   create_skill: 'writing a skill',

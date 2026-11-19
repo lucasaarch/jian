@@ -6,6 +6,7 @@ export * from './coordination.js';
 export * from './decisions.js';
 export * from './devices.js';
 export * from './diagram.js';
+export * from './file-links.js';
 export * from './github-items.js';
 export * from './github-reviews.js';
 export * from './integrations.js';

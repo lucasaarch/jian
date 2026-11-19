@@ -20,6 +20,7 @@ import {
 import { builtinSkillNames, builtinSkills } from '../src/skills/builtin/index.js';
 import { machineToolsFor } from '../src/skills/builtin/machine-tools.js';
 import { managingContext } from '../src/skills/builtin/managing-context.js';
+import { mediaFor } from '../src/skills/builtin/media.js';
 import { sshKeysFor } from '../src/skills/builtin/ssh-keys.js';
 import { videoProductionFor } from '../src/skills/builtin/video-production.js';
 import { xFor } from '../src/skills/builtin/x.js';
@@ -59,6 +60,8 @@ const everything = [
   // As a conversation on a connected machine is told it, with and without file tools there.
   videoProductionFor({ files: true }),
   videoProductionFor({ files: false }),
+  // As a run on a server with an https:// public address reads it.
+  mediaFor(true),
 ];
 const text = everything.map(({ instructions }) => instructions).join('\n');
 

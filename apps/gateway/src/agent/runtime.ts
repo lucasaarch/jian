@@ -158,6 +158,7 @@ import {
   CONTACTS_WITH_EMAIL_SUMMARY,
   cardInput,
   deferTools,
+  FILES_WITH_LINKS_SUMMARY,
   groupMates,
   MACHINE_FILES_SUMMARY,
   profileTools,
@@ -1068,6 +1069,7 @@ export class AgentRuntime {
       const keptTools = new Set(loadedTools);
       const { gated } = deferTools(tools, loadedTools, {
         ...(machineFiles ? { files: MACHINE_FILES_SUMMARY } : {}),
+        ...('share_file_link' in tools ? { files: FILES_WITH_LINKS_SUMMARY } : {}),
         ...('send_email' in tools ? { contacts: CONTACTS_WITH_EMAIL_SUMMARY } : {}),
       });
       const { mcpToolNames, selectedMcpTools, unavailable, catalog } = await connectMcpTools(
@@ -1099,6 +1101,7 @@ export class AgentRuntime {
               xConnected: Object.keys(xTools).length > 0,
               ...(worktreeCan ? { worktrees: worktreeCan } : {}),
               email: 'send_email' in tools,
+              links: 'share_file_link' in tools,
               // As load_skill builds it: a skill kept from an earlier turn reads the same.
               ...(session.remoteMachineId ? { machine: { files: Boolean(machineFiles) } } : {}),
             },

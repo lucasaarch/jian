@@ -1465,3 +1465,33 @@ export const devicePairings = pgTable('device_pairings', {
   expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
   usedAt: timestamp('used_at', { withTimezone: true }),
 });
+
+/**
+ * A file of the agents' workspace reachable by an unguessable link (`file-links/`). Only the
+ * token's SHA-256 is kept, so this table cannot be read back into working links. `path` is the
+ * file's real path relative to the workspace root, and `bytes` and `modified_ms` are the file as
+ * it was shared: a link serves that file and nothing written over it later.
+ */
+export const fileLinks = pgTable(
+  'file_links',
+  {
+    id: uuid('id').primaryKey(),
+    profileId: uuid('profile_id')
+      .notNull()
+      .references(() => profiles.id, { onDelete: 'cascade' }),
+    // The conversation it was made in, for the record; a link outlives a deleted one.
+    sessionId: uuid('session_id').references(() => sessions.id, { onDelete: 'set null' }),
+    tokenHash: text('token_hash').notNull(),
+    path: text('path').notNull(),
+    bytes: bigint('bytes', { mode: 'number' }).notNull(),
+    // Whole milliseconds since the epoch, as `stat` reports the modification time.
+    modifiedMs: bigint('modified_ms', { mode: 'number' }).notNull(),
+    createdAt,
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    revokedAt: timestamp('revoked_at', { withTimezone: true }),
+  },
+  (table) => [
+    uniqueIndex('file_links_token_hash').on(table.tokenHash),
+    index('file_links_profile_expires').on(table.profileId, table.expiresAt),
+  ],
+);

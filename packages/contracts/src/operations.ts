@@ -36,6 +36,7 @@ import {
   devicePushInputSchema,
   deviceSchema,
 } from './devices.js';
+import { fileLinkParamsSchema } from './file-links.js';
 import {
   githubFixConflictsInputSchema,
   githubIssueSchema,
@@ -1776,6 +1777,20 @@ export const operations: Operation[] = [
     access: 'public',
     params: publicArtifactParamsSchema,
     query: publicArtifactExportQuerySchema,
+    response: z.string(),
+    responseContentType: 'application/octet-stream',
+  },
+  {
+    // Public because the token in the path is the proof: only a link an agent made, unexpired and
+    // not revoked, has one. It answers that one file of the agents' workspace as it was when the
+    // link was made, with Range for players and services that seek; HEAD answers its headers.
+    // Anything else, whether unknown, expired, revoked, changed or gone, is the same bare 404. A
+    // desktop app's own gateway makes no links and has no such route.
+    method: 'GET',
+    path: '/v1/file-links/:token/:name',
+    operationId: 'readFileLink',
+    access: 'public',
+    params: fileLinkParamsSchema,
     response: z.string(),
     responseContentType: 'application/octet-stream',
   },

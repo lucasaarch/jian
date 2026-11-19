@@ -50,8 +50,10 @@ export function configureSecurity(
       return;
     }
 
+    // HEAD asks for what GET answers, without its body, so it is open to whoever GET is.
+    const method = request.method === 'HEAD' ? 'GET' : request.method;
     const operation = operations.find(
-      (item) => item.path === request.routeOptions.url && item.method === request.method,
+      (item) => item.path === request.routeOptions.url && item.method === method,
     );
 
     if (operation?.access === 'public' || operation?.access === 'webhook') {
