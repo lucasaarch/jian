@@ -189,36 +189,70 @@ export const gatewaySecrets = pgTable('gateway_secrets', {
 });
 
 /**
- * Secrets the owner keeps for agents' commands, by the environment variable a command reads them
- * as. The value is in `gateway_secrets` under `command:<name>`, never here: a secret is the
- * installation's, as a provider key is, so one key several agents use is typed and replaced once.
- * Which agents may use it is `command_secret_agents`.
+ * Credentials the owner and agents keep for agents' commands, each one or more fields
+ * (`secret_fields`). No value is here: each is in `gateway_secrets` under its field's `vault_key`.
+ * A Secret is the installation's, as a provider key is, so one key several agents use is typed and
+ * replaced once. Which agents may use it is `secret_agents`. The table is `secret_entries` because
+ * `secrets` is the per-agent vault.
  */
-export const commandSecrets = pgTable('command_secrets', {
-  name: text('name').primaryKey(),
+export const secretEntries = pgTable('secret_entries', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  title: text('title').notNull(),
   description: text('description'),
+  /** Origins it may be used on, such as https://app.example.com. */
+  sites: text('sites').array().notNull().default(sql`'{}'`),
+  /** The agent that made it, which alone may change it; null when the owner made it. */
+  createdByProfileId: uuid('created_by_profile_id').references(() => profiles.id, {
+    onDelete: 'set null',
+  }),
   createdAt,
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   lastUsedAt: timestamp('last_used_at', { withTimezone: true }),
 });
 
 /**
- * The agents whose commands may receive a command secret. A deleted agent loses its rows; a
- * secret no agent may use any more goes with it (`CommandSecrets.forgetAgent`).
+ * One environment variable of a Secret. `env_name` is unique across the installation: a command
+ * handed two Secrets would otherwise get only one of two values under one name. `vault_key` is
+ * stored, not derived, because a field carried from a command secret keeps `command:<name>`.
  */
-export const commandSecretAgents = pgTable(
-  'command_secret_agents',
+export const secretFields = pgTable(
+  'secret_fields',
   {
-    name: text('name')
+    secretId: uuid('secret_id')
       .notNull()
-      .references(() => commandSecrets.name, { onDelete: 'cascade' }),
+      .references(() => secretEntries.id, { onDelete: 'cascade' }),
+    position: integer('position').notNull(),
+    label: text('label').notNull(),
+    envName: text('env_name').notNull().unique(),
+    /** Masked in output and never returned; a plain value is shown and may be short. */
+    sensitive: boolean('sensitive').notNull(),
+    vaultKey: text('vault_key').notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.secretId, table.envName] })],
+);
+
+/**
+ * The agents whose commands may receive a Secret, and who let them. A deleted agent loses its
+ * rows; a Secret no agent may use any more goes with it (`Secrets.forgetAgent`).
+ */
+export const secretAgents = pgTable(
+  'secret_agents',
+  {
+    secretId: uuid('secret_id')
+      .notNull()
+      .references(() => secretEntries.id, { onDelete: 'cascade' }),
     profileId: uuid('profile_id')
       .notNull()
       .references(() => profiles.id, { onDelete: 'cascade' }),
+    /** The agent that shared it; null when the owner chose it, or the agent is gone. */
+    grantedByProfileId: uuid('granted_by_profile_id').references(() => profiles.id, {
+      onDelete: 'set null',
+    }),
+    grantedAt: timestamp('granted_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
-    primaryKey({ columns: [table.name, table.profileId] }),
-    index('command_secret_agents_profile').on(table.profileId),
+    primaryKey({ columns: [table.secretId, table.profileId] }),
+    index('secret_agents_profile').on(table.profileId),
   ],
 );
 

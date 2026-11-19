@@ -827,6 +827,13 @@
       "when": 1796000000000,
       "tag": "0117_artifact-password",
       "breakpoints": true
+    },
+    {
+      "idx": 118,
+      "version": "7",
+      "when": 1796100000000,
+      "tag": "0118_secrets",
+      "breakpoints": true
     }
   ]
 }
