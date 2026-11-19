@@ -3,7 +3,7 @@ import { inlineMediaSchema } from './media.js';
 import { channelMessageSchema, reactionDeliverySchema } from './message-actions.js';
 import { protectionModeSchema } from './profile.js';
 import { reasoningEffortSchema } from './providers.js';
-import { secretSchema } from './security.js';
+import { credentialSchema } from './security.js';
 
 /** One channel of each type per profile: the panel connects a type, it does not name a binding. */
 export const channelTypeSchema = z.enum(['whatsapp', 'telegram', 'api', 'email']);
@@ -23,7 +23,7 @@ export const conversationScopeSchema = z.enum(['direct', 'group']);
 /** Resend: an API key with full access, which checks the domain and registers the webhook. */
 export const resendEmailSchema = z.strictObject({
   provider: z.literal('resend'),
-  apiKey: secretSchema,
+  apiKey: credentialSchema,
   address: z.email().max(254),
 });
 
@@ -33,7 +33,7 @@ export const resendEmailSchema = z.strictObject({
  */
 export const cloudflareEmailSchema = z.strictObject({
   provider: z.literal('cloudflare'),
-  apiKey: secretSchema,
+  apiKey: credentialSchema,
   accountId: z
     .string()
     .regex(/^[0-9a-f]{32}$/i, 'A Cloudflare account ID is 32 hexadecimal characters'),
@@ -53,7 +53,7 @@ export const channelInputSchema = z
   .strictObject({
     type: channelTypeSchema,
     // The Telegram bot token. It goes to the vault under `channel:<id>` and is never read back.
-    botToken: secretSchema.optional(),
+    botToken: credentialSchema.optional(),
     email: emailInputSchema.optional(),
   })
   .refine((value) => (value.type === 'telegram') === (value.botToken !== undefined), {

@@ -8073,9 +8073,9 @@
         }
       }
     },
-    "/v1/profiles/{profileId}/command-secrets": {
+    "/v1/profiles/{profileId}/secrets": {
       "get": {
-        "operationId": "listCommandSecrets",
+        "operationId": "listSecrets",
         "security": [
           {
             "bearerAuth": []
@@ -8104,7 +8104,12 @@
                   "items": {
                     "type": "object",
                     "properties": {
-                      "name": {
+                      "id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
+                      "title": {
                         "type": "string"
                       },
                       "description": {
@@ -8113,6 +8118,42 @@
                           "null"
                         ]
                       },
+                      "sites": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "fields": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "label": {
+                              "type": "string"
+                            },
+                            "envName": {
+                              "type": "string"
+                            },
+                            "sensitive": {
+                              "type": "boolean"
+                            },
+                            "value": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "label",
+                            "envName",
+                            "sensitive",
+                            "value"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
                       "profileIds": {
                         "type": "array",
                         "items": {
@@ -8120,6 +8161,46 @@
                           "format": "uuid",
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         }
+                      },
+                      "grants": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "profileId": {
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            },
+                            "grantedByProfileId": {
+                              "type": [
+                                "string",
+                                "null"
+                              ],
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            },
+                            "grantedAt": {
+                              "type": "string",
+                              "format": "date-time",
+                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                            }
+                          },
+                          "required": [
+                            "profileId",
+                            "grantedByProfileId",
+                            "grantedAt"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "createdByProfileId": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                       },
                       "createdAt": {
                         "type": "string",
@@ -8141,9 +8222,14 @@
                       }
                     },
                     "required": [
-                      "name",
+                      "id",
+                      "title",
                       "description",
+                      "sites",
+                      "fields",
                       "profileIds",
+                      "grants",
+                      "createdByProfileId",
                       "createdAt",
                       "updatedAt",
                       "lastUsedAt"
@@ -8247,7 +8333,7 @@
         }
       },
       "post": {
-        "operationId": "createCommandSecret",
+        "operationId": "createSecret",
         "security": [
           {
             "bearerAuth": []
@@ -8273,18 +8359,53 @@
               "schema": {
                 "type": "object",
                 "properties": {
-                  "name": {
+                  "title": {
                     "type": "string",
-                    "pattern": "^[A-Z][A-Z0-9_]{1,63}$"
-                  },
-                  "value": {
-                    "type": "string",
-                    "minLength": 8,
-                    "maxLength": 8192
+                    "minLength": 1,
+                    "maxLength": 80
                   },
                   "description": {
                     "type": "string",
                     "maxLength": 300
+                  },
+                  "sites": {
+                    "maxItems": 20,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "format": "uri"
+                    }
+                  },
+                  "fields": {
+                    "minItems": 1,
+                    "maxItems": 20,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "label": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 60
+                        },
+                        "envName": {
+                          "type": "string",
+                          "pattern": "^[A-Z][A-Z0-9_]{1,63}$"
+                        },
+                        "sensitive": {
+                          "type": "boolean"
+                        },
+                        "value": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "label",
+                        "envName",
+                        "sensitive"
+                      ],
+                      "additionalProperties": false
+                    }
                   },
                   "profileIds": {
                     "maxItems": 100,
@@ -8297,8 +8418,8 @@
                   }
                 },
                 "required": [
-                  "name",
-                  "value"
+                  "title",
+                  "fields"
                 ],
                 "additionalProperties": false
               }
@@ -8313,7 +8434,12 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "name": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "title": {
                       "type": "string"
                     },
                     "description": {
@@ -8322,6 +8448,42 @@
                         "null"
                       ]
                     },
+                    "sites": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "fields": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "label": {
+                            "type": "string"
+                          },
+                          "envName": {
+                            "type": "string"
+                          },
+                          "sensitive": {
+                            "type": "boolean"
+                          },
+                          "value": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "label",
+                          "envName",
+                          "sensitive",
+                          "value"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
                     "profileIds": {
                       "type": "array",
                       "items": {
@@ -8329,6 +8491,46 @@
                         "format": "uuid",
                         "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                       }
+                    },
+                    "grants": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "profileId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "grantedByProfileId": {
+                            "type": [
+                              "string",
+                              "null"
+                            ],
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "grantedAt": {
+                            "type": "string",
+                            "format": "date-time",
+                            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                          }
+                        },
+                        "required": [
+                          "profileId",
+                          "grantedByProfileId",
+                          "grantedAt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "createdByProfileId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
                     "createdAt": {
                       "type": "string",
@@ -8350,9 +8552,14 @@
                     }
                   },
                   "required": [
-                    "name",
+                    "id",
+                    "title",
                     "description",
+                    "sites",
+                    "fields",
                     "profileIds",
+                    "grants",
+                    "createdByProfileId",
                     "createdAt",
                     "updatedAt",
                     "lastUsedAt"
@@ -8455,9 +8662,9 @@
         }
       }
     },
-    "/v1/profiles/{profileId}/command-secrets/{name}": {
+    "/v1/profiles/{profileId}/secrets/{secretId}": {
       "patch": {
-        "operationId": "updateCommandSecret",
+        "operationId": "updateSecret",
         "security": [
           {
             "bearerAuth": []
@@ -8476,12 +8683,13 @@
             }
           },
           {
-            "name": "name",
+            "name": "secretId",
             "in": "path",
             "required": true,
             "schema": {
               "type": "string",
-              "pattern": "^[A-Z][A-Z0-9_]{1,63}$"
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
             }
           }
         ],
@@ -8492,10 +8700,10 @@
               "schema": {
                 "type": "object",
                 "properties": {
-                  "value": {
+                  "title": {
                     "type": "string",
-                    "minLength": 8,
-                    "maxLength": 8192
+                    "minLength": 1,
+                    "maxLength": 80
                   },
                   "description": {
                     "type": [
@@ -8503,6 +8711,45 @@
                       "null"
                     ],
                     "maxLength": 300
+                  },
+                  "sites": {
+                    "maxItems": 20,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "format": "uri"
+                    }
+                  },
+                  "fields": {
+                    "minItems": 1,
+                    "maxItems": 20,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "label": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 60
+                        },
+                        "envName": {
+                          "type": "string",
+                          "pattern": "^[A-Z][A-Z0-9_]{1,63}$"
+                        },
+                        "sensitive": {
+                          "type": "boolean"
+                        },
+                        "value": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "label",
+                        "envName",
+                        "sensitive"
+                      ],
+                      "additionalProperties": false
+                    }
                   },
                   "profileIds": {
                     "minItems": 1,
@@ -8528,7 +8775,12 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "name": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "title": {
                       "type": "string"
                     },
                     "description": {
@@ -8537,6 +8789,42 @@
                         "null"
                       ]
                     },
+                    "sites": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "fields": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "label": {
+                            "type": "string"
+                          },
+                          "envName": {
+                            "type": "string"
+                          },
+                          "sensitive": {
+                            "type": "boolean"
+                          },
+                          "value": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "label",
+                          "envName",
+                          "sensitive",
+                          "value"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
                     "profileIds": {
                       "type": "array",
                       "items": {
@@ -8544,6 +8832,46 @@
                         "format": "uuid",
                         "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                       }
+                    },
+                    "grants": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "profileId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "grantedByProfileId": {
+                            "type": [
+                              "string",
+                              "null"
+                            ],
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "grantedAt": {
+                            "type": "string",
+                            "format": "date-time",
+                            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                          }
+                        },
+                        "required": [
+                          "profileId",
+                          "grantedByProfileId",
+                          "grantedAt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "createdByProfileId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
                     "createdAt": {
                       "type": "string",
@@ -8565,9 +8893,14 @@
                     }
                   },
                   "required": [
-                    "name",
+                    "id",
+                    "title",
                     "description",
+                    "sites",
+                    "fields",
                     "profileIds",
+                    "grants",
+                    "createdByProfileId",
                     "createdAt",
                     "updatedAt",
                     "lastUsedAt"
@@ -8670,7 +9003,7 @@
         }
       },
       "delete": {
-        "operationId": "deleteCommandSecret",
+        "operationId": "deleteSecret",
         "security": [
           {
             "bearerAuth": []
@@ -8689,12 +9022,13 @@
             }
           },
           {
-            "name": "name",
+            "name": "secretId",
             "in": "path",
             "required": true,
             "schema": {
               "type": "string",
-              "pattern": "^[A-Z][A-Z0-9_]{1,63}$"
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
             }
           }
         ],
@@ -8706,12 +9040,14 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "name": {
-                      "type": "string"
+                    "id": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     }
                   },
                   "required": [
-                    "name"
+                    "id"
                   ],
                   "additionalProperties": false
                 }
