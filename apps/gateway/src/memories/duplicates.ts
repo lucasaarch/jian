@@ -14,18 +14,24 @@ const NONE = '(none)';
 /**
  * The memory already kept about the same subject as one about to be written under a new key,
  * or nothing. Two memories on one subject drift apart, and the next recall brings back both,
- * one of them stale. Words find the candidates; a judgement on meaning picks among them.
+ * one of them stale. Words find the candidates; a judgement on meaning picks among them. Only
+ * one of the same kind can hold it: a flash note pointed at a permanent memory would be told to
+ * update one it may not turn flash, and a permanent one pointed at a flash memory would be
+ * folded into what is deleted tomorrow.
  */
 export async function sameSubject(
   judge: Judge,
   memories: { search(profileId: string, query: string, limit?: number): Promise<Memory[]> },
   profileId: string,
-  written: { key: string; content: string },
+  written: { key: string; content: string; flash?: boolean },
 ): Promise<Memory | undefined> {
   const text = `${written.key.replace(/[-_]+/g, ' ')} ${written.content}`;
   const candidates = rankMemories(text, await memories.search(profileId, text, CANDIDATES * 2))
     .map(({ memory }) => memory)
-    .filter((memory) => memory.key !== written.key)
+    .filter(
+      (memory) =>
+        memory.key !== written.key && Boolean(memory.expiresAt) === Boolean(written.flash),
+    )
     .slice(0, CANDIDATES);
 
   if (candidates.length === 0) {

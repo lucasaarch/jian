@@ -149,13 +149,6 @@
     @apply flex w-full items-center gap-3 rounded px-3 py-3 text-xs text-accent hover:bg-accent-soft;
   }
 
-  .memory-links {
-    @apply mt-3 flex flex-wrap gap-1.5;
-  }
-  .memory-links button {
-    @apply inline-flex items-center gap-1 rounded-full border border-line bg-surface px-2.5 py-1 font-mono text-[11px] text-ink transition-colors hover:border-accent hover:text-accent disabled:opacity-60;
-  }
-
   .time-columns {
     @apply flex h-64;
   }
