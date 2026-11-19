@@ -139,18 +139,20 @@ it('asks before deleting, and offers no rename where the name is not the chat’
   expect(view.remove).toHaveBeenCalledOnce();
 });
 
-it('replaces time with working, then unread until the conversation is opened', () => {
+it('tells how it stands before its name, the time staying at the end', () => {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
   const host = document.createElement('ul');
   document.body.append(host);
   const root = createRoot(host);
-  const row = (working: boolean, unread: boolean, selected = false) => (
+  const row = (working: boolean, unread: boolean, selected = false, waiting = false) => (
     <ChatRow
       name="Release notes"
+      icon={<i data-icon />}
       at="2026-10-31T08:00:00Z"
       selected={selected}
       working={working}
       unread={unread}
+      waiting={waiting}
       open={() => {}}
       remove={async () => true}
     />
@@ -158,17 +160,26 @@ it('replaces time with working, then unread until the conversation is opened', (
   try {
     act(() => root.render(row(true, false)));
     expect(host.querySelector('[role="status"][aria-label="Working"] svg')).not.toBeNull();
-    expect(host.querySelector('time')).toBeNull();
+    // It takes the place of the row's own mark, and never the time's.
+    expect(host.querySelector('[data-icon]')).toBeNull();
+    expect(host.querySelector('time')).not.toBeNull();
     act(() => root.render(row(true, true)));
     expect(host.querySelector('[aria-label="Working"]')).not.toBeNull();
     expect(host.querySelector('[aria-label="Unread"]')).toBeNull();
     act(() => root.render(row(false, true)));
     expect(host.querySelector('[aria-label="Working"]')).toBeNull();
     expect(host.querySelector('[aria-label="Unread"]')).not.toBeNull();
-    expect(host.querySelector('time')).toBeNull();
-    act(() => root.render(row(false, false, true)));
-    expect(host.querySelector('[aria-label="Unread"]')).toBeNull();
     expect(host.querySelector('time')).not.toBeNull();
+    // Seen: nothing is left to tell, and the row's own mark is back.
+    act(() => root.render(row(false, true, true)));
+    expect(host.querySelector('[aria-label="Unread"]')).toBeNull();
+    expect(host.querySelector('[data-icon]')).not.toBeNull();
+    // Waiting on the owner outlasts being seen, and comes before work going on beside it.
+    act(() => root.render(row(true, false, true, true)));
+    expect(host.querySelector('[aria-label="Waiting for you"]')?.className).toContain('bg-warn');
+    expect(host.querySelector('[aria-label="Working"]')).toBeNull();
+    act(() => root.render(row(false, false, true)));
+    expect(host.querySelector('[aria-label="Waiting for you"]')).toBeNull();
   } finally {
     act(() => root.unmount());
     host.remove();

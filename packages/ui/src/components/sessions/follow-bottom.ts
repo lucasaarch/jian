@@ -75,6 +75,10 @@ export function useFollowBottom() {
       if (rewrapped) holding.current = false;
       if (following.current) {
         element.scrollTop = element.scrollHeight;
+        // Where the history itself left the view. Shorter content pulls the view up with it,
+        // and the scroll heard for that must not read as the reader going up. Not during a
+        // glide, whose own scrolls are told from the reader's by where the last one was heard.
+        if (!gliding.current) lastTop.current = element.scrollTop;
         return;
       }
       // Only a change of width moves what is above the reader; new messages land below.
@@ -136,7 +140,11 @@ export function useFollowBottom() {
         gliding.current = false;
         clearTimeout(glide.current);
       }
-      following.current = near;
+      // Only the reader going up leaves the end. A scroll is heard a frame after it happened,
+      // and what arrived meanwhile (a chat's tools land after its messages, a card or an image
+      // takes its size) leaves the view far from an end nobody left. Taken for the reader's
+      // doing, that stopped the history following just as the content came in.
+      following.current = near || (following.current && !up);
       const top = topmost();
       anchor.current = top ? place(top) : undefined;
     },

@@ -27,8 +27,8 @@ export type ChatRowProps = {
   /** Where it takes place: the app's own chat, or a channel's mark. A project's own chats leave
    * it out: their folder already says what they are. */
   icon?: ReactNode;
-  /** Under a folder: its name lines up with the folder's, and where the folder's mark is, a dot
-   * says how it stands while it is open or the pointer is on it. */
+  /** Under a folder: its name lines up with the folder's, and the place of the folder's mark
+   * stays empty until the chat has something to tell. */
   nested?: boolean;
   /** When it was last spoken in, as an ISO date. */
   at: string;
@@ -36,6 +36,8 @@ export type ChatRowProps = {
   unread: boolean;
   /** The agent is at work in it. */
   working: boolean;
+  /** The agent stopped for the owner here: an approval to give, a question to answer. */
+  waiting?: boolean;
   /** Worked on somewhere other than this computer. */
   remote?: boolean;
   open: () => void;
@@ -50,13 +52,14 @@ export type ChatRowProps = {
 };
 
 /**
- * A conversation in the sidebar: its name, and at the end what it is doing, whether it is unread
- * or how long ago it was spoken in. Its actions open with a right click, or the keyboard's menu
- * key, which the system sends as the same.
+ * A conversation in the sidebar: before its name how it stands, when there is something to
+ * tell, and at the end how long ago it was spoken in. Its actions open with a right click, or
+ * the keyboard's menu key, which the system sends as the same.
  */
 export function ChatRow(props: ChatRowProps) {
   const [renaming, setRenaming] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const standing = standingOf(props);
 
   const actions = (
     <>
@@ -97,22 +100,22 @@ export function ChatRow(props: ChatRowProps) {
                 className="grid size-4 shrink-0 place-items-center text-muted"
                 aria-hidden="true"
               >
-                {props.icon}
+                {!standing && props.icon}
               </span>
             )}
             <span className="min-w-0 flex-1 truncate">{props.name}</span>
           </button>
-          {props.nested && (
-            <span
-              aria-hidden="true"
-              className={`pointer-events-none absolute top-1/2 left-3.75 size-1.5 -translate-y-1/2 rounded-full transition-opacity ${props.selected ? '' : 'opacity-0 group-hover/row:opacity-100'} ${dot(props)}`}
-            />
+          {/* Where the row's icon is, or a folder's mark above a nested row: the same box. */}
+          {standing && (
+            <span className="pointer-events-none absolute top-1/2 left-2.5 grid size-4 -translate-y-1/2 place-items-center">
+              <Standing is={standing} />
+            </span>
           )}
           <span className="pointer-events-none absolute inset-y-0 right-2.5 flex items-center text-[11px] text-muted tabular-nums">
             {props.remote && (
               <Cloud size={13} className="mr-1.5 text-muted" role="img" aria-label="Remote" />
             )}
-            <Status {...props} />
+            <time dateTime={props.at}>{ago(props.at)}</time>
           </span>
         </ContextMenu.Trigger>
         <ContextMenu.Portal>
@@ -176,25 +179,33 @@ export function DeleteChatDialog({
   );
 }
 
-/** At work, unread, or how long ago: the one that says the most. */
-/** How a chat stands, as the colour of its dot: the end of the row says the same in words. */
-function dot({ unread, working, selected }: ChatRowProps): string {
-  if (working) return 'bg-good';
-  return unread && !selected ? 'bg-accent' : 'bg-muted';
+type Standing = 'waiting' | 'working' | 'unread';
+
+/**
+ * What a chat has to tell, the most pressing first. Waiting on the owner comes before work
+ * still going on beside it, as it goes no further without them, and holds whether the chat is
+ * open or read: only the answer ends it. An unread answer is told until the chat is opened.
+ */
+function standingOf({ waiting, working, unread, selected }: ChatRowProps): Standing | undefined {
+  if (waiting) return 'waiting';
+  if (working) return 'working';
+  return unread && !selected ? 'unread' : undefined;
 }
 
-function Status({ at, unread, working, selected }: ChatRowProps) {
-  if (working) {
+/** At work, it turns; otherwise a dot whose colour says which news it is. */
+function Standing({ is }: { is: Standing }) {
+  if (is === 'working') {
     return (
       <span role="status" aria-label="Working" className="grid size-4 place-items-center">
-        <Spinner size={13} />
+        <Spinner size={14} />
       </span>
     );
   }
-  if (unread && !selected) {
-    return <span role="img" aria-label="Unread" className="size-2 rounded-full bg-accent" />;
-  }
-  return <time dateTime={at}>{ago(at)}</time>;
+  return is === 'waiting' ? (
+    <span role="img" aria-label="Waiting for you" className="size-1.5 rounded-full bg-warn" />
+  ) : (
+    <span role="img" aria-label="Unread" className="size-1.5 rounded-full bg-accent" />
+  );
 }
 
 /**

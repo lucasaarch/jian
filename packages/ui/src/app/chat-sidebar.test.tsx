@@ -183,7 +183,16 @@ it('shows worker activity on the principal conversation instead of its hidden ta
     item.textContent?.includes('Release notes'),
   );
   expect(row?.querySelector('[aria-label="Working"]')).not.toBeNull();
-  expect(row?.querySelector('time')).toBeNull();
+  expect(row?.querySelector('time')).not.toBeNull();
+});
+
+it('marks the conversation whose turn waits for the owner', async () => {
+  const view = await render([{ id: 'run', sessionId: 's-1', status: 'waiting' }] as Run[]);
+  const row = [...view.host.querySelectorAll('li')].find((item) =>
+    item.textContent?.includes('Release notes'),
+  );
+  expect(row?.querySelector('[aria-label="Waiting for you"]')).not.toBeNull();
+  expect(row?.querySelector('[aria-label="Working"]')).toBeNull();
 });
 
 const edge = () => document.querySelector<HTMLElement>('[aria-label="Resize sidebar"]');
