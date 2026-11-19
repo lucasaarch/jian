@@ -4,6 +4,19 @@ Every release of Jian, newest first.
 
 <!-- Generated from docs/releases by scripts/changelog.mjs. Edit the release note, then run `make changelog`. -->
 
+## 1.12.2 — 2026-11-19
+
+The desktop app no longer quits when it opens an Artifact from a server gateway.
+
+### Desktop app
+
+* **Artifacts open again:** On a server gateway, opening any Artifact in the desktop app (a page, a deck, a document) made the whole app quit. The gateway sent a header, `Origin-Agent-Cluster`, that the app's Electron cannot handle in the sandboxed frame an Artifact opens in. The gateway and the web panel no longer send it there, and the app ignores it from any gateway.
+
+### Upgrading
+
+* The desktop app updates itself to this release. Remote workers update themselves as well.
+* **Servers:** Recreate the gateway and web containers with the 1.12.2 images, or follow the `latest` tags. This release has no migration. Once the server is updated, desktop apps still on 1.12.0 or 1.12.1 open Artifacts too.
+
 ## 1.12.1 — 2026-11-19
 
 AWS accounts move to AWS's own MCP server, and Reactive Resume connects.

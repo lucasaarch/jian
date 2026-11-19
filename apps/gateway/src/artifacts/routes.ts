@@ -202,7 +202,10 @@ export function registerArtifactRoutes(
     const { type } = artifactFrameParamsSchema.parse(request.params);
     const { edit, present, theme } = artifactFrameQuerySchema.parse(request.query);
 
+    // Helmet's Origin-Agent-Cluster is left off: Electron 45 dies on a CHECK when a sandboxed frame
+    // it loads through its own scheme commits with it, and the desktop app loads this one so.
     return html(reply, "'self'")
+      .removeHeader('Origin-Agent-Cluster')
       .header('Cache-Control', 'public, max-age=3600')
       .send(artifactFrame(type, edit === '1', present === '1', theme));
   });

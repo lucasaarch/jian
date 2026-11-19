@@ -2,10 +2,9 @@ import { fileURLToPath } from 'node:url';
 
 // What helmet used to put on every page the gateway served. The policy that names scripts is
 // per request and lives in proxy.ts; these never change.
-const SECURITY_HEADERS = [
+export const SECURITY_HEADERS = [
   { key: 'Cross-Origin-Opener-Policy', value: 'same-origin' },
   { key: 'Cross-Origin-Resource-Policy', value: 'same-origin' },
-  { key: 'Origin-Agent-Cluster', value: '?1' },
   { key: 'Referrer-Policy', value: 'no-referrer' },
   { key: 'Strict-Transport-Security', value: 'max-age=15552000; includeSubDomains' },
   { key: 'X-Content-Type-Options', value: 'nosniff' },
@@ -17,6 +16,16 @@ const SECURITY_HEADERS = [
     value: 'noindex, nofollow, noarchive, nosnippet, noimageindex, notranslate',
   },
 ];
+
+/**
+ * Every address but an Artifact's frame. The frame is a sandboxed document with an opaque origin,
+ * and Electron 45 dies on a CHECK when a sandboxed frame it loads through its own scheme commits
+ * with this header: the desktop app crashed the moment an Artifact opened.
+ */
+export const ORIGIN_AGENT_CLUSTER = {
+  source: '/:path((?!v1/artifact-frames/).*)',
+  headers: [{ key: 'Origin-Agent-Cluster', value: '?1' }],
+};
 
 /**
  * Addresses of screens that moved, so a bookmark or an old notification lands where the screen
@@ -58,7 +67,7 @@ export default function configuration() {
     // advisory. It upgrades nothing by itself.
     experimental: { agentUpgrade: 'security' },
     async headers() {
-      return [{ source: '/:path*', headers: SECURITY_HEADERS }];
+      return [{ source: '/:path*', headers: SECURITY_HEADERS }, ORIGIN_AGENT_CLUSTER];
     },
     async redirects() {
       return MOVED.map(([source, destination]) => ({ source, destination, permanent: false }));
