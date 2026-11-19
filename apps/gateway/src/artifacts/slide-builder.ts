@@ -289,6 +289,24 @@ const buildSlide = (api) => {
     });
   }, true);
 
+  // The words that ask to be replaced are selected a moment after the click (above); a key that
+  // comes first would be typed after them. So the first key that writes in one selects them on
+  // the spot, and what is typed takes their place however fast it follows the click.
+  addEventListener('keydown', (event) => {
+    const writes = (event.key.length === 1 && !event.metaKey && !event.ctrlKey) ||
+      event.key === 'Backspace' || event.key === 'Delete' || event.key === 'Enter';
+    if (!writes) return;
+    const selection = getSelection();
+    const at = selection.rangeCount ? elementOf(selection.anchorNode) : null;
+    const placeholder = at && at.closest('[data-jian-placeholder]');
+    const active = api.active();
+    if (!placeholder || !active || !active.contains(placeholder)) return;
+    const range = document.createRange();
+    range.selectNodeContents(placeholder);
+    selection.removeAllRanges();
+    selection.addRange(range);
+  }, true);
+
   addEventListener('input', (event) => {
     const at = elementOf(getSelection().anchorNode) || elementOf(event.target);
     const placeholder = at && at.closest('[data-jian-placeholder]');
