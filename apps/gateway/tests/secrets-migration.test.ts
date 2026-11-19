@@ -62,4 +62,5 @@ it('carries every command secret across with its value, variable and agents', as
     ASSEMBLYAI_API_KEY: VALUE,
   });
   await expect(db.execute(sql`SELECT 1 FROM command_secrets`)).rejects.toThrow();
+  await expect(db.execute(sql`SELECT 1 FROM command_secret_agents`)).rejects.toThrow();
 });
