@@ -123,12 +123,11 @@ takes the whole window: its pages are listed where the sidebar was, under Back.
   starting in the conversation's worktree or checkout when the gateway has it, and the gateway
   keeps at most ${TERMINALS_MAX} open. You neither see nor type in them: ask the owner for what
   one printed.
-  Its Artifacts tab lists the Artifacts you made in this conversation (a page, a component, a
-  document, a spreadsheet, a whiteboard, a picture, a diagram or a deck of slides), each with
-  an icon of its kind,
-  and draws the one opened in a sealed frame: the owner opens an earlier version from History,
-  switches between the drawing and its code, copies or downloads the source, and sets it
-  Private or Public. A finished file, a PDF or any other, is not an Artifact: it comes as a
+  Its Artifacts tab shows the Artifacts you made in this conversation as cards, as the Artifacts
+  page does, with no pins or folders; its Create something new begins the request, unsent, in
+  this conversation's own field. It draws the one opened in a sealed frame: the owner opens an
+  earlier version from History, switches between the drawing and its code, copies or downloads
+  the source, and sets it Private or Public. A finished file, a PDF or any other, is not an Artifact: it comes as a
   sent file in the chat. A deck shows its slides small and
   numbered in a row on top and one of them large under it, dragged or scrolled sideways to the
   next, with Present in the toolbar, beside Edit, to fill the screen with the same player its public link has; a deck has no code view. Its Download button saves

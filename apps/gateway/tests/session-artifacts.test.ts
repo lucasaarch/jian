@@ -504,6 +504,22 @@ describe('the frame the panel draws one in', () => {
     ).toBe(400);
   });
 
+  it("paints a slide's white inside the deck's frames, and no other frame's", async () => {
+    const { app } = await setup();
+    // The shell's own page, without the one it holds.
+    const shell = async (url: string) =>
+      (await app.inject({ url })).body.replace(/srcdoc="[^"]*"/, '');
+    // Once the slide's frame has loaded (artifact-frames.test.ts sees it in a browser).
+    const sheet = 'html.drawn { background: #fff; }';
+
+    // The panel rounds a slide's corners and paints nothing under its frame (deck/slide-frame.tsx).
+    expect(await shell('/v1/artifact-frames/deck')).toContain(sheet);
+    expect(await shell('/v1/artifact-frames/deck?edit=1')).toContain(sheet);
+    expect(await shell('/v1/artifact-frames/deck?present=1')).not.toContain(sheet);
+    expect(await shell('/v1/artifact-frames/html')).not.toContain(sheet);
+    expect(await shell('/v1/artifact-frames/markdown?edit=1')).not.toContain(sheet);
+  });
+
   it('serves a deck its player, already presenting, and relays only the end back', async () => {
     const { app } = await setup();
     const frame = await app.inject({ url: '/v1/artifact-frames/deck?present=1' });

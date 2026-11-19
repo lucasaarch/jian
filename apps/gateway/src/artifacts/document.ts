@@ -243,12 +243,19 @@ ${editing ? '' : body}
  *
  * `fullscreen` lets the frame take the whole screen when its reader asks for it. It changes
  * nothing of where the frame can go or what it can reach, and a frame inside it is not given it.
+ *
+ * `sheet` paints the white a slide is drawn on, here, inside the frame the panel holds. The panel
+ * rounds that frame's corners, and a white it painted under the frame itself was cut by the
+ * corner apart from the slide: it showed past a dark slide as a pale arc. It is painted only once
+ * the slide's frame has loaded (`drawn`): before that the frame is clear, so what the panel had
+ * there stays, and a dark slide does not open on a flash of white.
  */
 function shell(
   title: string,
   inner: string | null,
   hears: 'nothing' | 'once' | 'always' | 'present',
   fullscreen = false,
+  sheet = false,
 ): string {
   const out = hears === 'present' ? ARTIFACT_PRESENT_MESSAGE : ARTIFACT_EDIT_MESSAGE;
   const held =
@@ -310,7 +317,7 @@ function shell(
 <title>${escaped(title)}</title>
 <style>:root { color-scheme: light dark; }
 html, body, iframe { margin: 0; width: 100%; height: 100%; border: 0; display: block; }
-html, body { background: transparent; }</style>
+html, body { background: transparent; }${sheet ? '\nhtml.drawn { background: #fff; }' : ''}</style>
 </head>
 <body>${held}
 <script>
@@ -320,6 +327,7 @@ html, body { background: transparent; }</style>
     frame.addEventListener('load', () => {
       if (loaded) return frame.remove();
       loaded = true;
+      document.documentElement.classList.add('drawn');
       ready();
     });
   };${inner === null ? made : relayed}
@@ -351,8 +359,8 @@ export function artifactFrame(type: SessionArtifactType, editing = false, presen
     frame = present
       ? shell('Artifact', page(type, undefined, false, true), 'present')
       : editing
-        ? shell('Artifact', page(type, undefined, true), 'always')
-        : shell('Artifact', DRAW[type].whole ? null : page(type), 'once');
+        ? shell('Artifact', page(type, undefined, true), 'always', false, type === 'deck')
+        : shell('Artifact', DRAW[type].whole ? null : page(type), 'once', false, type === 'deck');
     frames.set(key, frame);
   }
 

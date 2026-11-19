@@ -6,13 +6,17 @@ import type { ArtifactFolder, ProfileArtifact } from '../../lib/api';
 import { ArtifactCard, type CardActions } from './artifact-card';
 
 /**
- * As many columns as fit cards no narrower than 14rem, counted from the room the grid itself is
- * given, never from the window's: it stays right beside an open sidebar and on a phone alike. A
- * lone card keeps a card's width.
+ * As many columns as fit cards no narrower than a minimum, counted from the room the grid itself
+ * is given, never from the window's: it stays right beside an open sidebar and on a phone alike.
+ * A lone card keeps a card's width. The page's cards are at least 14rem; the Inspector's, in a
+ * column that is often under 30rem, at least 11rem, so two still sit side by side there.
  */
-const columns = 'grid grid-cols-[repeat(auto-fill,minmax(14rem,1fr))] gap-4 phone:gap-3';
+export const CARD_COLUMNS = {
+  page: 'grid grid-cols-[repeat(auto-fill,minmax(14rem,1fr))] gap-4 phone:gap-3',
+  inspector: 'grid grid-cols-[repeat(auto-fill,minmax(11rem,1fr))] gap-3',
+} as const;
 
-/** Some of the agent's Artifacts as cards, in the order given. */
+/** Some of the agent's Artifacts as the page's cards, in the order given. */
 export function ArtifactsGrid({
   label,
   api,
@@ -33,16 +37,29 @@ export function ArtifactsGrid({
   on: CardActions;
 }) {
   return (
-    <ul aria-label={label} className={`min-w-0 ${columns}`}>
+    <ul aria-label={label} className={`min-w-0 ${CARD_COLUMNS.page}`}>
       {artifacts.map((artifact) => (
         <ArtifactCard
           key={artifact.id}
           api={api}
           profileId={profileId}
           artifact={artifact}
-          folders={folders}
-          home={home(artifact)}
-          on={on}
+          onOpen={() => on.open(artifact)}
+          tools={{
+            rename: () => on.rename(artifact),
+            duplicate: () => on.duplicate(artifact),
+            delete: () => on.delete(artifact),
+            keeping: {
+              pinned: artifact.pinned,
+              pin: () => on.pin(artifact),
+              go: () => on.go(artifact),
+              folderId: artifact.folderId,
+              folders,
+              home: home(artifact),
+              move: (folderId) => on.move(artifact, folderId),
+              moveToNew: () => on.moveToNew(artifact),
+            },
+          }}
         />
       ))}
     </ul>
@@ -50,7 +67,13 @@ export function ArtifactsGrid({
 }
 
 /** The grid's shape while it is read: cards of the same size, so nothing moves when it lands. */
-export function ArtifactsGridSkeleton({ count = 6 }: { count?: number }) {
+export function ArtifactsGridSkeleton({
+  count = 6,
+  columns = CARD_COLUMNS.page,
+}: {
+  count?: number;
+  columns?: string;
+}) {
   return (
     <div className={columns}>
       {Array.from({ length: count }, (_, card) => card).map((card) => (

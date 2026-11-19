@@ -12,7 +12,9 @@ import { ARTIFACT_PRESENT_MESSAGE, SLIDE_HEIGHT, SLIDE_WIDTH } from '@jian/contr
  *   frame with no leave to), fills the window instead. The keys and a click step through it;
  *   Escape ends it, as does leaving the whole screen the browser's own way.
  * - A slide comes in over the one before it, once it has loaded, so there is no flash of an empty
- *   sheet. Whoever asked for less motion gets the next slide at once.
+ *   sheet. The first one waits for its load as well, and the white it is drawn on is its own,
+ *   not the sheet's: a dark slide, presented, opens from black instead of a flash of white.
+ *   Whoever asked for less motion gets the next slide at once.
  *
  * `embedded` is the same player inside the panel's own presentation: already presenting, filling
  * the frame the panel made fullscreen, and saying `end` to it (and only that) when the reader
@@ -30,9 +32,10 @@ export const PLAYER_STYLE = `
 body.deck #root { position: relative; display: grid; grid-template-rows: minmax(0, 1fr) auto;
   height: 100vh; }
 #stage { position: relative; display: grid; place-items: center; min-height: 0; overflow: hidden; }
-#sheet { position: relative; overflow: hidden; background: #fff;
+#sheet { position: relative; overflow: hidden;
   box-shadow: 0 0 0 1px color-mix(in srgb, CanvasText 15%, transparent); }
-#sheet .slide { position: absolute; inset: 0; opacity: 0; transform: translateX(var(--from, 0));
+#sheet .slide { position: absolute; inset: 0; background: #fff; opacity: 0;
+  transform: translateX(var(--from, 0));
   transition: opacity ${ENTER_MS}ms ease, transform ${ENTER_MS}ms ease; }
 #sheet .slide.in { opacity: 1; transform: none; }
 #sheet iframe { position: absolute; top: 0; left: 0; width: ${SLIDE_WIDTH}px;
@@ -100,9 +103,8 @@ const go = (to) => {
   const slide = make('div', '');
   const frame = document.createElement('iframe');
   slide.className = 'slide';
-  // The first one is simply there; the others come in from the side they are on.
-  if (at < 0) slide.classList.add('in');
-  else slide.style.setProperty('--from', target > at ? '24px' : '-24px');
+  // The first one fades in where it is; the others come in from the side they are on.
+  if (at >= 0) slide.style.setProperty('--from', target > at ? '24px' : '-24px');
   at = target;
   frame.setAttribute('sandbox', 'allow-scripts');
   frame.title = 'Slide ' + (at + 1);

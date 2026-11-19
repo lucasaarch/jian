@@ -7,11 +7,12 @@ import type { SessionArtifact } from '../../../lib/api';
 import { publish } from '../../../lib/events';
 import { keys } from '../../../lib/query/keys';
 import { useCrew } from '../../../lib/stores/crew';
+import { draftKey, useDrafts } from '../../../lib/stores/drafts';
 import { focusInspector } from '../inspector-host';
+import type { ArtifactsDrawerApi } from './artifact-cards';
 import { ArtifactsDrawer } from './artifacts-drawer';
 import { collectEdit, editAnswer } from './edit';
 import { fileName } from './source';
-import type { ArtifactsApi } from './use-artifacts';
 
 const SOURCE = 'export default () => <button>Count</button>;';
 const COMPILED = "exports.default = () => React.createElement('button', null, 'Count');";
@@ -116,7 +117,40 @@ function gateway(artifacts: SessionArtifact[] = [counter, notes, page, deck]) {
         return next;
       },
     ),
-  } satisfies ArtifactsApi & { held: SessionArtifact[] };
+    updateSessionArtifact: vi.fn(
+      async (
+        _profile: string,
+        _session: string,
+        artifactId: string,
+        change: { title?: string; pinned?: boolean; folderId?: string | null },
+      ) => {
+        const index = held.findIndex((item) => item.id === artifactId);
+        const next: SessionArtifact = { ...(held[index] as SessionArtifact), ...change };
+        held[index] = next;
+        return next;
+      },
+    ),
+    duplicateSessionArtifact: vi.fn(async (_profile: string, _session: string, id: string) => {
+      const copy: SessionArtifact = {
+        ...(held.find((item) => item.id === id) as SessionArtifact),
+        id: '55555555-5555-4555-8555-555555555555',
+        version: 1,
+      };
+      held.unshift(copy);
+      return copy;
+    }),
+    deleteSessionArtifact: vi.fn(async (_profile: string, _session: string, artifactId: string) => {
+      held.splice(
+        held.findIndex((item) => item.id === artifactId),
+        1,
+      );
+      return null;
+    }),
+    // The Inspector's cards make no folder; the page's do.
+    createArtifactFolder: vi.fn(),
+    renameArtifactFolder: vi.fn(),
+    deleteArtifactFolder: vi.fn(),
+  } satisfies ArtifactsDrawerApi & { held: SessionArtifact[] };
 }
 
 let container: HTMLDivElement;
@@ -137,6 +171,7 @@ afterEach(async () => {
   // Emptied before it is left: a conversation left with tabs gets them back when shown again.
   useCrew.setState({ tabs: [], opened: false, following: undefined });
   useCrew.getState().leave('session');
+  useDrafts.getState().forgetAll();
 });
 
 async function settled(done: () => boolean, limit = 100) {
@@ -145,7 +180,7 @@ async function settled(done: () => boolean, limit = 100) {
   }
 }
 
-async function render(api: ArtifactsApi, mode: 'server' | 'local' = 'server') {
+async function render(api: ArtifactsDrawerApi, mode: 'server' | 'local' = 'server') {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   // What kind of gateway this is, as its health answer said.
   client.setQueryData(keys.gateway, { status: 'ok', mode });
@@ -189,38 +224,131 @@ const viewed = (api: ReturnType<typeof gateway>) =>
 /** The older version in view, as the bar names it beside the title; none for the latest. */
 const older = () => drawer()?.querySelector('h2')?.nextElementSibling?.textContent || undefined;
 
+/** The names on the tab's cards, in order. */
+const cards = () =>
+  [
+    ...(drawer()?.querySelectorAll(
+      'ul[aria-label="Artifacts"] > li > button[aria-label^="Open "]',
+    ) ?? []),
+  ].map((card) => card.getAttribute('aria-label')?.replace(/^Open /, ''));
+/** One of Create something new's shortcuts, by the kind it makes. */
+const starter = (kind: string) =>
+  [...(drawer()?.querySelectorAll('section[aria-label="Create something new"] button') ?? [])].find(
+    (item) => item.textContent === kind,
+  );
+const entries = () => [...document.querySelectorAll<HTMLElement>('[role=menuitem]')];
+
+/** The tab of the conversation's cards, read. */
+async function listed(api = gateway()) {
+  await act(async () => useCrew.getState().showArtifacts());
+  await render(api);
+  await settled(() => cards().length > 0);
+  return api;
+}
+
+async function search(words: string) {
+  const field = drawer()?.querySelector('input[aria-label="Search artifacts"]') as HTMLInputElement;
+  const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+  await act(async () => {
+    set?.call(field, words);
+    field.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+}
+
 describe('the Artifacts tab', () => {
-  it('lists what the agent made, and opens one', async () => {
-    const api = gateway();
-    await act(async () => useCrew.getState().showArtifacts());
-    await render(api);
-    await settled(() => Boolean(drawer()?.querySelector('li')));
+  it('shows what the agent made as the Artifacts page’s cards, and opens one', async () => {
+    const api = await listed();
 
-    expect([...(drawer()?.querySelectorAll('li') ?? [])].map((row) => row.textContent)).toEqual([
-      'CounterReact component · Version 1',
-      'Launch notesDocument · Version 3',
-      'LandingWeb page · Version 2',
-      'PlanDeck · Version 1',
-    ]);
-    expect(frame()).toBeNull();
+    expect(cards()).toEqual(['Counter', 'Launch notes', 'Landing', 'Plan']);
+    expect(button('All artifacts')).toBeUndefined();
 
-    await click(drawer()?.querySelectorAll('li button')[1]);
-    await settled(() => Boolean(frame()));
+    await click(button('Open Launch notes'));
+    await settled(() => Boolean(button('All artifacts')));
 
     expect(drawer()?.querySelector('h2')?.textContent).toBe('Launch notes');
     expect(viewed(api)).toBe(3);
 
     await click(button('All artifacts'));
-    expect(frame()).toBeNull();
-    expect(drawer()?.querySelectorAll('li')).toHaveLength(4);
+    expect(button('All artifacts')).toBeUndefined();
+    expect(cards()).toHaveLength(4);
   });
 
-  it('says so when the conversation has none', async () => {
+  it('narrows the cards from its bar, by words of the title and by type', async () => {
+    await listed();
+
+    await search('LAUNCH');
+    expect(cards()).toEqual(['Launch notes']);
+    // Narrowed, the shortcuts make way for what was found, as on the page.
+    expect(starter('Deck')).toBeUndefined();
+
+    await search('nothing like it');
+    expect(cards()).toEqual([]);
+    expect(drawer()?.textContent).toContain('No Artifact matches.');
+
+    await search('');
+    await click(button('Type'));
+    await settled(() => document.querySelectorAll('[role="option"]').length > 0);
+    await click(
+      [...document.querySelectorAll('[role="option"]')].find((item) =>
+        item.textContent?.includes('Web page'),
+      ),
+    );
+    expect(cards()).toEqual(['Landing']);
+  });
+
+  it('begins a request in this conversation’s own field, after what is written there', async () => {
+    const field = draftKey('profile', 'session');
+    useDrafts.getState().write(field, 'Hello ');
+    const api = await listed();
+
+    await click(starter('Deck'));
+
+    expect(useDrafts.getState().texts[field]).toBe(
+      'Hello\n\nCreate a deck of slides as an Artifact about ',
+    );
+    // Nothing was made: the owner finishes the request and sends it.
+    expect(api.duplicateSessionArtifact).not.toHaveBeenCalled();
+    expect(api.editSessionArtifact).not.toHaveBeenCalled();
+  });
+
+  it('renames, duplicates and deletes from a card’s menu, deleting only after asking', async () => {
+    const api = await listed();
+    const pick = async (artifact: SessionArtifact, name: string) => {
+      await settled(() => entries().length === 0);
+      await click(button(`Actions for ${artifact.title}`));
+      await settled(() => entries().length > 0);
+      const names = entries().map((item) => item.textContent);
+      await click(entries().find((item) => item.textContent === name));
+      return names;
+    };
+
+    // Pins and folders are the page's, across every conversation; it is in this one already.
+    expect(await pick(page, 'Duplicate')).toEqual(['Rename', 'Duplicate', 'Delete']);
+    await settled(() => cards().length === 5);
+    expect(api.duplicateSessionArtifact).toHaveBeenCalledWith('profile', 'session', page.id);
+
+    await pick(notes, 'Delete');
+    const dialog = () => document.querySelector('[role=dialog]') as HTMLElement;
+    await settled(() => Boolean(dialog()));
+    expect(dialog().textContent).toContain('Delete Launch notes?');
+    expect(api.deleteSessionArtifact).not.toHaveBeenCalled();
+
+    await click(
+      [...dialog().querySelectorAll('button')].find(
+        (item) => item.textContent === 'Delete Artifact',
+      ),
+    );
+    await settled(() => !cards().includes('Launch notes'));
+    expect(api.deleteSessionArtifact).toHaveBeenCalledWith('profile', 'session', notes.id);
+  });
+
+  it('says so when the conversation has none, and still offers to make one', async () => {
     await act(async () => useCrew.getState().showArtifacts());
     await render(gateway([]));
     await settled(() => !drawer()?.querySelector('[role=status]'));
 
     expect(drawer()?.textContent).toContain('Nothing here yet');
+    expect(starter('Deck')).toBeDefined();
   });
 
   it('draws nothing while another tab is in front', async () => {

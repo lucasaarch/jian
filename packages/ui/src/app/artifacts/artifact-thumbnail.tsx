@@ -7,12 +7,12 @@ import {
   type ArtifactsApi,
   useArtifactVersion,
 } from '../../components/sessions/artifacts/use-artifacts';
-import type { ProfileArtifact } from '../../lib/api';
+import type { SessionArtifact } from '../../lib/api';
 
 /** How far past the screen's edge a card starts to read its picture, so it is there on arrival. */
 const AHEAD = '200px';
 
-type Shown = { api: ArtifactsApi; profileId: string; artifact: ProfileArtifact };
+type Shown = { api: ArtifactsApi; profileId: string; artifact: SessionArtifact };
 
 /**
  * Whether the box has come near the screen, once and for good: what a card reads for its
@@ -41,7 +41,7 @@ function useSeen() {
 }
 
 /** What stands for one with no picture of its own: its kind's icon on its kind's tint. */
-function KindPicture({ artifact }: { artifact: ProfileArtifact }) {
+function KindPicture({ artifact }: { artifact: SessionArtifact }) {
   return (
     <div
       data-thumbnail="kind"

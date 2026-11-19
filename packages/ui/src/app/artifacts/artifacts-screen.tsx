@@ -3,7 +3,7 @@
 import { FolderPlus } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArtifactView } from '../../components/sessions/artifacts/artifact-view';
-import { TYPE_NAME } from '../../components/sessions/artifacts/source';
+import { TYPE_FILTERS } from '../../components/sessions/artifacts/source';
 import {
   Action,
   FilterSelect,
@@ -41,12 +41,6 @@ import {
 /** How long typing rests before the search goes to the gateway, in milliseconds. */
 const SEARCH_PAUSE = 300;
 
-const ALL_TYPES = '';
-const TYPES = [
-  { value: ALL_TYPES, label: 'All types' },
-  ...Object.entries(TYPE_NAME).map(([value, label]) => ({ value, label })),
-];
-
 /**
  * Every Artifact the agent made, whatever the conversation, in place of the chat as its activity
  * is: a page of the kit's one anatomy, searched by title and narrowed to one type. They are
@@ -69,7 +63,7 @@ export function ArtifactsScreen({
   const router = useRouter();
   const projects = useProjects();
   const [typed, setTyped] = useState('');
-  const [filter, setFilter] = useState<ArtifactsFilter>({ q: '', type: ALL_TYPES });
+  const [filter, setFilter] = useState<ArtifactsFilter>({ q: '', type: '' });
   useEffect(() => {
     const timer = setTimeout(
       () => setFilter((was) => (was.q === typed.trim() ? was : { ...was, q: typed.trim() })),
@@ -181,7 +175,7 @@ export function ArtifactsScreen({
           <FilterSelect
             label="Type"
             value={filter.type}
-            options={TYPES}
+            options={TYPE_FILTERS}
             onValueChange={(type) =>
               setFilter((was) => ({ ...was, type: type as SessionArtifact['type'] | '' }))
             }

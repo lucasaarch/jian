@@ -60,8 +60,10 @@ export function SlideFrame({
         className="grid min-h-0 min-w-0 place-items-center overflow-hidden rounded-[inherit]"
       >
         {/* The sheet a slide is drawn on is white wherever it is shown, here, in a presentation
-            and on its public page. The white is the frame's own background, not a layer under
-            it: two layers, each cut by the corner on its own, showed the white as a pale arc. */}
+            and on its public page. Here the gateway's frame paints it, inside (document.ts),
+            and nothing is painted under the frame: a white behind it, the element's own
+            background included, was cut by a rounded corner apart from the slide and showed
+            past a dark one as a pale arc. */}
         <div
           className="relative shrink-0 overflow-hidden rounded-[inherit]"
           style={{ width: SLIDE_WIDTH * scale, height: SLIDE_HEIGHT * scale }}
@@ -80,7 +82,6 @@ export function SlideFrame({
               width: SLIDE_WIDTH,
               height: SLIDE_HEIGHT,
               transform: `scale(${scale})`,
-              background: '#fff',
             }}
           />
         </div>

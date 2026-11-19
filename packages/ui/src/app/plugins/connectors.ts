@@ -1,7 +1,6 @@
 import { isAwsServer } from '@jian/contracts';
 import type { GithubIntegration } from '../../components/integrations/github-actions';
 import type { XIntegration } from '../../components/integrations/x-actions';
-import type { FieldOption } from '../../kit';
 import type { McpServer } from '../../lib/api';
 import { matchesQuery } from '../../lib/search';
 import {
@@ -139,36 +138,10 @@ export function connectorsOf({
   return [...provided, ...custom].sort((a, b) => Number(b.connected) - Number(a.connected));
 }
 
-export const ALL = 'all';
-const CONNECTED = 'connected';
-const AVAILABLE = 'available';
-
-/** What the filter offers: how a connector stands, then the categories that hold one. */
-export function connectorFilters(connectors: Connector[]): FieldOption[] {
-  return [
-    { value: ALL, label: 'All connectors' },
-    { value: CONNECTED, label: 'Connected' },
-    { value: AVAILABLE, label: 'Not connected' },
-    ...(Object.keys(CATEGORIES) as Category[])
-      .filter((key) => connectors.some((connector) => connector.category === key))
-      .map((key) => ({ value: key, label: CATEGORIES[key] })),
-  ];
-}
-
-/**
- * The connectors a search and the filter leave: found by name, category, maker and what they
- * give. A custom connector has no category, so choosing one leaves it out.
- */
-export function narrowConnectors(connectors: Connector[], query: string, filter: string) {
+/** The connectors a search leaves: found by name, category, maker and what they give. */
+export function narrowConnectors(connectors: Connector[], query: string) {
   return connectors.filter((connector) => {
-    const kept =
-      filter === ALL ||
-      (filter === CONNECTED
-        ? connector.connected
-        : filter === AVAILABLE
-          ? !connector.connected
-          : connector.category === filter);
     const text = `${connector.name} ${connector.category ? CATEGORIES[connector.category] : ''} ${connector.description} ${connector.by ?? 'custom'}`;
-    return kept && matchesQuery(text, query);
+    return matchesQuery(text, query);
   });
 }

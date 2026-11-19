@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { ConfirmDialog } from '../../kit';
-import type { ArtifactFolder, ProfileArtifact } from '../../lib/api';
+import type { ArtifactFolder, ProfileArtifact, SessionArtifact } from '../../lib/api';
 import { RenameDialog, type Renaming } from '../chat-row';
 import type { ArtifactKeeping } from './use-profile-artifacts';
 
@@ -13,13 +13,13 @@ const FOLDER_LENGTH = 80;
 
 /** What is being named: an Artifact or a folder again, or a folder for the first time. */
 type Naming =
-  | { kind: 'artifact'; artifact: ProfileArtifact }
+  | { kind: 'artifact'; artifact: SessionArtifact }
   | { kind: 'folder'; folder: ArtifactFolder }
   /** With `moving`, the Artifact the new folder is made for, moved into it once it exists. */
   | { kind: 'new'; moving?: ProfileArtifact };
 
 /** What is about to be deleted. */
-type Doomed = { artifact: ProfileArtifact } | { folder: ArtifactFolder };
+type Doomed = { artifact: SessionArtifact } | { folder: ArtifactFolder };
 
 /** Says what the gateway refused with, in its own sentence, as when a paired phone asks. */
 const refused = (error: unknown) => {

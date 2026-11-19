@@ -4,16 +4,6 @@ import { importedFrom } from './origin';
 
 /** Whose a skill is: the owner's, an agent's, copied from a repository, or shipped with Jian. */
 type SkillKind = 'yours' | 'agent' | 'imported' | 'built-in';
-export type SkillFilter = SkillKind | 'all' | 'off';
-
-export const skillFilters: { value: SkillFilter; label: string }[] = [
-  { value: 'all', label: 'All skills' },
-  { value: 'yours', label: 'By you' },
-  { value: 'agent', label: 'By agents' },
-  { value: 'imported', label: 'Imported' },
-  { value: 'built-in', label: 'By Jian' },
-  { value: 'off', label: 'Off' },
-];
 
 /** One skill as the panel lists it: of the library or built-in, drawn alike. */
 export type SkillItem = {
@@ -89,11 +79,7 @@ export function skillItems(
 /** What kind of thing a row is and whose, under its description: "Skill · By Jian". */
 export const skillMeta = (item: SkillItem) => `Skill · ${item.by}`;
 
-/** The skills a search and the filter leave: found by name, what they are for and whose. */
-export function filterSkills(items: SkillItem[], query: string, filter: SkillFilter) {
-  return items.filter(
-    (item) =>
-      (filter === 'all' || (filter === 'off' ? !item.enabled : item.kind === filter)) &&
-      matchesQuery(`${item.name} ${item.description} ${item.by}`, query),
-  );
+/** The skills a search leaves: found by name, what they are for and whose. */
+export function filterSkills(items: SkillItem[], query: string) {
+  return items.filter((item) => matchesQuery(`${item.name} ${item.description} ${item.by}`, query));
 }

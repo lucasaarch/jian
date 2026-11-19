@@ -8,23 +8,25 @@ import {
 } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import type { ArtifactsApi } from '../../components/sessions/artifacts/use-artifacts';
-import type { GatewayApi, ProfileArtifact, SessionArtifact } from '../../lib/api';
+import type { GatewayApi, SessionArtifact } from '../../lib/api';
 import { subscribe } from '../../lib/events';
 import { keys } from '../../lib/query/keys';
 
+/** What keeping Artifacts asks of the gateway: renaming, pinning, moving, copying, deleting. */
+export type ArtifactKeepingApi = Pick<
+  GatewayApi,
+  | 'deleteSessionArtifact'
+  | 'updateSessionArtifact'
+  | 'duplicateSessionArtifact'
+  | 'createArtifactFolder'
+  | 'renameArtifactFolder'
+  | 'deleteArtifactFolder'
+>;
+
 /** What the page asks of the gateway: what one open Artifact does, the lists, and their keeping. */
 export type ArtifactsPageApi = ArtifactsApi &
-  Pick<
-    GatewayApi,
-    | 'profileArtifacts'
-    | 'deleteSessionArtifact'
-    | 'updateSessionArtifact'
-    | 'duplicateSessionArtifact'
-    | 'artifactFolders'
-    | 'createArtifactFolder'
-    | 'renameArtifactFolder'
-    | 'deleteArtifactFolder'
-  >;
+  ArtifactKeepingApi &
+  Pick<GatewayApi, 'profileArtifacts' | 'artifactFolders'>;
 
 /** What narrows the page: words of the title, and one type, either of them empty for all. */
 export type ArtifactsFilter = { q: string; type: '' | SessionArtifact['type'] };
@@ -104,12 +106,12 @@ export function useArtifactsPageFollow(profileId: string) {
 }
 
 /**
- * What the owner does to keep the page: each asks the gateway, then reads again every list the
- * change shows in. That is every reading of the page and its folders, whose counts move with
- * it, and the conversation's own list, which the Inspector draws. Each throws what the gateway
- * refused with, as when a paired phone asks.
+ * What the owner does to keep the page, and the Inspector's cards: each asks the gateway, then
+ * reads again every list the change shows in. That is every reading of the page and its
+ * folders, whose counts move with it, and the conversation's own list, which the Inspector
+ * draws. Each throws what the gateway refused with, as when a paired phone asks.
  */
-export function useArtifactKeeping(api: ArtifactsPageApi, profileId: string) {
+export function useArtifactKeeping(api: ArtifactKeepingApi, profileId: string) {
   const client = useQueryClient();
   const again = (sessionId?: string) =>
     Promise.all([
@@ -128,18 +130,18 @@ export function useArtifactKeeping(api: ArtifactsPageApi, profileId: string) {
   return {
     /** Its name, its pin, or its folder (`null` for where it started); no version is made. */
     change: async (
-      artifact: ProfileArtifact,
+      artifact: SessionArtifact,
       to: { title?: string; pinned?: boolean; folderId?: string | null },
     ) => {
       await api.updateSessionArtifact(profileId, artifact.sessionId, artifact.id, to);
       await again(artifact.sessionId);
     },
-    duplicate: async (artifact: ProfileArtifact) => {
+    duplicate: async (artifact: SessionArtifact) => {
       await api.duplicateSessionArtifact(profileId, artifact.sessionId, artifact.id);
       await again(artifact.sessionId);
     },
     /** For good, with every version it had. */
-    remove: async (artifact: ProfileArtifact) => {
+    remove: async (artifact: SessionArtifact) => {
       await api.deleteSessionArtifact(profileId, artifact.sessionId, artifact.id);
       await again(artifact.sessionId);
     },
