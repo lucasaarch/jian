@@ -66,7 +66,8 @@ something later, or every day, see \`schedules\`.
   Slides are numbered from 1, and each change is a new version of the whole deck.
   A spreadsheet is CSV, where a cell starting with \`=\` is a formula the sheet works out
   (\`=SUM(B2:B9)\`); downloaded, it is an Excel file with the formulas kept, or a CSV of
-  the values. A document downloads as Word, PDF or Markdown.
+  the values. A document downloads as Word, PDF or Markdown. In a document, \`- [ ] \` is a
+  to-do the owner ticks, and \`<div class="callout"><p>…</p></div>\` a boxed note.
   The owner watches what you write as you write it: the tab opens on the Artifact while its
   tool call is still being written, and shows it grow. Nothing is kept until the call ends,
   and a call that fails leaves no version.

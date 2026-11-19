@@ -138,10 +138,10 @@ takes the whole window: its pages are listed where the sidebar was, under Back.
   PDF or Markdown; a spreadsheet as Excel, its formulas kept, or as CSV, its values. Only a
   gateway on a server draws PDFs, PowerPoint files and pictures: on the desktop app's own, a deck
   downloads as the slide's web page alone.
-  A document and a spreadsheet open ready to edit: click a text to change it or its formatting, or
-  type in the cells. A web page and a deck's slide have Edit, and Done to stop. There is no Save:
-  what the owner changes keeps itself a moment after they stop, or as they leave, and the bar says
-  Saving… or Saved; a version you wrote is never written over.
+  A document and a spreadsheet open ready to edit: type anywhere in a document, \`/\` for its
+  blocks, or in a spreadsheet's cells. A web page and a deck's slide have Edit, and Done to stop.
+  There is no Save: what the owner changes keeps itself a moment after they stop, or as they
+  leave, and the bar says Saving… or Saved; a version you wrote is never written over.
   Public gives a link anyone can open without signing in, to the latest version only, and making
   it private again ends that link for good. A deck's link has Present too: arrow keys, space or a
   click step through it, Escape leaves. Only a gateway on a server offers Public.

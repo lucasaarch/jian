@@ -1,12 +1,11 @@
 import { ARTIFACT_EDIT_MESSAGE, type SessionArtifactType } from '@jian/contracts';
-import { MARKDOWN } from './markdown-frame.js';
+import { DOCUMENT_EDITOR } from './document-editor.js';
 import { SHEET } from './sheet-frame.js';
 
 /**
  * What the frame runs in place of drawing when the owner edits a page or a slide by hand. It is
  * script for the frame's page, kept as text: `const editPage = (source, options, finish) => …`.
- * `finish`, when given, is what the edited page is saved as instead of its markup (a
- * document's Markdown).
+ * `finish`, when given, is what the edited page is saved as instead of its markup.
  *
  * - The source is read as a document and never run. A page's own scripts are left exactly as
  *   written and stay asleep, so what is saved is the page the agent wrote plus the owner's
@@ -343,25 +342,13 @@ const answering = (options, made) => {
 `;
 
 /**
- * A document is drawn as it always is and edited as a page is, inside the frame's own head (its
- * style); what is saved is its Markdown again. `run` and `read` are the frame page's.
- */
-const MARKDOWN_EDITING = `
-const editing = (source, options) => {
-  run(read('libraries')[0]);
-  const page = '<!doctype html><html lang="en">' + document.head.outerHTML +
-    '<body class="markdown"><div id="root">' + marked.parse(source) + '</div></body></html>';
-  editPage(page, options, (copy) => markdownOf(copy.querySelector('#root')));
-};
-`;
-
-/**
  * What the editing frame of each type runs: `const editing = (source, options) => …`, with the
  * frame page's `root`, `run` and `read` in reach. Only the types in `EDITABLE_ARTIFACT_TYPES`.
  */
 export const EDITORS: Partial<Record<SessionArtifactType, string>> = {
   html: `${EDITING}const editing = editPage;\n`,
   deck: `${EDITING}const editing = editPage;\n`,
-  markdown: EDITING + MARKDOWN + MARKDOWN_EDITING,
+  // A document is one surface to write on, not a page of blocks opened one at a time.
+  markdown: DOCUMENT_EDITOR,
   sheet: `${SHEET}${ANSWERING}const editing = (source, options) => answering(options, sheet(source, root, true));\n`,
 };
