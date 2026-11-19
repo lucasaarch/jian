@@ -152,6 +152,7 @@ import {
   redactText,
   type StepResult,
 } from './results.js';
+import { secretsIn, secretTools } from './secret-tools.js';
 import type { SecretAccess } from './shell.js';
 import { type StepRequest, summaryCall } from './summary-call.js';
 import { plainTitle, type TitleModel, writeTitle } from './title.js';
@@ -277,8 +278,11 @@ export type RuntimeServices = ToolServices & {
   objectives?: Pick<ObjectiveContinuation, 'continueAfter'>;
   workspaces?: Pick<Workspaces, 'forRun' | 'cloned' | 'touched'>;
   worktrees?: WorktreeService;
-  /** The installation's Secrets for agents' commands: what a run offers, lends, and masks. */
-  secrets?: Pick<Secrets, 'usable' | 'reveal' | 'masks'>;
+  /**
+   * The installation's Secrets for agents' commands: what a run offers, lends and masks, and
+   * what the agent's own Secret tools change.
+   */
+  secrets?: Pick<Secrets, 'usable' | 'reveal' | 'masks' | 'create' | 'update' | 'remove' | 'share'>;
 };
 
 /**
@@ -325,13 +329,17 @@ async function actsOnComputer(
   return actsHere ? actsHere(input, callId, signal) : true;
 }
 
-/** What a run's `run_command` may lend: none offered when the agent has none to use. */
+/**
+ * What a run's `run_command` may lend: none offered when the agent has none to use, unless it
+ * can save one (`saves`), which its commands may use in the same run.
+ */
 async function secretAccess(
   secrets: Pick<Secrets, 'usable' | 'reveal'>,
   profileId: string,
+  saves: boolean,
 ): Promise<SecretAccess | undefined> {
   const offered = await secrets.usable(profileId);
-  return offered.length
+  return offered.length || saves
     ? { offered, reveal: (envNames) => secrets.reveal(profileId, envNames) }
     : undefined;
 }
@@ -964,6 +972,21 @@ export class AgentRuntime {
       const replyTo = email
         ? (await this.services.errands.replyContact(profileId, run.sessionId))?.chatId
         : undefined;
+      // The owner's own conversations alone: a subagent acts on Auto, where nobody approves a
+      // command before it runs, and a look back runs no command at all.
+      const secretService =
+        !run.subagent && !learning && !session.remoteMachineId ? this.services.secrets : undefined;
+      // A Secret reaches a command only through `run_command`, which asks where the conversation
+      // does: an agent keeps or hands on Secrets only where someone could approve that. A chat's
+      // contact the owner did not let approve, or an email's sender, could otherwise have it
+      // keep whatever they send it.
+      const keepsSecrets =
+        secretService !== undefined &&
+        ((!isChatChannel(session.channel) && session.channel !== 'email') ||
+          (await this.approvers(run, session)).contactCanApprove);
+      const commandSecrets = secretService
+        ? await secretAccess(secretService, profileId, keepsSecrets)
+        : undefined;
       const tools: ToolSet = {
         ...profileTools(
           this.services,
@@ -979,12 +1002,18 @@ export class AgentRuntime {
           () => scale,
           email,
           replyTo,
-          // The owner's own conversations alone: a subagent acts on Auto, where nobody approves
-          // a command before it runs, and a look back runs no command at all.
-          !run.subagent && !learning && !session.remoteMachineId && this.services.secrets
-            ? await secretAccess(this.services.secrets, profileId)
-            : undefined,
+          commandSecrets,
         ),
+        ...(keepsSecrets && secretService
+          ? secretTools({
+              secrets: secretService,
+              profileId,
+              // Masked in every result, error and timeline entry of this run from here on.
+              lend: (value) => {
+                for (const form of secretForms(value)) secrets.add(form);
+              },
+            })
+          : {}),
         ...(!learning && this.options.github && gitPlace
           ? githubGitTools({
               github: this.options.github,
@@ -1214,6 +1243,7 @@ export class AgentRuntime {
                 ...(lowEffort ? { providerOptions: lowEffort } : {}),
                 account: (usage, text) => account(usage, 0, text, 0),
               },
+              ...(commandSecrets ? { offered: commandSecrets.offered } : {}),
               signal,
             })
           : undefined;
@@ -1313,6 +1343,12 @@ export class AgentRuntime {
             await previous;
 
             try {
+              // A value the call carries (a Secret it saves) is masked before anything of the
+              // call is recorded: its protection, its card and its start all come after this.
+              for (const value of secretsIn(definition, input)) {
+                for (const form of secretForms(value)) secrets.add(form);
+              }
+
               // What the model said before this call is written first, so the conversation
               // and the channels read in the order things happened. An approved action runs
               // ahead of the stream, which will never tell of it.

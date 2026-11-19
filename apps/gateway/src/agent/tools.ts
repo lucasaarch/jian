@@ -1347,6 +1347,10 @@ export const TOOL_GROUPS = {
     summary: 'run commands on the machine this gateway runs on',
     tools: ['run_command'],
   },
+  secrets: {
+    summary: 'list, save, delete and share the Secrets your commands and logins use',
+    tools: ['list_secrets', 'save_secret', 'delete_secret', 'share_secret'],
+  },
   remote: {
     summary:
       'list the connected machines, run commands there, drive the Mac screen (remote_computer), pull or push files, and update their Jian Remote',
