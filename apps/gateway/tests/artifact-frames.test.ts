@@ -328,7 +328,7 @@ exports.default = (props) =>
       expect(await cell('3,1').textContent()).toBe('210');
       // The bar shows the cell picked as written, a formula included.
       await cell('3,1').click();
-      expect(await sheet.locator('input[aria-label="Cell"]').inputValue()).toBe('=SUM(B2:B3)*21');
+      expect(await sheet.locator('[aria-label="Cell"]').inputValue()).toBe('=SUM(B2:B3)*21');
 
       expect(await collect(page, 'edited')).toEqual({
         collect: 'edited',
