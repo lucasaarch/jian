@@ -9,7 +9,7 @@ import { SlideFrame } from './slide-frame';
 import type { SlideOps } from './use-slide-ops';
 
 /** What a drag of a slide carries: its place, counted from 0. Only the rail reads it. */
-export const SLIDE_DRAG = 'application/x-jian-slide';
+const SLIDE_DRAG = 'application/x-jian-slide';
 
 /**
  * A change made from the keyboard, waiting for the rail it ends in. The deck is drawn anew for
