@@ -6,7 +6,12 @@ import { MockLanguageModelV4, simulateReadableStream } from 'ai/test';
 import { errors } from 'undici';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { retryable } from '../src/agent/model-failure.js';
-import { retryDelay, withModelRetry } from '../src/agent/model-retry.js';
+import {
+  LONGEST_WAIT_MS,
+  ModelWaitTooLong,
+  retryDelay,
+  withModelRetry,
+} from '../src/agent/model-retry.js';
 import { ProgressReporter } from '../src/agent/progress.js';
 import { createSafeFetch } from '../src/security/outbound.js';
 
@@ -345,27 +350,42 @@ describe('a model call that cannot get through', () => {
     expect(attempts).toHaveLength(10);
   });
 
-  it('never fires early on a retry-after longer than a timer can hold', async () => {
-    // About 35 days: past 2^31-1 ms, which Node turns into a timer of 1 ms.
-    const { model, attempts } = anthropic(async (attempt) =>
-      attempt === 1 ? refusal(503, { 'retry-after': '3000000' }) : message('Late.'),
-    );
-    const cancel = new AbortController();
+  it('stops at once when the provider asks for more than a turn waits, saying until when', async () => {
+    // A subscription's weekly window: 74 hours.
+    const { model, attempts } = anthropic(async () => refusal(429, { 'retry-after': '266400' }));
+    const waiting = vi.fn();
 
     const call = generateText({
-      model: retrying(model),
+      model: withModelRetry(model, { log: () => {}, waiting }),
       prompt: 'Hello',
       maxRetries: 0,
-      abortSignal: cancel.signal,
     });
     const failed = call.catch((error: unknown) => error);
-    await vi.advanceTimersByTimeAsync(60_000);
-    expect(attempts).toHaveLength(1);
-    await vi.advanceTimersByTimeAsync(2 ** 31);
-    expect(attempts).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(0);
+    const outcome = await failed;
 
-    cancel.abort();
-    expect(await failed).toMatchObject({ name: 'AbortError' });
+    expect(outcome).toBeInstanceOf(ModelWaitTooLong);
+    expect(outcome).toMatchObject({
+      reason: 'HTTP 429, rate limited',
+      resumesAt: new Date(Date.now() + 266_400_000),
+      cause: { statusCode: 429 },
+    });
+    expect(attempts).toHaveLength(1);
+    // It never said it was reconnecting, and left nothing waiting.
+    expect(waiting).not.toHaveBeenCalled();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('still waits out a retry-after of up to 15 minutes', async () => {
+    const { model, attempts } = anthropic(async (attempt) =>
+      attempt === 1 ? refusal(429, { 'retry-after': '900' }) : message('Ready.'),
+    );
+
+    const call = generateText({ model: retrying(model), prompt: 'Hello', maxRetries: 0 });
+    await vi.advanceTimersByTimeAsync(LONGEST_WAIT_MS);
+
+    expect((await call).text).toBe('Ready.');
+    expect((attempts[1] ?? 0) - (attempts[0] ?? 0)).toBe(LONGEST_WAIT_MS);
   });
 
   it('logs every wait of 30 s or more, not only the end of a round', async () => {

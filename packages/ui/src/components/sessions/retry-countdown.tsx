@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from 'react';
 
-/** A wait in its two largest units: a provider's retry-after can be hours away. */
+/** A wait in its two largest units. The gateway waits at most 15 minutes; hours stay readable. */
 const wait = (seconds: number) =>
   seconds < 60
     ? `${seconds}s`

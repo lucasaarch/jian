@@ -255,3 +255,40 @@ it('keeps the stall watchdog fed through a wait longer than it allows', async ()
   expect(finished.status).toBe('completed');
   expect(finished.output).toBe('Through.');
 });
+
+it('fails at once when the provider will take no call for days, saying until when', async () => {
+  const { services, profile, ask, told } = await conversation({
+    provider: 'openai',
+    modelId: 'test',
+  });
+  const run = await ask();
+  let attempts = 0;
+  // A subscription's weekly window, 74 hours away, said the way a rate limit is.
+  const model = createOpenAI({
+    apiKey: 'synthetic-openai-key',
+    baseURL: 'https://api.openai.test/v1',
+    fetch: (async () => {
+      attempts += 1;
+      return Response.json(
+        { error: { message: 'Slow down.', type: 'rate_limit_exceeded' } },
+        { status: 429, headers: { 'retry-after': '266400' } },
+      );
+    }) as typeof globalThis.fetch,
+  }).chat('gpt-test');
+  const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+  try {
+    await new AgentRuntime(services, () => model).execute(profile.id, run.id);
+  } finally {
+    spy.mockRestore();
+  }
+
+  const failed = await services.runs.run(profile.id, run.id);
+  expect(failed.status).toBe('failed');
+  expect(failed.error).toMatch(
+    /^The provider takes no call until \d{4}-\d\d-\d\d \d\d:\d\d UTC, in 3 days 2 hours \(HTTP 429, rate limited\)/,
+  );
+  expect(attempts).toBe(1);
+  // It never said it was reconnecting.
+  expect(told.some((frame) => frame.reconnecting)).toBe(false);
+});

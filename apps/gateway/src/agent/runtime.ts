@@ -136,7 +136,7 @@ import { machineBackend, offersMachineFiles } from './machine-files.js';
 import { availableNote, connectMcpTools, type McpEntry, unavailableNote } from './mcp.js';
 import { MCP_ERROR_UNSAID, mcpErrorText, mcpOutcomeUncertain } from './mcp-errors.js';
 import { withFittedImages } from './model-images.js';
-import { ROUND, withModelRetry } from './model-retry.js';
+import { ModelWaitTooLong, ROUND, withModelRetry } from './model-retry.js';
 import { Narrator, ToolCalls } from './narrator.js';
 import { ProgressReporter } from './progress.js';
 import {
@@ -2767,6 +2767,28 @@ function providerRefusal(error: unknown): { status?: number; said?: string } {
   return {};
 }
 
+/**
+ * When a provider takes calls again, for the owner: how long from now, in its two largest units,
+ * and the moment itself in UTC, since the gateway does not know the owner's zone.
+ */
+function resumesIn(at: Date, now = Date.now()): string {
+  const minutes = Math.max(1, Math.ceil((at.getTime() - now) / 60_000));
+  const days = Math.floor(minutes / 1440);
+  const hours = Math.floor((minutes % 1440) / 60);
+  const parts = [
+    [days, 'day'],
+    [hours, 'hour'],
+    [minutes % 60, 'minute'],
+  ] as const;
+  const shown = parts
+    .filter(([count]) => count > 0)
+    .slice(0, 2)
+    .map(([count, unit]) => `${count} ${unit}${count === 1 ? '' : 's'}`);
+  const moment = at.toISOString().slice(0, 16).replace('T', ' ');
+
+  return `${moment} UTC, in ${shown.join(' ')}`;
+}
+
 function executionFailureMessage(
   error: unknown,
   uncertain: boolean,
@@ -2799,6 +2821,13 @@ function executionFailureMessage(
 
   if (budget) {
     return budget.message;
+  }
+
+  // Before the refusal below, which would read the 429 under it as a plain rate limit.
+  const closed = causes(error).find((cause) => cause instanceof ModelWaitTooLong);
+
+  if (closed) {
+    return `The provider takes no call until ${resumesIn(closed.resumesAt)} (${closed.reason}), most likely a subscription's usage limit. Choose another model, or send again then.`;
   }
 
   // Redacted, because a refusal can quote back what was sent.

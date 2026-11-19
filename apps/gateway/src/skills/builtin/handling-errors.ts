@@ -42,9 +42,12 @@ goes. The turn goes on where it was once a call gets through; the owner's Cancel
 
 - A 429 is waited out only when it is a rate limit: its body names one (Gemini's
   \`RESOURCE_EXHAUSTED\` among them), or, when the body names no refusal, it says when to come
-  back or carries the provider's rate-limit headers. A subscription's usage limit waits until it
-  resets. Any other 429, such as a spent quota, a billing error or a refused subscription
-  request, fails at once with the provider's own words.
+  back or carries the provider's rate-limit headers. Any other 429, such as a spent quota, a
+  billing error or a refused subscription request, fails at once with the provider's own words.
+- A provider that asks to be left alone for more than 15 minutes, as a subscription's usage
+  limit does until its window reopens, is not waited out: the turn fails at once, saying when
+  the provider takes calls again (in UTC). Tell the owner when, and that another model works
+  meanwhile.
 - A look back in your Learning conversation gets one round, ten attempts, then fails as before.
 - Any other status, such as 400 for a request too large or 401, fails at once.
 
