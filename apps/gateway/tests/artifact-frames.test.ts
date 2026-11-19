@@ -607,10 +607,14 @@ exports.default = () => React.createElement('section', null, React.createElement
         const page = await inPanel(`canvas-${type}`, type, SOURCE[type] ?? '');
         await expect.poll(() => read(page), { message: type }).toContain(text);
         const drawing = innermost(page);
-        const [x, y] = await middleOf(drawing, selector);
+        // The text shows before the drawing is placed: Mermaid measures it in a node of its own
+        // first, and the canvas fits the drawing only once it has landed. On a slow machine a
+        // drawing read at once is not there yet, so it is read until it stands where it should.
         // The frame is 900 by 600, with a little more room kept at the bottom for the zoom.
-        expect(Math.abs(x - 450), type).toBeLessThanOrEqual(2);
-        expect(Math.abs(y - 292), type).toBeLessThanOrEqual(2);
+        await expect
+          .poll(() => middleOf(drawing, selector), { message: type })
+          .toSatisfy(([x, y]) => Math.abs(x - 450) <= 2 && Math.abs(y - 292) <= 2);
+        const [x, y] = await middleOf(drawing, selector);
         expect(
           await drawing.evaluate(
             () => getComputedStyle(document.getElementById('root') as Element).backgroundImage,
