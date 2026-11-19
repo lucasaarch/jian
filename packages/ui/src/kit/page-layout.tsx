@@ -1,7 +1,8 @@
 'use client';
 
 import { ArrowLeft } from 'lucide-react';
-import type { ReactNode } from 'react';
+import { type ReactNode, useEffect, useRef } from 'react';
+import { useLayout } from '../lib/stores/layout';
 import { iconButton } from './icon-button';
 
 /*
@@ -19,11 +20,12 @@ export const surfaceCard = 'rounded-xl border border-glass-edge bg-glass-hover';
 
 /**
  * The scrolling column of such a screen, 60rem at most on every one of them: a screen of rows
- * and one of cards side by side are as wide, so going from one to another nothing jumps. It
- * starts where the host's title bar ends: what scrolls away goes out of sight at the bar's edge,
- * and that is where the toolbar stays. The room above the heading is the column's, not the
- * scroller's: a sticky toolbar stops at its scroller's padding, so padding there left a strip
- * over the stuck toolbar where the rows passing by showed.
+ * and one of cards side by side are as wide, so going from one to another nothing jumps. It runs
+ * up under the host's title bar, which has nothing of its own over a page: what scrolls away
+ * goes out at the window's top, uncovered, until the toolbar gets there and docks in the bar's
+ * place (`PageToolbar`). On a phone the title bar has buttons across it, so the page starts under
+ * it instead. The room above the heading is the column's, not the scroller's: a sticky box stops
+ * at its scroller's padding.
  */
 export function PageBody({
   label,
@@ -36,13 +38,33 @@ export function PageBody({
   className?: string;
   children: ReactNode;
 }) {
+  const scroller = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const page = scroller.current;
+    if (!page) return;
+    // A toolbar docked at the top, with the page scrolling under it, takes its ground and line;
+    // until it gets there it has neither, and covers nothing. Set on the element, not through
+    // React state, so scrolling renders nothing; a toolbar drawn anew picks it up at the next
+    // scroll, which narrowing the list also causes when it shortens the page.
+    const mark = () => {
+      const top = page.getBoundingClientRect().top;
+      for (const bar of page.querySelectorAll<HTMLElement>('[data-page-toolbar]')) {
+        const docked = page.scrollTop > 0 && bar.getBoundingClientRect().top - top < 1;
+        bar.toggleAttribute('data-docked', docked);
+      }
+    };
+    mark();
+    page.addEventListener('scroll', mark, { passive: true });
+    return () => page.removeEventListener('scroll', mark);
+  }, []);
   return (
     <section
+      ref={scroller}
       aria-label={label}
       aria-labelledby={labelledBy}
-      className={`scroll-inset mt-(--chrome-top,0px) min-h-0 min-w-0 flex-1 overflow-y-auto px-10 pb-14 phone:px-4 ${className}`}
+      className={`page-scroller min-h-0 min-w-0 flex-1 overflow-y-auto px-10 pb-14 phone:mt-(--chrome-top,0px) phone:px-4 ${className}`}
     >
-      <div className="mx-auto grid max-w-[60rem] grid-cols-1 gap-7 pt-9 phone:gap-5 phone:pt-3">
+      <div className="mx-auto grid max-w-[60rem] grid-cols-1 gap-7 pt-[calc(var(--chrome-top,0px)+2.25rem)] phone:gap-5 phone:pt-3">
         {children}
       </div>
     </section>
@@ -123,13 +145,19 @@ export function BackLink({
 
 /**
  * The row under the heading that narrows what the screen shows: a search that takes the room
- * left, then its filters. Controls in it are 2rem tall, as the heading's actions are. It stays
- * at the column's top while what it narrows scrolls away under it, on a ground that hides what
- * passes there; the room it keeps around its controls is taken back from the gap around it.
+ * left, then its filters. Controls in it are 2rem tall, as the heading's actions are. Scrolled up
+ * to the top, it docks in the title bar's place, as tall as it, and only then takes a ground and
+ * a line across the page (`page-toolbar`) for what it narrows to scroll away under. The room it
+ * keeps around its controls is taken back from the gap around it.
  */
 export function PageToolbar({ children }: { children: ReactNode }) {
+  const away = useLayout((state) => state.chatList);
   return (
-    <div className="sticky top-0 z-10 -my-2 flex min-w-0 flex-wrap items-center gap-2 bg-canvas py-2">
+    <div
+      data-page-toolbar
+      data-sidebar-away={away || undefined}
+      className="page-toolbar sticky top-0 z-20 -my-[max(0px,calc((var(--chrome-top,0px)-2rem)/2))] flex min-h-(--chrome-top,0px) min-w-0 flex-wrap items-center gap-2 py-1 phone:-my-2 phone:min-h-0 phone:py-2"
+    >
       {children}
     </div>
   );

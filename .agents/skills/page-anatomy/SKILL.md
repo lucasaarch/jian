@@ -49,14 +49,19 @@ for the pieces; this one is about how a screen goes together.
   to it (Refresh, settings) sits at its right: `Action tone="outline" size="field"`, or
   `iconButton`s with a `HoverTip`. Never patch a size with `className="h-8"`. No bar of tools at the window's top
   (`ScreenHeader`): that is only for a document open full size, as an Artifact is.
-- **The toolbar** is sticky: it stays right at the title bar's edge while the page scrolls, so
-  nothing that scrolled away shows above it. That holds only while the scroller has no top
-  padding (a sticky box stops at its scroller's padding): the room above the heading is
-  `PageBody`'s inner column's, never padding on the scroller. Put the search
-  first, taking the room left, then filters, then what adds to the list (New schedule, New
-  folder, Import, Create) at its right end, as the same outline `Action`s: they stay in reach
-  however far the list scrolls. Anything that narrows the list goes here too, never above the
-  heading or inside a section.
+- **The toolbar docks in the title bar.** `PageBody` runs up under the host's title bar, which
+  covers nothing over a page: what scrolls goes out at the window's top, in sight, with no
+  ground or line over it. The toolbar is sticky and, reaching the top, docks in the title bar's
+  place, as tall as it; only then does it take a ground and a line across the page's whole
+  width, sidebar to window or Inspector. Never an empty strip above it, nor a ground before it
+  docks. On a phone the page starts under the title bar and the toolbar stops under it.
+  Docked, it keeps clear of the sidebar's buttons (sidebar away) and of the window's buttons
+  (Windows, Linux). The room above the heading is `PageBody`'s inner column's, never padding on
+  the scroller (a sticky box stops at its scroller's padding). Put the search first, taking the
+  room left, then filters, then what adds to the list (New schedule, New folder, Import, Create)
+  at its right end, as the same outline `Action`s: they stay in reach however far the list
+  scrolls. Anything that narrows the list goes here too, a settings page's search included
+  (Keymaps), never above the heading or inside a section.
 - **Sections**: a `SectionHeading` over a `surfaceCard`, or a `SettingsGroup`. A list is a card
   with `divide-y divide-glass-edge overflow-hidden`, each row a full-width button `px-4 py-3`
   that hovers `bg-glass-press`. A table lies in a card too (`@container overflow-hidden`), its
