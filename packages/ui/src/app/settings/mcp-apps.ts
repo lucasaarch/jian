@@ -9,6 +9,7 @@ import {
   siClickup,
   siCloudflare,
   siDropbox,
+  siElevenlabs,
   siExpo,
   siGitlab,
   siHostinger,
@@ -46,6 +47,7 @@ export const CATEGORIES = {
   projects: 'Projects',
   productivity: 'Productivity',
   design: 'Design and sites',
+  media: 'Video and audio',
   payments: 'Payments',
   customers: 'Customers',
   social: 'Social',
@@ -59,7 +61,9 @@ export type Category = keyof typeof CATEGORIES;
  * one that needs a pre-registered client (Asana, HubSpot, Box) is added as a custom connector.
  * So is one whose registration takes only its own list of redirect addresses: Mercado Pago
  * refuses any callback outside localhost and a few vendors' hosts, so a hosted gateway cannot
- * sign in there; it connects with an access token in a header instead.
+ * sign in there; it connects with an access token in a header instead. The one exception is an
+ * app whose authorization server takes a client id metadata document in place of registration
+ * (ElevenLabs): the gateway serves that document itself, which is what `needsHttps` is about.
  */
 export type McpApp = {
   /** Also the MCP server's name, so it follows that name's rule. */
@@ -71,11 +75,19 @@ export type McpApp = {
   category: Category;
   url: string;
   /**
-   * Where the app's server used to be. A server saved there before the app moved is still this
-   * app, or it would drop out of its card and be listed as a custom connector, a stranger.
+   * Where else the app's server is: where it used to be, or a region's own. A server saved there
+   * is still this app, or it would drop out of its card and be listed as a custom connector, a
+   * stranger.
    */
   formerUrls?: string[];
   icon: AppMark;
+  /**
+   * Signs in by reading who Jian is from the gateway's HTTPS address (`JIAN_PUBLIC_URL`), so a
+   * gateway without one, the desktop app's own above all, cannot connect it.
+   */
+  needsHttps?: true;
+  /** What the owner should know before connecting it, under its accounts. */
+  note?: string;
 };
 
 /**
@@ -104,6 +116,17 @@ const mondayMark: AppMark = {
 const attioMark: AppMark = {
   viewBox: '0 -2 32 32',
   path: 'm31.669 19.175l-2.673-4.279l-.016-.026l-.211-.336a2.16 2.16 0 0 0-1.838-1.022l-4.306-.014l-.3.481l-5.146 8.235l-.284.456l2.156 3.444a2.15 2.15 0 0 0 1.843 1.023h6.035a2.19 2.19 0 0 0 1.842-1.02l.213-.34s.008-.01.01-.015l2.677-4.284c.44-.7.44-1.605 0-2.303zm-.816 1.792l-2.677 4.284l-.037.052a.363.363 0 0 1-.579-.054l-2.678-4.284a1.2 1.2 0 0 1-.137-.969c.03-.105.076-.21.135-.306l2.674-4.28l.006-.01a.34.34 0 0 1 .213-.154q.04-.01.071-.014h.03c.062 0 .215.02.31.176l2.674 4.278c.244.39.244.891 0 1.28zM23.758 8.823a2.19 2.19 0 0 0 0-2.303l-2.673-4.278l-.223-.36a2.16 2.16 0 0 0-1.844-1.02h-6.034c-.754 0-1.442.381-1.844 1.022L.333 19.178a2.16 2.16 0 0 0-.002 2.301L3.23 26.12c.4.64 1.088 1.02 1.842 1.02h6.035c.758 0 1.446-.381 1.844-1.022l.22-.35v-.004s.005-.006.005-.008l2.154-3.445l6.384-10.218l2.041-3.268zm-.63-1.151c0 .22-.062.443-.187.64L12.355 25.255a.36.36 0 0 1-.31.17a.36.36 0 0 1-.31-.17l-2.676-4.286a1.22 1.22 0 0 1 0-1.28L19.645 2.752a.36.36 0 0 1 .31-.173c.062 0 .215.018.313.175L22.94 7.03c.125.197.187.42.187.64',
+};
+
+/**
+ * Higgsfield and HeyGen: not their logos, which no openly licensed set carries, but neutral
+ * glyphs from Boxicons (MIT), a film for one and a framed person, an avatar, for the other.
+ */
+const higgsfieldMark: AppMark = {
+  path: 'M20 3H4c-1.103 0-2 .897-2 2v14c0 1.103.897 2 2 2h16c1.103 0 2-.897 2-2V5c0-1.103-.897-2-2-2zm.001 6c-.001 0-.001 0 0 0h-.465l-2.667-4H20l.001 4zM15.5 15 10 18v-6l5.5 3zm-.964-6-2.667-4h2.596l2.667 4h-2.596zm-2.404 0H9.536L6.869 5h2.596l2.667 4zM4 5h.465l2.667 4H4V5z',
+};
+const heygenMark: AppMark = {
+  path: 'M6 22h13a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h1zm6-17.001c1.647 0 3 1.351 3 3C15 9.647 13.647 11 12 11S9 9.647 9 7.999c0-1.649 1.353-3 3-3zM6 17.25c0-2.219 2.705-4.5 6-4.5s6 2.281 6 4.5V18H6v-.75z',
 };
 
 /** `by` is written only where the maker is not called what the app is. */
@@ -234,6 +257,29 @@ const CATALOG: Array<Omit<McpApp, 'url' | 'formerUrls' | 'by'> & { by?: string }
     description: 'Documents, schemas and datasets in your Sanity projects.',
     category: 'design',
     icon: siSanity,
+  },
+  {
+    id: 'higgsfield',
+    name: 'Higgsfield',
+    description: 'Images and videos from the generative models on Higgsfield.',
+    category: 'media',
+    icon: higgsfieldMark,
+  },
+  {
+    id: 'heygen',
+    name: 'HeyGen',
+    description: 'Avatar videos from a script, with your HeyGen avatars and voices.',
+    category: 'media',
+    icon: heygenMark,
+  },
+  {
+    id: 'elevenlabs',
+    name: 'ElevenLabs',
+    description: 'Speech, transcription, voice design, music and sound on ElevenLabs.',
+    category: 'media',
+    icon: siElevenlabs,
+    needsHttps: true,
+    note: 'An account kept in the EU is at https://api.eu.residency.elevenlabs.io/v1/mcp. Add that address as a custom connector signed in with OAuth, and it shows here.',
   },
   {
     id: 'stripe',
