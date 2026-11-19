@@ -49426,6 +49426,235 @@
         }
       }
     },
+    "/v1/telemetry/panel-usage": {
+      "post": {
+        "operationId": "reportPanelUsage",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "description": "Required permission: admin.",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "host": {
+                    "type": "string",
+                    "enum": [
+                      "web",
+                      "desktop"
+                    ]
+                  },
+                  "phone": {
+                    "type": "boolean"
+                  },
+                  "counts": {
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string",
+                      "enum": [
+                        "panel_opened",
+                        "theme_dark",
+                        "theme_light",
+                        "chat",
+                        "new_chat",
+                        "artifacts_page",
+                        "schedules",
+                        "pull_requests",
+                        "activity",
+                        "plugins",
+                        "skill_page",
+                        "connector_page",
+                        "agent_identity",
+                        "memories",
+                        "agent_channels",
+                        "settings_general",
+                        "settings_appearance",
+                        "settings_keymaps",
+                        "settings_providers",
+                        "settings_models",
+                        "settings_ssh_keys",
+                        "settings_machines",
+                        "settings_mobile",
+                        "settings_connection",
+                        "inspector_opened",
+                        "inspector_browser",
+                        "inspector_files",
+                        "inspector_changes",
+                        "inspector_artifacts",
+                        "inspector_terminal",
+                        "inspector_github",
+                        "inspector_subagent",
+                        "artifact_view_code",
+                        "artifact_history_opened",
+                        "artifact_presented",
+                        "artifact_made_public",
+                        "artifact_fix_pressed",
+                        "artifact_tweaks_changed",
+                        "deck_slide_added",
+                        "message_sent",
+                        "attachment_added",
+                        "voice_note_recorded",
+                        "model_changed",
+                        "effort_changed",
+                        "command_palette_opened",
+                        "command_run",
+                        "artifact_opened_html",
+                        "artifact_opened_react",
+                        "artifact_opened_markdown",
+                        "artifact_opened_mermaid",
+                        "artifact_opened_deck",
+                        "artifact_opened_sheet",
+                        "artifact_opened_diagram",
+                        "artifact_hand_edit_html",
+                        "artifact_hand_edit_react",
+                        "artifact_hand_edit_markdown",
+                        "artifact_hand_edit_mermaid",
+                        "artifact_hand_edit_deck",
+                        "artifact_hand_edit_sheet",
+                        "artifact_hand_edit_diagram",
+                        "artifact_downloaded_pdf",
+                        "artifact_downloaded_png",
+                        "artifact_downloaded_pptx",
+                        "artifact_downloaded_docx",
+                        "artifact_downloaded_xlsx",
+                        "artifact_downloaded_csv",
+                        "artifact_downloaded_source",
+                        "artifact_prompt_copied_react",
+                        "artifact_prompt_copied_vue",
+                        "artifact_prompt_copied_angular",
+                        "artifact_prompt_copied_svelte",
+                        "artifact_prompt_copied_solid",
+                        "artifact_prompt_copied_html",
+                        "artifact_prompt_copied_react_native"
+                      ]
+                    },
+                    "additionalProperties": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 10000
+                    }
+                  }
+                },
+                "required": [
+                  "host",
+                  "phone",
+                  "counts"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "null"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/profiles/{profileId}/schedules/{scheduleId}/run": {
       "post": {
         "operationId": "runSchedule",

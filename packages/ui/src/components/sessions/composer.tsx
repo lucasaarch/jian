@@ -8,6 +8,7 @@ import type { MediaUpload } from '../../lib/api';
 import { base64, classify, MAX_MESSAGE_MEDIA, PASTE_AS_FILE_CHARS } from '../../lib/attachments';
 import { useRecorder } from '../../lib/recorder';
 import { type Attachment, useAttached, useDrafts } from '../../lib/stores/drafts';
+import { countUsage } from '../../lib/usage';
 import { AudioPlayer } from '../ui';
 import { listBreak } from './list-break';
 import { size } from './media';
@@ -168,6 +169,7 @@ export function Composer({
 
     setError(problems.join(' '));
     setAttachments((list) => [...list, ...added]);
+    if (added.length) countUsage(voice ? 'voice_note_recorded' : 'attachment_added');
   };
 
   const remove = (key: string) =>
@@ -211,6 +213,7 @@ export function Composer({
       if (replyTo) await send(text.trim(), mediaIds, replyTo.id);
       else await send(text.trim(), mediaIds);
       onCancelReply?.();
+      countUsage('message_sent');
       for (const item of attachments) if (item.preview) URL.revokeObjectURL(item.preview);
       previews.current.clear();
       write('');

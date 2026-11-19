@@ -50,6 +50,7 @@ export function GatewayPanel({
       credentials: 'same-origin',
       push: false,
       credential: 'host',
+      host: 'desktop',
     }),
   );
   const memory = navigationFor(gateway.id);

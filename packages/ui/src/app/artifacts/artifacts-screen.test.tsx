@@ -1,3 +1,4 @@
+import type { PanelUsage } from '@jian/contracts';
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
@@ -6,6 +7,7 @@ import { artifactsPath } from '../../lib/navigation';
 import { keys } from '../../lib/query/keys';
 import { useCrew } from '../../lib/stores/crew';
 import { draftKey, useDrafts } from '../../lib/stores/drafts';
+import { flushUsage, setUsageReporting } from '../../lib/usage';
 import { memoryNavigation } from '../../platform/navigation';
 import { AgentCache, agentClient } from '../../test/agent';
 import { profile } from '../../test/fixtures';
@@ -358,6 +360,24 @@ it('opens one in the page with the Inspector’s own view, and comes back to the
   await click(button('All artifacts', container));
   expect(titles()).toEqual(['Landing', 'Release notes']);
   expect(memoryNavigation.current()).toBe(artifactsPath(profile.id));
+});
+
+it('counts the page and the Artifact opened, by type, for the anonymous report', async () => {
+  setUsageReporting(false);
+  setUsageReporting(true);
+  await render(gateway());
+  await click(button('Open Landing'));
+  await settled(() => Boolean(container.querySelector('iframe')));
+
+  const send = vi.fn(async (_usage: PanelUsage) => undefined);
+  await flushUsage(send);
+  setUsageReporting(undefined);
+
+  expect(send).toHaveBeenCalledWith({
+    host: 'web',
+    phone: false,
+    counts: { artifacts_page: 1, artifact_opened_html: 1 },
+  });
 });
 
 it('keeps the one open in the address, so the browser’s back comes to the cards', async () => {

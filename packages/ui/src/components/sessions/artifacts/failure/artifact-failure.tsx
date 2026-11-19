@@ -4,6 +4,7 @@ import type { ArtifactFrameError } from '@jian/contracts';
 import { CircleAlert, Copy, Wrench } from 'lucide-react';
 import { useId, useState } from 'react';
 import { Action, Fold, FoldChevron } from '../../../../kit';
+import { countUsage } from '../../../../lib/usage';
 import { copy } from '../source';
 import { errorText } from './fix-request';
 
@@ -88,6 +89,7 @@ export function ArtifactFailure({
             disabled={busy || asked}
             onClick={() => {
               setAsked(true);
+              countUsage('artifact_fix_pressed');
               onFix();
             }}
           >

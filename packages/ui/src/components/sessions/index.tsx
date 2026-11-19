@@ -19,6 +19,7 @@ import {
 import { keys } from '../../lib/query/keys';
 import { draftKey } from '../../lib/stores/drafts';
 import { COMPACT_COMMAND, sendNow } from '../../lib/stores/outbox';
+import { useUsage } from '../../lib/usage';
 import { useRefresh } from '../../lib/workspace';
 import { useParams, useRouter, useSearchParams } from '../../platform/navigation';
 import type { SectionActions } from '../props';
@@ -89,6 +90,8 @@ export function Sessions({ api, mutate, busy }: SectionActions) {
   // phone knows the draft is what is on screen. Its first message replaces it with the chat.
   const asked = search.has('new');
   const draft = !selected;
+  // A conversation opened, each one; the new chat's screen, each time it is come to.
+  useUsage(selected ? 'chat' : 'new_chat', selected);
   const active = selected ? sessions.find((session) => session.id === selected) : undefined;
   const [replyTo, setReplyTo] = useState<Message>();
   useEffect(

@@ -5,6 +5,7 @@ import { useCallback, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import type { DeckSlidesEdit, SessionArtifact } from '../../../../lib/api';
 import { keys } from '../../../../lib/query/keys';
+import { countUsage } from '../../../../lib/usage';
 import { type ArtifactsApi, artifactChanged, latestKnown } from '../use-artifacts';
 import { layoutSlide, type SlideLayout } from './layouts';
 
@@ -118,6 +119,7 @@ export function useSlideOps({
   const add = useCallback(
     (index: number, what: NewSlide) =>
       void run((slides) => {
+        countUsage('deck_slide_added');
         if (what === 'duplicate') {
           return { change: { op: 'duplicate', slide: index + 1 }, at: index + 1 };
         }

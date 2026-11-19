@@ -29,6 +29,7 @@ export * from './session-artifacts.js';
 export * from './session-files.js';
 export * from './skills.js';
 export * from './ssh.js';
+export * from './telemetry.js';
 export * from './terminals.js';
 export * from './web.js';
 export * from './work.js';

@@ -7,6 +7,7 @@ import { toast } from 'sonner';
 import type { GatewayApi, ModelDefaults, ModelDefaultsInput, Session } from '../../lib/api';
 import { useModelCatalog } from '../../lib/query/agent';
 import { keys } from '../../lib/query/keys';
+import { countUsage } from '../../lib/usage';
 import { usableProviders } from '../providers/catalog';
 import { preferredModelSelection, withDefaultEffort } from '../providers/role-choices';
 import { modelEntries } from './model-entries';
@@ -130,7 +131,10 @@ export function SessionModel({
         value={model}
         disabled={busy}
         align={menuAlign}
-        onChange={(next) => void save(next)}
+        onChange={(next) => {
+          if (remembers) countUsage('model_changed');
+          void save(next);
+        }}
       />
       <EffortMenu
         model={entries.find(
@@ -139,7 +143,10 @@ export function SessionModel({
         value={model}
         disabled={busy}
         align={menuAlign}
-        onChange={(next) => void save(next)}
+        onChange={(next) => {
+          if (remembers) countUsage('effort_changed');
+          void save(next);
+        }}
       />
     </div>
   );

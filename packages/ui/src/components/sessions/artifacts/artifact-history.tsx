@@ -3,6 +3,7 @@
 import { Menu } from '@base-ui/react/menu';
 import { History } from 'lucide-react';
 import { iconButton, MenuChoices, menuPopup } from '../../../kit';
+import { countUsage } from '../../../lib/usage';
 
 /**
  * The versions of the open Artifact, behind one button of its bar: every one it has had, the
@@ -27,7 +28,7 @@ export function ArtifactHistory({
   }));
 
   return (
-    <Menu.Root>
+    <Menu.Root onOpenChange={(open) => open && countUsage('artifact_history_opened')}>
       <Menu.Trigger aria-label="History" className={iconButton}>
         <History size={15} aria-hidden="true" />
       </Menu.Trigger>

@@ -6,6 +6,7 @@ import { useState } from 'react';
 import { toast } from 'sonner';
 import { iconButton, MenuEntry, menuPopup } from '../../../kit';
 import type { DeckExportQuery, SessionArtifact } from '../../../lib/api';
+import { countUsage } from '../../../lib/usage';
 import { Spinner } from '../../ui/spinner';
 import { download, fileName, fileOf } from './source';
 import type { ArtifactsApi } from './use-artifacts';
@@ -40,6 +41,7 @@ export function ArtifactDownload({
   const take = async (wanted: DeckExportQuery, extension: string) => {
     if (making) return;
     setMaking(true);
+    countUsage(`artifact_downloaded_${wanted.format}`);
     try {
       download(
         fileName(artifact, version, undefined, extension),
@@ -86,9 +88,11 @@ export function ArtifactDownload({
                 )}
                 <MenuEntry
                   disabled={source === undefined}
-                  onClick={() =>
-                    source !== undefined && download(fileName(artifact, version), source)
-                  }
+                  onClick={() => {
+                    if (source === undefined) return;
+                    countUsage('artifact_downloaded_source');
+                    download(fileName(artifact, version), source);
+                  }}
                 >
                   Markdown (.md)
                 </MenuEntry>

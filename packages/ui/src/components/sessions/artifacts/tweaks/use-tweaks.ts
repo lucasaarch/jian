@@ -8,6 +8,7 @@ import {
   artifactTweaks,
 } from '@jian/contracts';
 import { type RefObject, useEffect, useState } from 'react';
+import { useUsage } from '../../../../lib/usage';
 
 /** The theme a component is tried in: the panel's, or one of its own. */
 export type TweakScheme = 'auto' | 'light' | 'dark';
@@ -61,14 +62,17 @@ export function useTweaks(frame: RefObject<HTMLIFrameElement | null>, on: boolea
   }, [tweaks, values, frame]);
 
   const initial = tweaks ? defaults(tweaks) : {};
+  const changed =
+    scheme !== 'auto' || Object.entries(values).some(([key, value]) => initial[key] !== value);
+  // Once each time the component is moved off how it was drawn, not at every step of a slider.
+  useUsage(changed ? 'artifact_tweaks_changed' : undefined);
   return {
     tweaks,
     values,
     scheme,
     setScheme,
     set: (key: string, value: ArtifactTweakValue) => setValues((now) => ({ ...now, [key]: value })),
-    changed:
-      scheme !== 'auto' || Object.entries(values).some(([key, value]) => initial[key] !== value),
+    changed,
     reset: () => {
       setScheme('auto');
       setValues(initial);
