@@ -20,11 +20,11 @@ type FolderParams = ProfileParams & { folderId: string };
  */
 const EDIT_BODY_LIMIT = 2 * 1024 * 1024;
 
-const html = (reply: FastifyReply, ancestors: "'self'" | "'none'", downloads = false) =>
+const html = (reply: FastifyReply, ancestors: "'self'" | "'none'", publicPage = false) =>
   reply
     .type('text/html; charset=utf-8')
     // Over the policy the gateway gives every answer, which would let the page reach its origin.
-    .header('Content-Security-Policy', artifactPolicy(ancestors, downloads));
+    .header('Content-Security-Policy', artifactPolicy(ancestors, publicPage));
 
 export function registerArtifactRoutes(
   app: FastifyInstance,

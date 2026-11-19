@@ -7,23 +7,33 @@ import {
 } from '@jian/contracts';
 
 /**
- * The page a public link answers, around the Artifact: the gateway's own, never the agent's. It
- * holds the Artifact's page in a sandboxed `srcdoc` frame that fills the window, and over it a
- * toolbar that takes none of the window's room: it slides in while the pointer is at the top
- * edge or the keyboard is in it, and on a touch screen from a small handle at the top.
+ * The page a public link answers, around the Artifact: the gateway's own, never the agent's. A
+ * toolbar stands across its top, always, in a room of its own, so whoever opens the link sees what
+ * it is, where it was made and what they can take away; the Artifact's page fills the rest, in a
+ * sandboxed `srcdoc` frame.
  *
  * What the toolbar needs this page to be allowed, and why the Artifact still cannot:
  *
  * - `allow-downloads`, which the page is served with (routes.ts) beside `allow-scripts`, lets
- *   its Download menu save a file. A frame's sandbox flags are the ones its own `sandbox`
- *   attribute grants, intersected with its parent's: the Artifact's frame is given
- *   `allow-scripts` alone, so it saves nothing, and neither does any frame inside it.
+ *   its Download menu save a file.
+ * - `allow-popups` and `allow-popups-to-escape-sandbox` let its links to Jian open in a tab of
+ *   their own, as an ordinary page there rather than one sealed like this.
+ * - A frame's sandbox flags are the ones its own `sandbox` attribute grants, intersected with its
+ *   parent's: the Artifact's frame is given `allow-scripts` alone, so it saves nothing and opens
+ *   nothing, and neither does any frame inside it.
  * - Copying needs no flag: the clipboard is written from this page, on the reader's click, and
  *   only with what the page already holds (the prompts). The Artifact cannot reach it, and this
  *   page reads nothing the Artifact says: no message is listened for.
  * - Nothing else is loosened. `frame-src 'none'` still refuses every navigation of the frame,
  *   which is removed should one get through, as in every shell (document.ts).
  */
+
+/** Where the toolbar sends a reader who wants Jian. */
+const JIAN = {
+  site: 'https://usejian.app',
+  download: 'https://usejian.app/download',
+  repository: 'https://github.com/lucasaarch/jian',
+};
 
 /** Inside a script element nothing may read as markup, and `<` is all that could. */
 const data = (value: unknown) => JSON.stringify(value).replaceAll('<', '\\u003c');
@@ -47,7 +57,9 @@ const ICONS = {
   ),
   check: icon('<path d="M20 6 9 17l-5-5"/>'),
   chevron: icon('<path d="m6 9 6 6 6-6"/>'),
-  hide: icon('<path d="m18 15-6-6-6 6"/>'),
+  external: icon('<path d="M7 17 17 7"/><path d="M7 7h10v10"/>'),
+  // GitHub's own mark, filled, as the panel's About shows it.
+  github: `<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .5a11.5 11.5 0 0 0-3.64 22.41c.58.1.79-.25.79-.56v-1.97c-3.2.7-3.87-1.37-3.87-1.37-.52-1.33-1.28-1.69-1.28-1.69-1.04-.71.08-.7.08-.7 1.15.08 1.76 1.19 1.76 1.19 1.03 1.76 2.69 1.25 3.35.96.1-.75.4-1.25.73-1.54-2.55-.29-5.24-1.28-5.24-5.69 0-1.26.45-2.29 1.19-3.1-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.17 1.18a11 11 0 0 1 5.77 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.84 1.19 3.1 0 4.42-2.7 5.4-5.26 5.68.41.36.78 1.06.78 2.14v3.17c0 .31.21.67.8.56A11.5 11.5 0 0 0 12 .5Z"/></svg>`,
 };
 
 /**
@@ -56,7 +68,7 @@ const ICONS = {
  * system's, since a font could only come from the network.
  */
 const STYLE = `
-:root { color-scheme: light dark; --ink: #171716; --muted: #686864;
+:root { color-scheme: light dark; --ink: #171716; --muted: #686864; --canvas: #f7f7f5;
   --glass: color-mix(in srgb, #ffffff 82%, transparent);
   --glass-edge: color-mix(in srgb, #000000 8%, transparent);
   --glass-light: color-mix(in srgb, #ffffff 70%, transparent);
@@ -65,7 +77,7 @@ const STYLE = `
   --glass-press: color-mix(in srgb, #000000 9%, transparent);
   --good: #237a51; --bad: #b22e3d; }
 @media (prefers-color-scheme: dark) {
-  :root { --ink: #f5f5f3; --muted: #a6a6a3;
+  :root { --ink: #f5f5f3; --muted: #a6a6a3; --canvas: #0f0f0f;
     --glass: color-mix(in srgb, #141414 78%, transparent);
     --glass-edge: color-mix(in srgb, #ffffff 9%, transparent);
     --glass-light: color-mix(in srgb, #ffffff 7%, transparent);
@@ -74,25 +86,24 @@ const STYLE = `
     --glass-press: color-mix(in srgb, #ffffff 11%, transparent);
     --good: #84d6ae; --bad: #fb8791; }
 }
-html, body { margin: 0; height: 100%; overflow: hidden; background: transparent; }
-#artifact { position: fixed; inset: 0; width: 100%; height: 100%; border: 0; display: block; }
-#top { position: fixed; inset: 0 0 auto; z-index: 1; pointer-events: none;
-  font: 13px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; color: var(--ink); }
-/* The strip the pointer finds the toolbar by. Thin, since it covers the top of the Artifact. */
-#edge { height: 10px; pointer-events: auto; }
+html, body { margin: 0; height: 100%; }
+/* The toolbar, then the Artifact filling what is left: the page itself never scrolls, so the
+   toolbar stays where it is while the Artifact scrolls in its own frame. */
+body { display: flex; flex-direction: column; overflow: hidden; background: var(--canvas);
+  color: var(--ink); font: 13px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; }
+#artifact { flex: 1; min-height: 0; width: 100%; border: 0; display: block; }
 .glass { background: var(--glass); border: 1px solid var(--glass-edge);
   box-shadow: inset 0 1px 0 var(--glass-light), var(--glass-shadow);
   -webkit-backdrop-filter: blur(40px) saturate(170%); backdrop-filter: blur(40px) saturate(170%); }
-#bar { position: absolute; top: 8px; left: 8px; right: 8px; max-width: 960px; margin: 0 auto;
-  box-sizing: border-box; display: flex; align-items: center; gap: 4px; height: 46px;
-  padding: 0 6px 0 12px; border-radius: 14px; opacity: 0; pointer-events: none;
-  transform: translateY(calc(-100% - 12px));
-  transition: transform 180ms ease 300ms, opacity 180ms ease 300ms; }
-#top:hover #bar, #top:focus-within #bar, #top.open #bar, #top.held #bar {
-  opacity: 1; transform: none; pointer-events: auto; transition-delay: 0s; }
-#brand { display: grid; place-items: center; flex: none; width: 22px; height: 22px; }
-#brand svg { width: 20px; height: 20px; }
-#name { flex: 1; min-width: 0; margin: 0 8px 0 6px; font-size: 13px; font-weight: 600;
+/* Above the Artifact's frame, so its menus open over it. */
+#bar { position: relative; z-index: 1; flex: none; box-sizing: border-box; display: flex;
+  align-items: center; gap: 4px; height: 48px; padding: 0 10px 0 8px; background: var(--glass);
+  border-bottom: 1px solid var(--glass-edge);
+  -webkit-backdrop-filter: blur(40px) saturate(170%); backdrop-filter: blur(40px) saturate(170%); }
+#brand { flex: none; font-weight: 650; letter-spacing: -.01em; }
+#brand svg { width: 18px; height: 18px; }
+.divider { flex: none; width: 1px; height: 18px; margin: 0 6px 0 2px; background: var(--glass-edge); }
+#name { flex: 1; min-width: 0; margin: 0 8px 0 0; font-size: 13px; font-weight: 600;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tool, [role=menuitem] { display: flex; align-items: center; gap: 6px; height: 32px;
   padding: 0 10px; border: 0; border-radius: 8px; font: inherit; color: inherit;
@@ -102,32 +113,25 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: transparent;
 .tool .chevron { width: 13px; height: 13px; color: var(--muted); }
 .tool.done { color: var(--good); }
 .tool.failed { color: var(--bad); }
-:is(.tool, [role=menuitem], #handle):focus-visible {
+.tool.get { margin-left: 2px; padding: 0 12px; border-radius: 999px; background: var(--ink);
+  color: var(--canvas); font-weight: 600; }
+.tool.get:hover { background: color-mix(in srgb, var(--ink) 86%, var(--canvas)); }
+.tool.get svg { width: 13px; height: 13px; }
+:is(.tool, [role=menuitem]):focus-visible {
   outline: 2px solid color-mix(in srgb, var(--ink) 45%, transparent); outline-offset: -2px; }
 .menu { position: relative; }
 [role=menu] { position: absolute; top: calc(100% + 8px); right: 0; min-width: 200px;
-  padding: 4px; border-radius: 12px; display: flex; flex-direction: column; }
+  padding: 4px; border-radius: 12px; display: flex; flex-direction: column; outline: none; }
 [role=menu][hidden] { display: none; }
 [role=menuitem] { width: 100%; box-sizing: border-box; text-align: start; }
-[role=menuitem]:is(:hover, :focus) { background: var(--glass-press); outline: none; }
+/* One entry lit at a time: the one the pointer is on, or the keyboard's when it moves through
+   them. The pointer moving over one gives it the focus (the script), so the two never differ. */
+[role=menuitem]:focus { background: var(--glass-press); outline: none; }
 .caption { padding: 6px 10px 4px; color: var(--muted); font-size: 12px; }
-#handle, #hide { display: none; }
-#handle { position: absolute; top: 0; left: 50%; width: 64px; height: 24px; margin-left: -32px;
-  padding: 0; border: 0; background: none; pointer-events: auto; cursor: pointer; }
-#handle span { display: block; width: 36px; height: 5px; margin: 7px auto 0; border-radius: 99px;
-  background: color-mix(in srgb, CanvasText 32%, transparent);
-  box-shadow: 0 0 0 1px color-mix(in srgb, Canvas 55%, transparent); }
 .quiet { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
-/* A touch screen has no pointer resting at the top: a tap on the handle shows the toolbar, and
-   a button in it hides it again. */
-@media (hover: none) {
-  #edge { display: none; }
-  #handle { display: block; }
-  #hide { display: flex; }
-}
-@media (max-width: 560px) { .tool .label { display: none; } }
-@media (prefers-reduced-motion: reduce) {
-  #bar { transform: none; transition: opacity 120ms ease 300ms; }
+@media (max-width: 640px) {
+  .tool .label, .divider { display: none; }
+  #brand .label { display: none; }
 }`;
 
 /**
@@ -142,34 +146,42 @@ const SCRIPT = `(() => {
     if (loaded) return frame.remove();
     loaded = true;
   });
-  const top = document.getElementById('top');
   const said = document.getElementById('said');
   const menus = [...document.querySelectorAll('.menu')];
   const items = (menu) => [...menu.querySelectorAll('[role=menuitem]')];
   const toggle = (menu, open) => {
     menu.querySelector('.tool').setAttribute('aria-expanded', String(open));
     menu.querySelector('[role=menu]').hidden = !open;
-    // An open menu keeps the toolbar out, wherever the pointer goes.
-    top.classList.toggle('held', menus.some((each) => !each.querySelector('[role=menu]').hidden));
   };
   const close = () => { for (const menu of menus) toggle(menu, false); };
   for (const menu of menus) {
     const button = menu.querySelector('.tool');
-    const open = () => { close(); toggle(menu, true); items(menu)[0].focus(); };
-    button.addEventListener('click', () => button.getAttribute('aria-expanded') === 'true' ? toggle(menu, false) : open());
+    const list = menu.querySelector('[role=menu]');
+    // Opened from the keyboard, the first entry has the focus; opened with the pointer, none does
+    // until the pointer is on one, so no entry is lit that the reader did not point at.
+    const open = (keyboard) => {
+      close();
+      toggle(menu, true);
+      (keyboard ? items(menu)[0] : list).focus();
+    };
+    button.addEventListener('click', (event) =>
+      button.getAttribute('aria-expanded') === 'true' ? toggle(menu, false) : open(event.detail === 0));
     button.addEventListener('keydown', (event) => {
       if (event.key !== 'ArrowDown') return;
       event.preventDefault();
-      open();
+      // The menu below hears keys too: this one opened it, and must not also move through it.
+      event.stopPropagation();
+      open(true);
     });
+    for (const item of items(menu)) item.addEventListener('pointermove', () => item.focus());
+    list.addEventListener('pointerleave', () => { if (!list.hidden) list.focus(); });
     menu.addEventListener('keydown', (event) => {
-      const list = items(menu);
-      const at = list.indexOf(document.activeElement);
-      if (at < 0) return;
-      const to = { ArrowDown: at + 1, ArrowUp: at - 1, Home: 0, End: list.length - 1 }[event.key];
-      if (to !== undefined) {
+      const entries = items(menu);
+      const at = entries.indexOf(document.activeElement);
+      const to = { ArrowDown: at + 1, ArrowUp: at < 0 ? -1 : at - 1, Home: 0, End: entries.length - 1 }[event.key];
+      if (to !== undefined && !list.hidden) {
         event.preventDefault();
-        list[(to + list.length) % list.length].focus();
+        entries[(to + entries.length) % entries.length].focus();
       } else if (event.key === 'Escape') {
         toggle(menu, false);
         button.focus();
@@ -183,14 +195,7 @@ const SCRIPT = `(() => {
   document.addEventListener('pointerdown', (event) => { if (!event.target.closest('.menu')) close(); });
   // A click in the Artifact takes the focus into its frame, which this page sees as its own
   // window losing it: whatever the toolbar had open closes.
-  addEventListener('blur', () => { close(); top.classList.remove('open'); });
-  const handle = document.getElementById('handle');
-  const reveal = (open) => {
-    top.classList.toggle('open', open);
-    handle.setAttribute('aria-expanded', String(open));
-  };
-  handle.addEventListener('click', () => reveal(!top.classList.contains('open')));
-  document.getElementById('hide').addEventListener('click', () => { close(); reveal(false); });
+  addEventListener('blur', close);
 
   const prompt = document.getElementById('prompt');
   if (!prompt) return;
@@ -229,14 +234,11 @@ const SCRIPT = `(() => {
       button.classList.toggle('done', done);
       button.classList.toggle('failed', !done);
       said.textContent = done ? 'Prompt for ' + item.textContent + ' copied.' : 'The prompt could not be copied.';
-      // Held out long enough to be read, wherever the pointer went.
-      top.classList.add('held');
       clearTimeout(shown);
       shown = setTimeout(() => {
         button.innerHTML = idle;
         button.classList.remove('done', 'failed');
         said.textContent = '';
-        top.classList.toggle('held', menus.some((each) => !each.querySelector('[role=menu]').hidden));
       }, 1800);
     });
   }
@@ -246,7 +248,7 @@ const SCRIPT = `(() => {
 const menu = (id: string, label: string, glyph: string, entries: string, caption?: string) => `
 <div class="menu" id="${id}">
 <button type="button" class="tool" aria-haspopup="menu" aria-expanded="false" aria-controls="${id}-menu">${glyph}<span class="label">${label}</span>${ICONS.chevron.replace('<svg', '<svg class="chevron"')}</button>
-<div role="menu" id="${id}-menu" class="glass" aria-label="${label}" hidden>${caption ? `<div class="caption" aria-hidden="true">${caption}</div>` : ''}${entries}</div>
+<div role="menu" id="${id}-menu" class="glass" aria-label="${label}" tabindex="-1" hidden>${caption ? `<div class="caption" aria-hidden="true">${caption}</div>` : ''}${entries}</div>
 </div>`;
 
 /**
@@ -323,15 +325,13 @@ export function publicPage(
 </head>
 <body>
 <!-- The toolbar first, so the keyboard reaches it before the Artifact. -->
-<div id="top">
-<div id="edge"></div>
-<button type="button" id="handle" aria-label="Show the toolbar" aria-expanded="false" aria-controls="bar"><span></span></button>
-<header id="bar" class="glass" aria-label="Artifact">
-<span id="brand" title="Made with Jian">${LOGO}</span>
+<header id="bar" aria-label="Artifact">
+<a class="tool" id="brand" href="${JIAN.site}" target="_blank" rel="noopener noreferrer" title="Made with Jian">${LOGO}<span class="label">Jian</span></a>
+<span class="divider" aria-hidden="true"></span>
 <h1 id="name">${text(title)}</h1>${prompts}${downloads}
-<button type="button" class="tool" id="hide" aria-label="Hide the toolbar">${ICONS.hide}</button>
+<a class="tool" href="${JIAN.repository}" target="_blank" rel="noopener noreferrer" aria-label="Jian on GitHub">${ICONS.github}<span class="label">GitHub</span></a>
+<a class="tool get" href="${JIAN.download}" target="_blank" rel="noopener noreferrer">Get Jian${ICONS.external}</a>
 </header>
-</div>
 <iframe id="artifact" sandbox="allow-scripts" referrerpolicy="no-referrer" title="${text(title)}"${fullscreen ? ' allowfullscreen' : ''} srcdoc="${text(inner)}"></iframe>
 <p id="said" class="quiet" role="status"></p>${promptData}
 <script>${SCRIPT}</script>

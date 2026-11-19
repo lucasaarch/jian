@@ -102,7 +102,7 @@ it('adds up every report of every panel, at once or one after another, by host',
   const event = panel(sent[0]);
   expect(event?.properties).toMatchObject({
     version: '1.6.0',
-    $process_person_profile: false,
+    $process_person_profile: true,
     features: { chat: 14, artifacts_page: 1 },
     hosts: {
       web: { chat: 2 + 4, artifacts_page: 1 },

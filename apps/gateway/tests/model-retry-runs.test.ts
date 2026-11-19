@@ -130,6 +130,14 @@ it('waits out more than a round for a conversation, but gives a look back one ro
     );
     expect((await services.runs.run(profile.id, run.id)).status).toBe('completed');
     expect(owner.attempts()).toBe(13);
+    // Kept on the run once the progress that showed it is gone, to be counted later.
+    const reconnected = async (runId: string) =>
+      (await services.lifecycle.checkpoints(profile.id, runId))
+        .map((checkpoint) => checkpoint.data as { phase?: string })
+        .filter((data) => data.phase === 'model-reconnected');
+    expect(await reconnected(run.id)).toEqual([
+      { phase: 'model-reconnected', attempts: 13, waitedMs: expect.any(Number), recovered: true },
+    ]);
 
     const learning = await services.sessions.learningSession(profile.id);
     const look = failing(Number.POSITIVE_INFINITY);
@@ -141,6 +149,7 @@ it('waits out more than a round for a conversation, but gives a look back one ro
     const failed = await services.runs.run(profile.id, lookBack.id);
     expect(failed.status).toBe('failed');
     expect(look.attempts()).toBe(10);
+    expect(await reconnected(lookBack.id)).toMatchObject([{ attempts: 10, recovered: false }]);
   } finally {
     spy.mockRestore();
     await outbound.close();
