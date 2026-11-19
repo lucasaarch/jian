@@ -10,7 +10,7 @@ import {
   SlidersHorizontal,
 } from 'lucide-react';
 import { type RefObject, useRef, useState } from 'react';
-import { Action, HoverTip, iconButton, SkeletonLine, SkeletonRegion } from '../../../kit';
+import { Action, HoverTip, iconButton } from '../../../kit';
 import type { SessionArtifact } from '../../../lib/api';
 import { useGatewayMode } from '../../../lib/gateway-mode';
 import type { ArtifactDraft } from '../../../lib/stores/artifact-draft';
@@ -18,11 +18,11 @@ import { CodeBlock } from '../../ui/code-block';
 import { InspectorBody } from '../inspector';
 import { ArtifactBar, SaveStatus } from './artifact-bar';
 import { ArtifactDownload } from './artifact-download';
-import { ArtifactFrame } from './artifact-frame';
 import { ArtifactHistory } from './artifact-history';
-import { LiveArtifact, WritingChip } from './artifact-live';
+import { LiveSheet, UpdatingLine, WritingChip } from './artifact-live';
 import { ArtifactOptions } from './artifact-options';
 import { ArtifactSharing } from './artifact-sharing';
+import { ArtifactSkeleton, StagedFrame } from './artifact-stage';
 import { DeckDownload } from './deck/deck-download';
 import { DeckView } from './deck/deck-view';
 import { Presentation } from './deck/presentation';
@@ -99,8 +99,10 @@ export function ArtifactView({
   const editable = EDITABLE_ARTIFACT_TYPES.includes(artifact.type);
   const direct = artifact.type === 'markdown' || artifact.type === 'sheet';
   const writing = Boolean(draft && !draft.done);
-  // What the agent writes shows in place of the version until the owner has begun to edit it.
-  const streaming = Boolean(draft?.content) && held === undefined;
+  // A spreadsheet written again whole fills in where it stands, in place of the version, until the
+  // owner has begun to edit it. Anything else keeps its version in view while it changes: what
+  // is half written of a page or a component draws nothing worth seeing.
+  const streaming = artifact.type === 'sheet' && Boolean(draft?.content) && held === undefined;
   const editing = editable && !code && !streaming && (direct || toggled);
   // What has a drawing and a source to switch between: all but a deck.
   const sourced = artifact.type !== 'deck';
@@ -140,7 +142,11 @@ export function ArtifactView({
         title={artifact.title}
         old={held !== undefined || version === artifact.version ? undefined : version}
         status={
-          writing ? <WritingChip /> : editing ? <SaveStatus state={autosave.state} /> : undefined
+          writing ? (
+            <WritingChip updating />
+          ) : editing ? (
+            <SaveStatus state={autosave.state} />
+          ) : undefined
         }
         back={
           <HoverTip tip="All artifacts" hoverOnly side="bottom">
@@ -291,21 +297,15 @@ export function ArtifactView({
         }
       />
 
+      {writing && !streaming && <UpdatingLine />}
       {streaming && draft ? (
-        <LiveArtifact draft={draft} />
+        <LiveSheet content={draft.content} done={draft.done} />
       ) : read.isError ? (
         <p role="alert" className="px-(--inspector-inset) pt-3 text-sm text-muted">
           {read.error instanceof Error ? read.error.message : 'The Artifact could not be read.'}
         </p>
       ) : !read.data ? (
-        <SkeletonRegion
-          label="Loading artifact…"
-          className="grid gap-2 px-(--inspector-inset) pt-3"
-        >
-          {['w-1/3', 'w-1/2', 'w-2/5'].map((width) => (
-            <SkeletonLine key={width} className={width} />
-          ))}
-        </SkeletonRegion>
+        <ArtifactSkeleton />
       ) : code ? (
         <InspectorBody className="px-(--inspector-inset)">
           <CodeBlock text={source ?? ''} language={LANGUAGE[artifact.type]} wrapped />
@@ -323,19 +323,19 @@ export function ArtifactView({
       ) : component ? (
         // The frame stays mounted while Tweaks opens and shuts beside it.
         <div className="relative flex min-h-0 flex-1">
-          <ArtifactFrame
+          <StagedFrame
             key={version}
             type={artifact.type}
             title={artifact.title}
             source={read.data.compiled ?? read.data.content}
             frame={frame}
-            className="min-h-0 min-w-0 flex-1 border-0"
+            className="min-h-0 w-full min-w-0 flex-1 border-0"
             scheme={tweaks.scheme === 'auto' ? undefined : tweaks.scheme}
           />
           {tweaksShown && <TweaksPanel tweaks={tweaks} />}
         </div>
       ) : (
-        <ArtifactFrame
+        <StagedFrame
           key={`${version}:${editing}`}
           type={artifact.type}
           title={artifact.title}

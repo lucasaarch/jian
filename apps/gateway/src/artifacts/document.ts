@@ -317,6 +317,10 @@ addEventListener('message', (event) => {
  * corner apart from the slide: it showed past a dark slide as a pale arc. It is painted only once
  * the slide's frame has loaded (`drawn`): before that the frame is clear, so what the panel had
  * there stays, and a dark slide does not open on a flash of white.
+ *
+ * Any frame here is unseen until it has loaded (`drawn`) for the same reason: until then it holds
+ * the browser's empty page, whose colour scheme is not the panel's, and the browser paints a
+ * frame like that on an opaque canvas, white behind a dark panel.
  */
 function shell(
   title: string,
@@ -439,7 +443,8 @@ function shell(
 <title>${escaped(title)}</title>
 <style>:root { color-scheme: ${theme ?? 'light dark'}; }
 html, body, iframe { margin: 0; width: 100%; height: 100%; border: 0; display: block; }
-html, body { background: transparent; }${sheet ? '\nhtml.drawn { background: #fff; }' : ''}</style>
+html, body { background: transparent; }
+html:not(.drawn) iframe { opacity: 0; }${sheet ? '\nhtml.drawn { background: #fff; }' : ''}</style>
 </head>
 <body>${held}
 <script>

@@ -827,15 +827,61 @@ describe('an Artifact being written', () => {
     expect(drawer()?.textContent).not.toContain('Writing…');
   });
 
-  it('shows the source growing for anything but a document', async () => {
+  it('never shows what is half written of a page as code, nor runs it', async () => {
     await render(gateway([]));
 
-    await told(writing('<h1>Hi', { type: 'html' }));
-    expect(drawer()?.querySelector('pre')?.textContent).toContain('<h1>Hi');
-    expect(drawer()?.querySelector('article')).toBeNull();
+    await told(writing('<h1>Hi</h1><script>alert(1)</script>', { type: 'html' }));
+    expect(drawer()?.textContent).toContain('Generating…');
+    expect(drawer()?.textContent).not.toContain('<h1>Hi');
+    expect(drawer()?.querySelector('pre')).toBeNull();
+    expect(frame()).toBeNull();
   });
 
-  it('keeps the current version in view until the update has words, then streams them', async () => {
+  it('fills a spreadsheet in cell by cell, as text, with the cell being written marked', async () => {
+    await render(gateway([]));
+
+    await told(writing('Item,Cost\nA,2\n"<b>B</b>, quoted",=SU', { type: 'sheet' }));
+    const cells = () => [...(drawer()?.querySelectorAll('tbody td') ?? [])];
+    expect(cells().map((cell) => cell.textContent)).toEqual([
+      'Item',
+      'Cost',
+      'A',
+      '2',
+      '<b>B</b>, quoted',
+      '=SU',
+    ]);
+    // Data, never markup: what looks like a tag is the cell's own text.
+    expect(drawer()?.querySelector('tbody b')).toBeNull();
+    expect(drawer()?.querySelector('[data-writing]')?.textContent).toBe('=SU');
+
+    await told(writing('Item,Cost,Paid\nA,2,yes\n', { type: 'sheet' }));
+    expect(drawer()?.querySelectorAll('thead th[scope=col]')).toHaveLength(3);
+    expect(drawer()?.querySelector('[data-writing]')).toBeNull();
+  });
+
+  it('draws the slides of a deck as each is finished, and none half written', async () => {
+    await render(gateway([]));
+
+    const slide = (text: string) => `<!doctype html><h1>${text}</h1>`;
+    await told(
+      writing(`${slide('One')}\n\n${slide('Tw')}`, {
+        type: 'deck',
+        slides: [slide('One')],
+      }),
+    );
+    expect(container.querySelectorAll('ol[aria-label="Slides"] iframe')).toHaveLength(1);
+    expect(drawer()?.querySelector('[aria-label="Slide 2, being written"]')).not.toBeNull();
+
+    await told(
+      writing(`${slide('One')}\n\n${slide('Two')}`, {
+        type: 'deck',
+        slides: [slide('One'), slide('Two')],
+      }),
+    );
+    expect(container.querySelectorAll('ol[aria-label="Slides"] iframe')).toHaveLength(2);
+  });
+
+  it('keeps the current version in view while the agent changes it, with Updating…', async () => {
     const api = gateway();
     await opened(notes, api);
     await settled(() => drawer()?.querySelector('h2')?.textContent === notes.title);
@@ -843,17 +889,29 @@ describe('an Artifact being written', () => {
     // Named but not yet written: the version stays, with the quiet word beside it.
     await told(writing('', { artifactId: notes.id }));
     expect(frame()).not.toBeNull();
-    expect(drawer()?.textContent).toContain('Writing…');
+    expect(drawer()?.textContent).toContain('Updating…');
 
+    // Written again whole, a document still keeps its version in view, the owner's edits with it.
+    const before = frame();
     await told(writing('# New words', { artifactId: notes.id }));
-    expect(frame()).toBeNull();
-    expect(drawer()?.querySelector('article')?.textContent).toContain('New words');
+    expect(frame()).toBe(before);
+    expect(drawer()?.querySelector('article')).toBeNull();
 
     api.held[api.held.findIndex((item) => item.id === notes.id)] = { ...notes, version: 4 };
     await told(undefined);
-    await settled(() => Boolean(frame()));
+    await settled(() => viewed(api) === 4);
     expect(viewed(api)).toBe(4);
-    expect(drawer()?.textContent).not.toContain('Writing…');
+    expect(drawer()?.textContent).not.toContain('Updating…');
+  });
+
+  it('fills a spreadsheet written again whole where it stands', async () => {
+    await opened(sheet, gateway([sheet]));
+    await settled(() => drawer()?.querySelector('h2')?.textContent === sheet.title);
+
+    await told(writing('Item,Cost\nA,3', { artifactId: sheet.id, type: undefined }));
+    expect(frame()).toBeNull();
+    expect(drawer()?.querySelector('[data-writing]')?.textContent).toBe('3');
+    expect(drawer()?.textContent).toContain('Updating…');
   });
 
   it('moves no focus when it opens the tab by itself', async () => {
@@ -865,7 +923,7 @@ describe('an Artifact being written', () => {
     // The tab opens on it by itself, as the agent's own request to show one does.
     await told(writing('', { artifactId: notes.id }));
     expect(document.activeElement).toBe(composer);
-    expect(drawer()?.textContent).toContain('Writing…');
+    expect(drawer()?.textContent).toContain('Updating…');
     composer.remove();
   });
 });
