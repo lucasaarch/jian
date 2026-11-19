@@ -20,16 +20,16 @@ Shared by the whole installation.
   message, name, address, file or credential. The owner turns it off there; a host with
   \`DO_NOT_TRACK=1\` or \`JIAN_TELEMETRY=off\` has it off for good.
 - **Providers**: model providers, the Tavily web-search key and Decisions (Jev). A provider
-  can hold several accounts (two Claude Code tokens); Configure lists them; runs use the one
-  marked Active.
+  can hold several accounts, listed in Configure; runs use the Active one.
 - **Capabilities**: the models for channels, incoming audio, image generation and speech. A
   conversation is compacted by its own model. Automatic selects from connected providers;
   Disabled turns that activity off where offered.
 - **SSH keys**: the keys every agent uses for Git.
 - **Machines**: on a server gateway, the computers every agent can use, and how to install their
   worker. A desktop app connected to that gateway is listed as This computer.
-- **Mobile**: on a server gateway, pairs a phone with the Jian app by QR code, lists paired
-  phones and when each was last seen, sets notification previews per phone, and revokes one. Pairing needs the gateway's public address.
+- **Mobile**: on a server gateway, pairs a phone with the Jian app by QR code (it needs the
+  public address), lists paired phones and when each was last seen, sets notification previews
+  per phone, and revokes one.
 - **Connection**: on a server gateway, how this panel reaches it.
 
 ## Plugins

@@ -137,6 +137,9 @@ async function github({ registered = true, accounts = true } = {}) {
     name: 'Atlas',
     instructions: 'Help.',
     model,
+    // A test model has no window to read the budget from, and the default 32k is mostly taken by
+    // the built-in tools and the system prompt: room for the push and its answer.
+    contextPolicy: { inputTokens: 64_000 },
   });
   // Agents share one directory, so each test takes its own for its checkouts not to meet.
   process.env.JIAN_WORKSPACES = join(root, randomUUID());
