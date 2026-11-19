@@ -128,7 +128,7 @@ takes the whole window: its pages are listed where the sidebar was, under Back.
   this conversation's own field. It draws the one opened in a sealed frame: the owner opens an
   earlier version from History, switches between the drawing and its code, copies or downloads
   the source, and sets it Private or Public. A finished file, a PDF or any other, is not an Artifact: it comes as a
-  sent file in the chat. A deck shows its slides small and
+  sent file in the chat. A deck, which the panel names Slide, shows its slides small and
   numbered in a row on top and one of them large under it, dragged or scrolled sideways to the
   next, with Present in the toolbar, beside Edit, to fill the screen with the same player its public link has; a deck has no code view. Its Download button saves
   the whole deck as a PDF, a page a slide, or as a PowerPoint file, in the fonts it is shown in
@@ -138,7 +138,7 @@ takes the whole window: its pages are listed where the sidebar was, under Back.
   its own fonts, so only one on a server offers them: on the desktop app's own gateway a deck
   downloads as the slide's web page alone. Edit, on a web page, a document or a deck's slide,
   lets the owner click a text to change it or its formatting; on a spreadsheet, type in its
-  cells; on a whiteboard, draw and move notes, shapes, arrows and strokes. Save keeps that as a
+  cells. Save keeps that as a
   new version of theirs.
   Public gives a link anyone can open without signing in, to read the latest version only,
   and making it private again ends that link for good. A deck's link has Present too, the same player the panel's Present opens: the whole

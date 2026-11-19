@@ -14,7 +14,7 @@ export const frameStyle = (theme: FrameTheme | undefined) => `
 html, body { margin: 0; }
 body { padding: 16px; font: 15px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif;
   overflow-wrap: anywhere; }
-body.react, body.deck, body.sheet, body.board, body.markdown { padding: 0; }
+body.react, body.deck, body.sheet, body.markdown { padding: 0; }
 /* A component that sizes itself to its parent (h-full, min-h-screen) fills the view, and one that
    is taller scrolls the page. */
 body.react #root { min-height: 100vh; }

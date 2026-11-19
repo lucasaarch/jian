@@ -7,7 +7,6 @@ import {
   type SessionArtifactType,
 } from '@jian/contracts';
 import { GatewayError } from '../core/errors.js';
-import { BOARD } from './board-frame.js';
 import { EDITORS } from './edit-frame.js';
 import { type FrameTheme, frameStyle } from './frame-style.js';
 import { PLAYER, PLAYER_EMBEDDED } from './player.js';
@@ -81,8 +80,6 @@ const DRAW: Record<
   html: { libraries: [], body: WRITE, whole: true },
   // The panel hands its frame one slide, a page like any other; the public page holds them all.
   deck: { libraries: [], body: PLAYER, whole: true },
-  // Markup set this way runs no script element of its own.
-  svg: { libraries: [], body: `root.innerHTML = source;` },
   markdown: {
     libraries: ['marked'],
     body: `run(libraries[0]); root.innerHTML = marked.parse(source);`,
@@ -100,7 +97,6 @@ root.innerHTML = (await mermaid.render('diagram', source)).svg;`,
   },
   // Drawn by scripts of the gateway's own, which read the source as data and never run it.
   sheet: { libraries: [], body: `${SHEET}\nsheet(source, root, false);` },
-  board: { libraries: [], body: `${BOARD}\nboard(source, root, false);` },
   // React ships as CommonJS, and the component arrives compiled to it: each is wrapped in a
   // function and handed a require that knows these few names and nothing else.
   react: {
