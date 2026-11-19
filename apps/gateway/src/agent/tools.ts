@@ -460,14 +460,14 @@ export function profileTools(
           }),
           update_artifact: tool({
             description:
-              'Give an Artifact of this conversation a new version: the whole content again, not a patch (for a deck every slide again, as `slides`; to change one slide use update_slide). The owner sees the new one and can go back to any earlier version. The owner may have edited it by hand since you wrote it, and this replaces their edit too: read_artifact_source first when that is possible. Its type stays; make another Artifact for another type.',
+              'Give an Artifact of this conversation a new version: the whole content again, not a patch (for a deck every slide again, as `slides`; to change one slide use update_slide). The owner sees the new one and can go back to any earlier version. The owner may have edited it by hand since you wrote it, and your version goes on top of their edit, so read_artifact_source first when that is possible and build on it. The owner watches the content as you write it. Its type stays; make another Artifact for another type.',
             inputSchema: sessionArtifactRevisionSchema,
             execute: async (input) =>
               madeArtifact(await services.artifacts?.revise(run.profileId, run.sessionId, input)),
           }),
           read_artifact_source: tool({
             description:
-              'Read an Artifact of this conversation back: its source as it now stands, or as a version of it was, and whether you or the owner wrote that version. The owner edits a web page, a deck’s slides, a document and a spreadsheet by hand in the panel, which makes a version you have never seen, so read before you update one you did not just write. A deck answers its slides, numbered from 1, or with `slide` that one alone.',
+              'Read an Artifact of this conversation back: its source as it now stands, or as a version of it was, and whether you or the owner wrote that version. The owner edits a web page, a deck’s slides, a document and a spreadsheet by hand in the panel, which is kept by itself as a version of theirs you have never seen, so read before you update one you did not just write. A deck answers its slides, numbered from 1, or with `slide` that one alone.',
             inputSchema: sessionArtifactReadSchema,
             execute: async (input) => services.artifacts?.read(run.profileId, run.sessionId, input),
           }),

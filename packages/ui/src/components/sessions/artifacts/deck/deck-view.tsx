@@ -16,7 +16,7 @@ import { SlideRail } from './slide-rail';
  *
  * While the owner edits, it is the slide in view that is open for editing, and it stays in
  * view: moving to another would drop what was typed, so the rail, the track and the steps wait
- * for Save or Cancel.
+ * for Done.
  */
 export function DeckView({
   title,
@@ -32,7 +32,7 @@ export function DeckView({
   at: number;
   onAt: (index: number) => void;
   editing: boolean;
-  /** The frame of the slide in view, for the one who saves an edit. */
+  /** The frame of the slide in view, for the one who keeps an edit. */
   frame: RefObject<HTMLIFrameElement | null>;
 }) {
   const last = slides.length - 1;

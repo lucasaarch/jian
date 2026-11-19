@@ -8242,6 +8242,45 @@
                             ],
                             "additionalProperties": false
                           },
+                          "artifact": {
+                            "type": "object",
+                            "properties": {
+                              "toolCallId": {
+                                "type": "string",
+                                "maxLength": 200
+                              },
+                              "artifactId": {
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "title": {
+                                "type": "string",
+                                "maxLength": 120
+                              },
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "html",
+                                  "react",
+                                  "markdown",
+                                  "mermaid",
+                                  "deck",
+                                  "sheet"
+                                ]
+                              },
+                              "content": {
+                                "default": "",
+                                "type": "string",
+                                "maxLength": 400000
+                              }
+                            },
+                            "required": [
+                              "toolCallId",
+                              "content"
+                            ],
+                            "additionalProperties": false
+                          },
                           "updatedAt": {
                             "type": "string",
                             "format": "date-time",
@@ -13986,6 +14025,45 @@
                           ],
                           "additionalProperties": false
                         },
+                        "artifact": {
+                          "type": "object",
+                          "properties": {
+                            "toolCallId": {
+                              "type": "string",
+                              "maxLength": 200
+                            },
+                            "artifactId": {
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            },
+                            "title": {
+                              "type": "string",
+                              "maxLength": 120
+                            },
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "html",
+                                "react",
+                                "markdown",
+                                "mermaid",
+                                "deck",
+                                "sheet"
+                              ]
+                            },
+                            "content": {
+                              "default": "",
+                              "type": "string",
+                              "maxLength": 400000
+                            }
+                          },
+                          "required": [
+                            "toolCallId",
+                            "content"
+                          ],
+                          "additionalProperties": false
+                        },
                         "updatedAt": {
                           "type": "string",
                           "format": "date-time",
@@ -14831,6 +14909,45 @@
                           ],
                           "additionalProperties": false
                         },
+                        "artifact": {
+                          "type": "object",
+                          "properties": {
+                            "toolCallId": {
+                              "type": "string",
+                              "maxLength": 200
+                            },
+                            "artifactId": {
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            },
+                            "title": {
+                              "type": "string",
+                              "maxLength": 120
+                            },
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "html",
+                                "react",
+                                "markdown",
+                                "mermaid",
+                                "deck",
+                                "sheet"
+                              ]
+                            },
+                            "content": {
+                              "default": "",
+                              "type": "string",
+                              "maxLength": 400000
+                            }
+                          },
+                          "required": [
+                            "toolCallId",
+                            "content"
+                          ],
+                          "additionalProperties": false
+                        },
                         "updatedAt": {
                           "type": "string",
                           "format": "date-time",
@@ -15671,6 +15788,45 @@
                             "attempts",
                             "nextAt",
                             "reason"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "artifact": {
+                          "type": "object",
+                          "properties": {
+                            "toolCallId": {
+                              "type": "string",
+                              "maxLength": 200
+                            },
+                            "artifactId": {
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            },
+                            "title": {
+                              "type": "string",
+                              "maxLength": 120
+                            },
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "html",
+                                "react",
+                                "markdown",
+                                "mermaid",
+                                "deck",
+                                "sheet"
+                              ]
+                            },
+                            "content": {
+                              "default": "",
+                              "type": "string",
+                              "maxLength": 400000
+                            }
+                          },
+                          "required": [
+                            "toolCallId",
+                            "content"
                           ],
                           "additionalProperties": false
                         },
@@ -35592,6 +35748,45 @@
                           ],
                           "additionalProperties": false
                         },
+                        "artifact": {
+                          "type": "object",
+                          "properties": {
+                            "toolCallId": {
+                              "type": "string",
+                              "maxLength": 200
+                            },
+                            "artifactId": {
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            },
+                            "title": {
+                              "type": "string",
+                              "maxLength": 120
+                            },
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "html",
+                                "react",
+                                "markdown",
+                                "mermaid",
+                                "deck",
+                                "sheet"
+                              ]
+                            },
+                            "content": {
+                              "default": "",
+                              "type": "string",
+                              "maxLength": 400000
+                            }
+                          },
+                          "required": [
+                            "toolCallId",
+                            "content"
+                          ],
+                          "additionalProperties": false
+                        },
                         "updatedAt": {
                           "type": "string",
                           "format": "date-time",
@@ -36629,6 +36824,45 @@
                           ],
                           "additionalProperties": false
                         },
+                        "artifact": {
+                          "type": "object",
+                          "properties": {
+                            "toolCallId": {
+                              "type": "string",
+                              "maxLength": 200
+                            },
+                            "artifactId": {
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            },
+                            "title": {
+                              "type": "string",
+                              "maxLength": 120
+                            },
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "html",
+                                "react",
+                                "markdown",
+                                "mermaid",
+                                "deck",
+                                "sheet"
+                              ]
+                            },
+                            "content": {
+                              "default": "",
+                              "type": "string",
+                              "maxLength": 400000
+                            }
+                          },
+                          "required": [
+                            "toolCallId",
+                            "content"
+                          ],
+                          "additionalProperties": false
+                        },
                         "updatedAt": {
                           "type": "string",
                           "format": "date-time",
@@ -37477,6 +37711,45 @@
                           ],
                           "additionalProperties": false
                         },
+                        "artifact": {
+                          "type": "object",
+                          "properties": {
+                            "toolCallId": {
+                              "type": "string",
+                              "maxLength": 200
+                            },
+                            "artifactId": {
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            },
+                            "title": {
+                              "type": "string",
+                              "maxLength": 120
+                            },
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "html",
+                                "react",
+                                "markdown",
+                                "mermaid",
+                                "deck",
+                                "sheet"
+                              ]
+                            },
+                            "content": {
+                              "default": "",
+                              "type": "string",
+                              "maxLength": 400000
+                            }
+                          },
+                          "required": [
+                            "toolCallId",
+                            "content"
+                          ],
+                          "additionalProperties": false
+                        },
                         "updatedAt": {
                           "type": "string",
                           "format": "date-time",
@@ -38301,6 +38574,45 @@
                             "attempts",
                             "nextAt",
                             "reason"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "artifact": {
+                          "type": "object",
+                          "properties": {
+                            "toolCallId": {
+                              "type": "string",
+                              "maxLength": 200
+                            },
+                            "artifactId": {
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            },
+                            "title": {
+                              "type": "string",
+                              "maxLength": 120
+                            },
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "html",
+                                "react",
+                                "markdown",
+                                "mermaid",
+                                "deck",
+                                "sheet"
+                              ]
+                            },
+                            "content": {
+                              "default": "",
+                              "type": "string",
+                              "maxLength": 400000
+                            }
+                          },
+                          "required": [
+                            "toolCallId",
+                            "content"
                           ],
                           "additionalProperties": false
                         },
@@ -40205,6 +40517,45 @@
                             "attempts",
                             "nextAt",
                             "reason"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "artifact": {
+                          "type": "object",
+                          "properties": {
+                            "toolCallId": {
+                              "type": "string",
+                              "maxLength": 200
+                            },
+                            "artifactId": {
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            },
+                            "title": {
+                              "type": "string",
+                              "maxLength": 120
+                            },
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "html",
+                                "react",
+                                "markdown",
+                                "mermaid",
+                                "deck",
+                                "sheet"
+                              ]
+                            },
+                            "content": {
+                              "default": "",
+                              "type": "string",
+                              "maxLength": 400000
+                            }
+                          },
+                          "required": [
+                            "toolCallId",
+                            "content"
                           ],
                           "additionalProperties": false
                         },
@@ -43368,6 +43719,11 @@
                     "type": "integer",
                     "minimum": 1,
                     "maximum": 100
+                  },
+                  "editKey": {
+                    "type": "string",
+                    "minLength": 8,
+                    "maxLength": 64
                   }
                 },
                 "required": [
@@ -49010,6 +49366,45 @@
                           ],
                           "additionalProperties": false
                         },
+                        "artifact": {
+                          "type": "object",
+                          "properties": {
+                            "toolCallId": {
+                              "type": "string",
+                              "maxLength": 200
+                            },
+                            "artifactId": {
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            },
+                            "title": {
+                              "type": "string",
+                              "maxLength": 120
+                            },
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "html",
+                                "react",
+                                "markdown",
+                                "mermaid",
+                                "deck",
+                                "sheet"
+                              ]
+                            },
+                            "content": {
+                              "default": "",
+                              "type": "string",
+                              "maxLength": 400000
+                            }
+                          },
+                          "required": [
+                            "toolCallId",
+                            "content"
+                          ],
+                          "additionalProperties": false
+                        },
                         "updatedAt": {
                           "type": "string",
                           "format": "date-time",
@@ -51691,6 +52086,45 @@
                             ],
                             "additionalProperties": false
                           },
+                          "artifact": {
+                            "type": "object",
+                            "properties": {
+                              "toolCallId": {
+                                "type": "string",
+                                "maxLength": 200
+                              },
+                              "artifactId": {
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "title": {
+                                "type": "string",
+                                "maxLength": 120
+                              },
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "html",
+                                  "react",
+                                  "markdown",
+                                  "mermaid",
+                                  "deck",
+                                  "sheet"
+                                ]
+                              },
+                              "content": {
+                                "default": "",
+                                "type": "string",
+                                "maxLength": 400000
+                              }
+                            },
+                            "required": [
+                              "toolCallId",
+                              "content"
+                            ],
+                            "additionalProperties": false
+                          },
                           "updatedAt": {
                             "type": "string",
                             "format": "date-time",
@@ -52509,6 +52943,45 @@
                           ],
                           "additionalProperties": false
                         },
+                        "artifact": {
+                          "type": "object",
+                          "properties": {
+                            "toolCallId": {
+                              "type": "string",
+                              "maxLength": 200
+                            },
+                            "artifactId": {
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            },
+                            "title": {
+                              "type": "string",
+                              "maxLength": 120
+                            },
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "html",
+                                "react",
+                                "markdown",
+                                "mermaid",
+                                "deck",
+                                "sheet"
+                              ]
+                            },
+                            "content": {
+                              "default": "",
+                              "type": "string",
+                              "maxLength": 400000
+                            }
+                          },
+                          "required": [
+                            "toolCallId",
+                            "content"
+                          ],
+                          "additionalProperties": false
+                        },
                         "updatedAt": {
                           "type": "string",
                           "format": "date-time",
@@ -53323,6 +53796,45 @@
                             "attempts",
                             "nextAt",
                             "reason"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "artifact": {
+                          "type": "object",
+                          "properties": {
+                            "toolCallId": {
+                              "type": "string",
+                              "maxLength": 200
+                            },
+                            "artifactId": {
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            },
+                            "title": {
+                              "type": "string",
+                              "maxLength": 120
+                            },
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "html",
+                                "react",
+                                "markdown",
+                                "mermaid",
+                                "deck",
+                                "sheet"
+                              ]
+                            },
+                            "content": {
+                              "default": "",
+                              "type": "string",
+                              "maxLength": 400000
+                            }
+                          },
+                          "required": [
+                            "toolCallId",
+                            "content"
                           ],
                           "additionalProperties": false
                         },

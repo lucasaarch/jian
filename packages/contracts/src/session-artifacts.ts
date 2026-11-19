@@ -130,6 +130,13 @@ export const sessionArtifactEditSchema = z.strictObject({
   content: z.string().min(1).max(SESSION_ARTIFACT_MAX),
   /** A deck only, and required for one: the slide that was edited, counting from 1. */
   slide: slideNumberSchema.optional(),
+  /**
+   * Names one editing stretch, made by the panel when the owner starts editing. The first save of
+   * a key adds a version; later saves with it replace that version's content while it is still
+   * the latest and the owner's. If the agent wrote a newer one meanwhile, the save is a new
+   * version on top and the answer's `version` says so.
+   */
+  editKey: z.string().min(8).max(64).optional(),
 });
 
 export const sessionArtifactSchema = z.strictObject({

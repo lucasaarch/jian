@@ -1,12 +1,15 @@
 'use client';
 
 import { useRef } from 'react';
+import { useArtifactDraft } from '../../../lib/stores/artifact-draft';
 import { useCrew } from '../../../lib/stores/crew';
 import { useDrawerFocus } from '../crew';
 import { InspectorContent } from '../inspector-host';
 import { ArtifactCards, type ArtifactsDrawerApi } from './artifact-cards';
+import { LiveCreation } from './artifact-live';
 import { ArtifactView } from './artifact-view';
 import { useArtifactsFollow, useSessionArtifacts } from './use-artifacts';
+import { useDraftHandoff } from './use-draft-handoff';
 
 /**
  * The Inspector's Artifacts tab: what the agent made in this conversation for the owner to see,
@@ -29,7 +32,14 @@ export function ArtifactsDrawer({
   const tab = found?.kind === 'artifacts' ? found : undefined;
   const listing = useSessionArtifacts(api, profileId, tab?.sessionId);
 
-  useDrawerFocus(tab ? following : undefined, closer);
+  const draft = useArtifactDraft(
+    (state) => state.byConversation[tab?.sessionId ?? conversation ?? ''],
+  );
+  // Held across the render that opens the drawer on a draft, so that the opening moves no focus.
+  const quiet = useRef(false);
+  quiet.current = Boolean(draft && !draft.done);
+  useDrawerFocus(tab ? following : undefined, closer, quiet);
+  useDraftHandoff(api, profileId, tab?.sessionId ?? conversation ?? undefined, draft);
   useArtifactsFollow(profileId, conversation);
 
   if (!tab) return null;
@@ -40,13 +50,16 @@ export function ArtifactsDrawer({
   return (
     <InspectorContent>
       <aside className="crew-drawer" aria-label="Artifacts">
-        {artifact ? (
+        {draft && !draft.artifactId ? (
+          <LiveCreation draft={draft} closer={closer} />
+        ) : artifact ? (
           <ArtifactView
             key={artifact.id}
             api={api}
             profileId={profileId}
             artifact={artifact}
             closer={closer}
+            draft={draft?.artifactId === artifact.id ? draft : undefined}
             onBack={() => useCrew.getState().showArtifacts()}
           />
         ) : (

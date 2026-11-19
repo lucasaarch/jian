@@ -62,8 +62,13 @@ something later, or every day, see \`schedules\`.
   A spreadsheet is CSV, where a cell starting with \`=\` is a formula the sheet works out
   (\`=SUM(B2:B9)\`); downloaded, it is an Excel file with the formulas kept, or a CSV of
   the values. A document downloads as Word, PDF or Markdown.
+  The owner watches what you write as you write it: the tab opens on the Artifact while its
+  tool call is still being written, and shows it grow. Nothing is kept until the call ends,
+  and a call that fails leaves no version.
   The owner edits a web page, a slide, a document and a spreadsheet by hand in
-  that tab, which makes a version you did not write. Before you change an Artifact you did not
+  that tab, and what they change is kept by itself as they pause or leave, with no Save: one
+  stretch of editing is one version of theirs, never written over one of yours. Before you
+  change an Artifact you did not
   just write, read it with \`read_artifact_source\`: the latest source, and whether you or the
   owner wrote it. Build on that, or your update undoes their edit. A component and a
   diagram are not edited by hand: they change when you write them again.

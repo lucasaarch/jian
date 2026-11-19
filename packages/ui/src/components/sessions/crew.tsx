@@ -186,12 +186,18 @@ export function placeCrew(agents: Subagent[], answers: Message[]) {
  * In on open, and back to what opened it on close, so the keyboard does not lose its place.
  * Escape closes. `shown` is what the drawer shows, undefined while it shows nothing.
  */
-export function useDrawerFocus(shown: string | undefined, closer: RefObject<HTMLElement | null>) {
+export function useDrawerFocus(
+  shown: string | undefined,
+  closer: RefObject<HTMLElement | null>,
+  quiet?: RefObject<boolean>,
+) {
   const close = useCrew((state) => state.close);
 
   useEffect(() => {
     if (!shown) return;
-    closer.current?.focus();
+    // Quiet where the drawer opened by itself, as on an Artifact being written: the owner may be
+    // typing in the composer.
+    if (!quiet?.current) closer.current?.focus();
     const keys = (event: KeyboardEvent) => {
       if (event.key === 'Escape') close();
     };
@@ -201,5 +207,5 @@ export function useDrawerFocus(shown: string | undefined, closer: RefObject<HTML
       document.removeEventListener('keydown', keys);
       useCrew.getState().opener?.focus({ preventScroll: true });
     };
-  }, [shown, close, closer]);
+  }, [shown, close, closer, quiet]);
 }

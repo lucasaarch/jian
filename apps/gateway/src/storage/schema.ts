@@ -529,6 +529,9 @@ export const sessionArtifactVersions = pgTable(
     content: text('content').notNull(),
     // Who wrote it: the agent with its tools, or the owner editing it by hand in the panel.
     author: text('author').$type<SessionArtifactAuthor>().notNull().default('agent'),
+    // The owner's editing stretch that wrote it (migration 0111): while it is the latest version,
+    // a save with the same key replaces its content instead of adding a version.
+    editKey: text('edit_key'),
     createdAt,
   },
   (table) => [primaryKey({ columns: [table.artifactId, table.version] })],
