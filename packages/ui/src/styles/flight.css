@@ -2,14 +2,21 @@
 @reference "tailwindcss";
 @reference "./themes.css";
 
+/* What turns is a box of the icon's own size, holding the drawing still. An SVG turned itself
+   leaves its axis to how a browser places an SVG's transform box and to the line of text it
+   sits in, and went round off-centre in the web panel. A box out of the line, with no line
+   height of its own, turns about its centre everywhere. */
 .spin {
-  /* An inline SVG sits on the text baseline and turns around a box taller than its glyph, so it
-     wobbles; a block box turning about its own centre stays put. */
-  display: block;
+  display: inline-flex;
   flex-shrink: 0;
-  transform-origin: 50% 50%;
-  transform-box: fill-box;
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
+  transform-origin: center;
   animation: spin 1s linear infinite;
+}
+.spin > svg {
+  display: block;
 }
 
 /* A row new to the conversation enters once: an answer, someone else's line, a card. A row

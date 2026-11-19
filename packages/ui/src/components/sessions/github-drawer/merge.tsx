@@ -14,8 +14,21 @@ const methodNames: Record<GitHubMergeMethod, { action: string; detail: string }>
 };
 
 /**
+ * Whether merging is out of reach: a draft, a branch in conflict, a repository that allows no
+ * method, or rules that block it and that the App may not bypass.
+ */
+export const mergeBlocked = (pull: GitHubPull) =>
+  pull.draft ||
+  pull.mergeable === 'conflicts' ||
+  !pull.mergeMethods.length ||
+  (pull.mergeable === 'blocked' && !pull.canBypassRules);
+
+/** Blocked rules the App may pass: merging now goes past them. */
+const bypassing = (pull: GitHubPull) => pull.mergeable === 'blocked' && pull.canBypassRules;
+
+/**
  * Merging, as GitHub offers it: the method the repository prefers, squash when it allows it, and
- * the others a menu away. A draft, a branch in conflict or a repository that allows none cannot.
+ * the others a menu away.
  */
 export function MergeButton({
   pull,
@@ -27,7 +40,7 @@ export function MergeButton({
   const [method, setMethod] = useState<GitHubMergeMethod>(
     pull.mergeMethods.includes('squash') ? 'squash' : (pull.mergeMethods[0] ?? 'merge'),
   );
-  const blocked = pull.draft || pull.mergeable === 'conflicts' || !pull.mergeMethods.length;
+  const blocked = mergeBlocked(pull);
 
   return (
     <div className="inline-flex">
@@ -102,13 +115,18 @@ export function MergeConfirm({
           <p className="text-sm leading-relaxed text-muted">
             {pull.head.ref} lands on {pull.base.ref} {methodNames[shown].detail}.
           </p>
+          {bypassing(pull) && (
+            <p className="text-sm leading-relaxed text-warn">
+              The repository’s rules are not met yet: merging now bypasses them.
+            </p>
+          )}
         </header>
         <OverlayActions>
           <Action tone="quiet" disabled={busy} onClick={close}>
             Cancel
           </Action>
           <Action tone="primary" busy={busy} onClick={() => method && merge(method)}>
-            {methodNames[shown].action}
+            {bypassing(pull) ? 'Bypass rules and merge' : methodNames[shown].action}
           </Action>
         </OverlayActions>
       </div>
