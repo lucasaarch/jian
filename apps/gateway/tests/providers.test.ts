@@ -350,7 +350,10 @@ describe('anthropic thinking', () => {
           { provider: 'anthropic', modelId: id, reasoningEffort: 'medium' },
           6144,
         ),
-      ).toEqual({ anthropic: { thinking: { type: 'adaptive' }, effort: 'medium' } });
+      ).toEqual({
+        // Summarized, so a long thought streams and is not taken for a stalled call.
+        anthropic: { thinking: { type: 'adaptive', display: 'summarized' }, effort: 'medium' },
+      });
     }
     const opus = { provider: 'anthropic', modelId: 'claude-opus-5-5' } as const;
     expect(
