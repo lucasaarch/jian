@@ -143,6 +143,30 @@ it('adds a Secret with a login and a password', async () => {
   });
   expect(host.textContent).toContain('Mail account');
   expect(document.body.innerHTML).not.toContain(PASSWORD);
+
+  // Opened again, it starts from nothing: what was typed went with the dialog.
+  await click(button('Add'));
+  const again = lastDialog();
+  expect(inputs(again, 'Title')[0]?.value).toBe('');
+  expect(inputs(again, 'Value').map((input) => input.value)).toEqual(['']);
+});
+
+it('forgets a typed password when the dialog is cancelled', async () => {
+  await render({ updateSecret: vi.fn() }, [mail]);
+
+  await click(button('Edit Mail account'));
+  let dialog = lastDialog();
+  await type(inputs(dialog, 'Value')[1], PASSWORD);
+  await click(button('Cancel', dialog));
+  // Closed, the form is gone, and what was typed in it with it.
+  expect(document.querySelector('input[type="password"]')).toBeNull();
+
+  await click(button('Edit Mail account'));
+  dialog = lastDialog();
+  const values = inputs(dialog, 'Value');
+  expect(values).toHaveLength(2);
+  expect(values[1]?.type).toBe('password');
+  expect(values[1]?.value).toBe('');
 });
 
 it('shows why a site is refused on its row, and sends only its origin', async () => {
