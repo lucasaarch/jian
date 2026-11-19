@@ -67,8 +67,10 @@ export interface ModelRetryHooks {
   /**
    * A call that failed at least once is over, after `attempts` attempts, however it ended: through,
    * refused, aborted or out of attempts. Whatever said it was reconnecting must stop saying so.
+   * `waitedMs` is the time spent waiting between attempts, as it passed (a wait cut short by an
+   * abort counts what elapsed); `through` is whether the call got an answer in the end.
    */
-  settled?: (attempts: number) => void;
+  settled?: (attempts: number, outcome: { waitedMs: number; through: boolean }) => void;
   log?: (line: string) => void;
   /** The wait after a number of failures in a row, in ms; the owner's schedule when unset. */
   delay?: (failures: number) => number;
@@ -199,12 +201,15 @@ export function withModelRetry(model: LanguageModel, hooks: ModelRetryHooks): La
     let failures = 0;
     let attempted = 0;
     let last = '';
+    let waitedMs = 0;
+    let through = false;
     try {
       while (true) {
         signal?.throwIfAborted();
         try {
           attempted += 1;
           const answer = await call();
+          through = true;
           if (failures > 0) {
             log(`jian: ${label} model reached after ${failures + 1} attempts (${last})`);
           }
@@ -241,14 +246,19 @@ export function withModelRetry(model: LanguageModel, hooks: ModelRetryHooks): La
             );
           }
           hooks.alive?.();
-          await pause(wait, signal, hooks.alive, hooks.aliveEveryMs);
+          const paused = Date.now();
+          try {
+            await pause(wait, signal, hooks.alive, hooks.aliveEveryMs);
+          } finally {
+            waitedMs += Date.now() - paused;
+          }
           hooks.alive?.();
         }
       }
     } finally {
       // On every way out, so a call refused, aborted or out of attempts after a wait never
       // leaves the run saying it is reconnecting.
-      if (failures > 0) hooks.settled?.(attempted);
+      if (failures > 0) hooks.settled?.(attempted, { waitedMs, through });
     }
   };
 

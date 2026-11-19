@@ -2,10 +2,12 @@ import { randomUUID } from 'node:crypto';
 import type { MCPClient } from '@ai-sdk/mcp';
 import {
   GATEWAY_SESSION_CHANNEL,
+  isAwsServer,
   JIAN_DESKTOP_CLIENT,
   LEARNING_SESSION_CHANNEL,
   type McpServer,
   type ModelConfig,
+  mcpAppOf,
   type Run,
   type RunApproval,
   type Session,
@@ -117,6 +119,7 @@ import {
   githubMcpServer,
   githubMcpServerName,
   githubMcpToolsetsKey,
+  isGitHubIntegrationServer,
 } from './github-mcp.js';
 import {
   ApprovalPause,
@@ -736,7 +739,19 @@ export class AgentRuntime {
         // Four beats inside the watchdog's limit, as the watchdog checks four times in it.
         aliveEveryMs: Math.min(1_000, stalledAfter / 4),
         waiting: (state) => progress.reconnecting(state),
-        settled: () => progress.reconnected(),
+        settled: (attempts, { waitedMs, through }) => {
+          progress.reconnected();
+          // Kept on the run, as the progress above is cleared when it ends: how often a provider
+          // made a turn wait, and for how long, is otherwise only in the log. Counts only.
+          void this.services.lifecycle
+            .checkpoint(profileId, runId, owner, {
+              phase: 'model-reconnected',
+              attempts,
+              waitedMs,
+              recovered: through,
+            })
+            .catch(() => {});
+        },
         ...(learning ? { attempts: ROUND } : {}),
         ...(this.options.modelRetryDelay ? { delay: this.options.modelRetryDelay } : {}),
       });
@@ -1098,6 +1113,25 @@ export class AgentRuntime {
 
       for (const server of unavailable) {
         console.warn(`jian: MCP server ${server.name} is unavailable — ${server.reason}`);
+      }
+      if (unavailable.length) {
+        // Which servers could not be reached, by name and, for a known app, which app: the reason
+        // stays in the log, as a server's error can quote its address or a token.
+        const appOf = (name: string) => {
+          const server = servers.find((item) => item.name === name);
+          if (!server) return name === githubMcpFailure?.name ? 'github' : undefined;
+          if (isGitHubIntegrationServer(server)) return 'github';
+          return isAwsServer(server) ? 'aws' : mcpAppOf(server.url ?? undefined);
+        };
+        await this.services.lifecycle
+          .checkpoint(profileId, runId, owner, {
+            phase: 'mcp-unavailable',
+            servers: unavailable.map((server) => ({
+              name: server.name,
+              ...(appOf(server.name) ? { app: appOf(server.name) } : {}),
+            })),
+          })
+          .catch(() => {});
       }
 
       // Whether the run offers a tool now, by its own bookkeeping: always offered, or loaded.

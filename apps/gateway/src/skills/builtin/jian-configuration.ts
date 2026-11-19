@@ -16,7 +16,8 @@ Shared by the whole installation.
 
 - **General, Appearance, Keymaps**: the app itself. General also holds Privacy: the gateway's
   anonymous daily report, on by default. Once a day it sends counts under a random id (version
-  and system, how many agents and runs, which models, tools and apps were used, why runs failed),
+  and system, how many agents, runs and Artifacts, which models, tools and apps were used, why
+  runs failed),
   never a message, a name, an address, a file or a credential. The owner turns it off there; a
   host with \`DO_NOT_TRACK=1\` or \`JIAN_TELEMETRY=off\` has it off for good.
 - **Providers**: model providers, the Tavily web-search key and Decisions (Jev).
