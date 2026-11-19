@@ -268,6 +268,45 @@ it('names conflicts', async () => {
   expect(response.json().mergeable).toBe('conflicts');
 });
 
+it.each([
+  { bypass: ['always', 'pull_requests_only'], can: true },
+  { bypass: ['always', 'never'], can: false },
+])(
+  'says a blocked branch can bypass its rules only when every ruleset lets the App past ($bypass)',
+  async ({ bypass, can }) => {
+    const { app } = await gateway({
+      ...pullRoutes({ mergeable: true, mergeable_state: 'blocked' }),
+      [`GET ${base}/rules/branches/main?per_page=100`]: {
+        body: [
+          { type: 'pull_request', ruleset_id: 1 },
+          { type: 'required_status_checks', ruleset_id: 2 },
+          { type: 'deletion', ruleset_id: 1 },
+        ],
+      },
+      [`GET ${base}/rulesets/1`]: { body: { id: 1, current_user_can_bypass: bypass[0] } },
+      [`GET ${base}/rulesets/2`]: { body: { id: 2, current_user_can_bypass: bypass[1] } },
+    });
+    const response = await app.inject({
+      url: '/v1/integrations/github/pulls/octo-example/site/7',
+      headers,
+    });
+
+    expect(response.json().mergeable).toBe('blocked');
+    expect(response.json().canBypassRules).toBe(can ? true : undefined);
+  },
+);
+
+it('does not offer a bypass when the rulesets cannot be read', async () => {
+  const { app } = await gateway(pullRoutes({ mergeable: true, mergeable_state: 'blocked' }));
+  const response = await app.inject({
+    url: '/v1/integrations/github/pulls/octo-example/site/7',
+    headers,
+  });
+
+  expect(response.json().mergeable).toBe('blocked');
+  expect(response.json().canBypassRules).toBeUndefined();
+});
+
 it('reads a merged pull request as merged', async () => {
   const { app } = await gateway(
     pullRoutes({ state: 'closed', merged: true, merged_at: '2026-10-29T10:00:00Z' }),
@@ -394,7 +433,7 @@ it('summarizes links for cards, keeps an unseen one plain, and reuses a recent a
 
 it('asks GitHub to update a pull request branch using the head the owner saw', async () => {
   const { app, asked } = await gateway({
-    [`POST ${base}/pulls/7/update-branch`]: { status: 202, body: {} },
+    [`PUT ${base}/pulls/7/update-branch`]: { status: 202, body: {} },
   });
   const response = await app.inject({
     method: 'POST',
@@ -405,14 +444,14 @@ it('asks GitHub to update a pull request branch using the head the owner saw', a
 
   expect(response.statusCode).toBe(200);
   expect(response.json()).toEqual({ updated: true, message: 'GitHub accepted the branch update.' });
-  expect(asked[0]).toMatchObject({ method: 'POST', path: `${base}/pulls/7/update-branch` });
+  expect(asked[0]).toMatchObject({ method: 'PUT', path: `${base}/pulls/7/update-branch` });
   expect(JSON.parse(asked[0]?.body ?? '{}')).toEqual({ expected_head_sha: head });
 });
 
 it('keeps an open pull request open in its drawer and link after updating its branch', async () => {
   const { app } = await gateway({
     ...pullRoutes(),
-    [`POST ${base}/pulls/7/update-branch`]: { status: 202, body: {} },
+    [`PUT ${base}/pulls/7/update-branch`]: { status: 202, body: {} },
   });
   const url = 'https://github.com/octo-example/site/pull/7';
   const card = async () =>

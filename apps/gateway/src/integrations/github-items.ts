@@ -145,6 +145,10 @@ const commentsResponse = z.array(
 );
 
 const mergeResponse = z.object({ sha: z.string(), message: z.string().optional() });
+const branchRulesResponse = z.array(z.object({ ruleset_id: z.number().int().optional() }));
+const rulesetResponse = z.object({ current_user_can_bypass: z.string().optional() });
+/** What GitHub says of the App on a ruleset when it may merge past it; `never` is the rest. */
+const BYPASSES = new Set(['always', 'pull_requests_only', 'exempt']);
 const errorResponse = z.object({ message: z.string() });
 const readyMutationResponse = z.object({
   data: z
@@ -264,11 +268,15 @@ export class GitHubItems {
     const base = `/repos/${ref.owner}/${ref.repo}`;
     const pull = await this.read(ref, `${base}/pulls/${ref.number}`, pullResponse);
     const sha = pull.head.sha;
-    const [repo, reviews, checks, files] = await Promise.all([
+    const mergeable = mergeableOf(pull.mergeable, pull.mergeable_state);
+    const [repo, reviews, checks, files, bypass] = await Promise.all([
       this.optional(ref, base, repoResponse),
       this.optional(ref, `${base}/pulls/${ref.number}/reviews?per_page=100`, reviewsResponse),
       this.checks(ref, sha),
       this.optional(ref, `${base}/pulls/${ref.number}/files?per_page=${FILES}`, filesResponse),
+      pull.state === 'open' && !pull.draft && mergeable === 'blocked'
+        ? this.canBypass(ref, pull.base.ref)
+        : false,
     ]);
     const latest = new Map<string, z.infer<typeof reviewsResponse>[number]>();
 
@@ -302,7 +310,8 @@ export class GitHubItems {
       additions: pull.additions ?? 0,
       deletions: pull.deletions ?? 0,
       changedFiles,
-      mergeable: mergeableOf(pull.mergeable, pull.mergeable_state),
+      mergeable,
+      ...(bypass ? { canBypassRules: true } : {}),
       mergeMethods: mergeMethods(repo),
       reviews: {
         approved: standing.filter((review) => review.state === 'approved').length,
@@ -418,11 +427,12 @@ export class GitHubItems {
   }
 
   async updateBranch(ref: Ref, expectedHeadSha: string) {
+    // GitHub's endpoint is a PUT: a POST there answers 404 Not Found.
     const response = await this.request(
       ref,
       `/repos/${ref.owner}/${ref.repo}/pulls/${ref.number}/update-branch`,
       {
-        method: 'POST',
+        method: 'PUT',
         body: JSON.stringify({ expected_head_sha: expectedHeadSha }),
       },
     );
@@ -697,6 +707,30 @@ export class GitHubItems {
     if (!parsed.success)
       throw new GatewayError(502, `GitHub sent an unexpected answer for ${describe(ref)}.`);
     return parsed.data;
+  }
+
+  /**
+   * Whether the App may merge past every ruleset on the base branch. GitHub's merge applies a
+   * bypass on its own, with no flag, for an actor on a ruleset's bypass list; its "blocked" does
+   * not say who asks, so the rulesets are asked. A classic branch protection is not read here: one
+   * that still blocks refuses the merge, with GitHub's reason.
+   */
+  private async canBypass(ref: Ref, branch: string): Promise<boolean> {
+    const base = `/repos/${ref.owner}/${ref.repo}`;
+    const path = branch.split('/').map(encodeURIComponent).join('/');
+    const rules = await this.optional(
+      ref,
+      `${base}/rules/branches/${path}?per_page=100`,
+      branchRulesResponse,
+    );
+    const ids = [...new Set((rules ?? []).flatMap((rule) => rule.ruleset_id ?? []))];
+
+    if (!ids.length || ids.length > 10) return false;
+    const rulesets = await Promise.all(
+      ids.map((id) => this.optional(ref, `${base}/rulesets/${id}`, rulesetResponse)),
+    );
+
+    return rulesets.every((ruleset) => BYPASSES.has(ruleset?.current_user_can_bypass ?? 'never'));
   }
 
   /** A part of the view it can go without: reviews, checks, files. Missing reads as none. */
