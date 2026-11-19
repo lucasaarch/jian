@@ -9322,6 +9322,8 @@ export interface operations {
                             fast?: boolean;
                             inputModalities: ("text" | "image" | "audio" | "video" | "pdf")[];
                             outputModalities?: ("text" | "image" | "audio" | "video" | "pdf")[];
+                            tools?: boolean;
+                            voices?: string[];
                             known: boolean;
                             id: string;
                             displayName?: string;

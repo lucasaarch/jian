@@ -29,7 +29,7 @@ import { voiceNote } from './audio.js';
 import { isOfficeDocument, officeText } from './documents.js';
 import { type MediaMeter, MediaProviders } from './providers.js';
 import { findMedia, type MediaAsset, mediaIdsIn, mediaMarker } from './repository.js';
-import { speechVoices } from './voices.js';
+import { speechVoice, speechVoices } from './voices.js';
 
 type MediaRole = 'audio' | 'image' | 'speech';
 
@@ -575,7 +575,7 @@ export class Media {
         inputSchema: z.object({}),
         execute: async () => {
           const { config } = await this.selection('speech');
-          return speechVoices(config);
+          return speechVoices(config, (await this.providers.loadCapabilities(config)).voices);
         },
       }),
       generate_speech: tool({
@@ -638,8 +638,17 @@ export class Media {
       kind === 'speech' && voice === undefined
         ? (await this.providers.modelDefaults()).speech
         : undefined;
-    const selectedVoice =
+    const chosenVoice =
       speechDefault && speechDefault !== 'disabled' ? speechDefault.voiceName : voice;
+    // OpenRouter's voices are per model, named in its listing: checked here, where it is read.
+    const selectedVoice =
+      kind === 'speech' && config.provider === 'openrouter'
+        ? speechVoice(
+            config,
+            chosenVoice,
+            (await this.providers.loadCapabilities(config)).voices,
+          ) || undefined
+        : chosenVoice;
     const deadline = AbortSignal.any([
       signal ?? new AbortController().signal,
       AbortSignal.timeout(180_000),

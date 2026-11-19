@@ -64,6 +64,8 @@ export function modelCapabilities(
     ...(takesFast(kind, bareModelId(modelId)) ? { fast: true } : {}),
     inputModalities: inputModalities ?? floor.inputModalities,
     outputModalities: catalogued?.outputModalities ?? [],
+    ...(catalogued?.tools === false ? { tools: false } : {}),
+    ...(catalogued?.voices?.length ? { voices: catalogued.voices } : {}),
     // Known means a source spoke for this model, not that every field came from one.
     known: Boolean(contextWindow && inputModalities),
   };

@@ -203,10 +203,14 @@ const xaiSpeechVoices = [
   'zenith',
 ];
 
-/** The voices a speech model of this vendor speaks in; empty asks for its own default. */
-export function voiceOptions(provider: string): SelectOption[] {
-  const voices =
-    provider === 'google'
+/**
+ * The voices a speech model of this vendor speaks in; empty asks for its own default. A router
+ * names each model's own (`listed`), as OpenRouter does.
+ */
+export function voiceOptions(provider: string, listed?: string[]): SelectOption[] {
+  const voices = listed?.length
+    ? listed
+    : provider === 'google'
       ? geminiSpeechVoices
       : provider === 'openai'
         ? ['alloy', 'ash', 'ballad', 'coral', 'echo', 'fable', 'nova', 'onyx', 'sage', 'shimmer']

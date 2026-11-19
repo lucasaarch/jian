@@ -180,3 +180,46 @@ it('says what the provider refused, with its key masked', async () => {
     'Media provider answered HTTP 400 — file must be one of flac mp3 ogg; key [REDACTED] was used',
   );
 });
+
+it('transcribes, draws and speaks through OpenRouter on its own endpoints', async () => {
+  const seen: Array<{ url: string; body: Record<string, unknown> }> = [];
+  const client = new MediaProviders(async (url, options) => {
+    const body = JSON.parse(String(options?.body)) as Record<string, unknown>;
+    seen.push({ url: String(url), body });
+    if (String(url).endsWith('/audio/transcriptions'))
+      return Response.json({ text: 'Call me at five.' });
+    if (String(url).endsWith('/images'))
+      return Response.json({ data: [{ b64_json: 'aW1n', media_type: 'image/webp' }] });
+    return new Response(new Uint8Array([1, 2, 3]));
+  }, []);
+  const config = (modelId: string) => ({ provider: 'openrouter' as const, modelId });
+
+  const text = await client.analyze(config('openai/whisper-1'), 'k', audio, 'Transcribe.', signal);
+  const image = await client.generate(
+    'image',
+    config('openai/gpt-image-1'),
+    'k',
+    'a cat',
+    undefined,
+    signal,
+  );
+  const speech = await client.generate(
+    'speech',
+    config('elevenlabs/eleven-v3'),
+    'k',
+    'Hello',
+    'sarah',
+    signal,
+  );
+
+  expect(text).toBe('Call me at five.');
+  expect(image).toEqual({ mimeType: 'image/webp', data: 'aW1n' });
+  expect(speech.mimeType).toBe('audio/mpeg');
+  expect(seen.map((call) => call.url)).toEqual([
+    'https://openrouter.ai/api/v1/audio/transcriptions',
+    'https://openrouter.ai/api/v1/images',
+    'https://openrouter.ai/api/v1/audio/speech',
+  ]);
+  expect(seen[0]?.body.input_audio).toEqual({ data: audio.data, format: 'ogg' });
+  expect(seen[2]?.body).toMatchObject({ voice: 'sarah', response_format: 'mp3' });
+});
