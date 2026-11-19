@@ -1,4 +1,5 @@
 import type { Skill } from '@jian/contracts';
+import { RUN_CONCURRENCY } from '../../runs/executors.js';
 
 export const handlingErrors: Skill = {
   name: 'handling-errors',
@@ -62,6 +63,10 @@ Other messages you may see:
 - A tool that is not there at all — its group is not loaded (\`load_tools\`), or this run does not
   have it: a subagent has no browser or X tools, and a conversation outside the desktop app has no
   browser.
+- A turn that stays at **Waiting for a free slot**, with how many runs are working — the gateway
+  runs at most ${RUN_CONCURRENCY} turns at once by default, subagents and turns waiting on them
+  included, and the rest start in order as slots free. Nothing is broken. Fewer subagents at once
+  frees them; the host admin can raise \`JIAN_RUN_CONCURRENCY\` in the gateway's environment and restart it.
 - A channel that does not deliver — check Channels in the panel; WhatsApp may need its QR
   code scanned again.
 - An MCP server that does not connect or needs sign-in — the owner can test or sign in under

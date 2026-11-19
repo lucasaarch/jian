@@ -7449,7 +7449,7 @@ export interface operations {
                         output?: string;
                         error?: string;
                         /** @enum {string} */
-                        tier?: "light" | "standard" | "deep";
+                        tier?: "light" | "standard" | "deep" | "premium";
                         /** @enum {string} */
                         tierBy?: "agent" | "jev" | "default";
                         modelSelection?: {
@@ -7478,6 +7478,10 @@ export interface operations {
                                 /** Format: date-time */
                                 nextAt: string;
                                 reason: string;
+                            };
+                            queued?: {
+                                working: number;
+                                slots: number;
                             };
                             artifact?: {
                                 toolCallId: string;
@@ -10360,7 +10364,7 @@ export interface operations {
                             inputHash: string;
                             repositories?: string[];
                             /** @enum {string} */
-                            tier?: "light" | "standard" | "deep";
+                            tier?: "light" | "standard" | "deep" | "premium";
                             /** @enum {string} */
                             tierBy?: "agent" | "jev" | "default";
                             /** Format: date-time */
@@ -10467,6 +10471,10 @@ export interface operations {
                                 /** Format: date-time */
                                 nextAt: string;
                                 reason: string;
+                            };
+                            queued?: {
+                                working: number;
+                                slots: number;
                             };
                             artifact?: {
                                 toolCallId: string;
@@ -10650,7 +10658,7 @@ export interface operations {
                             inputHash: string;
                             repositories?: string[];
                             /** @enum {string} */
-                            tier?: "light" | "standard" | "deep";
+                            tier?: "light" | "standard" | "deep" | "premium";
                             /** @enum {string} */
                             tierBy?: "agent" | "jev" | "default";
                             /** Format: date-time */
@@ -10757,6 +10765,10 @@ export interface operations {
                                 /** Format: date-time */
                                 nextAt: string;
                                 reason: string;
+                            };
+                            queued?: {
+                                working: number;
+                                slots: number;
                             };
                             artifact?: {
                                 toolCallId: string;
@@ -10939,7 +10951,7 @@ export interface operations {
                             inputHash: string;
                             repositories?: string[];
                             /** @enum {string} */
-                            tier?: "light" | "standard" | "deep";
+                            tier?: "light" | "standard" | "deep" | "premium";
                             /** @enum {string} */
                             tierBy?: "agent" | "jev" | "default";
                             /** Format: date-time */
@@ -11046,6 +11058,10 @@ export interface operations {
                                 /** Format: date-time */
                                 nextAt: string;
                                 reason: string;
+                            };
+                            queued?: {
+                                working: number;
+                                slots: number;
                             };
                             artifact?: {
                                 toolCallId: string;
@@ -21773,7 +21789,7 @@ export interface operations {
                             inputHash: string;
                             repositories?: string[];
                             /** @enum {string} */
-                            tier?: "light" | "standard" | "deep";
+                            tier?: "light" | "standard" | "deep" | "premium";
                             /** @enum {string} */
                             tierBy?: "agent" | "jev" | "default";
                             /** Format: date-time */
@@ -21880,6 +21896,10 @@ export interface operations {
                                 /** Format: date-time */
                                 nextAt: string;
                                 reason: string;
+                            };
+                            queued?: {
+                                working: number;
+                                slots: number;
                             };
                             artifact?: {
                                 toolCallId: string;
@@ -22171,7 +22191,7 @@ export interface operations {
                             inputHash: string;
                             repositories?: string[];
                             /** @enum {string} */
-                            tier?: "light" | "standard" | "deep";
+                            tier?: "light" | "standard" | "deep" | "premium";
                             /** @enum {string} */
                             tierBy?: "agent" | "jev" | "default";
                             /** Format: date-time */
@@ -22278,6 +22298,10 @@ export interface operations {
                                 /** Format: date-time */
                                 nextAt: string;
                                 reason: string;
+                            };
+                            queued?: {
+                                working: number;
+                                slots: number;
                             };
                             artifact?: {
                                 toolCallId: string;
@@ -22464,7 +22488,7 @@ export interface operations {
                             inputHash: string;
                             repositories?: string[];
                             /** @enum {string} */
-                            tier?: "light" | "standard" | "deep";
+                            tier?: "light" | "standard" | "deep" | "premium";
                             /** @enum {string} */
                             tierBy?: "agent" | "jev" | "default";
                             /** Format: date-time */
@@ -22571,6 +22595,10 @@ export interface operations {
                                 /** Format: date-time */
                                 nextAt: string;
                                 reason: string;
+                            };
+                            queued?: {
+                                working: number;
+                                slots: number;
                             };
                             artifact?: {
                                 toolCallId: string;
@@ -22747,7 +22775,7 @@ export interface operations {
                             inputHash: string;
                             repositories?: string[];
                             /** @enum {string} */
-                            tier?: "light" | "standard" | "deep";
+                            tier?: "light" | "standard" | "deep" | "premium";
                             /** @enum {string} */
                             tierBy?: "agent" | "jev" | "default";
                             /** Format: date-time */
@@ -22854,6 +22882,10 @@ export interface operations {
                                 /** Format: date-time */
                                 nextAt: string;
                                 reason: string;
+                            };
+                            queued?: {
+                                working: number;
+                                slots: number;
                             };
                             artifact?: {
                                 toolCallId: string;
@@ -23579,7 +23611,7 @@ export interface operations {
                             inputHash: string;
                             repositories?: string[];
                             /** @enum {string} */
-                            tier?: "light" | "standard" | "deep";
+                            tier?: "light" | "standard" | "deep" | "premium";
                             /** @enum {string} */
                             tierBy?: "agent" | "jev" | "default";
                             /** Format: date-time */
@@ -23686,6 +23718,10 @@ export interface operations {
                                 /** Format: date-time */
                                 nextAt: string;
                                 reason: string;
+                            };
+                            queued?: {
+                                working: number;
+                                slots: number;
                             };
                             artifact?: {
                                 toolCallId: string;
@@ -28682,7 +28718,7 @@ export interface operations {
                             inputHash: string;
                             repositories?: string[];
                             /** @enum {string} */
-                            tier?: "light" | "standard" | "deep";
+                            tier?: "light" | "standard" | "deep" | "premium";
                             /** @enum {string} */
                             tierBy?: "agent" | "jev" | "default";
                             /** Format: date-time */
@@ -28789,6 +28825,10 @@ export interface operations {
                                 /** Format: date-time */
                                 nextAt: string;
                                 reason: string;
+                            };
+                            queued?: {
+                                working: number;
+                                slots: number;
                             };
                             artifact?: {
                                 toolCallId: string;
@@ -29980,7 +30020,7 @@ export interface operations {
                             inputHash: string;
                             repositories?: string[];
                             /** @enum {string} */
-                            tier?: "light" | "standard" | "deep";
+                            tier?: "light" | "standard" | "deep" | "premium";
                             /** @enum {string} */
                             tierBy?: "agent" | "jev" | "default";
                             /** Format: date-time */
@@ -30087,6 +30127,10 @@ export interface operations {
                                 /** Format: date-time */
                                 nextAt: string;
                                 reason: string;
+                            };
+                            queued?: {
+                                working: number;
+                                slots: number;
                             };
                             artifact?: {
                                 toolCallId: string;
@@ -30262,7 +30306,7 @@ export interface operations {
                             inputHash: string;
                             repositories?: string[];
                             /** @enum {string} */
-                            tier?: "light" | "standard" | "deep";
+                            tier?: "light" | "standard" | "deep" | "premium";
                             /** @enum {string} */
                             tierBy?: "agent" | "jev" | "default";
                             /** Format: date-time */
@@ -30369,6 +30413,10 @@ export interface operations {
                                 /** Format: date-time */
                                 nextAt: string;
                                 reason: string;
+                            };
+                            queued?: {
+                                working: number;
+                                slots: number;
                             };
                             artifact?: {
                                 toolCallId: string;
@@ -30544,7 +30592,7 @@ export interface operations {
                             inputHash: string;
                             repositories?: string[];
                             /** @enum {string} */
-                            tier?: "light" | "standard" | "deep";
+                            tier?: "light" | "standard" | "deep" | "premium";
                             /** @enum {string} */
                             tierBy?: "agent" | "jev" | "default";
                             /** Format: date-time */
@@ -30651,6 +30699,10 @@ export interface operations {
                                 /** Format: date-time */
                                 nextAt: string;
                                 reason: string;
+                            };
+                            queued?: {
+                                working: number;
+                                slots: number;
                             };
                             artifact?: {
                                 toolCallId: string;

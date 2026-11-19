@@ -19,7 +19,7 @@ import type { SessionReader } from '../sessions/port.js';
 import type { Sessions } from '../sessions/service.js';
 import type { Store } from '../storage/database.js';
 import { mediaAssets, runs } from '../storage/schema.js';
-import { chooseTier } from './tier.js';
+import { chooseTier, TIER_AT_ONCE } from './tier.js';
 
 /**
  * How long a waiting `spawn_subagent` call holds its parent's turn. Past it the call returns and
@@ -71,6 +71,20 @@ export function nameFromBrief(brief: string): string {
 class SpawnKeyConflict extends GatewayError {
   constructor() {
     super(409, 'Spawn key was already used for different work');
+  }
+}
+
+/** What the agent is told when a tier is full, so it can wait or choose another tier. */
+const TIER_FULL = {
+  premium: (working: number) =>
+    `Not started: ${working} premium subagent is already at work in this conversation, and premium runs one at a time. Wait for its report, or give this work tier "deep".`,
+  deep: (working: number) =>
+    `Not started: ${working} deep subagents are already at work in this conversation, the most at once. Deep is for the hard piece, not for each of many: give this piece tier "standard" or "light", or wait for a deep one to report.`,
+};
+
+class TierFull extends GatewayError {
+  constructor(tier: keyof typeof TIER_AT_ONCE, working: number) {
+    super(409, TIER_FULL[tier](working));
   }
 }
 
@@ -444,6 +458,12 @@ export class Work {
       this.store.transaction(parent.profileId, async (tx) => {
         const existing = await this.spawned(tx, parent, spawnKey, inputHash);
         if (existing) return existing;
+        // Counted inside the profile's transaction, so calls made in one step, which run at the
+        // same time, cannot all see room for themselves.
+        if (tier === 'premium' || tier === 'deep') {
+          const working = await this.working(tx, parent, tier);
+          if (working >= TIER_AT_ONCE[tier]) throw new TierFull(tier, working);
+        }
         const session = await this.sessions.taskSession(parent.profileId, name, tx);
         const mediaIds = await Promise.all(
           (data.mediaIds ?? []).map((id) => this.copyImage(tx, parent.profileId, id, session.id)),
@@ -489,9 +509,30 @@ export class Work {
     } catch (error) {
       // A tier's model the gateway cannot resolve right now — a credential gone stale, a model
       // withdrawn — must not cost the work: it runs on the parent's model, as before tiers.
-      if (error instanceof SpawnKeyConflict) throw error;
+      if (error instanceof SpawnKeyConflict || error instanceof TierFull) throw error;
       return start(parent.modelSelection);
     }
+  }
+
+  /** This conversation's subagents of a tier that have yet to finish, from any of its turns. */
+  private async working(tx: Store['db'], parent: Run, tier: string) {
+    const [row] = await tx
+      .select({ count: sql<number>`count(*)::int` })
+      .from(runs)
+      .where(
+        and(
+          eq(runs.profileId, parent.profileId),
+          inArray(runs.status, ['queued', 'running', 'waiting']),
+          sql`${runs.subagent}->>'tier' = ${tier}`,
+          sql`${runs.subagent}->>'parentRunId' in (
+            select ${runs.id}::text from ${runs}
+            where ${runs.profileId} = ${parent.profileId}
+              and ${runs.sessionId} = ${parent.sessionId}
+              and ${runs.subagent} is null
+          )`,
+        ),
+      );
+    return row?.count ?? 0;
   }
 
   /** The run an earlier spawn with this key started, or a 409 when the key named other work. */

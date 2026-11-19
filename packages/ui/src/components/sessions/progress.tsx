@@ -34,6 +34,9 @@ export function statusOf(run: Pick<Run, 'status' | 'progress'>): {
   tool: boolean;
 } {
   const progress = run.progress;
+  // Every run slot is held: the gateway works, and the owner should not take it for broken.
+  if (run.status === 'queued' && progress?.queued)
+    return { label: 'Waiting for a free slot', state: 'breathing', tool: false };
   // Waiting to try the model again outranks the tool it last used: that tool is over.
   if (run.status !== 'queued' && progress?.reconnecting)
     return { label: 'Reconnecting to the model', state: 'connecting', tool: false };
@@ -57,6 +60,10 @@ export function statusOf(run: Pick<Run, 'status' | 'progress'>): {
   };
 }
 
+/** How many runs hold the slots a queued run waits for. */
+const slotsText = ({ working }: { working: number }) =>
+  `${working} ${working === 1 ? 'run is' : 'runs are'} working`;
+
 /** The working Thought Line of a run and the pictures it is drawing so far. */
 export function LiveThought({
   run,
@@ -71,7 +78,8 @@ export function LiveThought({
   startedAt: string;
 }) {
   const { label, state, tool } = statusOf(run);
-  const reconnecting = run.progress?.reconnecting;
+  const reconnecting = run.status !== 'queued' ? run.progress?.reconnecting : undefined;
+  const queued = run.status === 'queued' ? run.progress?.queued : undefined;
   // Words written before the call failed stay where they are; the line says why nothing follows.
   const writing = !tool && !reconnecting && Boolean(run.progress?.text);
 
@@ -87,14 +95,26 @@ export function LiveThought({
           finishedAt={writing ? (steps.at(-1)?.finishedAt ?? run.progress?.updatedAt) : undefined}
           {...(reconnecting
             ? { spoken: `${reconnecting.reason}, ${attemptsText(reconnecting.attempts)}` }
-            : {})}
+            : queued
+              ? { spoken: slotsText(queued) }
+              : {})}
           after={
-            reconnecting && (
+            reconnecting ? (
               <RetryCountdown
                 attempts={reconnecting.attempts}
                 nextAt={reconnecting.nextAt}
                 reason={reconnecting.reason}
               />
+            ) : (
+              queued && (
+                <span
+                  className="thought-retry"
+                  title={`The gateway runs ${queued.slots} at once; this one starts as one ends.`}
+                  aria-hidden="true"
+                >
+                  {slotsText(queued)}
+                </span>
+              )
             )
           }
         />

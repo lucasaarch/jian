@@ -2,7 +2,7 @@ import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { z } from 'zod';
 import { createGateway } from './gateway.js';
-import { LocalExecutor } from './runs/executors.js';
+import { LocalExecutor, runConcurrencySchema } from './runs/executors.js';
 import { SecretBox } from './security/crypto.js';
 import { startupFailure } from './startup.js';
 import { PGliteStore } from './storage/pglite.js';
@@ -43,6 +43,8 @@ const config = z
      * send the owner's browser back to it, so it has to stay the same from launch to launch.
      */
     JIAN_PUBLIC_URL: z.url().optional(),
+    /** Runs at once, as on a server; the app passes its own environment through. */
+    JIAN_RUN_CONCURRENCY: runConcurrencySchema,
   })
   .safeParse(process.env);
 
@@ -67,7 +69,7 @@ const gateway = await createGateway({
   }),
   token: config.data.JIAN_API_TOKEN,
   role: 'all',
-  executor: new LocalExecutor(),
+  executor: new LocalExecutor(config.data.JIAN_RUN_CONCURRENCY),
   channels: 'none',
   mode: 'local',
   // The owner's own model servers and MCP servers on this computer, over plain HTTP too.

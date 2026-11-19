@@ -9,9 +9,11 @@ export const subagentRoleSchema = z.enum(['execute', 'review']);
  * subscriptions first; see the gateway's `providers/tiers.ts`.
  * - light: small and well defined, a lookup, a rename, a short text;
  * - standard: a bounded change across a few files, with tests to run;
- * - deep: several files or systems, risky, or in need of a plan.
+ * - deep: several files or systems, risky, or in need of a plan;
+ * - premium: a provider's top-priced model, at least 1.5 times its other deep models. Never
+ *   picked by Jev or by default: only when the agent names it, one at a time per conversation.
  */
-export const subagentTierSchema = z.enum(['light', 'standard', 'deep']);
+export const subagentTierSchema = z.enum(['light', 'standard', 'deep', 'premium']);
 export type SubagentTier = z.infer<typeof subagentTierSchema>;
 
 /** Who settled the tier: the agent that asked, Jev reading the brief, or the fallback. */
@@ -36,8 +38,11 @@ export const conversationSubagentInputSchema = z.strictObject({
   wait: z.boolean().default(true),
   mediaIds: z.array(z.uuid()).max(4).optional(),
   repositories: z.array(z.string().trim().min(1).max(4096)).max(4).optional(),
-  /** Left out, or `auto`, Jev reads the brief and picks; without Jev it is `standard`. */
-  tier: z.enum(['auto', 'light', 'standard', 'deep']).optional(),
+  /**
+   * Left out, or `auto`, Jev reads the brief and picks among light, standard and deep; without
+   * Jev it is `standard`. `premium` is only ever the agent's own choice.
+   */
+  tier: z.enum(['auto', 'light', 'standard', 'deep', 'premium']).optional(),
 });
 
 export const subagentSchema = z.strictObject({

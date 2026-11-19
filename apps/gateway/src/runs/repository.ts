@@ -332,6 +332,34 @@ export async function writeProgress(
   `);
 }
 
+/**
+ * Tells queued runs that every slot of the worker is held, as their progress, so a panel says
+ * why nothing has started. Only rows still queued: a run that took a slot meanwhile is left as
+ * its claim wrote it. A row already saying the same is not written again, so a full queue read
+ * every two seconds wakes no stream until the count changes.
+ */
+export async function writeQueued(
+  db: Queryable,
+  runIds: string[],
+  queued: NonNullable<RunProgress['queued']>,
+  now: string,
+): Promise<void> {
+  if (!runIds.length) return;
+  const progress: RunProgress = { phase: 'thinking', text: '', steps: 0, queued, updatedAt: now };
+
+  await db.execute(sql`
+    with changed as (
+      update ${runs}
+      set ${sql.raw('progress')} = ${JSON.stringify(progress)}::jsonb
+      where ${inArray(runs.id, runIds)}
+        and ${runs.status} = 'queued'
+        and (${runs.progress} -> 'queued') is distinct from ${JSON.stringify(queued)}::jsonb
+      returning ${runs.profileId}
+    )
+    select pg_notify('jian_events', ${sql.raw('profile_id')}::text) from changed
+  `);
+}
+
 /** A session admits one run at a time, and `runs_activity` answers without reading the rest. */
 export async function findActiveSessionRun(
   db: Queryable,

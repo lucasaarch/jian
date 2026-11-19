@@ -71,6 +71,8 @@ export class RunLifecycle {
 
       const claimed: Run = {
         ...run,
+        // A queued run's only progress is that it waited for a slot, which it no longer does.
+        progress: undefined,
         status: 'running',
         leaseOwner: owner,
         leaseUntil: this.clock() + 60_000,
