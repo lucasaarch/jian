@@ -326,7 +326,7 @@ export class Secrets {
     if (refused.length) {
       throw new GatewayError(
         403,
-        `Not run: this agent may not use ${refused.join(', ')}. Only the Secrets listed in run_command's description can be used; the owner adds them in this agent's settings.`,
+        `Not run: this agent may not use ${refused.join(', ')}. Name a variable listed in run_command's description. The owner adds Secrets in this agent's settings, under Secrets.`,
       );
     }
 
@@ -387,7 +387,9 @@ export class Secrets {
         await this.vault.put(vaultKey, field.value, tx);
       } else if (!old) {
         throw new GatewayError(400, `Give a value for ${field.envName}: it is a new field.`);
-      } else if (field.sensitive) {
+      } else if (field.sensitive && !old.sensitive) {
+        // Only when it turns sensitive: a value already sensitive passed this check when it was
+        // saved, so renaming its label never decrypts it.
         const value = await this.vault.read(old.vaultKey, tx);
         if ((value ?? '').length < SHORTEST_SENSITIVE) {
           throw new GatewayError(
@@ -395,7 +397,7 @@ export class Secrets {
             'A sensitive value has at least 8 characters: type a longer one',
           );
         }
-      } else if (old.sensitive) {
+      } else if (old.sensitive && !field.sensitive) {
         // A plain value is returned on every read: a sensitive one never is, so it is typed again.
         throw new GatewayError(
           400,

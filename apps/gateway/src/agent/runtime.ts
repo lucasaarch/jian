@@ -152,7 +152,7 @@ import {
   redactText,
   type StepResult,
 } from './results.js';
-import type { CommandSecretAccess } from './shell.js';
+import type { SecretAccess } from './shell.js';
 import { type StepRequest, summaryCall } from './summary-call.js';
 import { plainTitle, type TitleModel, writeTitle } from './title.js';
 import { reason, toolFailure } from './tool-failure.js';
@@ -326,13 +326,13 @@ async function actsOnComputer(
 }
 
 /** What a run's `run_command` may lend: none offered when the agent has none to use. */
-async function commandSecretAccess(
+async function secretAccess(
   secrets: Pick<Secrets, 'usable' | 'reveal'>,
   profileId: string,
-): Promise<CommandSecretAccess | undefined> {
+): Promise<SecretAccess | undefined> {
   const offered = await secrets.usable(profileId);
   return offered.length
-    ? { offered, reveal: (names) => secrets.reveal(profileId, names) }
+    ? { offered, reveal: (envNames) => secrets.reveal(profileId, envNames) }
     : undefined;
 }
 
@@ -982,7 +982,7 @@ export class AgentRuntime {
           // The owner's own conversations alone: a subagent acts on Auto, where nobody approves
           // a command before it runs, and a look back runs no command at all.
           !run.subagent && !learning && !session.remoteMachineId && this.services.secrets
-            ? await commandSecretAccess(this.services.secrets, profileId)
+            ? await secretAccess(this.services.secrets, profileId)
             : undefined,
         ),
         ...(!learning && this.options.github && gitPlace

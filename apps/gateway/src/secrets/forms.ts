@@ -1,6 +1,6 @@
 /**
  * Shorter than this, an encoded piece of a secret would match ordinary output: the values
- * themselves are at least 8 characters (`commandSecretValueSchema`).
+ * themselves are at least 8 characters (the value rules in `packages/contracts/src/secrets.ts`).
  */
 const SHORTEST = 8;
 

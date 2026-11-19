@@ -589,7 +589,9 @@ describe('lending a secret to one command', () => {
       byOwner,
     );
     const shell = await shellOf(services, agent.id);
-    expect(shell.tool.description).toContain('ASSEMBLYAI_API_KEY (Word timings)');
+    expect(shell.tool.description).toContain(
+      'ASSEMBLYAI_API_KEY (Word timings): ASSEMBLYAI_API_KEY',
+    );
     expect(shell.tool.description).not.toContain(VALUE);
 
     const result = await shell.run({
@@ -611,6 +613,74 @@ describe('lending a secret to one command', () => {
     expect((await services.secrets.list(agent.id))[0]?.lastUsedAt).not.toBeNull();
   });
 
+  it('hands the command every field of the Secret named by one of its variables', async () => {
+    const { services, agent } = await installation();
+    await services.secrets.create(
+      agent.id,
+      {
+        title: 'Acme login',
+        description: 'The Acme portal',
+        fields: [
+          { label: 'User', envName: 'ACME_USER', sensitive: false, value: 'atlas@example.test' },
+          { label: 'Password', envName: 'ACME_PASSWORD', sensitive: true, value: VALUE },
+        ],
+      },
+      byOwner,
+    );
+    const shell = await shellOf(services, agent.id);
+    expect(shell.tool.description).toContain(
+      'Acme login (The Acme portal): ACME_USER, ACME_PASSWORD',
+    );
+
+    const result = await shell.run({
+      command: 'printf "%s|%s" "$ACME_USER" "$ACME_PASSWORD"',
+      secrets: ['ACME_USER'],
+      timeoutMs: 10_000,
+    });
+    expect(result.stdout).toBe('atlas@example.test|[REDACTED]');
+  });
+
+  it('takes a variable of a Secret saved after the run started', async () => {
+    const { services, agent } = await installation();
+    await services.secrets.create(agent.id, single('FIRST_KEY'), byOwner);
+    const shell = await shellOf(services, agent.id);
+    await services.secrets.create(agent.id, single('LATER_KEY'), byOwner);
+
+    expect(
+      shell.tool.inputSchema.safeParse({ command: 'true', secrets: ['LATER_KEY'] }).success,
+    ).toBe(true);
+    const result = await shell.run({
+      command: 'printf "%s" "$LATER_KEY"',
+      secrets: ['LATER_KEY'],
+      timeoutMs: 10_000,
+    });
+    expect(result.stdout).toBe('[REDACTED]');
+  });
+
+  it('names on the approval card every variable the command gets', async () => {
+    const { services, agent } = await installation();
+    await services.secrets.create(
+      agent.id,
+      {
+        title: 'Acme login',
+        fields: [
+          { label: 'User', envName: 'ACME_USER', sensitive: false, value: 'atlas@example.test' },
+          { label: 'Password', envName: 'ACME_PASSWORD', sensitive: true, value: VALUE },
+        ],
+      },
+      byOwner,
+    );
+    const shell = await shellOf(services, agent.id);
+    const shown = await (
+      shell.tool as unknown as { cardInput: (input: unknown) => Promise<unknown> }
+    ).cardInput({ command: 'true', secrets: ['ACME_USER'] });
+    expect(
+      plainDescription({ toolName: 'run_command', kind: 'machine', input: shown }),
+    ).toMatchObject({
+      title: 'Run a command with the Secrets ACME_USER, ACME_PASSWORD',
+    });
+  });
+
   it('gives a command without `secrets` none of them', async () => {
     const { services, agent } = await installation();
     await services.secrets.create(agent.id, single('ASSEMBLYAI_API_KEY'), byOwner);
@@ -630,15 +700,11 @@ describe('lending a secret to one command', () => {
     const shell = await shellOf(services, agent.id);
     const marker = join(root, `${agent.id}-ran`);
 
-    // Not in the call's own schema: the model's call is refused before it is approved or run.
+    // The schema checks only the shape of a name, so a Secret saved since the run began works;
+    // the refusal is where the command would run, before anything starts.
     expect(
-      shell.tool.inputSchema.safeParse({ command: 'true', secrets: ['VEGA_TOKEN'] }).success,
+      shell.tool.inputSchema.safeParse({ command: 'true', secrets: ['not a name'] }).success,
     ).toBe(false);
-    expect(
-      shell.tool.inputSchema.safeParse({ command: 'true', secrets: ['ASSEMBLYAI_API_KEY'] })
-        .success,
-    ).toBe(true);
-    // An approved call is run from what was stored, past the schema: it is refused there too.
     const result = await shell.run({
       command: `touch ${marker}`,
       secrets: ['VEGA_TOKEN'],
@@ -723,7 +789,7 @@ describe('a command with a secret in a conversation that asks first', () => {
     expect(parked.status).toBe('waiting');
     expect(parked.approval).toMatchObject({
       toolName: 'run_command',
-      title: 'Run a command with the secret ASSEMBLYAI_API_KEY',
+      title: 'Run a command with the Secret ASSEMBLYAI_API_KEY',
       detail: command,
     });
     expect(leaks(JSON.stringify(parked))).toEqual([]);
@@ -794,7 +860,7 @@ describe('a command with a secret on Auto', () => {
         input: { command: 'make upload', secrets: ['S3_KEY', 'S3_SECRET'] },
       }),
     ).toMatchObject({
-      title: 'Run a command with the secrets S3_KEY, S3_SECRET',
+      title: 'Run a command with the Secrets S3_KEY, S3_SECRET',
       detail: 'make upload',
     });
   });

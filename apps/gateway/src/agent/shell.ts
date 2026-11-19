@@ -1,6 +1,7 @@
 import { execFile } from 'node:child_process';
 import { writeFile } from 'node:fs/promises';
 import { isAbsolute, join } from 'node:path';
+import { secretEnvNameSchema } from '@jian/contracts';
 import { type ToolSet, tool } from 'ai';
 import { z } from 'zod';
 import { secretForms } from '../secrets/forms.js';
@@ -170,30 +171,38 @@ const RUN_COMMAND = {
 };
 
 /**
- * The owner's command secrets this run may hand a command: what the agent is told of them, and
- * how their values are read for one command, which refuses any this agent may not use.
+ * The owner's Secrets this run may hand a command: what the agent is told of them, and how their
+ * values are read for one command. `reveal` takes variable names, and each one lends the whole
+ * Secret it belongs to; it refuses any this agent may not use.
  */
-export type CommandSecretAccess = {
+export type SecretAccess = {
   offered: readonly OfferedSecret[];
-  reveal: (names: readonly string[]) => Promise<Record<string, string>>;
+  reveal: (envNames: readonly string[]) => Promise<Record<string, string>>;
 };
 
-/**
- * Every variable of the Secrets a run may use, each with what its Secret is for: each is offered
- * and named on its own, as a command secret was, and `reveal` lends its whole Secret.
- */
-const offeredNames = (offered: readonly OfferedSecret[]) =>
-  offered.flatMap(({ description, fields }) =>
-    fields.map(({ envName }) => ({ name: envName, description })),
-  );
-
-/** What the agent reads of the secrets it may use: names and what each is for, never a value. */
+/** What the agent reads of the Secrets it may use: names and what each is for, never a value. */
 function secretsDescription(offered: readonly OfferedSecret[]): string {
-  const listed = offeredNames(offered)
-    .map(({ name, description }) => `${name}${description ? ` (${description})` : ''}`)
+  const listed = offered
+    .map(({ title, description, fields }) => {
+      const names = fields.map(({ envName }) => envName).join(', ');
+      return `${title}${description ? ` (${description})` : ''}: ${names}`;
+    })
     .join('; ');
 
-  return ` The owner keeps secrets for your commands. Name the ones a command needs in \`secrets\`, and it gets each as an environment variable of that name, for that command alone: write "$NAME" in the command, never a value. You never see a value: wherever one would be printed it comes back as [REDACTED]. Send a secret only to the service it is for, and never write it to a file. Where this conversation asks before acting, the owner approves each such command, seeing which secrets it gets. Yours: ${listed}.`;
+  return ` The owner keeps Secrets for your commands. Name a variable of the one a command needs in \`secrets\`, and it gets every variable of that Secret, for that command alone: write "$NAME" in the command, never a value. You never see a sensitive value: wherever one would be printed it comes back as [REDACTED]. Send a Secret only to the service it is for, and never write it to a file. Where this conversation asks before acting, the owner approves each such command, seeing which variables it gets. Yours: ${listed}.`;
+}
+
+/**
+ * Every variable a call would hand a command: naming one lends its whole Secret, so the card
+ * the owner approves lists them all, not only the ones the agent wrote.
+ */
+function lentNames(offered: readonly OfferedSecret[], asked: readonly string[]): string[] {
+  const lent = new Set<string>();
+  for (const name of asked) {
+    const whole = offered.find(({ fields }) => fields.some(({ envName }) => envName === name));
+    for (const { envName } of whole?.fields ?? [{ envName: name }]) lent.add(envName);
+  }
+  return [...lent];
 }
 
 const refused = (stderr: string) => ({ exitCode: 126, stdout: '', stderr });
@@ -203,91 +212,109 @@ export function shellTools(
     readOnly: [],
     writable: [],
   },
-  secrets?: CommandSecretAccess,
+  secrets?: SecretAccess,
 ): ToolSet {
-  const names = offeredNames(secrets?.offered ?? []).map((secret) => secret.name);
   const base = z.object({
     command: z.string().trim().min(1).max(4000),
     cwd: absolute.optional(),
     timeoutMs: z.number().int().min(1000).max(TIMEOUT_MS).default(30_000),
   });
-  // Offered only to a run with secrets to use, and only theirs: a name it does not have fails
-  // the call's own check, before the call is approved or anything runs.
-  const [first, ...rest] = names;
-  const inputSchema = first
-    ? base.extend({
-        secrets: z
-          .array(z.enum([first, ...rest]))
-          .max(names.length)
-          .optional(),
-      })
+  // Offered only to a run with Secrets to use. Any well-formed name passes: a Secret saved after
+  // the run began is lendable at once, and `reveal` refuses what this agent may not use.
+  const inputSchema = secrets
+    ? base.extend({ secrets: z.array(secretEnvNameSchema).max(40).optional() })
     : base;
 
   return {
-    run_command: tool({
-      description:
-        (onOwnerComputer() ? RUN_COMMAND.owner : RUN_COMMAND.server) +
-        (secrets?.offered.length ? secretsDescription(secrets.offered) : ''),
-      inputSchema,
-      execute: async (input: z.infer<typeof base> & { secrets?: string[] }) => {
-        const { command, cwd, timeoutMs } = input;
-        if (/(?:^|[;&|\s])ssh-keygen(?:\s|$)/.test(command)) {
-          return refused('SSH keys must be managed with the SSH key tools, not ssh-keygen.');
-        }
-        // Checked again here, at the moment it runs: an approved call is run from what was
-        // stored, not through the schema, and a secret may have been taken away since.
-        let lent: Record<string, string> = {};
-        if (input.secrets?.length) {
-          if (!secrets) return refused('Not run: this run has no command secrets to use.');
-          try {
-            lent = await secrets.reveal(input.secrets);
-          } catch (error) {
-            return refused(error instanceof Error ? error.message : 'Not run.');
+    run_command: Object.assign(
+      tool({
+        description:
+          (onOwnerComputer() ? RUN_COMMAND.owner : RUN_COMMAND.server) +
+          (secrets?.offered.length ? secretsDescription(secrets.offered) : ''),
+        inputSchema,
+        execute: async (input: z.infer<typeof base> & { secrets?: string[] }) => {
+          const { command, cwd, timeoutMs } = input;
+          if (/(?:^|[;&|\s])ssh-keygen(?:\s|$)/.test(command)) {
+            return refused('SSH keys must be managed with the SSH key tools, not ssh-keygen.');
           }
-        }
-        // Masked here, before the result leaves the tool, in every form a command could print a
-        // value in; the run masks every secret of the installation again in what it records.
-        const masks = new Set(Object.values(lent).flatMap(secretForms));
-        const mask = (text: string) => (masks.size ? redactText(text, masks) : text);
-        const home = await workspaceHome();
-        const temp = await workspaceTemp();
-        const directory = cwd ? await confine(cwd, 'read') : (reachableFolders()[0] ?? home);
-        const shell = await confined(home, '/bin/sh', ['-c', command], gitAccess);
-
-        return new Promise((resolvePromise) => {
-          const child = execFile(
-            shell.file,
-            shell.args,
-            {
-              cwd: directory,
-              // The secrets reach the command as its environment alone: never its text, which
-              // the owner's timeline and the approval card show.
-              env: {
-                ...commandEnvironment({ home, temp }, process.env, gitAccess.sshCommand),
-                ...lent,
-              },
-              timeout: timeoutMs,
-              // Read past what is kept, so the end that is kept is the command's real end: a
-              // command stopped at this size ends with whatever it printed by then.
-              maxBuffer: READ_OUTPUT,
-              encoding: 'utf8',
-            },
-            (error, stdout, stderr) => {
-              const status = (error as { code?: unknown } | null)?.code;
-
-              resolvePromise({
-                // Zero is success; a string here is a signal, such as a command that timed out.
-                exitCode: typeof status === 'number' ? status : status ? String(status) : 0,
-                // Masked whole, then cut: a cut through a value would leave part of it.
-                stdout: clip(mask(stdout), MAX_OUTPUT),
-                stderr: clip(mask(stderr), MAX_OUTPUT),
-              });
-            },
+          // Checked again here, at the moment it runs: an approved call is run from what was
+          // stored, not through the schema, and a Secret may have been taken away since.
+          let lent: Record<string, string> = {};
+          if (input.secrets?.length) {
+            if (!secrets) return refused('Not run: this run has no Secrets to use.');
+            try {
+              lent = await secrets.reveal(input.secrets);
+            } catch (error) {
+              return refused(error instanceof Error ? error.message : 'Not run.');
+            }
+          }
+          // Masked here, before the result leaves the tool, in every form a command could print a
+          // value in; the run masks every sensitive value of the installation again in what it
+          // records. Only sensitive fields: a username lent with them prints as it is. A variable
+          // the run did not know when it started (a Secret saved since) is masked, to be safe.
+          const plain = new Set(
+            (secrets?.offered ?? []).flatMap(({ fields }) =>
+              fields.filter((field) => !field.sensitive).map((field) => field.envName),
+            ),
           );
-          surrenderFirst(child.pid);
-        });
+          const masks = new Set(
+            Object.entries(lent)
+              .filter(([name]) => !plain.has(name))
+              .flatMap(([, value]) => secretForms(value)),
+          );
+          const mask = (text: string) => (masks.size ? redactText(text, masks) : text);
+          const home = await workspaceHome();
+          const temp = await workspaceTemp();
+          const directory = cwd ? await confine(cwd, 'read') : (reachableFolders()[0] ?? home);
+          const shell = await confined(home, '/bin/sh', ['-c', command], gitAccess);
+
+          return new Promise((resolvePromise) => {
+            const child = execFile(
+              shell.file,
+              shell.args,
+              {
+                cwd: directory,
+                // The secrets reach the command as its environment alone: never its text, which
+                // the owner's timeline and the approval card show.
+                env: {
+                  ...commandEnvironment({ home, temp }, process.env, gitAccess.sshCommand),
+                  ...lent,
+                },
+                timeout: timeoutMs,
+                // Read past what is kept, so the end that is kept is the command's real end: a
+                // command stopped at this size ends with whatever it printed by then.
+                maxBuffer: READ_OUTPUT,
+                encoding: 'utf8',
+              },
+              (error, stdout, stderr) => {
+                const status = (error as { code?: unknown } | null)?.code;
+
+                resolvePromise({
+                  // Zero is success; a string here is a signal, such as a command that timed out.
+                  exitCode: typeof status === 'number' ? status : status ? String(status) : 0,
+                  // Masked whole, then cut: a cut through a value would leave part of it.
+                  stdout: clip(mask(stdout), MAX_OUTPUT),
+                  stderr: clip(mask(stderr), MAX_OUTPUT),
+                });
+              },
+            );
+            surrenderFirst(child.pid);
+          });
+        },
+      }),
+      {
+        // The card names every variable the command gets, which the call does not: naming one
+        // lends its whole Secret.
+        cardInput: async (input: unknown) => {
+          const asked = (input as { secrets?: unknown } | null)?.secrets;
+          if (!secrets || !Array.isArray(asked) || !asked.length) return input;
+          return {
+            ...(input as object),
+            secrets: lentNames(secrets.offered, asked.map(String)),
+          };
+        },
       },
-    }),
+    ),
 
     ...fileTools(),
   };

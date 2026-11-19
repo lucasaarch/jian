@@ -126,7 +126,7 @@ export function requestText(input: unknown): string {
   return text.length > REQUEST_CHARS ? `${text.slice(0, REQUEST_CHARS - 1)}…` : text;
 }
 
-/** The command secrets a call to `run_command` asks to be handed, by name. */
+/** The variables of the Secrets a call to `run_command` asks to be handed, by name. */
 export function secretNames(input: unknown): string[] {
   const value =
     input && typeof input === 'object' ? (input as { secrets?: unknown }).secrets : undefined;
@@ -196,7 +196,7 @@ const PLAIN: Record<
     const lent = secretNames(input);
     return {
       title: lent.length
-        ? `Run a command with the ${lent.length === 1 ? 'secret' : 'secrets'} ${lent.join(', ')}`
+        ? `Run a command with the ${lent.length === 1 ? 'Secret' : 'Secrets'} ${lent.join(', ')}`
         : 'Run a command',
       detail: field(input, 'command'),
       confirm: 'Run',
@@ -352,7 +352,7 @@ const PLAIN: Record<
 /**
  * Cards no model writes: the owner approves exactly what leaves, so they read it from the call
  * itself, never from a summary the agent being approved wrote about it. A command handed the
- * owner's secrets is one: the card names each secret and shows the command that gets it.
+ * owner's secrets is one: the card names each variable it gets and shows the command that gets it.
  */
 const PLAIN_ONLY = new Set(['send_email']);
 
