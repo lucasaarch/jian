@@ -15,8 +15,13 @@ const BETWEEN_ROUNDS_MS = [30_000, 60_000, 120_000, 240_000, 300_000];
  * five-minute wait is silence it would otherwise end the run for.
  */
 const ALIVE_EVERY_MS = 1_000;
-/** The longest a Node timer holds, in ms: past it, Node fires after 1 ms instead. */
-const LONGEST_TIMER_MS = 2 ** 31 - 1;
+/**
+ * The longest a turn waits on a provider's `retry-after`, in ms. A rate limit asks for seconds or
+ * minutes; a subscription's usage window asks for hours or days, and a turn left waiting that
+ * long only looks hung. Past this the call stops with `ModelWaitTooLong`, and the owner is told
+ * when the provider takes calls again, to pick another model or send again then.
+ */
+export const LONGEST_WAIT_MS = 15 * 60_000;
 /** A wait at least this long gets its own log line, in ms, wherever it falls in a round. */
 const LOGGED_WAIT_MS = 30_000;
 
@@ -29,6 +34,22 @@ export function retryDelay(failures: number): number {
   if (failures % ROUND !== 0) return WITHIN_ROUND_MS;
   const round = failures / ROUND;
   return BETWEEN_ROUNDS_MS[Math.min(round, BETWEEN_ROUNDS_MS.length) - 1] ?? WITHIN_ROUND_MS;
+}
+
+/**
+ * The provider will not take a call for longer than a turn waits (`LONGEST_WAIT_MS`). The provider's
+ * own error is its cause; `reason` and `resumesAt` are safe to show, read from its status and
+ * headers, never its message.
+ */
+export class ModelWaitTooLong extends Error {
+  constructor(
+    readonly reason: string,
+    readonly resumesAt: Date,
+    options: { cause: unknown },
+  ) {
+    super(`The provider asks to wait until ${resumesAt.toISOString()} (${reason})`, options);
+    this.name = 'ModelWaitTooLong';
+  }
 }
 
 export interface ModelRetryHooks {
@@ -53,6 +74,8 @@ export interface ModelRetryHooks {
   delay?: (failures: number) => number;
   /** The most attempts a call may make, unset for no end; past it the last failure is thrown. */
   attempts?: number;
+  /** The longest `retry-after` waited out, in ms; `LONGEST_WAIT_MS` when unset. */
+  longestWaitMs?: number;
 }
 
 /** Waits `ms`, feeding `alive`, and rejects with the abort the moment `signal` aborts. */
@@ -68,24 +91,16 @@ function pause(
       return;
     }
     const beat = alive ? setInterval(alive, every) : undefined;
-    let timer: ReturnType<typeof setTimeout> | undefined;
     const done = () => {
       clearTimeout(timer);
       clearInterval(beat);
       signal?.removeEventListener('abort', aborted);
     };
-    // A retry-after of weeks is slept in pieces a timer can hold.
-    const sleep = (left: number) => {
-      timer = setTimeout(
-        () => {
-          if (left > LONGEST_TIMER_MS) return sleep(left - LONGEST_TIMER_MS);
-          done();
-          resolve();
-        },
-        Math.min(left, LONGEST_TIMER_MS),
-      );
-    };
-    sleep(ms);
+    // Never past LONGEST_WAIT_MS, well within what a Node timer holds.
+    const timer = setTimeout(() => {
+      done();
+      resolve();
+    }, ms);
     const aborted = () => {
       done();
       reject(signal?.reason);
@@ -164,7 +179,8 @@ async function opened(
 
 /**
  * The model, with every call that fails for a network or availability reason tried again until it
- * gets through, on `retryDelay`'s schedule and never sooner than a `retry-after` asks. Only calls
+ * gets through, on `retryDelay`'s schedule and never sooner than a `retry-after` asks; one that
+ * asks for more than `LONGEST_WAIT_MS` stops the call instead (`ModelWaitTooLong`). Only calls
  * to the model come through here, never the agent's tools. A call with an abort signal stops at
  * once when it aborts, so a cancelled run, one that lost its lease, or a side call's own time
  * limit ends the waiting as it ends the call.
@@ -177,6 +193,7 @@ export function withModelRetry(model: LanguageModel, hooks: ModelRetryHooks): La
   const delay = hooks.delay ?? retryDelay;
   const log = hooks.log ?? console.error;
   const label = hooks.label ?? 'a call';
+  const longest = hooks.longestWaitMs ?? LONGEST_WAIT_MS;
 
   const attempt = async <T>(signal: AbortSignal | undefined, call: () => PromiseLike<T>) => {
     let failures = 0;
@@ -204,6 +221,13 @@ export function withModelRetry(model: LanguageModel, hooks: ModelRetryHooks): La
               `jian: ${label} model unreachable (${retry.reason}), gave up after ${failures} attempts`,
             );
             throw error;
+          }
+          if ((retry.afterMs ?? 0) > longest) {
+            const resumesAt = new Date(Date.now() + (retry.afterMs ?? 0));
+            log(
+              `jian: ${label} model unavailable (${retry.reason}) until ${resumesAt.toISOString()}, longer than a turn waits`,
+            );
+            throw new ModelWaitTooLong(retry.reason, resumesAt, { cause: error });
           }
           const wait = Math.max(delay(failures), retry.afterMs ?? 0);
           hooks.waiting?.({
