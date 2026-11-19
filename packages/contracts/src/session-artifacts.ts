@@ -84,6 +84,104 @@ export const sessionArtifactRevisionSchema = z.strictObject({
   title: z.string().trim().min(1).max(120).optional().describe('Only to rename it.'),
 });
 
+/** The most targeted edits one call makes. */
+export const ARTIFACT_EDITS_MAX = 50;
+
+/**
+ * The agent's targeted change to one, as a text editor makes it: each `find` is replaced by its
+ * `replace` in the latest source, whoever wrote it, so a small change costs a few lines instead
+ * of the whole source again. The panel's preview of the call reads exactly these fields.
+ */
+export const artifactSourceEditSchema = z.strictObject({
+  artifactId: artifactIdSchema,
+  edits: z
+    .array(
+      z.strictObject({
+        find: z
+          .string()
+          .min(1)
+          .max(SESSION_ARTIFACT_MAX)
+          .describe(
+            'Text copied exactly from the current source, spaces and line breaks included, with enough around it to occur there exactly once.',
+          ),
+        replace: z
+          .string()
+          .max(SESSION_ARTIFACT_MAX)
+          .describe('What takes its place; empty removes it.'),
+      }),
+    )
+    .min(1)
+    .max(ARTIFACT_EDITS_MAX)
+    .describe('Applied in order, each to the text the one before it left.'),
+  slide: slideNumberSchema
+    .optional()
+    .describe('A deck only, and required for one: the slide the edits are in, counting from 1.'),
+});
+
+/** The agent's change to who reads one, when the owner asked for it. */
+export const artifactShareSchema = z.strictObject({
+  artifactId: artifactIdSchema,
+  visibility: sessionArtifactVisibilitySchema.describe(
+    'public: anyone with its link opens it, and a new link is made each time. private: the link stops working.',
+  ),
+});
+
+/**
+ * The files an Artifact of each type is sent as. `source` is its source saved as it was
+ * written, with that extension; `made` are the files the gateway makes from it (the formats of
+ * `deckExportQuerySchema`). A new type is one line here: the tool that sends one offers, checks
+ * and names in its refusals what this table says.
+ */
+export const ARTIFACT_FILE_FORMATS = {
+  html: { source: 'html', made: [] },
+  react: { source: 'tsx', made: [] },
+  markdown: { source: 'md', made: ['docx', 'pdf'] },
+  mermaid: { source: 'mmd', made: [] },
+  // A deck's source is its slides in JSON, which nothing opens: only the drawn files leave.
+  deck: { made: ['pdf', 'pptx', 'png'] },
+  // Its CSV is the values alone, as the panel downloads it; the formulas go in the Excel file.
+  sheet: { made: ['xlsx', 'csv'] },
+} as const satisfies Record<
+  SessionArtifactType,
+  { source?: string; made: readonly DeckExportQuery['format'][] }
+>;
+
+/** Every file a type is sent as, its source first. */
+export function artifactFileFormats(type: SessionArtifactType): string[] {
+  const formats: { source?: string; made: readonly string[] } = ARTIFACT_FILE_FORMATS[type];
+  return [...(formats.source ? [formats.source] : []), ...formats.made];
+}
+
+const fileFormats = [
+  ...new Set(sessionArtifactTypeSchema.options.flatMap((type) => artifactFileFormats(type))),
+] as [string, ...string[]];
+
+/**
+ * An Artifact sent as a file in a conversation, as `send_file` sends one: here, or in another
+ * of the agent's conversations, where a chat or an email takes it to the person.
+ */
+export const artifactSendSchema = z.strictObject({
+  artifactId: artifactIdSchema,
+  format: z
+    .enum(fileFormats)
+    .describe(
+      `The file's extension, one its type has: ${sessionArtifactTypeSchema.options
+        .map((type) => `${type} ${artifactFileFormats(type).join(', ')}`)
+        .join('; ')}.`,
+    ),
+  slide: slideNumberSchema
+    .optional()
+    .describe('A deck as png only, and required for it: the slide, counting from 1.'),
+  version: z.number().int().min(1).optional().describe('Omit for the latest.'),
+  caption: z.string().trim().min(1).max(1000).optional(),
+  sessionId: z
+    .uuid()
+    .optional()
+    .describe(
+      'Another of your conversations to send it in (from list_sessions or your conversations); this one when absent.',
+    ),
+});
+
 /** What the agent gives to read one back, as it now stands or as a version of it was. */
 export const sessionArtifactReadSchema = z.strictObject({
   artifactId: artifactIdSchema,
