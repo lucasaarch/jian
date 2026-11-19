@@ -2904,6 +2904,11 @@ export interface operations {
                             /** Format: date-time */
                             connectedAt: string;
                         }[];
+                        pending?: {
+                            login: string;
+                            /** Format: date-time */
+                            requestedAt: string;
+                        }[];
                     };
                 };
             };
@@ -3117,6 +3122,8 @@ export interface operations {
                 "application/json": {
                     /** @enum {string} */
                     returnPath: "/settings/integrations" | "/settings/integrations/github";
+                    /** @enum {string} */
+                    mode?: "install" | "authorize";
                 };
             };
         };
@@ -3326,6 +3333,7 @@ export interface operations {
                 code?: string;
                 state?: string;
                 installation_id?: number;
+                setup_action?: string;
                 error?: string;
             };
             header?: never;

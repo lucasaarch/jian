@@ -171,6 +171,7 @@ export function createApp(
         routes,
         options.github,
         new GitHubItems(options.github, options.store),
+        { webhook: options.mode !== 'local' },
       );
       // A webhook needs an address GitHub reaches: a desktop app's own gateway has none.
       if (options.mode !== 'local') {

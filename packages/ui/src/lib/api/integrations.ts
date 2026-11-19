@@ -7,7 +7,14 @@ export const integrationCalls = (client: Client) => ({
   startGithubInstallation: (
     // Where the gateway sends the owner back, which the panel sends on to Plugins.
     returnPath: GithubReturnPath,
-  ) => result(client.POST('/v1/integrations/github/install', { body: { returnPath } })),
+    // `authorize` skips installing, to connect installations the owner already reaches.
+    mode?: 'install' | 'authorize',
+  ) =>
+    result(
+      client.POST('/v1/integrations/github/install', {
+        body: { returnPath, ...(mode ? { mode } : {}) },
+      }),
+    ),
   startGithubAppRegistration: (
     // Where the gateway sends the owner back, which the panel sends on to Plugins.
     returnPath: GithubReturnPath,

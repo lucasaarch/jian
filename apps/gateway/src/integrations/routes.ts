@@ -1,6 +1,7 @@
 import type { GitHubMergeMethod } from '@jian/contracts';
 import type { FastifyInstance } from 'fastify';
-import type { GitHubIntegrations, GitHubReturnPath } from './github.js';
+import type { GitHubInstallMode, GitHubIntegrations, GitHubReturnPath } from './github.js';
+import { APPROVED_PAGE, APPROVED_PAGE_POLICY } from './github-approved.js';
 import type { GitHubItems } from './github-items.js';
 
 type ItemParams = { owner: string; repo: string; number: number };
@@ -9,6 +10,8 @@ export function registerIntegrationRoutes(
   app: FastifyInstance,
   github: GitHubIntegrations,
   items: GitHubItems,
+  /** Whether GitHub's webhook reaches this gateway, to connect an approved request by itself. */
+  options: { webhook: boolean },
 ) {
   app.get<{ Params: ItemParams }>('/v1/integrations/github/pulls/:owner/:repo/:number', (request) =>
     items.pull(request.params),
@@ -72,13 +75,16 @@ export function registerIntegrationRoutes(
     },
   );
 
-  app.post<{ Body: { returnPath: GitHubReturnPath } }>(
+  app.post<{ Body: { returnPath: GitHubReturnPath; mode?: GitHubInstallMode } }>(
     '/v1/integrations/github/install',
-    async (request) => github.start(request.headers.origin ?? '', request.body.returnPath),
+    async (request) =>
+      github.start(request.headers.origin ?? '', request.body.returnPath, request.body.mode),
   );
 
-  // GitHub has installed the App by the time it comes back here, so a failure is logged with its
-  // reason — never the code or the state — and the owner is still sent back to the panel.
+  // GitHub may have installed the App, or sent an organization's owners a request for it, by the
+  // time it comes back here, so a failure is logged with its reason — never the code or the
+  // state — and the owner is still sent back to the panel. Only the state, which this gateway's
+  // owner got from `start`, lets anything be connected: the address is public, and so is the App.
   app.get<{
     Querystring: {
       code?: string;
@@ -97,7 +103,17 @@ export function registerIntegrationRoutes(
     } = request.query;
     const context = { installationId, setupAction };
 
-    if (request.query.error || !code || !state || !installationId) {
+    // An owner approving a member's request comes back with the installation and no state, as
+    // does anyone installing the App from GitHub. They may not be signed in to this panel.
+    if (!request.query.error && !state && installationId) {
+      request.log.info({ github: context }, 'GitHub installed the App without a Jian request');
+      return reply
+        .type('text/html; charset=utf-8')
+        .header('content-security-policy', APPROVED_PAGE_POLICY)
+        .send(APPROVED_PAGE);
+    }
+    const requested = setupAction === 'request';
+    if (request.query.error || !state || (!code && !requested)) {
       const reason = request.query.error ? 'denied' : 'incomplete';
       request.log.warn(
         {
@@ -114,7 +130,13 @@ export function registerIntegrationRoutes(
       return reply.redirect(await github.failedRedirect(state, reason), 302);
     }
     try {
-      const { location, failure } = await github.finish(state, code, installationId);
+      // A request has no installation yet; a code with none is a sign-in to find the ones the
+      // user reaches, which `authorize` asks for.
+      const { location, failure } = requested
+        ? await github.requested(state, code, options.webhook)
+        : code && installationId
+          ? await github.finish(state, code, installationId)
+          : await github.connectReachable(state, code ?? '');
       if (failure) {
         request.log.warn(
           { github: { ...context, reason: failure.reason }, err: failure },
