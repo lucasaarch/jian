@@ -106,6 +106,9 @@ describe('public API contracts', () => {
         'artifactFrame',
         'readPublicArtifact',
         'exportPublicArtifact',
+        // A link an agent made to one file, proved by its unguessable token alone; expired,
+        // revoked or unknown, it answers nothing but 404.
+        'readFileLink',
       ]);
     } finally {
       await app.close();

@@ -40,6 +40,7 @@ import {
   MAX_EMAIL_FILES,
 } from '../errands/email-parts.js';
 import type { Outreach } from '../errands/port.js';
+import type { FileLinks } from '../file-links/service.js';
 import { X_TOOL_GROUPS } from '../integrations/x/catalog/index.js';
 import type { Media } from '../media/service.js';
 import { sameSubject } from '../memories/duplicates.js';
@@ -56,6 +57,7 @@ import type { Sessions } from '../sessions/service.js';
 import { findSkill, NO_LIBRARY, type SkillLibraryState } from '../skills/builtin/index.js';
 import { longRunningWork, longRunningWorkFor } from '../skills/builtin/long-running-work.js';
 import { managingContext, managingContextFor } from '../skills/builtin/managing-context.js';
+import { media, mediaFor } from '../skills/builtin/media.js';
 import { ownerAndContacts, ownerAndContactsFor } from '../skills/builtin/owner-and-contacts.js';
 import { remoteControl, remoteControlFor } from '../skills/builtin/remote-control.js';
 import { type WebAccess, webResearch, webResearchFor } from '../skills/builtin/web-research.js';
@@ -69,6 +71,7 @@ import type { Store } from '../storage/database.js';
 import { artifacts, checkpoints } from '../storage/schema.js';
 import type { Work } from '../tasks/service.js';
 import { AskUserPause } from './ask-user.js';
+import { fileLinkTools } from './file-link-tools.js';
 import { type FileBackend, fileTools } from './files.js';
 import { remoteTools } from './remote-tools.js';
 import { artifactPage } from './results.js';
@@ -148,6 +151,8 @@ export type ToolServices = {
     Remote,
     'list' | 'execute' | 'executeComputer' | 'update' | 'executeFiles' | 'offersFiles'
   >;
+  /** Absent on a gateway no link from outside reaches: see `fileLinkTools`. */
+  fileLinks?: Pick<FileLinks, 'create' | 'revoke'>;
 };
 
 /**
@@ -188,6 +193,8 @@ export function skillFor(
     machine?: { files: boolean };
     /** The run has `send_email`. */
     email?: boolean;
+    /** The run has `share_file_link`. */
+    links?: boolean;
   },
   /** The skills of the conversation's workspaces, named apart from the library's already. */
   projectSkills: readonly Skill[] = [],
@@ -212,6 +219,7 @@ export function skillFor(
   }
   if (skill === remoteControl) return remoteControlFor(can.machine);
   if (skill === ownerAndContacts) return ownerAndContactsFor(Boolean(can.email));
+  if (skill === media) return mediaFor(Boolean(can.links));
   return skill;
 }
 
@@ -765,6 +773,7 @@ export function profileTools(
             xConnected,
             worktrees,
             email,
+            links: !remoteTarget && Boolean(services.fileLinks),
             ...(remoteTarget ? { machine: { files: Boolean(machineFiles) } } : {}),
           },
           projectSkills,
@@ -1198,6 +1207,10 @@ export function profileTools(
   // through run_remote_command, its files through the same file tools when its worker has them.
   if (!remoteTarget) Object.assign(tools, shellTools(gitAccess));
   else if (machineFiles) Object.assign(tools, fileTools(machineFiles));
+  // A link reads the gateway's own files, so only a run whose files are here gets one.
+  if (!remoteTarget && services.fileLinks) {
+    Object.assign(tools, fileLinkTools(services.fileLinks, run));
+  }
   if (services.remote) {
     Object.assign(tools, remoteTools(run, services.remote, services.store, remoteTarget));
   }
@@ -1306,7 +1319,16 @@ export const TOOL_GROUPS = {
   files: {
     summary:
       'read, edit, write, find and search files on the machine this gateway runs on — for code too',
-    tools: ['read_file', 'edit_file', 'write_file', 'find_files', 'search_files', 'list_directory'],
+    tools: [
+      'read_file',
+      'edit_file',
+      'write_file',
+      'find_files',
+      'search_files',
+      'list_directory',
+      'share_file_link',
+      'revoke_file_link',
+    ],
   },
   shell: {
     summary: 'run commands on the machine this gateway runs on',
@@ -1392,6 +1414,10 @@ export type ToolGroup = keyof typeof TOOL_GROUPS;
 /** The `contacts` group for a run that has `send_email`. */
 export const CONTACTS_WITH_EMAIL_SUMMARY =
   'list the people the owner approved on your channels, rename one on WhatsApp or Telegram, and write to one, optionally bringing their answer back here, or email any address once the owner approves that email; expect a service’s mail when you sign up, and search the mail you received and sent';
+
+/** The `files` group for a run that can also share a file by a temporary link. */
+export const FILES_WITH_LINKS_SUMMARY =
+  'read, edit, write, find and search files on the machine this gateway runs on — for code too — and share one by a temporary link, for a file too large to send or a service that takes a URL';
 
 /** The `files` group for a run whose file tools reach its machine, not the gateway's. */
 export const MACHINE_FILES_SUMMARY =

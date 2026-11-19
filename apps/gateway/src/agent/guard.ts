@@ -26,6 +26,8 @@ const ACTION_KINDS: Partial<Record<string, ActionKind>> = {
   merge_worktree: 'machine',
   remove_worktree: 'machine',
   send_file: 'message',
+  // A link hands the file to whoever holds it, as sending it would.
+  share_file_link: 'message',
   // An Artifact sent as a file is a file that leaves, as send_file's is.
   send_artifact: 'message',
   send_session_message: 'message',
@@ -239,6 +241,13 @@ const PLAIN: Record<
         }
       : { title: `Remove worktree ${field(input, 'name')}`, confirm: 'Remove' },
   send_file: (input) => ({ title: 'Send a file', detail: field(input, 'path'), confirm: 'Send' }),
+  share_file_link: (input) => ({
+    title: 'Share a file by a temporary link',
+    detail: [field(input, 'path'), 'Anyone with the link can download it until it expires.']
+      .filter(Boolean)
+      .join('\n'),
+    confirm: 'Share',
+  }),
   send_artifact: (input) => ({
     title: field(input, 'format')
       ? `Send an Artifact as a ${field(input, 'format')?.toUpperCase()} file`
