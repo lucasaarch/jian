@@ -203,8 +203,6 @@ it('shows a few connectors on All, the connected first, and the rest behind Show
 
   await show();
 
-  // All narrows by the search alone: each kind's filter is on its own tab.
-  expect(button('Filter connectors', host)).toBeUndefined();
   // Stripe is far down the catalog; connected, it leads.
   expect(names('Connectors')).toHaveLength(8);
   expect(names()[0]).toBe('Stripe');
@@ -214,12 +212,10 @@ it('shows a few connectors on All, the connected first, and the rest behind Show
   expect(names('Connected')).toEqual(['Stripe']);
   expect(names('Available').length).toBeGreaterThan(8);
   expect(button('Show all', host)).toBeUndefined();
-  expect(button('Filter connectors', host)).toBeDefined();
 
   await press('Skills', host);
   expect(rows()).toEqual([]);
   expect(host.textContent).toContain('No skills yet.');
-  expect(button('Filter connectors', host)).toBeUndefined();
 });
 
 it('lists only the connectors this gateway can finish connecting', async () => {
@@ -242,7 +238,7 @@ it('lists only the connectors this gateway can finish connecting', async () => {
   expect(names()).not.toContain('GitHub');
 });
 
-it('narrows the connectors by search and by the filter', async () => {
+it('narrows the connectors by search alone, with no filter of their own', async () => {
   read.githubIntegration.mockResolvedValue({ ...none, callbackUrl: githubCallback });
   read.xIntegration.mockResolvedValue({ ...none, callbackUrl: xCallback });
   read.mcpServers.mockResolvedValue([tickets]);
@@ -261,26 +257,11 @@ it('narrows the connectors by search and by the filter', async () => {
   await search('');
   await press('Connectors', host);
 
-  const choose = async (label: string) => {
-    const filter = button('Filter connectors', host);
-    if (!filter) throw new Error('no filter');
-    await act(async () => {
-      filter.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
-      filter.click();
-    });
-    const option = await vi.waitFor(() => {
-      const found = [...document.querySelectorAll<HTMLElement>('[role="option"]')].find(
-        (item) => item.textContent === label,
-      );
-      if (!found) throw new Error(`no option ${label}`);
-      return found;
-    });
-    await act(async () => option.click());
-  };
-  await choose('Social');
-  await vi.waitFor(() => expect(names()).toEqual(['X']));
-  await choose('Connected');
-  await vi.waitFor(() => expect(names()).toEqual(['harbor_tickets']));
+  // The search and the tabs are the only ways to narrow the list: no Filter connectors.
+  expect(button('Filter connectors', host)).toBeUndefined();
+  expect(host.querySelector('[role="combobox"]')).toBeNull();
+  await search('social');
+  expect(names()).toEqual(['X']);
   await search('nothing like this');
   expect(host.textContent).toContain('No connector matches.');
 });
@@ -290,7 +271,6 @@ it('opens the Connectors tab an address names', async () => {
 
   await show();
 
-  expect(button('Filter connectors', host)).toBeDefined();
   expect(names('Available').length).toBeGreaterThan(8);
 });
 

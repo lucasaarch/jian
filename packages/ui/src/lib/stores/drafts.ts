@@ -7,6 +7,17 @@ type Drafts = {
   /** What was written and not sent, by `draftKey`; nothing is kept for an empty field. */
   texts: Record<string, string>;
   write: (key: string, text: string) => void;
+  /**
+   * A request begun for the owner to finish, as the Inspector's Create something new does: after
+   * what the field already holds, never in its place, since the conversation's field may hold
+   * words of the owner's. A composer open on that draft takes it in at once.
+   */
+  begin: (key: string, text: string) => void;
+  /**
+   * The draft last begun, until a composer on it takes it in and empties this. A composer reads
+   * its draft only as it opens; this is how one already open hears of words it did not type.
+   */
+  begun?: { key: string; text: string } | undefined;
   forgetAll: () => void;
 };
 
@@ -27,7 +38,13 @@ export const useDrafts = create<Drafts>()(
           const { [key]: _was, ...rest } = state.texts;
           return { texts: text ? { ...rest, [key]: text } : rest };
         }),
-      forgetAll: () => set({ texts: {} }),
+      begin: (key, text) =>
+        set((state) => {
+          const was = state.texts[key]?.trimEnd();
+          const next = was ? `${was}\n\n${text}` : text;
+          return { texts: { ...state.texts, [key]: next }, begun: { key, text: next } };
+        }),
+      forgetAll: () => set({ texts: {}, begun: undefined }),
     }),
     { name: 'jian-drafts', partialize: ({ texts }) => ({ texts }) },
   ),

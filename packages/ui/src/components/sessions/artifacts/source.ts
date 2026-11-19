@@ -15,6 +15,12 @@ export const TYPE_NAME: Record<Kind, string> = {
   board: 'Whiteboard',
 };
 
+/** The choices of a filter by type, the Artifacts page's and the Inspector's: empty for all. */
+export const TYPE_FILTERS = [
+  { value: '', label: 'All types' },
+  ...Object.entries(TYPE_NAME).map(([value, label]) => ({ value, label })),
+];
+
 /**
  * The highlighter's grammar for a type's source; a diagram's and a spreadsheet's have none. A
  * deck's is a slide's.

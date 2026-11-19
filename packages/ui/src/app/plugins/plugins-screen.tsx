@@ -4,11 +4,10 @@ import { Menu } from '@base-ui/react/menu';
 import { useQuery } from '@tanstack/react-query';
 import { ArrowRight, Cable, ChevronDown, Download, PenLine } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { filterSkills, type SkillFilter, skillFilters } from '../../components/skills/skill-items';
+import { filterSkills } from '../../components/skills/skill-items';
 import { SKILL_LIMIT } from '../../components/skills/skill-list';
 import {
   Action,
-  FilterSelect,
   MenuEntry,
   menuPopup,
   PageBody,
@@ -28,9 +27,7 @@ import { usePathname, useRouter, useSearchParams } from '../../platform/navigati
 import { returnedConnector } from '../web-addresses';
 import { ConnectorIcon } from './connector-icon';
 import {
-  ALL,
   type Connector,
-  connectorFilters,
   connectorMeta,
   connectorsOf,
   isVerified,
@@ -78,7 +75,7 @@ function ShowAll({ onClick }: { onClick: () => void }) {
  * What the agents can be given, in place of the chat: the connectors, which are Jian's own apps
  * and the MCP servers the owner adds by hand, and the skills, written here, by an agent, or
  * imported, beside the ones built into Jian. A page of the kit's one anatomy: a search narrows
- * the rows, the tabs choose the kind, each kind's tab has its own filter, and a row opens the
+ * the rows and the tabs choose the kind, the only two ways to narrow it, and a row opens the
  * page of what it names. Both belong to the installation, so every agent shows the same; the page goes with
  * no conversation, so it has no Inspector beside it. `?tab=` in the address opens a tab.
  */
@@ -95,9 +92,6 @@ export function PluginsScreen() {
   const asked = params.get('tab');
   const [tab, setTab] = useState<Tab>(isTab(asked) ? asked : 'all');
   const [query, setQuery] = useState('');
-  // Each kind's filter is its tab's alone: All narrows by the search only.
-  const [connectorFilter, setConnectorFilter] = useState<string>(ALL);
-  const [skillFilter, setSkillFilter] = useState<SkillFilter>('all');
   const [adding, setAdding] = useState(false);
 
   // An address that names a tab opens it, also when the screen is already up.
@@ -134,8 +128,8 @@ export function PluginsScreen() {
   }, [returned, profileId, params, router]);
 
   const searching = Boolean(query.trim());
-  const shown = narrowConnectors(connectors, query, tab === 'connectors' ? connectorFilter : ALL);
-  const shownSkills = filterSkills(skills.items, query, tab === 'skills' ? skillFilter : 'all');
+  const shown = narrowConnectors(connectors, query);
+  const shownSkills = filterSkills(skills.items, query);
   const connected = shown.filter((connector) => connector.connected);
   const available = shown.filter((connector) => !connector.connected);
   // A search is never cut to the first few: what it found is all there.
@@ -165,22 +159,6 @@ export function PluginsScreen() {
             onValueChange={setQuery}
           />
           <Segmented label="Show" value={tab} options={TABS} onChange={choose} />
-          {tab === 'connectors' && (
-            <FilterSelect
-              label="Filter connectors"
-              value={connectorFilter}
-              options={connectorFilters(connectors)}
-              onValueChange={setConnectorFilter}
-            />
-          )}
-          {tab === 'skills' && (
-            <FilterSelect
-              label="Filter skills"
-              value={skillFilter}
-              options={skillFilters}
-              onValueChange={(next) => setSkillFilter(next as SkillFilter)}
-            />
-          )}
           <Menu.Root>
             <Menu.Trigger render={<Action tone="outline" size="field" />}>
               Add
@@ -231,9 +209,7 @@ export function PluginsScreen() {
           <>
             {skillsFailed}
             <SkillsTab items={shownSkills} onOpen={skills.show} />
-            {!shownSkills.length &&
-              !skills.error &&
-              none('skill', searching || skillFilter !== 'all')}
+            {!shownSkills.length && !skills.error && none('skill', searching)}
           </>
         ) : tab === 'connectors' ? (
           shown.length ? (
@@ -250,7 +226,7 @@ export function PluginsScreen() {
               )}
             </>
           ) : (
-            none('connector', searching || connectorFilter !== ALL)
+            none('connector', searching)
           )
         ) : (
           <>

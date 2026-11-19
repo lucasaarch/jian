@@ -81,9 +81,11 @@ describe.runIf(existsSync(process.env.PLAYWRIGHT_EXECUTABLE_PATH ?? chromium.exe
           return send(publishedArtifact(type, 'Shared', source), artifactPolicy("'none'"));
         }
         // The panel's part, as artifact-frame.tsx plays it: the frame, and its source once it loads.
-        // Editing, it also asks for the edit (`collect`) and keeps what the frame answers.
+        // Editing, it also asks for the edit (`collect`) and keeps what the frame answers. `wait`
+        // hands the source only when the test calls `hand`.
         if (kind === 'panel') {
           const edit = url.searchParams.has('edit');
+          const wait = url.searchParams.has('wait');
           return send(`<!doctype html><body style="margin:0">
 <iframe id="held" sandbox="allow-scripts" style="border:0;width:900px;height:600px" src="/frame/${url.searchParams.get('type')}${edit ? '?edit=1' : ''}"></iframe>
 <script>
@@ -94,12 +96,13 @@ addEventListener('message', (event) => {
 });
 window.collect = (nonce) =>
   held.contentWindow.postMessage({ ${ARTIFACT_EDIT_MESSAGE}: { collect: nonce } }, '*');
-held.addEventListener('load', () => {
+window.hand = () => {
   held.contentWindow.postMessage({
     ${ARTIFACT_FRAME_MESSAGE}: ${embedded(handed.get(name))},
     ${edit ? `${ARTIFACT_EDIT_MESSAGE}: { scale: 1 },` : ''}
   }, '*');
-}, { once: true });
+};
+${wait ? '' : "held.addEventListener('load', window.hand, { once: true });"}
 </script></body>`);
         }
         response.writeHead(404).end();
@@ -162,6 +165,32 @@ held.addEventListener('load', () => {
         expect(await read(page), type).toContain(text);
         await page.close();
       }
+    });
+
+    it("keeps a slide's frame clear until the slide has drawn, then white under it", async () => {
+      handed.set('deck-wait', SOURCE.deck ?? '');
+      const page = await open('/panel/deck-wait?type=deck&wait=1');
+      const shell = () => page.frames().find((frame) => frame.parentFrame() === page.mainFrame());
+      await expect
+        .poll(() =>
+          shell()
+            ?.evaluate(() => document.readyState)
+            .catch(() => ''),
+        )
+        .toBe('complete');
+      const ground = () =>
+        (shell() as Frame).evaluate(
+          () => getComputedStyle(document.documentElement).backgroundColor,
+        );
+      // Loaded and still waiting for its slide: nothing painted, so no white shows before a
+      // dark slide does.
+      expect(await ground()).toBe('rgba(0, 0, 0, 0)');
+
+      await page.evaluate(() => (window as never as { hand: () => void }).hand());
+      await expect.poll(() => read(page)).toContain('One slide ran');
+      // A slide that sets no ground of its own is still drawn on white.
+      expect(await ground()).toBe('rgb(255, 255, 255)');
+      await page.close();
     });
 
     it('edits a spreadsheet cell by cell, works its formulas again, and hands back the CSV', async () => {

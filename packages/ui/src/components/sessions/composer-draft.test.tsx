@@ -83,6 +83,26 @@ it('keeps what was written for each conversation when the page changes', async (
   expect(field().value).toBe('Another one');
 });
 
+it('takes in a request begun elsewhere while it is open, after what was written', async () => {
+  await show('agent:one');
+  await type('Half a thought');
+
+  // Another conversation's draft is not this one's business.
+  await act(async () => useDrafts.getState().begin('agent:two', 'Draw a diagram of '));
+  expect(field().value).toBe('Half a thought');
+
+  await act(async () => useDrafts.getState().begin('agent:one', 'Draw a diagram of '));
+  await act(async () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())));
+  expect(field().value).toBe('Half a thought\n\nDraw a diagram of ');
+  expect(document.activeElement).toBe(field());
+  expect(field().selectionStart).toBe(field().value.length);
+  // Taken in once: the field is the owner's again.
+  await type('Something else');
+  await show('agent:two');
+  await show('agent:one');
+  expect(field().value).toBe('Something else');
+});
+
 it('forgets it once sent, and keeps it when sending failed', async () => {
   await show('agent:new', async () => {
     throw new Error('The gateway could not be reached.');

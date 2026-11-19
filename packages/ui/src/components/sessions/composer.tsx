@@ -82,6 +82,22 @@ export function Composer({
   useEffect(() => {
     if (replyTo) editor.current?.focus();
   }, [replyTo]);
+  // A request begun elsewhere for this draft, as the Inspector's Create something new: taken in
+  // once, with the caret after it, for the owner to finish and send.
+  const begun = useDrafts((state) =>
+    draftKey && state.begun?.key === draftKey ? state.begun : undefined,
+  );
+  useEffect(() => {
+    if (!begun) return;
+    useDrafts.setState({ begun: undefined });
+    setText(begun.text);
+    requestAnimationFrame(() => {
+      const field = editor.current;
+      if (!field) return;
+      field.focus();
+      field.setSelectionRange(field.value.length, field.value.length);
+    });
+  }, [begun]);
   const recorder = useRecorder();
   const pastes = useRef(0);
   // Local previews hold memory until released. Without a draft the last ones go with the

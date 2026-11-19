@@ -383,7 +383,8 @@ export function SelectButton({
 
 /**
  * A choice that narrows a list, beside its search: as tall as the search box and drawn like it,
- * showing what is chosen. Its list is as wide as it needs, not as the trigger.
+ * showing what is chosen. Its list is as wide as it needs, not as the trigger. `className`
+ * matches a search made shorter, as the Inspector's bar makes it (`h-7`).
  */
 export function FilterSelect({
   label,
@@ -391,6 +392,7 @@ export function FilterSelect({
   options,
   onValueChange,
   disabled = false,
+  className = '',
 }: {
   /** What it filters by, for assistive technology. */
   label: string;
@@ -398,6 +400,7 @@ export function FilterSelect({
   options: FieldOption[];
   onValueChange: (value: string) => void;
   disabled?: boolean;
+  className?: string;
 }) {
   const chosen = options.find((option) => option.value === value);
 
@@ -409,7 +412,7 @@ export function FilterSelect({
       onValueChange={onValueChange}
       disabled={disabled}
       searchable={options.length >= SEARCH_FROM}
-      triggerClass={`${searchBox} shrink-0 text-[13px] text-ink transition-colors hover:bg-glass-press data-popup-open:border-ink/20 data-popup-open:bg-glass-press disabled:opacity-45`}
+      triggerClass={`${searchBox} shrink-0 text-[13px] text-ink transition-colors hover:bg-glass-press data-popup-open:border-ink/20 data-popup-open:bg-glass-press disabled:opacity-45 ${className}`}
       width="min-w-(--anchor-width) w-max max-w-[min(20rem,calc(100vw-2rem))]"
       shown={
         <>

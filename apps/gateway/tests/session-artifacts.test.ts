@@ -509,7 +509,8 @@ describe('the frame the panel draws one in', () => {
     // The shell's own page, without the one it holds.
     const shell = async (url: string) =>
       (await app.inject({ url })).body.replace(/srcdoc="[^"]*"/, '');
-    const sheet = 'html { background: #fff; }';
+    // Once the slide's frame has loaded (artifact-frames.test.ts sees it in a browser).
+    const sheet = 'html.drawn { background: #fff; }';
 
     // The panel rounds a slide's corners and paints nothing under its frame (deck/slide-frame.tsx).
     expect(await shell('/v1/artifact-frames/deck')).toContain(sheet);

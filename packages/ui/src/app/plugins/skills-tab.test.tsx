@@ -111,22 +111,6 @@ const type = (input: HTMLInputElement | null | undefined, value: string) =>
   });
 const search = (text: string) =>
   type(host.querySelector<HTMLInputElement>('input[aria-label="Search plugins"]'), text);
-const filterBy = async (label: string) => {
-  const filter = button('Filter skills', host);
-  if (!filter) throw new Error('no filter');
-  await act(async () => {
-    filter.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
-    filter.click();
-  });
-  const option = await vi.waitFor(() => {
-    const found = [...document.querySelectorAll<HTMLElement>('[role="option"]')].find(
-      (item) => item.textContent === label,
-    );
-    if (!found) throw new Error(`no option ${label}`);
-    return found;
-  });
-  await act(async () => option.click());
-};
 
 it('says who made each skill, the library first and then what Jian ships', async () => {
   await show();
@@ -149,12 +133,11 @@ it('says who made each skill, the library first and then what Jian ships', async
 
 it('opens the Skills tab an address names, and stops naming it once another is chosen', async () => {
   await show();
-  expect(button('Filter skills', host)).toBeDefined();
-  expect(button('Filter connectors', host)).toBeUndefined();
+  expect(names('Library')).toHaveLength(librarySkills.length);
+  // The search and the tabs narrow the list: the Skills tab has no filter of its own.
+  expect(button('Filter skills', host)).toBeUndefined();
 
   await press('All', host);
-  // Each kind's filter is on its own tab alone.
-  expect(button('Filter skills', host)).toBeUndefined();
   expect(address.replace).toHaveBeenCalledWith('/agents/a1/plugins');
 });
 
@@ -231,21 +214,6 @@ it('finds a skill by what it says and by who made it, accents and case aside', a
 
   await search('zzz');
   expect(host.textContent).toContain('No skill matches.');
-});
-
-it('narrows the skills by who made them, and to the ones switched off', async () => {
-  await show();
-
-  await filterBy('By Jian');
-  await vi.waitFor(() => expect(names()).toEqual(['web-research']));
-  await filterBy('Imported');
-  await vi.waitFor(() => expect(names()).toEqual(['concise']));
-  await filterBy('By you');
-  await vi.waitFor(() => expect(names()).toEqual(['standup-notes']));
-  await filterBy('By agents');
-  await vi.waitFor(() => expect(names()).toEqual(['trip-planning', 'invoice-check']));
-  await filterBy('Off');
-  await vi.waitFor(() => expect(names()).toEqual(['invoice-check']));
 });
 
 /** Imports from Add what the gateway then answers with. */
