@@ -7,7 +7,7 @@ coverage/
 .DS_Store
 
 work/
-secrets/
+/secrets/
 
 # Gateway UI static export
 **/.next/

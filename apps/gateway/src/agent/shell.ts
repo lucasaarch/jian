@@ -3,8 +3,8 @@ import { writeFile } from 'node:fs/promises';
 import { isAbsolute, join } from 'node:path';
 import { type ToolSet, tool } from 'ai';
 import { z } from 'zod';
-import { secretForms } from '../command-secrets/forms.js';
-import type { OfferedSecret } from '../command-secrets/service.js';
+import { secretForms } from '../secrets/forms.js';
+import type { OfferedSecret } from '../secrets/service.js';
 import { fileTools } from './files.js';
 import { redactText } from './results.js';
 import { confine, confined, reachableFolders } from './workspace.js';
@@ -178,9 +178,18 @@ export type CommandSecretAccess = {
   reveal: (names: readonly string[]) => Promise<Record<string, string>>;
 };
 
+/**
+ * Every variable of the Secrets a run may use, each with what its Secret is for: each is offered
+ * and named on its own, as a command secret was, and `reveal` lends its whole Secret.
+ */
+const offeredNames = (offered: readonly OfferedSecret[]) =>
+  offered.flatMap(({ description, fields }) =>
+    fields.map(({ envName }) => ({ name: envName, description })),
+  );
+
 /** What the agent reads of the secrets it may use: names and what each is for, never a value. */
 function secretsDescription(offered: readonly OfferedSecret[]): string {
-  const listed = offered
+  const listed = offeredNames(offered)
     .map(({ name, description }) => `${name}${description ? ` (${description})` : ''}`)
     .join('; ');
 
@@ -196,7 +205,7 @@ export function shellTools(
   },
   secrets?: CommandSecretAccess,
 ): ToolSet {
-  const names = secrets?.offered.map((secret) => secret.name) ?? [];
+  const names = offeredNames(secrets?.offered ?? []).map((secret) => secret.name);
   const base = z.object({
     command: z.string().trim().min(1).max(4000),
     cwd: absolute.optional(),
