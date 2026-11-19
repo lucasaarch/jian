@@ -8,6 +8,7 @@ import {
   deckSlideDeleteSchema,
   deckSlideMoveSchema,
   deckSlideUpdateSchema,
+  diagramContentSchema,
   EDITABLE_ARTIFACT_TYPES,
   type ProfileArtifact,
   profileArtifactsQuerySchema,
@@ -79,6 +80,35 @@ function compiled(content: string): string {
 const drawn = (type: SessionArtifactType, content: string) =>
   type === 'react' ? compiled(content) : content;
 
+/**
+ * A diagram is data its frame draws, not code: checked against its form here, so a line to a
+ * node that does not exist is the agent's to fix now rather than missing from the drawing. The
+ * owner's own save is checked the same way.
+ */
+function checkDiagram(content: string): void {
+  let given: unknown;
+  try {
+    given = JSON.parse(content);
+  } catch {
+    throw new GatewayError(
+      400,
+      'A diagram is given as JSON: {"nodes": [{"id": "a", "label": "Start"}, …], "edges": [{"from": "a", "to": "b"}, …]}.',
+    );
+  }
+  const checked = diagramContentSchema.safeParse(given);
+  const issues = checked.error?.issues ?? [];
+  if (issues.length) {
+    // A few at once, so a diagram with several wrong ids is mended in one go.
+    const told = issues
+      .slice(0, 5)
+      .map((issue) => `at ${issue.path.join('.') || 'its top'}: ${issue.message}`);
+    throw new GatewayError(
+      400,
+      `The diagram does not fit its form ${told.join('; ')}${issues.length > 5 ? '; and more' : ''}`,
+    );
+  }
+}
+
 /** What the agent gives for a version: which of these it takes depends on the type. */
 type Given = {
   content?: string | undefined;
@@ -106,6 +136,7 @@ function kept(type: SessionArtifactType, given: Given): string {
     );
   }
   drawn(type, given.content);
+  if (type === 'diagram') checkDiagram(given.content);
   return given.content;
 }
 

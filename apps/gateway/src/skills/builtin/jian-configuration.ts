@@ -138,8 +138,8 @@ takes the whole window: its pages are listed where the sidebar was, under Back.
   PDF or Markdown; a spreadsheet as Excel, its formulas kept, or as CSV, its values. Only a
   gateway on a server draws PDFs, PowerPoint files and pictures: on the desktop app's own, a deck
   downloads as the slide's web page alone.
-  A document and a spreadsheet open ready to edit: click a text to change it or its formatting, or
-  type in the cells. A web page and a deck's slide have Edit, and Done to stop. There is no Save:
+  A document, a spreadsheet and a diagram open ready to edit: click a text to change it or its
+  formatting, type in the cells, or move nodes. A web page and a deck's slide have Edit, and Done to stop. There is no Save:
   what the owner changes keeps itself a moment after they stop, or as they leave, and the bar says
   Saving… or Saved; a version you wrote is never written over.
   Public gives a link anyone can open without signing in, to the latest version only, and making

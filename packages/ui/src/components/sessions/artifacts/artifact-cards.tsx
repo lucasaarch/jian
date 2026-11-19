@@ -17,7 +17,7 @@ import { useCrew } from '../../../lib/stores/crew';
 import { draftKey, useDrafts } from '../../../lib/stores/drafts';
 import { revealViewer } from '../files/use-files';
 import { InspectorBar, InspectorBody } from '../inspector';
-import { TYPE_FILTERS } from './source';
+import { ofKind, TYPE_FILTERS } from './source';
 import { type ArtifactsApi, useSessionArtifacts } from './use-artifacts';
 
 /** What the Artifacts tab asks of the gateway: what one open Artifact does, and the cards' menu. */
@@ -61,7 +61,8 @@ export function ArtifactCards({
     () =>
       listing.data?.filter(
         (item) =>
-          (!type || item.type === type) && (!needle || item.title.toLowerCase().includes(needle)),
+          (!type || ofKind(item.type, type)) &&
+          (!needle || item.title.toLowerCase().includes(needle)),
       ),
     [listing.data, needle, type],
   );

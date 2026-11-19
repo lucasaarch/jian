@@ -8,6 +8,9 @@ import {
   type SessionArtifactType,
 } from '@jian/contracts';
 import { GatewayError } from '../core/errors.js';
+import { CANVAS } from './canvas-frame.js';
+import { DIAGRAM } from './diagram-frame.js';
+import { DIAGRAM_LAYOUT } from './diagram-layout.js';
 import { EDITORS } from './edit-frame.js';
 import { type FrameTheme, frameStyle } from './frame-style.js';
 import { PLAYER, PLAYER_EMBEDDED } from './player.js';
@@ -86,17 +89,39 @@ const DRAW: Record<
     libraries: ['marked'],
     body: `run(libraries[0]); root.innerHTML = marked.parse(source);`,
   },
+  // On the same canvas as a diagram, read only: Mermaid is changed by asking the agent. Its theme
+  // is the page's, the panel's when the panel names one, and it is drawn again when that changes.
   mermaid: {
     libraries: ['mermaid'],
     body: `run(libraries[0]);
-mermaid.initialize({
-  startOnLoad: false,
-  securityLevel: 'strict',
-  suppressErrorRendering: true,
-  theme: matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'default',
-});
-root.innerHTML = (await mermaid.render('diagram', source)).svg;`,
+${CANVAS}
+const view = canvas(root);
+let drawn = 0;
+let theme = '';
+const paint = async () => {
+  const wanted = document.documentElement.classList.contains('dark') ? 'dark' : 'default';
+  if (wanted === theme) return;
+  theme = wanted;
+  mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', suppressErrorRendering: true, theme });
+  view.world.innerHTML = (await mermaid.render('diagram-' + ++drawn, source)).svg;
+  // Drawn at its own size, which Mermaid gives as the viewBox and then caps to its container.
+  const picture = view.world.querySelector('svg');
+  const box = picture.viewBox.baseVal;
+  const width = box && box.width ? box.width : picture.getBoundingClientRect().width;
+  const height = box && box.height ? box.height : picture.getBoundingClientRect().height;
+  for (const name of ['style', 'width', 'height']) picture.removeAttribute(name);
+  picture.style.cssText = 'display: block; width: ' + width + 'px; height: ' + height + 'px;';
+  view.bounds(() => [0, 0, width, height]);
+};
+await paint();
+view.fit();
+new MutationObserver(() => paint().catch(fail)).observe(document.documentElement, {
+  attributes: true,
+  attributeFilter: ['class'],
+});`,
   },
+  // Drawn by scripts of the gateway's own, which read the JSON as data and never run it.
+  diagram: { libraries: [], body: `${CANVAS}${DIAGRAM_LAYOUT}${DIAGRAM}\ndiagram(source, root);` },
   // Drawn by scripts of the gateway's own, which read the source as data and never run it.
   sheet: { libraries: [], body: `${SHEET}\nsheet(source, root, false);` },
   // React ships as CommonJS, and the component arrives compiled to it: each is wrapped in a

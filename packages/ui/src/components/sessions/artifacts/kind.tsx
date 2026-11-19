@@ -17,6 +17,7 @@ const ICON: Record<SessionArtifact['type'], LucideIcon> = {
   react: Atom,
   markdown: FileText,
   mermaid: Workflow,
+  diagram: Workflow,
   deck: Presentation,
   sheet: Sheet,
 };
@@ -35,6 +36,7 @@ export const KIND_TINT: Record<SessionArtifact['type'], string> = {
   html: 'bg-good/15 text-good',
   react: 'bg-merged/15 text-merged',
   mermaid: 'bg-good/15 text-good',
+  diagram: 'bg-good/15 text-good',
   sheet: 'bg-good/15 text-good',
 };
 

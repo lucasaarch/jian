@@ -14,7 +14,7 @@ export const frameStyle = (theme: FrameTheme | undefined) => `
 html, body { margin: 0; }
 body { padding: 16px; font: 15px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif;
   overflow-wrap: anywhere; }
-body.react, body.deck, body.sheet, body.markdown { padding: 0; }
+body.react, body.deck, body.sheet, body.markdown, body.mermaid, body.diagram { padding: 0; }
 ${canvasStyle()}
 #failure { margin: 12px; padding: 12px; border-radius: 8px; white-space: pre-wrap;
   font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; color: #b42318;
@@ -32,6 +32,15 @@ ${documentStyle()}
 ${PLAYER_STYLE}`;
 
 /**
+ * The ground of a canvas and its dots, one 18px apart: a component's, and the one a diagram is
+ * panned and zoomed on (canvas-frame.ts), so the two read as the same surface.
+ */
+export const CANVAS_GROUND = 'light-dark(#f4f4f5, #0d0d0f)';
+export const CANVAS_DOT =
+  'radial-gradient(light-dark(#00000024, #ffffff1c) 1px, transparent 1.4px)';
+export const CANVAS_SPACING = 18;
+
+/**
  * A component stands centred on a canvas of dots, the canvas's ground being its own so a component
  * drawn light on a dark panel still has a light canvas. `safe` keeps one larger than the view
  * reachable by scrolling, from its start. `filled` is a component that paints its own ground over
@@ -40,9 +49,10 @@ ${PLAYER_STYLE}`;
  */
 function canvasStyle() {
   return `
-body.react { background-color: light-dark(#f4f4f5, #0d0d0f);
-  background-image: radial-gradient(light-dark(#00000024, #ffffff1c) 1px, transparent 1.4px);
-  background-size: 18px 18px; background-position: 9px 9px; }
+body.react { background-color: ${CANVAS_GROUND};
+  background-image: ${CANVAS_DOT};
+  background-size: ${CANVAS_SPACING}px ${CANVAS_SPACING}px;
+  background-position: ${CANVAS_SPACING / 2}px ${CANVAS_SPACING / 2}px; }
 body.react #root { box-sizing: border-box; min-height: 100vh; padding: 56px 32px; display: flex;
   flex-direction: column; align-items: safe center; justify-content: safe center; }
 body.react.filled { background: none; }

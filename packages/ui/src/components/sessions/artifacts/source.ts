@@ -3,31 +3,45 @@ import type { SessionArtifact } from '../../../lib/api';
 
 type Kind = SessionArtifact['type'];
 
-/** Each type as the owner reads it in the list. */
+/**
+ * Each type as the owner reads it in the list. A diagram the owner draws and a Mermaid one are
+ * one kind to them, Diagram: one name, one icon, one filter.
+ */
 export const TYPE_NAME: Record<Kind, string> = {
   html: 'Web page',
   react: 'React component',
   markdown: 'Document',
   mermaid: 'Diagram',
+  diagram: 'Diagram',
   deck: 'Slide',
   sheet: 'Spreadsheet',
 };
 
-/** The choices of a filter by type, the Artifacts page's and the Inspector's: empty for all. */
+/**
+ * The choices of a filter by type, the Artifacts page's and the Inspector's: empty for all.
+ * Diagram is `diagram`, which the gateway answers with Mermaid ones too (`ofKind` here).
+ */
 export const TYPE_FILTERS = [
   { value: '', label: 'All types' },
-  ...Object.entries(TYPE_NAME).map(([value, label]) => ({ value, label })),
+  ...Object.entries(TYPE_NAME)
+    .filter(([value]) => value !== 'mermaid')
+    .map(([value, label]) => ({ value, label })),
 ];
 
+/** Whether an Artifact is of the kind a filter picked: a Mermaid one is a Diagram. */
+export const ofKind = (type: Kind, picked: Kind) =>
+  type === picked || (picked === 'diagram' && type === 'mermaid');
+
 /**
- * The highlighter's grammar for a type's source; a diagram's and a spreadsheet's have none. A
- * deck's is a slide's.
+ * The highlighter's grammar for a type's source; a Mermaid diagram's and a spreadsheet's have
+ * none. A deck's is a slide's.
  */
 export const LANGUAGE: Partial<Record<Kind, string>> = {
   html: 'xml',
   react: 'typescript',
   markdown: 'markdown',
   deck: 'xml',
+  diagram: 'json',
 };
 
 const EXTENSION: Record<Kind, string> = {
@@ -35,6 +49,7 @@ const EXTENSION: Record<Kind, string> = {
   react: 'tsx',
   markdown: 'md',
   mermaid: 'mmd',
+  diagram: 'json',
   // A deck is read, copied and downloaded one slide at a time, and a slide is a page.
   deck: 'html',
   // Opened by Excel or Google Sheets, which work its formulas out again.

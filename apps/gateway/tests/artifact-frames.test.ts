@@ -28,6 +28,18 @@ const SOURCE: Partial<Record<SessionArtifactType, string>> = {
   // A component as the gateway hands it over: compiled to CommonJS.
   react: `exports.default = () => React.createElement('p', null, 'A component');`,
   sheet: 'Item,Cost\nA,2\nB,3\nTotal,=SUM(B2:B3)*21\n',
+  diagram: JSON.stringify({
+    nodes: [
+      { id: 'start', label: 'Start' },
+      { id: 'check', label: 'Is it ready?', shape: 'diamond', color: 'blue' },
+      { id: 'done', label: 'Done' },
+    ],
+    edges: [
+      { from: 'start', to: 'check' },
+      { from: 'check', to: 'done', label: 'yes' },
+    ],
+  }),
+  mermaid: 'graph LR; A[Alpha] --> B[Beta]',
 };
 const DECK = JSON.stringify({ slides: [slide('First'), slide('Second'), slide('Third')] });
 
@@ -419,6 +431,145 @@ exports.default = (props) =>
       await deck.keyboard.press('Escape');
       await settled('3 / 3', false);
       await deck.close();
+    });
+
+    /** Where the drawing stands in its frame: the middle of what it covers, in the frame's pixels. */
+    const middleOf = (frame: Frame, selector: string): Promise<[number, number]> =>
+      frame.evaluate((picked): [number, number] => {
+        const boxes = [...document.querySelectorAll(picked)].map((el) =>
+          el.getBoundingClientRect(),
+        );
+        const left = Math.min(...boxes.map((box) => box.left));
+        const right = Math.max(...boxes.map((box) => box.right));
+        const top = Math.min(...boxes.map((box) => box.top));
+        const bottom = Math.max(...boxes.map((box) => box.bottom));
+        return [Math.round((left + right) / 2), Math.round((top + bottom) / 2)];
+      }, selector);
+    const innermost = (page: Page) => page.frames().at(-1) as Frame;
+
+    it('draws a diagram and a Mermaid one centred on a dotted canvas, which pans and zooms', async () => {
+      for (const [type, text, selector] of [
+        ['diagram', 'Is it ready?', '.d-node'],
+        ['mermaid', 'Alpha', '.canvas-world svg'],
+      ] as const) {
+        const page = await inPanel(`canvas-${type}`, type, SOURCE[type] ?? '');
+        await expect.poll(() => read(page), { message: type }).toContain(text);
+        const drawing = innermost(page);
+        const [x, y] = await middleOf(drawing, selector);
+        // The frame is 900 by 600, with a little more room kept at the bottom for the zoom.
+        expect(Math.abs(x - 450), type).toBeLessThanOrEqual(2);
+        expect(Math.abs(y - 292), type).toBeLessThanOrEqual(2);
+        expect(
+          await drawing.evaluate(
+            () => getComputedStyle(document.getElementById('root') as Element).backgroundImage,
+          ),
+        ).toMatch(/^radial-gradient/);
+
+        // Ctrl and the wheel zoom in around the pointer; the wheel alone pans.
+        const box = await page.locator('#held').boundingBox();
+        if (!box) throw new Error('No frame.');
+        await page.mouse.move(box.x + 450, box.y + 292);
+        await page.keyboard.down('Control');
+        await page.mouse.wheel(0, -100);
+        await page.keyboard.up('Control');
+        await expect
+          .poll(() => drawing.locator('button[aria-label="Actual size"]').textContent())
+          .not.toBe('100%');
+        await page.mouse.wheel(0, 120);
+        await expect
+          .poll(async () => (await middleOf(drawing, selector))[1], { message: type })
+          .toBeLessThan(250);
+        await drawing.click('button[aria-label="Fit"]');
+        await expect.poll(() => middleOf(drawing, selector)).toEqual([x, y]);
+        await page.close();
+      }
+    });
+
+    it('draws a public diagram for anyone, with nothing to edit it', async () => {
+      const page = await open('/public/diagram');
+      await expect.poll(() => read(page)).toContain('Is it ready?');
+      const drawing = innermost(page);
+      expect(await drawing.locator('.d-handle, .d-tools').count()).toBe(0);
+      expect(await drawing.locator('button[aria-label="Zoom in"]').count()).toBe(1);
+      await page.close();
+    });
+
+    it('edits a diagram by hand and hands back its JSON, every node placed', async () => {
+      const page = await inPanel('diagram-edit', 'diagram', SOURCE.diagram ?? '', true);
+      const drawing = await editing(page);
+      await expect.poll(() => read(page)).toContain('Is it ready?');
+      // Laid out where the agent left it to the layout, which is not an edit of the owner's.
+      expect(await collect(page, 'untouched')).toEqual({ collect: 'untouched', unchanged: true });
+
+      const box = await page.locator('#held').boundingBox();
+      if (!box) throw new Error('No frame.');
+      const centre = async (id: string) => {
+        const [x, y] = await middleOf(drawing, `.d-node[data-id="${id}"]`);
+        return [box.x + x, box.y + y] as const;
+      };
+      const kept = async (nonce: string) => {
+        const answer = (await collect(page, nonce)) as { html: string };
+        return JSON.parse(answer.html) as {
+          nodes: { id: string; label: string; x: number; y: number; shape?: string }[];
+          edges: { from: string; to: string; label?: string }[];
+        };
+      };
+
+      // Dragged 100 pixels right at full size.
+      const [sx, sy] = await centre('start');
+      await page.mouse.move(sx, sy);
+      await page.mouse.down();
+      await page.mouse.move(sx + 50, sy, { steps: 4 });
+      await page.mouse.move(sx + 100, sy, { steps: 4 });
+      await page.mouse.up();
+      const [movedX, movedY] = await centre('start');
+      expect([Math.round(movedX - sx), Math.round(movedY - sy)]).toEqual([100, 0]);
+      let saved = await kept('moved');
+      const start = saved.nodes.find((node) => node.id === 'start');
+      const others = saved.nodes.filter((node) => node.id !== 'start');
+      expect(others.every((node) => Number.isFinite(node.x) && Number.isFinite(node.y))).toBe(true);
+      expect(start?.label).toBe('Start');
+
+      // A double click on the canvas adds a node, written in place.
+      await page.mouse.dblclick(box.x + 120, box.y + 520);
+      await page.keyboard.type('Ship it');
+      await page.keyboard.press('Enter');
+      saved = await kept('added');
+      const added = saved.nodes.find((node) => node.label === 'Ship it');
+      expect(added).toMatchObject({ shape: 'rounded' });
+
+      // A handle dragged onto another node joins them.
+      const done = drawing.locator('.d-node[data-id="done"]');
+      await done.hover();
+      const handle = await done.locator('.d-handle[data-side="s"]').boundingBox();
+      if (!handle || !added) throw new Error('No handle.');
+      const [ax, ay] = await centre(added.id);
+      await page.mouse.move(box.x + handle.x + 5, box.y + handle.y + 5);
+      await page.mouse.down();
+      await page.mouse.move(ax, ay - 10, { steps: 6 });
+      await page.mouse.move(ax, ay, { steps: 2 });
+      await page.mouse.up();
+      saved = await kept('joined');
+      expect(saved.edges).toContainEqual({ from: 'done', to: added.id });
+
+      // The bar over a picked node changes its shape; Delete takes it away with its edges; undo
+      // brings it back.
+      // The line just drawn is picked, its bar over it; Escape lets go of it.
+      expect(await drawing.locator('.d-bar').getAttribute('aria-label')).toBe('Edge');
+      await page.keyboard.press('Escape');
+      await page.mouse.click(...(await centre('done')));
+      await drawing.click('.d-bar button[aria-label="Ellipse"]');
+      saved = await kept('shaped');
+      expect(saved.nodes.find((node) => node.id === 'done')?.shape).toBe('ellipse');
+      await page.keyboard.press('Delete');
+      saved = await kept('deleted');
+      expect(saved.nodes.map((node) => node.id)).not.toContain('done');
+      expect(saved.edges.some((edge) => edge.from === 'done' || edge.to === 'done')).toBe(false);
+      await page.keyboard.press('Control+z');
+      saved = await kept('undone');
+      expect(saved.nodes.map((node) => node.id)).toContain('done');
+      expect(saved.edges).toContainEqual({ from: 'check', to: 'done', label: 'yes' });
+      await page.close();
     });
   },
 );

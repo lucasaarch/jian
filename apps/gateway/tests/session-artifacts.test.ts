@@ -145,6 +145,79 @@ describe('what the agent makes', () => {
     expect(version.compiled).not.toContain('<number>');
   });
 
+  it('keeps a diagram as JSON whose every reference holds, its places optional', async () => {
+    const { services, app, owner, session, at, make } = await setup();
+    const diagram = (body: object) => ({
+      title: 'Flow',
+      type: 'diagram',
+      content: JSON.stringify(body),
+    });
+
+    await expect(
+      make({ title: 'Flow', type: 'diagram', content: 'graph TD; A-->B' }),
+    ).rejects.toMatchObject({ statusCode: 400, message: /given as JSON/ });
+    // A line to a node that does not exist is refused, naming where it is and what does exist.
+    await expect(
+      make(
+        diagram({
+          nodes: [
+            { id: 'web', label: 'Web' },
+            { id: 'api', label: 'API', group: 'back' },
+          ],
+          edges: [{ from: 'web', to: 'db' }],
+        }),
+      ),
+    ).rejects.toMatchObject({
+      statusCode: 400,
+      message: expect.stringMatching(
+        /nodes\.1\.group: No group has the id "back"\. There are none\..*edges\.0\.to: No node has the id "db"\. They are "web", "api"\./,
+      ),
+    });
+    await expect(
+      make(
+        diagram({
+          nodes: [
+            { id: 'a', label: 'A' },
+            { id: 'a', label: 'Again' },
+          ],
+        }),
+      ),
+    ).rejects.toMatchObject({ message: /nodes\.1\.id: "a" is the id of another/ });
+    await expect(make(diagram({ nodes: [{ id: 'a', label: 'A', x: 10 }] }))).rejects.toMatchObject({
+      message: /both x and y/,
+    });
+    await expect(
+      make(diagram({ nodes: [{ id: 'a', label: 'A', colour: 'blue' }] })),
+    ).rejects.toMatchObject({ message: /colour/ });
+
+    // Places are optional: the frame lays out what has none, and the source is kept as written.
+    const content = JSON.stringify({
+      nodes: [
+        { id: 'web', label: 'Web' },
+        { id: 'api', label: 'API', x: 200, y: 40, shape: 'diamond', color: 'teal' },
+      ],
+      edges: [{ from: 'web', to: 'api', label: 'calls', style: 'dashed' }],
+    });
+    const made = await make({ title: 'Flow', type: 'diagram', content });
+    expect((await app.inject({ url: at(`/${made.id}/versions/1`), headers })).json().content).toBe(
+      content,
+    );
+
+    // The owner's own save is held to the same form.
+    const save = (body: string) =>
+      app.inject({
+        method: 'POST',
+        url: at(`/${made.id}/versions`),
+        headers,
+        payload: { version: 1, content: body },
+      });
+    expect((await save('{"nodes": [], "edges": [{"from": "x", "to": "y"}]}')).statusCode).toBe(400);
+    const moved = '{"nodes": [{"id": "web", "label": "Web", "x": 0, "y": 0}]}';
+    expect((await save(moved)).statusCode).toBe(201);
+    const read = await services.artifacts.read(owner.id, session.id, { artifactId: made.id });
+    expect(read).toMatchObject({ version: 2, writtenBy: 'owner', content: moved });
+  });
+
   it('keeps a spreadsheet as CSV, its formulas included', async () => {
     const { app, at, make } = await setup();
     const sheet = await make({
@@ -372,7 +445,7 @@ describe('the frame the panel draws one in', () => {
     const { app, make } = await setup();
     await make({ title: 'Secret plan', type: 'markdown', content: 'Only for the owner' });
 
-    for (const type of ['html', 'react', 'markdown', 'mermaid', 'deck', 'sheet']) {
+    for (const type of ['html', 'react', 'markdown', 'mermaid', 'deck', 'sheet', 'diagram']) {
       const frame = await app.inject({ url: `/v1/artifact-frames/${type}` });
       expect(frame.statusCode).toBe(200);
       expect(frame.headers['content-type']).toBe('text/html; charset=utf-8');
@@ -408,7 +481,7 @@ describe('the frame the panel draws one in', () => {
     }
     // The others are drawn by a page of the gateway's, which the shell posts the source on to.
     // A component's shell alone says something back: its tweaks, under that one key.
-    for (const type of ['react', 'markdown', 'mermaid', 'sheet']) {
+    for (const type of ['react', 'markdown', 'mermaid', 'sheet', 'diagram']) {
       const own = (await app.inject({ url: `/v1/artifact-frames/${type}` })).body.replace(
         /srcdoc="[^"]*"/,
         '',
@@ -427,7 +500,7 @@ describe('the frame the panel draws one in', () => {
   it('edits in a frame of its own, as sealed, that only answers its parent', async () => {
     const { app } = await setup();
 
-    for (const type of ['html', 'deck', 'markdown', 'sheet']) {
+    for (const type of ['html', 'deck', 'markdown', 'sheet', 'diagram']) {
       const frame = await app.inject({ url: `/v1/artifact-frames/${type}?edit=1` });
       expect(frame.statusCode).toBe(200);
       const policy = String(frame.headers['content-security-policy']);

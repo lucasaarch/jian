@@ -324,6 +324,29 @@ describe('the Artifacts tab', () => {
     expect(cards()).toEqual(['Landing']);
   });
 
+  it('shows a Mermaid diagram and a diagram as one kind, Diagram', async () => {
+    const flow: SessionArtifact = {
+      ...counter,
+      id: '66666666-6666-4666-8666-666666666666',
+      title: 'Flow',
+      type: 'mermaid',
+    };
+    const map: SessionArtifact = {
+      ...counter,
+      id: '77777777-7777-4777-8777-777777777777',
+      title: 'Map',
+      type: 'diagram',
+    };
+    await listed(gateway([flow, map, notes]));
+
+    await click(button('Type'));
+    await settled(() => document.querySelectorAll('[role="option"]').length > 0);
+    const options = [...document.querySelectorAll('[role="option"]')];
+    expect(options.filter((item) => item.textContent?.includes('Diagram'))).toHaveLength(1);
+    await click(options.find((item) => item.textContent?.includes('Diagram')));
+    expect(cards()).toEqual(['Flow', 'Map']);
+  });
+
   it('begins a request in this conversation’s own field, after what is written there', async () => {
     const field = draftKey('profile', 'session');
     useDrafts.getState().write(field, 'Hello ');
