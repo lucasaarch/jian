@@ -28,8 +28,6 @@ import {
 import { z } from 'zod';
 import { isChatChannel } from '../channels/kinds.js';
 import { findContactBySession } from '../channels/repository.js';
-import { secretForms } from '../command-secrets/forms.js';
-import type { CommandSecrets } from '../command-secrets/service.js';
 import { fitPrompt, promptTokens, tokenCounter, truncatePrompt } from '../context/budget.js';
 import { withTurnNote } from '../context/build.js';
 import {
@@ -72,6 +70,8 @@ import { providerSecret } from '../providers/service.js';
 import { mergeProviderOptions, speedProviderOptions } from '../providers/speed.js';
 import { lastPromptScale, lastStepAt } from '../runs/context-usage.js';
 import { keptBeside, readRunAction, writeRunAction } from '../runs/repository.js';
+import { secretForms } from '../secrets/forms.js';
+import type { Secrets } from '../secrets/service.js';
 import { createSafeFetch } from '../security/outbound.js';
 import type { ObjectiveContinuation } from '../sessions/continuation.js';
 import { dropLoads, listLoads, type SessionLoad, useLoads } from '../sessions/loads.js';
@@ -277,8 +277,8 @@ export type RuntimeServices = ToolServices & {
   objectives?: Pick<ObjectiveContinuation, 'continueAfter'>;
   workspaces?: Pick<Workspaces, 'forRun' | 'cloned' | 'touched'>;
   worktrees?: WorktreeService;
-  /** The owner's secrets for agents' commands: what a run offers, lends, and masks. */
-  commandSecrets?: Pick<CommandSecrets, 'usable' | 'reveal' | 'masks'>;
+  /** The installation's Secrets for agents' commands: what a run offers, lends, and masks. */
+  secrets?: Pick<Secrets, 'usable' | 'reveal' | 'masks'>;
 };
 
 /**
@@ -327,12 +327,12 @@ async function actsOnComputer(
 
 /** What a run's `run_command` may lend: none offered when the agent has none to use. */
 async function commandSecretAccess(
-  commandSecrets: Pick<CommandSecrets, 'usable' | 'reveal'>,
+  secrets: Pick<Secrets, 'usable' | 'reveal'>,
   profileId: string,
 ): Promise<CommandSecretAccess | undefined> {
-  const offered = await commandSecrets.usable(profileId);
+  const offered = await secrets.usable(profileId);
   return offered.length
-    ? { offered, reveal: (names) => commandSecrets.reveal(profileId, names) }
+    ? { offered, reveal: (names) => secrets.reveal(profileId, names) }
     : undefined;
 }
 
@@ -726,7 +726,7 @@ export class AgentRuntime {
       // Every command secret, in each form a command could print it, whichever agent may use it
       // and whether or not this run lends one: a value written to a shared file by one command is
       // there for any later one to read back.
-      for (const value of (await this.services.commandSecrets?.masks()) ?? []) {
+      for (const value of (await this.services.secrets?.masks()) ?? []) {
         for (const form of secretForms(value)) secrets.add(form);
       }
 
@@ -981,8 +981,8 @@ export class AgentRuntime {
           replyTo,
           // The owner's own conversations alone: a subagent acts on Auto, where nobody approves
           // a command before it runs, and a look back runs no command at all.
-          !run.subagent && !learning && !session.remoteMachineId && this.services.commandSecrets
-            ? await commandSecretAccess(this.services.commandSecrets, profileId)
+          !run.subagent && !learning && !session.remoteMachineId && this.services.secrets
+            ? await commandSecretAccess(this.services.secrets, profileId)
             : undefined,
         ),
         ...(!learning && this.options.github && gitPlace

@@ -2,7 +2,6 @@ import { localPlace, remotePlace } from './agent/github-git-place.js';
 import { prepareGitAccess } from './agent/worker-workspace.js';
 import { SessionArtifacts } from './artifacts/service.js';
 import { Contacts } from './channels/contacts.js';
-import { CommandSecrets } from './command-secrets/service.js';
 import { Contexts } from './context/service.js';
 import type { Clock } from './core/clock.js';
 import { Decisions } from './decisions/service.js';
@@ -29,6 +28,7 @@ import { Remote } from './remote/service.js';
 import { RunLifecycle } from './runs/lifecycle.js';
 import { Runs } from './runs/service.js';
 import { Schedules } from './schedules/service.js';
+import { Secrets } from './secrets/service.js';
 import type { GatewayVault } from './security/gateway-vault.js';
 import { createSafeFetch } from './security/outbound.js';
 import type { Vault } from './security/vault.js';
@@ -77,7 +77,7 @@ export type Services = {
   vault: Vault;
   gatewayVault: GatewayVault;
   sshKeys: SshKeys;
-  commandSecrets: CommandSecrets;
+  secrets: Secrets;
   mcp: McpServers;
   skillLibrary: SkillLibrary;
   remote: Remote;
@@ -185,8 +185,8 @@ export function buildServices({
     decisions.judge,
   );
   const sshKeys = new SshKeys(store, gatewayVault);
-  const commandSecrets = new CommandSecrets(store, gatewayVault, clock);
-  profiles.useBeforeDelete((profileId, tx) => commandSecrets.forgetAgent(profileId, tx));
+  const secrets = new Secrets(store, gatewayVault, clock);
+  profiles.useBeforeDelete((profileId, tx) => secrets.forgetAgent(profileId, tx));
   const worktrees = new Worktrees(
     store,
     clock,
@@ -257,7 +257,7 @@ export function buildServices({
     vault,
     gatewayVault,
     sshKeys,
-    commandSecrets,
+    secrets,
     mcp: new McpServers(store, gatewayVault, clock),
     skillLibrary: new SkillLibrary(store, clock),
     remote,
