@@ -4,6 +4,122 @@ Every release of Jian, newest first.
 
 <!-- Generated from docs/releases by scripts/changelog.mjs. Edit the release note, then run `make changelog`. -->
 
+## 1.12.0 — 2026-11-19
+
+Artifacts arrive, Plugins brings connectors and skills into one screen, a provider can hold several accounts, and agents can make video.
+
+### Artifacts
+
+* **Things you keep working on:** The agent can make a page, a React component, a document, a slide deck, a spreadsheet or a diagram (Mermaid, or Jian's own) as an Artifact. You watch it being written, and each change is a new version you can go back to. The **Artifacts** tab in the Inspector shows a conversation's Artifacts, and the **Artifacts** page in the sidebar shows every Artifact an agent has made, as cards you can search, pin, rename, duplicate, delete or sort into folders.
+* **Edit them yourself:** Pages, documents, slides, spreadsheets and diagrams are edited in place and save as you go. Each stretch of your editing becomes a new version, so the agent's versions stay as they were, and its next change starts from yours.
+  * Documents work like a notes app: `/` for blocks and Markdown shortcuts.
+  * Spreadsheets edit inside the cell, with formulas, rows and columns, copy and paste, and undo, as in Excel.
+  * You can build a deck slide by slide from layouts, with text boxes and pictures.
+  * Diagrams sit on an infinite canvas you can pan and zoom, with nodes you drag, join and restyle.
+* **A component you can try:** A React component stands on a canvas. If it declares props, the **Tweaks** panel beside it lets you change them and switch it between light and dark. Nothing set in Tweaks is saved or sent to the agent.
+* **The agent changes only what it has to:** It edits an Artifact the way it edits a file, replacing exact passages, so your own edits stay. It can also send one as a file, or make one public, in any conversation, WhatsApp, Telegram and email included. Making one public follows the conversation's approval mode.
+* **Errors you can hand back:** A broken component shows a small badge in its corner instead of covering the view. Click it to see the whole error, copy it, or press **Fix**, which sends it to the agent and asks for the smallest change that fixes it.
+* **Downloads:**
+  * A document downloads as Word, PDF or Markdown.
+  * A spreadsheet downloads as Excel, with the formulas kept, or as CSV.
+  * A deck downloads as PDF, PowerPoint or a PNG of a slide. **Present** shows it full screen.
+  * PDF, PNG and PowerPoint files are drawn by the gateway's browser, which only a server gateway has, so the desktop app's own gateway doesn't offer them.
+* **Public links:** On a server gateway an Artifact can be shared by an unguessable link that shows its latest version.
+  * The page looks as it does in the panel. A toolbar at the top has the title, downloads, and links to Jian's site and GitHub.
+  * For a component, **Copy prompt** gives you its source with notes for rebuilding it in React, Vue, Angular, Svelte, SolidJS, plain HTML or React Native.
+* **From a phone:** A paired phone can open, pin, rename, move and delete Artifacts, but it can't edit them or make one public.
+
+### Plugins
+
+* **Connectors and skills in one place:** **Plugins**, in the sidebar, lists every connector and skill, with All / Connectors / Skills tabs and a search. A connector or a skill opens as its own page. Apps and MCP servers have left Settings, and their old addresses take you here.
+* **Skills are shared by every agent:** There is now one library of skills for all your agents, and turning a skill on or off applies to all of them. An agent can change or delete only the skills it made; you can change any of them. Imported skills show their version and can be updated from GitHub. A library holds up to 60 skills.
+* **New apps:**
+  * **Higgsfield** for generated images and video.
+  * **HeyGen** for avatar videos.
+  * **ElevenLabs** for voice, music and sound. It needs your gateway's `JIAN_PUBLIC_URL` to be an `https://` address, so the desktop app's own gateway can't sign in to it.
+  * **Composio**, which reaches hundreds of apps through one connection and asks you to sign in to each the first time the agent needs it.
+  * **Reactive Resume** for resumes, cover letters and job applications.
+* **AWS by access key, several accounts:** AWS now runs through AWS's own command-line MCP server (via `uvx`). You can add one account per access key, each with its own name and region. The desktop app needs `uv` installed on your computer for it.
+* **A member can connect an organization:** If you aren't an owner of a GitHub organization, installing Jian's GitHub App there sends a request. Once an owner approves it, the account connects by itself, or you can use **Connect an approved installation**.
+
+### Providers and models
+
+* **Several accounts per provider:** Keep two Claude Code tokens, or a work and a personal API key, and pick which one is active. Every run uses the active account. **Configure**, in Settings → Providers, lists the accounts with their name, what they are and, for a subscription, how much of its 5-hour and weekly windows is used. From there you can make one active, rename it or remove it. Signing in again to a ChatGPT account you already have refreshes it instead of adding a copy.
+* **Subagents cost less:** Models that cost at least one and a half times a provider's cheapest deep model, such as Claude Fable 5.2, are now a **Premium** tier, which the agent uses only when you ask for it or when a deep subagent has already failed. A conversation runs at most one premium and three deep subagents at once. Each subagent at work shows what it is doing next to its name.
+* **No more three-day waits:** When a provider asks Jian to wait more than 15 minutes, such as when a subscription's weekly limit is used up, the turn stops and says when the provider takes calls again, in UTC. Shorter waits are waited out as before.
+* **"Starting" says why:** A gateway now runs up to 48 turns and subagents at once, up from 4. When every slot is busy, a waiting turn says **Waiting for a free slot** and how many runs are working.
+* **OpenRouter:** Image, speech and transcription models show up in Capabilities, with each model's own voices. A model that can't use tools chats without them instead of failing.
+* **Many images in one request:** Images are scaled down to what the provider accepts before they're sent, so a conversation with lots of pictures no longer fails with a size error.
+
+### Video and files
+
+* **Video in the image:** The gateway image now includes ImageMagick, mediainfo, sox and Noto fonts, alongside ffmpeg. The new built-in `video-production` skill shows the agent how to make a short vertical ad or reel from a script: clean narration, captions timed word by word, a headline, music under the voice, and a check before sending.
+* **Temporary links to a file:** On a server whose `JIAN_PUBLIC_URL` is `https://`, the agent can share a file from its workspace by a link that expires (an hour by default, a week at most, files up to 2 GB). That covers a finished video over the 16 MB a chat can carry, or a service that wants a file by URL. Hidden files and folders, such as `.ssh` and `.env`, can never be shared, and the agent can revoke a link at once.
+* **Keys for the agent's commands:** **Command secrets**, a new page in an agent's settings, keeps API keys encrypted in Jian. You choose which agents may use each key. A command gets a key only as an environment variable, with your approval, and the value is masked everywhere it could show up. Nobody can read a key back once it's saved, and a paired phone can't add or change one.
+
+### Memories
+
+* **Flash memories:** The agent can save a memory that expires after 1 to 24 hours (24 by default). It uses them for work in progress, such as a branch, a deploy or today's task. A flash memory can become permanent, but a permanent memory never becomes temporary.
+* **Back to a list:** The Memories screen is a plain list again, with Permanent and Flash sections, a search, and each memory on its own page. The map from 1.11.2 is gone.
+
+### Chat and screens
+
+* **The chat follows the answer:** Sending a message takes you to the end of the chat, and the chat keeps following the answer. It also stays at the end when tool cards load after the messages. Scrolling up still stops it.
+* **The sidebar says what needs you:**
+  * A spinner on the left means the agent is working, and the time stays on the right.
+  * A colored dot means an unread reply.
+  * A yellow dot means a turn is waiting for your approval or answer.
+* **Every screen has the same layout:** Each screen has the same width, and its toolbar sticks under the title bar. Pages get a **Scroll to top** button. Schedules opens in the chat's place instead of replacing the sidebar.
+* **Pull requests:**
+  * **Update branch** works again (GitHub was answering 404).
+  * Why a pull request can't merge now shows as a tooltip on the button it's about, and the merge button is disabled when merging can't work.
+  * If Jian's GitHub App is on the branch's bypass list, you can **Bypass rules and merge**.
+  * The merge button shows in every conversation, including those from WhatsApp and Telegram.
+  * The list shows a loading skeleton instead of an empty card.
+* **Reading preferences are kept:** **Wrap lines** and **View diff** stay as you left them.
+
+### Desktop app
+
+* **Stays in step with a remote gateway:** On a network that changes often, the app could fall behind a remote gateway: old messages and a stuck "working" status, even after a reload. It now drops connections that stop carrying anything. **Reconnect to gateway**, and waking from sleep, always start fresh connections. The app logs connection problems to `connections.log` in its log folder (`~/Library/Logs/Jian/` on a Mac).
+* **Importing Chrome's logins:** On macOS, importing Chrome's cookies no longer fails with `EPERM`. When macOS blocks the read, the app tells you to give Jian Full Disk Access. The import also works when the browser tab is put away and not drawn on screen.
+
+### Computer Use
+
+* **Several agents, one computer:** Agents in different conversations can use the same machine. They take turns: the one that acted last keeps the screen for 10 seconds, and another gets it after waiting 20. Each agent's pointer shows its name in its own color.
+
+### Privacy
+
+* **The daily report counts more:** Besides runs, models and tools, the anonymous daily report now counts Artifacts, channels, schedules, approvals, memories, skills, reconnects and upgrades. It also counts which screens and features of the panel were used. It still sends only counts and fixed words. Nothing you or a contact typed leaves the installation. In PostHog each installation is now one anonymous profile under its random id. Turn the report off in Settings → General → Privacy, or with `DO_NOT_TRACK` or `JIAN_TELEMETRY=off` on the host.
+
+### Security
+
+* **Next.js 16.4.6:** The web panel moves from Next.js 16.4.1 to 16.4.6, which fixes two cache advisories in `use cache`.
+
+### Upgrading
+
+* The desktop app updates itself to this release. Remote workers update themselves as well.
+* **Servers:** Recreate the gateway and web containers with the 1.12.0 images, or follow the `latest` tags. Migrations 0104 to 0115 run when the gateway starts. The gateway image is larger, mostly because of the Noto fonts.
+* **Skills move into one library:** Migration 0108 merges every agent's skills. If two agents had skills with the same name but different contents, one of them is renamed `name_2`. A built-in skill stays off only if every agent had it off.
+* **AWS:** An AWS account connected by signing in on 1.11 now shows up as a custom connector. Remove it, then add the account again on the AWS page in Plugins with an access key. The gateway image already includes `uv`.
+* **Run slots:** `JIAN_RUN_CONCURRENCY` (1 to 256, empty means 48) sets how many runs one gateway executes at once. Each command-line MCP server an agent uses is one process per run, so a small machine may want fewer.
+* **`JIAN_PUBLIC_URL`:** File links and the ElevenLabs sign-in need it to be an `https://` address. With `JIAN_ROLE=api`, the API process serves file links, so it must see the workspaces volume.
+* **Event streams:** An event stream now closes after 30 minutes, and the client reopens it from where it was, without missing anything.
+* **Settings addresses:** An unknown `/settings/<page>` on the web now opens General instead of a 404.
+* **API, removed:** `GET /v1/profiles/{profileId}/built-in-skills` and `POST /v1/profiles/{profileId}/skills/import`. Use `GET /v1/built-in-skills` and `POST /v1/skills/import`.
+* **API, changed:**
+  * `POST /v1/providers` adds an account (with an optional `label`) and makes it active, instead of replacing the previous one.
+  * `GET /v1/providers` lists only active accounts.
+  * `GET /v1/subscription-usage` adds `providerId`, `label` and `active` to each entry.
+  * `POST /v1/integrations/github/install` takes `mode: 'authorize'`.
+* **API, new:**
+  * Skills: `GET`, `POST /v1/skills`; `PATCH`, `DELETE /v1/skills/{name}`; `PUT /v1/skills/{name}/enabled`; `GET /v1/skills/{name}/upstream`; `POST /v1/skills/{name}/update`.
+  * Provider accounts: `GET /v1/provider-accounts`; `PATCH /v1/providers/{providerId}`; `POST /v1/providers/{providerId}/activate`.
+  * Artifacts: `GET /v1/profiles/{profileId}/session-artifacts`; `GET /v1/profiles/{profileId}/sessions/{sessionId}/artifacts`; `PATCH`, `DELETE .../artifacts/{artifactId}`; `POST .../artifacts/{artifactId}/versions`, `/duplicate` and `/slides`; `GET .../artifacts/{artifactId}/versions/{version}` and `.../export`.
+  * Artifact folders: `GET`, `POST /v1/profiles/{profileId}/artifact-folders`; `PATCH`, `DELETE .../artifact-folders/{folderId}`.
+  * Public, read without a token: `GET /v1/public-artifacts/{token}` and `/export`; `GET /v1/artifact-frames/{type}`; `GET` and `HEAD /v1/file-links/{token}/{name}`; `GET /v1/mcp-servers/{name}/oauth/client`.
+  * Command secrets: `GET`, `POST /v1/profiles/{profileId}/command-secrets`; `PATCH`, `DELETE .../command-secrets/{name}`.
+  * Telemetry: `POST /v1/telemetry/panel-usage`.
+
 ## 1.11.2 — 2026-11-13
 
 Settings and schedules open as pages, Memories is a map you can link and pin to projects, and Skills are cards.
