@@ -13,7 +13,6 @@ import {
   PageToolbar,
   SearchField,
   Segmented,
-  SkeletonLine,
   SkeletonRegion,
   surfaceCard,
 } from '../../kit';
@@ -23,7 +22,7 @@ import { queries } from '../../lib/query/profile';
 import { useNoInspector } from '../../lib/stores/screen';
 import { useRouter } from '../../platform/navigation';
 import { pullKey } from './cells';
-import { PullTable } from './pull-table';
+import { PullTable, PullTableSkeleton } from './pull-table';
 import { ReviewSettings } from './review-settings';
 import { usePulls, useReviewSettings, useStartReview } from './use-pulls';
 
@@ -67,6 +66,9 @@ export function PullsScreen({ profileId }: { profileId: string }) {
     { value: 'review' as const, label: 'Needs review' },
   ];
   const list = pulls.data;
+  // A list on screen while another is read (a new filter, a search being typed, a refresh)
+  // stays, dimmed and marked busy, so every press shows at once that something is under way.
+  const reading = pulls.isFetching || typed.trim() !== q;
 
   return (
     <div className="flex h-full min-h-0">
@@ -134,35 +136,50 @@ export function PullsScreen({ profileId }: { profileId: string }) {
             out.
           </p>
         ) : null}
+        {pulls.isError && list && !reading ? (
+          <p className="text-xs text-warn">
+            GitHub did not answer the refresh. These are the pull requests read before.
+          </p>
+        ) : null}
         {pulls.isError && !list ? (
           <Empty
             text="The pull requests could not be read from GitHub."
             action={<Action onClick={() => void pulls.refetch()}>Try again</Action>}
           />
         ) : !list ? (
+          // The table goes by the card's width, not the window's: it is the container.
           <SkeletonRegion
             label="Loading pull requests…"
-            className={`grid gap-4 p-4 ${surfaceCard}`}
+            className={`@container overflow-hidden ${surfaceCard}`}
           >
-            {[0, 1, 2, 3, 4].map((row) => (
-              <SkeletonLine key={row} />
-            ))}
+            <PullTableSkeleton />
           </SkeletonRegion>
-        ) : list.pulls.length ? (
-          // The table goes by the card's width, not the window's: it is the container.
-          <div className={`@container overflow-hidden ${surfaceCard}`}>
-            <PullTable
-              pulls={list.pulls}
-              starting={
-                start.isPending && start.variables ? pullKey(start.variables.pull) : undefined
-              }
-              review={review}
-              openChat={openChat}
-            />
-          </div>
         ) : (
-          <Empty text={q || repository ? 'No pull request matches.' : 'No open pull requests.'} />
+          <div
+            aria-busy={reading}
+            className={`transition-opacity duration-200 ${reading ? 'opacity-50' : ''}`}
+          >
+            {list.pulls.length ? (
+              <div className={`@container overflow-hidden ${surfaceCard}`}>
+                <PullTable
+                  pulls={list.pulls}
+                  starting={
+                    start.isPending && start.variables ? pullKey(start.variables.pull) : undefined
+                  }
+                  review={review}
+                  openChat={openChat}
+                />
+              </div>
+            ) : (
+              <Empty
+                text={q || repository ? 'No pull request matches.' : 'No open pull requests.'}
+              />
+            )}
+          </div>
         )}
+        <p role="status" className="sr-only">
+          {list && reading ? 'Updating pull requests…' : ''}
+        </p>
         {list?.truncated && (
           <p className="text-xs text-muted">
             Only the most recently updated are shown. Search or pick a repository to find others.
