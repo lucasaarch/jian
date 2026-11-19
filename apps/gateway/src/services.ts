@@ -197,7 +197,7 @@ export function buildServices({
     profiles,
     providers,
     sessions,
-    artifacts: new SessionArtifacts(store, sessions, clock, mode === 'local'),
+    artifacts: new SessionArtifacts(store, sessions, clock, mode === 'local', publicUrl),
     projects,
     memories,
     media,

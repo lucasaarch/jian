@@ -1,5 +1,7 @@
 import {
   ARTIFACT_EDIT_MESSAGE,
+  ARTIFACT_ERROR_MAX,
+  ARTIFACT_ERROR_MESSAGE,
   ARTIFACT_FRAME_MESSAGE,
   ARTIFACT_PRESENT_MESSAGE,
   ARTIFACT_THEME_MESSAGE,
@@ -8,9 +10,13 @@ import {
   type SessionArtifactType,
 } from '@jian/contracts';
 import { GatewayError } from '../core/errors.js';
+import { CANVAS } from './canvas-frame.js';
+import { DIAGRAM } from './diagram-frame.js';
+import { DIAGRAM_LAYOUT } from './diagram-layout.js';
 import { EDITORS } from './edit-frame.js';
 import { type FrameTheme, frameStyle } from './frame-style.js';
 import { PLAYER, PLAYER_EMBEDDED } from './player.js';
+import { publicPage } from './public-page.js';
 import { type RuntimeFile, runtimeSource } from './runtime.js';
 import { SHEET } from './sheet-frame.js';
 
@@ -42,10 +48,20 @@ import { SHEET } from './sheet-frame.js';
  * The page takes its source and gives nothing back: it posts no message, and the panel listens
  * for none. One exception is the frame the owner opens to edit by hand (edit-frame.ts), which
  * runs nothing the agent wrote and answers the panel's request for the edited source; a public
- * link never serves it. The other is a component's tweaks (ARTIFACT_TWEAKS_MESSAGE): the shell
- * relays that key alone, and the panel takes it as data to draw fields from, checked first.
+ * link never serves it. Another is a component's tweaks (ARTIFACT_TWEAKS_MESSAGE): the shell
+ * relays that key alone, and the panel takes it as data to draw fields from, checked first. The
+ * last is what went wrong as a component, a diagram or a document ran (ARTIFACT_ERROR_MESSAGE):
+ * relayed once, read as text, and sent to the agent only when the owner asks for a fix.
  */
-export function artifactPolicy(ancestors: "'self'" | "'none'"): string {
+export function artifactPolicy(
+  ancestors: "'self'" | "'none'",
+  /**
+   * The public page's own leave to save a file, for its Download menu (public-page.ts). The
+   * Artifact's frame inside it is still given `allow-scripts` alone, and a frame never has a flag
+   * its own `sandbox` attribute does not grant.
+   */
+  downloads = false,
+): string {
   return [
     "default-src 'none'",
     "script-src 'unsafe-inline'",
@@ -58,7 +74,7 @@ export function artifactPolicy(ancestors: "'self'" | "'none'"): string {
     "form-action 'none'",
     "frame-src 'none'",
     `frame-ancestors ${ancestors}`,
-    'sandbox allow-scripts',
+    `sandbox allow-scripts${downloads ? ' allow-downloads' : ''}`,
   ].join('; ');
 }
 
@@ -72,8 +88,8 @@ const WRITE = `document.write(source);`;
  * `root` and `run` in reach. `libraries` are the type's files below, in their order.
  *
  * `whole` is a type whose source is a page already. In the panel the shell makes the frame out
- * of it and no page of ours stands between (`shell` below); `body` is then only how its public
- * page, which arrives holding the source, draws it.
+ * of it and no page of ours stands between (`shell` below). On a public link a web page is its
+ * frame too (`publishedArtifact`), and a deck's `body` is the player that holds its slides.
  */
 const DRAW: Record<
   SessionArtifactType,
@@ -86,24 +102,77 @@ const DRAW: Record<
     libraries: ['marked'],
     body: `run(libraries[0]); root.innerHTML = marked.parse(source);`,
   },
+  // On the same canvas as a diagram, read only: Mermaid is changed by asking the agent. Its theme
+  // is the page's, the panel's when the panel names one, and it is drawn again when that changes.
   mermaid: {
     libraries: ['mermaid'],
     body: `run(libraries[0]);
-mermaid.initialize({
-  startOnLoad: false,
-  securityLevel: 'strict',
-  suppressErrorRendering: true,
-  theme: matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'default',
-});
-root.innerHTML = (await mermaid.render('diagram', source)).svg;`,
+${CANVAS}
+const view = canvas(root);
+let drawn = 0;
+let theme = '';
+const paint = async () => {
+  const wanted = document.documentElement.classList.contains('dark') ? 'dark' : 'default';
+  if (wanted === theme) return;
+  theme = wanted;
+  mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', suppressErrorRendering: true, theme });
+  view.world.innerHTML = (await mermaid.render('diagram-' + ++drawn, source)).svg;
+  // Drawn at its own size, which Mermaid gives as the viewBox and then caps to its container.
+  const picture = view.world.querySelector('svg');
+  const box = picture.viewBox.baseVal;
+  const width = box && box.width ? box.width : picture.getBoundingClientRect().width;
+  const height = box && box.height ? box.height : picture.getBoundingClientRect().height;
+  for (const name of ['style', 'width', 'height']) picture.removeAttribute(name);
+  picture.style.cssText = 'display: block; width: ' + width + 'px; height: ' + height + 'px;';
+  view.bounds(() => [0, 0, width, height]);
+};
+await paint();
+view.fit();
+new MutationObserver(() => paint().catch(fail)).observe(document.documentElement, {
+  attributes: true,
+  attributeFilter: ['class'],
+});`,
   },
+  // Drawn by scripts of the gateway's own, which read the JSON as data and never run it.
+  diagram: { libraries: [], body: `${CANVAS}${DIAGRAM_LAYOUT}${DIAGRAM}\ndiagram(source, root);` },
   // Drawn by scripts of the gateway's own, which read the source as data and never run it.
   sheet: { libraries: [], body: `${SHEET}\nsheet(source, root, false);` },
   // React ships as CommonJS, and the component arrives compiled to it: each is wrapped in a
   // function and handed a require that knows these few names and nothing else.
   react: {
     libraries: ['react', 'scheduler', 'react-dom', 'react-dom-client'],
-    body: `const modules = {};
+    body: `// What the component throws is caught where it is thrown, Error and all. Left to reach the
+// window, a frame with an origin of its own may be told only "Script error.", which says nothing
+// of what went wrong (Safari does this). React hands what it does not catch to reportError, which
+// it looks up as it loads, so this comes first; timers and listeners the component sets up report
+// the same way.
+window.reportError = (error) => fail(error);
+const guard = (callback) =>
+  typeof callback !== 'function'
+    ? callback
+    : function (...given) {
+        try {
+          return callback.apply(this, given);
+        } catch (error) {
+          fail(error);
+        }
+      };
+for (const name of ['setTimeout', 'setInterval', 'requestAnimationFrame', 'queueMicrotask']) {
+  const original = window[name];
+  window[name] = (callback, ...rest) => original.call(window, guard(callback), ...rest);
+}
+const guarded = new WeakMap();
+const { addEventListener: listen, removeEventListener: unlisten } = EventTarget.prototype;
+EventTarget.prototype.addEventListener = function (type, listener, options) {
+  if (typeof listener !== 'function') return listen.call(this, type, listener, options);
+  if (!guarded.has(listener)) guarded.set(listener, guard(listener));
+  return listen.call(this, type, guarded.get(listener), options);
+};
+EventTarget.prototype.removeEventListener = function (type, listener, options) {
+  const held = typeof listener === 'function' ? guarded.get(listener) : undefined;
+  return unlisten.call(this, type, held || listener, options);
+};
+const modules = {};
 const define = (name, code) => {
   let factory;
   window.jianModule = (given) => { factory = given; };
@@ -155,7 +224,13 @@ const Frame = ({ children }) => {
   }, []);
   return children;
 };
-const view = createRoot(root);
+const view = createRoot(root, {
+  // What broke the drawing, with the part of the component it broke in.
+  onUncaughtError: (error, info) => fail(error, info && info.componentStack),
+  // A boundary of the component's own caught it, and React drew on: said only to the console.
+  onCaughtError: (error, info) => console.error(error, info && info.componentStack),
+  onRecoverableError: (error, info) => console.warn(error, info && info.componentStack),
+});
 const paint = () =>
   view.render(React.createElement(Frame, null, React.createElement(Component, { ...props })));
 addEventListener('message', (event) => {
@@ -184,11 +259,16 @@ const embedded = (value: unknown) => JSON.stringify(value).replaceAll('<', '\\u0
 export const escaped = (value: string) =>
   value.replace(/[&<>"']/g, (char) => `&#${char.charCodeAt(0)};`);
 
+/** The types whose drawing can fail as it runs, and whose frame in the panel says so. */
+const REPORTS = new Set<SessionArtifactType>(['react', 'mermaid', 'diagram', 'markdown']);
+
 /**
  * The page for one type. With no `artifact` it is the empty frame: it draws the first source its
  * parent posts to it, and only its parent's. With one it draws that, and listens to no one.
  * `editing` is the empty frame the owner edits in: it opens what it is handed for editing
- * (edit-frame.ts) and never runs it, so nothing the agent wrote runs in it.
+ * (edit-frame.ts) and never runs it, so nothing the agent wrote runs in it. `reports` tells its
+ * parent what went wrong as it ran (ARTIFACT_ERROR_MESSAGE), which only the panel's frame of a
+ * type in `REPORTS` does; every other page says it only on itself.
  */
 function page(
   type: SessionArtifactType,
@@ -196,6 +276,7 @@ function page(
   editing = false,
   presented = false,
   theme?: FrameTheme,
+  reports = false,
 ): string {
   const { libraries } = DRAW[type];
   const body = presented ? PLAYER_EMBEDDED : DRAW[type].body;
@@ -226,9 +307,60 @@ function page(
   const read = (id) => JSON.parse(document.getElementById(id).textContent);
   const root = document.getElementById('root');
   const failure = document.getElementById('failure');
-  const fail = (error) => { failure.textContent = String((error && error.message) || error); };
-  addEventListener('error', (event) => fail(event.message));
+  // What went wrong, said in full above what was drawn: the error, then which part of a component
+  // it broke in and where it was thrown. Only the first: what follows from it repeats it, and
+  // goes to the console. The panel's frame tells the panel too, as data (\`reports\`).
+  let failed = false;
+  const fail = (error, componentStack) => {
+    console.error(error);
+    if (failed) return;
+    failed = true;
+    const known = error instanceof Error || (error && typeof error.message === 'string');
+    const kind = known && error.name && error.name !== 'Error' ? error.name + ': ' : '';
+    const message = (kind + String((known ? error.message : error) || 'Unknown error')).slice(0, ${ARTIFACT_ERROR_MAX.message});
+    // Most browsers start the stack with the message again.
+    let stack = known && typeof error.stack === 'string' ? error.stack : '';
+    if (stack.startsWith(kind + error.message)) stack = stack.slice(stack.indexOf('\\n') + 1);
+    const said = { message };
+    if (stack.trim()) said.stack = stack.trim().slice(0, ${ARTIFACT_ERROR_MAX.stack});
+    if (typeof componentStack === 'string' && componentStack.trim()) {
+      said.componentStack = componentStack.trim().slice(0, ${ARTIFACT_ERROR_MAX.stack});
+    }
+    const head = document.createElement('strong');
+    head.textContent = message;
+    failure.replaceChildren(head);
+    for (const [name, text] of [['In', said.componentStack], ['Stack', said.stack]]) {
+      if (!text) continue;
+      const part = document.createElement('span');
+      part.className = 'trace';
+      part.textContent = '\\n\\n' + name + '\\n' + text;
+      failure.append(part);
+    }
+${
+  reports
+    ? `    if (parent !== window) parent.postMessage({ ${ARTIFACT_ERROR_MESSAGE}: said }, '*');
+`
+    : ''
+}  };
+  // A script element's own error arrives here while it runs (\`run\` below), and is thrown from
+  // there instead.
+  let running = null;
+  addEventListener('error', (event) => {
+    if (running) running.event = event;
+    else fail(thrown(event));
+  });
   addEventListener('unhandledrejection', (event) => fail(event.reason));
+  // The Error of a window error, or one made of what it says when the browser kept it back.
+  const thrown = (event) => {
+    if (event.error instanceof Error) return event.error;
+    if (event.error !== undefined && event.error !== null) return event.error;
+    if (!event.message || event.message === 'Script error.') {
+      return new Error('Script error: the browser kept back what went wrong and where.');
+    }
+    const made = new Error(event.message.replace(/^Uncaught /, ''));
+    made.stack = event.lineno ? 'at line ' + event.lineno + ':' + event.colno : '';
+    return made;
+  };
   // The panel's theme changed. Only its own window may say so, and it carries nothing else.
   addEventListener('message', (event) => {
     const theme = event.source === parent && event.data && event.data.${ARTIFACT_THEME_MESSAGE};
@@ -236,12 +368,20 @@ function page(
     document.documentElement.style.colorScheme = theme;
     document.documentElement.classList.toggle('dark', theme === 'dark');
   });
-  // A script element made here runs at once, under the page's policy, with no eval.
+  // A script element made here runs at once, under the page's policy, with no eval. What it
+  // throws as it runs, or cannot be read at all, is thrown here, where the drawing catches it.
   const run = (code) => {
+    running = {};
     const script = document.createElement('script');
     script.textContent = code;
-    document.head.append(script);
-    script.remove();
+    try {
+      document.head.append(script);
+    } finally {
+      script.remove();
+    }
+    const { event } = running;
+    running = null;
+    if (event) throw thrown(event);
   };
   const draw = async (source, libraries) => {
 ${editing ? '' : body}
@@ -287,6 +427,32 @@ addEventListener('message', (event) => {
 })();</script>`;
 
 /**
+ * Where a page's dressing goes: after its doctype and after its own `<html>` start tag when it
+ * has one. Before that tag, the dressing's class and scheme would be on the element first, and a
+ * browser keeps an attribute already there over the tag's own: a page's `<html class="…">` or
+ * `style` would be lost.
+ */
+const DRESSED_AT = /^\s*(?:<!doctype[^>]*>)?\s*(?:<!--[\s\S]*?-->\s*)*(?:<html\b[^>]*>)?/i;
+
+/**
+ * An HTML page as its public link draws it: the agent's page alone, as in the panel, with only
+ * what it needs to follow the reader's system as the panel's theme is followed there. Its scheme,
+ * which `light-dark()` and the browser's own colours read, and the dark class Tailwind-style
+ * dark: variants read, kept as the system changes. None of Jian's styles.
+ */
+const publicWebPage = (source: string) => {
+  const at = DRESSED_AT.exec(source)?.[0].length ?? 0;
+  const dressing = `<meta name="color-scheme" content="light dark"><script>(() => {
+const dark = matchMedia('(prefers-color-scheme: dark)');
+const apply = () => document.documentElement.classList.toggle('dark', dark.matches);
+apply();
+dark.addEventListener('change', apply);
+})();</script>`;
+
+  return source.slice(0, at) + dressing + source.slice(at);
+};
+
+/**
  * What the gateway answers: a shell that holds the Artifact's page in a sandboxed `srcdoc` frame.
  * Loading a `srcdoc` is no request, so `frame-src 'none'` lets it be and refuses every later
  * navigation of the frame. Should one still get through, the frame is removed rather than kept:
@@ -312,11 +478,22 @@ addEventListener('message', (event) => {
  * `tweaks` is a component's shell: it also relays the tweaks key, and only that key, both ways,
  * for as long as the frame lives (ARTIFACT_TWEAKS_MESSAGE).
  *
+ * `reports` is the shell of a type whose drawing can fail as it runs: a component, a diagram, a
+ * document. It relays outward what went wrong (ARTIFACT_ERROR_MESSAGE), from the frame it holds
+ * only, under that key only, and once: a frame that says more is not heard. What it relays is
+ * the Artifact's own word about itself, so it is data and nothing more: the panel checks its
+ * shape, draws it as text, and hands it to the agent only when the owner presses Fix. It gives
+ * the frame no way to ask the panel for anything, as the tweaks key gives none.
+ *
  * `sheet` paints the white a slide is drawn on, here, inside the frame the panel holds. The panel
  * rounds that frame's corners, and a white it painted under the frame itself was cut by the
  * corner apart from the slide: it showed past a dark slide as a pale arc. It is painted only once
  * the slide's frame has loaded (`drawn`): before that the frame is clear, so what the panel had
  * there stays, and a dark slide does not open on a flash of white.
+ *
+ * Any frame here is unseen until it has loaded (`drawn`) for the same reason: until then it holds
+ * the browser's empty page, whose colour scheme is not the panel's, and the browser paints a
+ * frame like that on an opaque canvas, white behind a dark panel.
  */
 function shell(
   title: string,
@@ -328,12 +505,14 @@ function shell(
     theme,
     dressed = false,
     tweaks = false,
+    reports = false,
   }: {
     fullscreen?: boolean;
     sheet?: boolean;
     theme?: FrameTheme | undefined;
     dressed?: boolean;
     tweaks?: boolean;
+    reports?: boolean;
   } = {},
 ): string {
   const out = hears === 'present' ? ARTIFACT_PRESENT_MESSAGE : ARTIFACT_EDIT_MESSAGE;
@@ -342,12 +521,13 @@ function shell(
       ? ''
       : `
 <iframe id="artifact" sandbox="allow-scripts" referrerpolicy="no-referrer"${fullscreen ? ' allowfullscreen' : ''} srcdoc="${escaped(inner)}"></iframe>`;
-  // What is added goes after a leading doctype, which has to stay first.
+  // What is added goes after a leading doctype, which has to stay first, and after the page's
+  // own `<html>` tag (DRESSED_AT), as on a public link.
   const dress = dressed
     ? `
   const dressing = ${embedded({ dark: dressing('dark'), light: dressing('light') })};
   const dress = (source) => {
-    const at = (/^\\s*<!doctype[^>]*>/i.exec(source) || [''])[0].length;
+    const at = (new RegExp(${embedded(DRESSED_AT.source)}, 'i').exec(source) || [''])[0].length;
     return source.slice(0, at) + (scheme ? dressing[scheme] : '') + source.slice(at);
   };`
     : '';
@@ -421,6 +601,17 @@ function shell(
   });`
       : ''
   }${
+    reports
+      ? `
+  let reported = false;
+  addEventListener('message', (event) => {
+    const said = event.source === frame.contentWindow && event.data && event.data.${ARTIFACT_ERROR_MESSAGE};
+    if (!said || reported) return;
+    reported = true;
+    parent.postMessage({ ${ARTIFACT_ERROR_MESSAGE}: said }, '*');
+  });`
+      : ''
+  }${
     hears === 'always' || hears === 'present'
       ? `
   addEventListener('message', (event) => {
@@ -439,7 +630,8 @@ function shell(
 <title>${escaped(title)}</title>
 <style>:root { color-scheme: ${theme ?? 'light dark'}; }
 html, body, iframe { margin: 0; width: 100%; height: 100%; border: 0; display: block; }
-html, body { background: transparent; }${sheet ? '\nhtml.drawn { background: #fff; }' : ''}</style>
+html, body { background: transparent; }
+html:not(.drawn) iframe { opacity: 0; }${sheet ? '\nhtml.drawn { background: #fff; }' : ''}</style>
 </head>
 <body>${held}
 <script>
@@ -493,7 +685,7 @@ export function artifactFrame(
           })
         : shell(
             'Artifact',
-            DRAW[type].whole ? null : page(type, undefined, false, false, theme),
+            DRAW[type].whole ? null : page(type, undefined, false, false, theme, REPORTS.has(type)),
             'once',
             {
               sheet: type === 'deck',
@@ -501,6 +693,7 @@ export function artifactFrame(
               // A slide keeps its own page; only an HTML page takes the panel's theme.
               dressed: type === 'html' && theme !== undefined,
               tweaks: type === 'react',
+              reports: REPORTS.has(type),
             },
           );
     frames.set(key, frame);
@@ -510,13 +703,25 @@ export function artifactFrame(
 }
 
 /**
- * One Artifact as a page of its own, which is what a public link answers. Only a deck's frame may
- * take the whole screen, to be presented: that frame runs the gateway's own player, and each
- * slide, which is what the agent wrote, sits one frame further in with no such leave.
+ * One Artifact as a page of its own, which is what a public link answers: the gateway's page
+ * with its toolbar (public-page.ts), holding the Artifact drawn exactly as the panel draws it. A
+ * web page is its own source in the frame, as in the panel, with nothing of Jian's around it;
+ * every other type is the page of its type, the panel's own. Only a deck's frame may take the
+ * whole screen, to be presented: that frame runs the gateway's own player, and each slide, which
+ * is what the agent wrote, sits one frame further in with no such leave.
+ *
+ * `token` addresses its downloads; `written` is a component's source as written, for its prompts.
  */
 export const publishedArtifact = (
   type: SessionArtifactType,
   title: string,
   source: string,
+  link: { token?: string; written?: string } = {},
 ): string =>
-  shell(title, page(type, { title, source }), 'nothing', { fullscreen: type === 'deck' });
+  publicPage(type === 'html' ? publicWebPage(source) : page(type, { title, source }), {
+    type,
+    title,
+    token: link.token,
+    written: link.written,
+    fullscreen: type === 'deck',
+  });

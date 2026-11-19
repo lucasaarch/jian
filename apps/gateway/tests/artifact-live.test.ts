@@ -156,6 +156,34 @@ describe('an Artifact written live', () => {
     });
   });
 
+  it('hands a deck over slide by slide, never one half written', async () => {
+    const { services, profile, run, told } = await setup();
+    const slide = (name: string) =>
+      `<!doctype html><html><body><h1>${name}</h1><p>${'Words. '.repeat(30)}</p></body></html>`;
+    const slides = [slide('First'), slide('Second'), slide('Third')];
+    const model = scripted([
+      load,
+      [
+        { type: 'stream-start', warnings: [] },
+        ...writing('create_artifact', 'deck', { title: 'Talk', type: 'deck', slides }, 12),
+        calls('tool-calls'),
+      ],
+      text('Done.'),
+    ]);
+
+    await new AgentRuntime(services, () => model).execute(profile.id, run.id);
+
+    const seen = drafts(told);
+    // Every slide handed over is one of the deck's, whole, in its place.
+    for (const draft of seen) {
+      expect(draft.slides).toEqual(slides.slice(0, draft.slides?.length));
+    }
+    expect(seen.some((draft) => (draft.slides?.length ?? 0) < slides.length)).toBe(true);
+    // The end of the input has every slide, and the content stays the slides one after another.
+    expect(seen.at(-1)?.slides).toEqual(slides);
+    expect(seen.at(-1)?.content).toBe(slides.join('\n\n'));
+  });
+
   it('ends when the tool refuses what was written, and keeps nothing', async () => {
     const { services, profile, session, run, told } = await setup();
     const model = scripted([

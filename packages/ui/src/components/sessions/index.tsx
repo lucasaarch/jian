@@ -365,7 +365,24 @@ export function Sessions({ api, mutate, busy }: SectionActions) {
                 <CrewDrawer api={api} profileId={profile.id} profile={profile} />
                 <ChangesDrawer api={api} profileId={profile.id} />
                 <FilesDrawer api={api} profileId={profile.id} />
-                <ArtifactsDrawer api={api} profileId={profile.id} />
+                <ArtifactsDrawer
+                  api={api}
+                  profileId={profile.id}
+                  // Fix on an Artifact that failed is the owner's message, sent as the
+                  // composer sends one: into the turn running, if there is one.
+                  ask={
+                    isGateway(active)
+                      ? (text) =>
+                          sendNow({
+                            sessionId: active.id,
+                            text,
+                            mediaIds: [],
+                            deliver: (key) => api.send(profile.id, active.id, text, [], key),
+                            delivered: answered,
+                          })
+                      : undefined
+                  }
+                />
                 <TerminalDrawer api={api} profileId={profile.id} />
                 {/* Any conversation can have its agent settle a pull request's conflicts, and the
                   owner merges from it whichever channel it came on. */}

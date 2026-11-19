@@ -8,6 +8,7 @@ import type { FastifyInstance, FastifyReply } from 'fastify';
 import { GatewayError } from '../core/errors.js';
 import type { ProfileParams, SessionParams } from '../http/params.js';
 import { artifactFrame, artifactPolicy, publishedArtifact } from './document.js';
+import { attachment } from './public-files.js';
 import type { SessionArtifacts } from './service.js';
 
 type ArtifactParams = SessionParams & { artifactId: string };
@@ -19,11 +20,11 @@ type FolderParams = ProfileParams & { folderId: string };
  */
 const EDIT_BODY_LIMIT = 2 * 1024 * 1024;
 
-const html = (reply: FastifyReply, ancestors: "'self'" | "'none'") =>
+const html = (reply: FastifyReply, ancestors: "'self'" | "'none'", downloads = false) =>
   reply
     .type('text/html; charset=utf-8')
     // Over the policy the gateway gives every answer, which would let the page reach its origin.
-    .header('Content-Security-Policy', artifactPolicy(ancestors));
+    .header('Content-Security-Policy', artifactPolicy(ancestors, downloads));
 
 export function registerArtifactRoutes(
   app: FastifyInstance,
@@ -55,7 +56,8 @@ export function registerArtifactRoutes(
   );
 
   // A deck's version drawn into a file. It reads, so a paired phone may ask as the owner does;
-  // a public link has no way to it, and neither has the frame, which holds no credential.
+  // a public link has no way to it, and neither has the frame, which holds no credential. A
+  // public link has its own, for its latest version alone (`public-artifacts/:token/export`).
   app.get(
     '/v1/profiles/:profileId/sessions/:sessionId/artifacts/:artifactId/versions/:version/export',
     async (request) => {
@@ -86,6 +88,28 @@ export function registerArtifactRoutes(
         .code(201)
         .send(
           await deps.artifacts.edit(
+            request.params.profileId,
+            request.params.sessionId,
+            request.params.artifactId,
+            request.body,
+          ),
+        );
+    },
+  );
+
+  // The owner's change to a deck's slides, by hand: as an edit, the panel's alone. An added slide
+  // is a whole page, so it takes the same room.
+  app.post<{ Params: ArtifactParams }>(
+    '/v1/profiles/:profileId/sessions/:sessionId/artifacts/:artifactId/slides',
+    { bodyLimit: EDIT_BODY_LIMIT },
+    async (request, reply) => {
+      if (request.device) {
+        throw new GatewayError(403, 'A paired device cannot edit an Artifact.');
+      }
+      return reply
+        .code(201)
+        .send(
+          await deps.artifacts.editSlides(
             request.params.profileId,
             request.params.sessionId,
             request.params.artifactId,
@@ -189,8 +213,29 @@ export function registerArtifactRoutes(
     const { token } = publicArtifactParamsSchema.parse(request.params);
     const found = await deps.artifacts.published(token);
 
-    return html(reply, "'none'")
+    return html(reply, "'none'", true)
       .header('Cache-Control', 'no-store')
-      .send(publishedArtifact(found.type, found.title, found.source));
+      .send(
+        publishedArtifact(found.type, found.title, found.source, {
+          token,
+          written: found.written,
+        }),
+      );
+  });
+
+  // A file of the same latest version, for the page's Download menu, by the same proof and kept
+  // no more than the page. Always an attachment, and under a policy that runs nothing, so a
+  // source that is itself a page (HTML) is saved, never drawn at the gateway's address.
+  app.get('/v1/public-artifacts/:token/export', async (request, reply) => {
+    const { token } = publicArtifactParamsSchema.parse(request.params);
+    const file = await deps.artifacts.publicFile(token, request.query);
+
+    return reply
+      .type(file.mimeType)
+      .header('Content-Disposition', attachment(file.title, file.format))
+      .header('Content-Security-Policy', "default-src 'none'; frame-ancestors 'none'; sandbox")
+      .header('X-Content-Type-Options', 'nosniff')
+      .header('Cache-Control', 'no-store')
+      .send(file.data);
   });
 }

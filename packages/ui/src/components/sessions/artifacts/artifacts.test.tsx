@@ -4,7 +4,7 @@ import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { toast } from 'sonner';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { DeckExportQuery, SessionArtifact } from '../../../lib/api';
+import type { DeckExportQuery, DeckSlidesEdit, SessionArtifact } from '../../../lib/api';
 import { publish } from '../../../lib/events';
 import { keys } from '../../../lib/query/keys';
 import { useArtifactDraft } from '../../../lib/stores/artifact-draft';
@@ -72,6 +72,8 @@ const sheet: SessionArtifact = {
 function gateway(artifacts: SessionArtifact[] = [counter, notes, page, deck]) {
   const held = [...artifacts];
   const keyed = new Map<string, string>();
+  // The deck's slides by version, as the gateway keeps them.
+  const decks = new Map<number, string[]>([[1, SLIDES]]);
 
   return {
     held,
@@ -87,10 +89,10 @@ function gateway(artifacts: SessionArtifact[] = [counter, notes, page, deck]) {
             : artifactId === page.id
               ? PAGE
               : artifactId === deck.id
-                ? JSON.stringify({ slides: SLIDES })
+                ? JSON.stringify({ slides: decks.get(version) ?? SLIDES })
                 : `# Notes, version ${version}`,
         ...(artifactId === counter.id ? { compiled: COMPILED } : {}),
-        ...(artifactId === deck.id ? { slides: SLIDES } : {}),
+        ...(artifactId === deck.id ? { slides: decks.get(version) ?? SLIDES } : {}),
         createdAt: at,
       }),
     ),
@@ -117,6 +119,21 @@ function gateway(artifacts: SessionArtifact[] = [counter, notes, page, deck]) {
         if (edit.editKey) keyed.set(artifactId, edit.editKey);
         const next: SessionArtifact = { ...current, version: current.version + (again ? 0 : 1) };
         held[index] = next;
+        return next;
+      },
+    ),
+    editDeckSlides: vi.fn(
+      async (_profile: string, _session: string, artifactId: string, change: DeckSlidesEdit) => {
+        const index = held.findIndex((item) => item.id === artifactId);
+        const current = held[index] as SessionArtifact;
+        const slides = [...(decks.get(change.version) ?? SLIDES)];
+        if (change.op === 'add') {
+          slides.splice((change.position ?? slides.length + 1) - 1, 0, change.html);
+        }
+        if (change.op === 'delete') slides.splice(change.slide - 1, 1);
+        const next: SessionArtifact = { ...current, version: current.version + 1 };
+        held[index] = next;
+        decks.set(next.version, slides);
         return next;
       },
     ),
@@ -201,14 +218,18 @@ async function settled(done: () => boolean, limit = 100) {
   }
 }
 
-async function render(api: ArtifactsDrawerApi, mode: 'server' | 'local' = 'server') {
+async function render(
+  api: ArtifactsDrawerApi,
+  mode: 'server' | 'local' = 'server',
+  ask?: (text: string) => void,
+) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   // What kind of gateway this is, as its health answer said.
   client.setQueryData(keys.gateway, { status: 'ok', mode });
   await act(async () =>
     root.render(
       <QueryClientProvider client={client}>
-        <ArtifactsDrawer api={api} profileId="profile" />
+        <ArtifactsDrawer api={api} profileId="profile" ask={ask} />
       </QueryClientProvider>,
     ),
   );
@@ -322,6 +343,29 @@ describe('the Artifacts tab', () => {
       ),
     );
     expect(cards()).toEqual(['Landing']);
+  });
+
+  it('shows a Mermaid diagram and a diagram as one kind, Diagram', async () => {
+    const flow: SessionArtifact = {
+      ...counter,
+      id: '66666666-6666-4666-8666-666666666666',
+      title: 'Flow',
+      type: 'mermaid',
+    };
+    const map: SessionArtifact = {
+      ...counter,
+      id: '77777777-7777-4777-8777-777777777777',
+      title: 'Map',
+      type: 'diagram',
+    };
+    await listed(gateway([flow, map, notes]));
+
+    await click(button('Type'));
+    await settled(() => document.querySelectorAll('[role="option"]').length > 0);
+    const options = [...document.querySelectorAll('[role="option"]')];
+    expect(options.filter((item) => item.textContent?.includes('Diagram'))).toHaveLength(1);
+    await click(options.find((item) => item.textContent?.includes('Diagram')));
+    expect(cards()).toEqual(['Flow', 'Map']);
   });
 
   it('begins a request in this conversation’s own field, after what is written there', async () => {
@@ -537,7 +581,32 @@ describe('who can read an Artifact', () => {
     // Everything else is still there, behind the bar's one button of options.
     await click(button('Artifact options'));
     await settled(() => entries().length > 0);
-    expect(entries().map((entry) => entry.textContent)).toEqual(['Copy source', 'Download']);
+    expect(entries().map((entry) => entry.textContent)).toEqual([
+      'Copy source',
+      'Copy prompt for',
+      'Download',
+    ]);
+  });
+
+  it('copies a component as a prompt for another framework, with its source as written', async () => {
+    const copied = vi.fn(async (_text: string) => undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText: copied },
+      configurable: true,
+    });
+    await opened(counter, gateway(), 'local');
+
+    await click(button('Artifact options'));
+    await settled(() => entries().length > 0);
+    await click(entries().find((entry) => entry.textContent === 'Copy prompt for'));
+    await settled(() => entries().some((entry) => entry.textContent === 'Vue 3'));
+    await click(entries().find((entry) => entry.textContent === 'Vue 3'));
+
+    const prompt = String(copied.mock.calls.at(-1)?.[0]);
+    expect(prompt).toMatch(/^# Counter\n/);
+    expect(prompt).toContain('Vue 3 single-file component');
+    expect(prompt).toContain(SOURCE);
+    expect(prompt).not.toContain(COMPILED);
   });
 
   it('makes one public on a server, with a link to copy from the gateway’s own address', async () => {
@@ -827,15 +896,61 @@ describe('an Artifact being written', () => {
     expect(drawer()?.textContent).not.toContain('Writing…');
   });
 
-  it('shows the source growing for anything but a document', async () => {
+  it('never shows what is half written of a page as code, nor runs it', async () => {
     await render(gateway([]));
 
-    await told(writing('<h1>Hi', { type: 'html' }));
-    expect(drawer()?.querySelector('pre')?.textContent).toContain('<h1>Hi');
-    expect(drawer()?.querySelector('article')).toBeNull();
+    await told(writing('<h1>Hi</h1><script>alert(1)</script>', { type: 'html' }));
+    expect(drawer()?.textContent).toContain('Generating…');
+    expect(drawer()?.textContent).not.toContain('<h1>Hi');
+    expect(drawer()?.querySelector('pre')).toBeNull();
+    expect(frame()).toBeNull();
   });
 
-  it('keeps the current version in view until the update has words, then streams them', async () => {
+  it('fills a spreadsheet in cell by cell, as text, with the cell being written marked', async () => {
+    await render(gateway([]));
+
+    await told(writing('Item,Cost\nA,2\n"<b>B</b>, quoted",=SU', { type: 'sheet' }));
+    const cells = () => [...(drawer()?.querySelectorAll('tbody td') ?? [])];
+    expect(cells().map((cell) => cell.textContent)).toEqual([
+      'Item',
+      'Cost',
+      'A',
+      '2',
+      '<b>B</b>, quoted',
+      '=SU',
+    ]);
+    // Data, never markup: what looks like a tag is the cell's own text.
+    expect(drawer()?.querySelector('tbody b')).toBeNull();
+    expect(drawer()?.querySelector('[data-writing]')?.textContent).toBe('=SU');
+
+    await told(writing('Item,Cost,Paid\nA,2,yes\n', { type: 'sheet' }));
+    expect(drawer()?.querySelectorAll('thead th[scope=col]')).toHaveLength(3);
+    expect(drawer()?.querySelector('[data-writing]')).toBeNull();
+  });
+
+  it('draws the slides of a deck as each is finished, and none half written', async () => {
+    await render(gateway([]));
+
+    const slide = (text: string) => `<!doctype html><h1>${text}</h1>`;
+    await told(
+      writing(`${slide('One')}\n\n${slide('Tw')}`, {
+        type: 'deck',
+        slides: [slide('One')],
+      }),
+    );
+    expect(container.querySelectorAll('ol[aria-label="Slides"] iframe')).toHaveLength(1);
+    expect(drawer()?.querySelector('[aria-label="Slide 2, being written"]')).not.toBeNull();
+
+    await told(
+      writing(`${slide('One')}\n\n${slide('Two')}`, {
+        type: 'deck',
+        slides: [slide('One'), slide('Two')],
+      }),
+    );
+    expect(container.querySelectorAll('ol[aria-label="Slides"] iframe')).toHaveLength(2);
+  });
+
+  it('keeps the current version in view while the agent changes it, with Updating…', async () => {
     const api = gateway();
     await opened(notes, api);
     await settled(() => drawer()?.querySelector('h2')?.textContent === notes.title);
@@ -843,17 +958,29 @@ describe('an Artifact being written', () => {
     // Named but not yet written: the version stays, with the quiet word beside it.
     await told(writing('', { artifactId: notes.id }));
     expect(frame()).not.toBeNull();
-    expect(drawer()?.textContent).toContain('Writing…');
+    expect(drawer()?.textContent).toContain('Updating…');
 
+    // Written again whole, a document still keeps its version in view, the owner's edits with it.
+    const before = frame();
     await told(writing('# New words', { artifactId: notes.id }));
-    expect(frame()).toBeNull();
-    expect(drawer()?.querySelector('article')?.textContent).toContain('New words');
+    expect(frame()).toBe(before);
+    expect(drawer()?.querySelector('article')).toBeNull();
 
     api.held[api.held.findIndex((item) => item.id === notes.id)] = { ...notes, version: 4 };
     await told(undefined);
-    await settled(() => Boolean(frame()));
+    await settled(() => viewed(api) === 4);
     expect(viewed(api)).toBe(4);
-    expect(drawer()?.textContent).not.toContain('Writing…');
+    expect(drawer()?.textContent).not.toContain('Updating…');
+  });
+
+  it('fills a spreadsheet written again whole where it stands', async () => {
+    await opened(sheet, gateway([sheet]));
+    await settled(() => drawer()?.querySelector('h2')?.textContent === sheet.title);
+
+    await told(writing('Item,Cost\nA,3', { artifactId: sheet.id, type: undefined }));
+    expect(frame()).toBeNull();
+    expect(drawer()?.querySelector('[data-writing]')?.textContent).toBe('3');
+    expect(drawer()?.textContent).toContain('Updating…');
   });
 
   it('moves no focus when it opens the tab by itself', async () => {
@@ -865,8 +992,75 @@ describe('an Artifact being written', () => {
     // The tab opens on it by itself, as the agent's own request to show one does.
     await told(writing('', { artifactId: notes.id }));
     expect(document.activeElement).toBe(composer);
-    expect(drawer()?.textContent).toContain('Writing…');
+    expect(drawer()?.textContent).toContain('Updating…');
     composer.remove();
+  });
+});
+
+describe('an Artifact that fails as it runs', () => {
+  const failing = async () => {
+    const ask = vi.fn();
+    await act(async () => useCrew.getState().showArtifacts(counter.id));
+    await render(gateway(), 'server', ask);
+    await settled(() => Boolean(frame()));
+    const { element } = await loaded();
+    const say = (source: unknown, said: unknown) =>
+      act(async () => {
+        window.dispatchEvent(
+          new MessageEvent('message', {
+            data: { jianArtifactError: said },
+            source: source as MessageEventSource,
+          }),
+        );
+      });
+    return { ask, element, say };
+  };
+  const alert = () => drawer()?.querySelector('[role=alert]');
+  const action = (name: string) =>
+    [...(alert()?.querySelectorAll('button') ?? [])].find((item) => item.textContent === name);
+
+  it('says what its frame reported, as text, and Fix asks the agent with all of it', async () => {
+    const { ask, element, say } = await failing();
+
+    // Another window saying it is heard as nothing at all, and so is a shape it does not have.
+    await say({ postMessage: vi.fn() }, { message: 'Not mine' });
+    await say(element.contentWindow, { message: 42 });
+    expect(alert()).toBeFalsy();
+
+    await say(element.contentWindow, {
+      message: 'TypeError: <b>items</b>.map is not a function',
+      componentStack: 'at List\nat App',
+      stack: 'at List (about:srcdoc:3:9)',
+    });
+    expect(alert()?.textContent).toContain('The component failed');
+    expect(alert()?.textContent).toContain('<b>items</b>.map is not a function');
+    expect(alert()?.querySelector('b')).toBeNull();
+
+    // Only the first is said: what follows from it repeats it.
+    await say(element.contentWindow, { message: 'Error: later' });
+    expect(alert()?.textContent).not.toContain('later');
+
+    await click(action('Fix'));
+    expect(ask).toHaveBeenCalledTimes(1);
+    const [text] = ask.mock.calls[0] as [string];
+    expect(text).toContain(counter.id);
+    expect(text).toContain(`version ${counter.version}`);
+    expect(text).toContain('<b>items</b>.map is not a function');
+    expect(text).toContain('at List\nat App');
+    expect(text).toContain('about:srcdoc:3:9');
+    // Asked once: the button holds until the fixed version arrives.
+    expect(action('Asked to fix')?.hasAttribute('disabled')).toBe(true);
+  });
+
+  it('holds Fix while the agent is already changing it', async () => {
+    const { ask, element, say } = await failing();
+    await say(element.contentWindow, { message: 'Error: broken' });
+    await act(async () =>
+      hearArtifactDraft('session', { toolCallId: 'call', artifactId: counter.id, content: '' }),
+    );
+
+    expect(action('Fix')?.hasAttribute('disabled')).toBe(true);
+    expect(ask).not.toHaveBeenCalled();
   });
 });
 
@@ -916,7 +1110,7 @@ describe('a deck of slides', () => {
     const rail = drawer()?.querySelector('nav[aria-label=Slides]');
     expect(
       [...(rail?.querySelectorAll('button') ?? [])].map((item) => item.getAttribute('aria-label')),
-    ).toEqual(['Slide 1', 'Slide 2', 'Slide 3']);
+    ).toEqual(['Slide 1', 'Slide 2', 'Slide 3', 'New slide']);
     // The row comes before the slide in view, not beside it.
     expect(
       (rail as Element).compareDocumentPosition(large()) & Node.DOCUMENT_POSITION_FOLLOWING,
@@ -990,10 +1184,10 @@ describe('a deck of slides', () => {
     await click(button('Slide 2'));
     await click(button('Edit'));
 
-    // Only the slide in view opens for editing, and it stays in view until Done.
+    // Only the slide in view opens for editing, with what builds on it beside Done.
     expect(frames().filter((item) => item.src.includes('?edit=1'))).toEqual([large()]);
-    expect(button('Slide 1')?.disabled).toBe(true);
-    expect(button('Next slide')?.disabled).toBe(true);
+    expect(button('Add a text box')).toBeDefined();
+    expect(button('Add a picture')).toBeDefined();
     // Present is in the toolbar, which Done replaces while a slide is open.
     expect(button('Present')).toBeUndefined();
     const { element, sent } = await loaded(large());
@@ -1014,6 +1208,100 @@ describe('a deck of slides', () => {
       content: edited,
       slide: 2,
       editKey: expect.stringMatching(/^[0-9a-f-]{36}$/),
+    });
+  });
+
+  it('keeps what was typed before going to another slide, and opens that one', async () => {
+    const api = await opened(deck);
+    await click(button('Edit'));
+    const { element, sent } = await loaded(large());
+    await changed(element);
+
+    await click(button('Slide 3'));
+    await settled(() => questions(sent) > 0);
+    // Nothing moves until the edit is kept.
+    expect(large()?.title).toBe('Plan, slide 1, editing');
+    const edited = (SLIDES[0] as string).replace('One', 'First');
+    await answer(element.contentWindow, { collect: asked(sent), html: edited });
+    await settled(() => large()?.title === 'Plan, slide 3, editing');
+
+    expect(api.editSessionArtifact).toHaveBeenCalledWith('profile', 'session', deck.id, {
+      version: 1,
+      content: edited,
+      slide: 1,
+      editKey: expect.stringMatching(/^[0-9a-f-]{36}$/),
+    });
+    expect(large()?.src).toContain('?edit=1');
+    expect(button('Slide 3')?.getAttribute('aria-current')).toBe('true');
+  });
+
+  /** The rail's slides, by name, without its other buttons. */
+  const railed = () =>
+    [
+      ...(drawer()?.querySelectorAll('nav[aria-label=Slides] button[aria-label^="Slide "]') ?? []),
+    ].map((item) => item.getAttribute('aria-label'));
+
+  it('adds a slide after the one in view, from a layout in the deck’s look', async () => {
+    const api = await opened(deck);
+    await click(button('Slide 2'));
+
+    const layouts = await menu('New slide');
+    expect(layouts.map((entry) => entry.textContent)).toEqual([
+      'Title',
+      'Title and text',
+      'Two columns',
+      'Section header',
+      'Blank',
+      'Duplicate current',
+    ]);
+    await click(layouts.find((entry) => entry.textContent === 'Title and text'));
+    await settled(() => railed().length === 4);
+
+    expect(api.editDeckSlides).toHaveBeenCalledWith('profile', 'session', deck.id, {
+      op: 'add',
+      version: 1,
+      position: 3,
+      html: expect.stringContaining('Click to add title'),
+    });
+    // A new slide holds the layout's words to type over, none of the slide it was made from.
+    const [, , , change] = api.editDeckSlides.mock.calls[0] as unknown as [
+      string,
+      string,
+      string,
+      { html: string },
+    ];
+    expect(change.html).not.toContain('Two');
+    // The new one is in view, in the version it made.
+    expect(button('Slide 3')?.getAttribute('aria-current')).toBe('true');
+    expect(viewed(api)).toBe(2);
+  });
+
+  it('deletes a focused slide with Delete, and gives it back with Undo', async () => {
+    const api = await opened(deck);
+    const second = button('Slide 2') as HTMLButtonElement;
+    await act(async () => {
+      second.dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete', bubbles: true }));
+    });
+    await settled(() => railed().length === 2);
+    expect(api.editDeckSlides).toHaveBeenCalledWith('profile', 'session', deck.id, {
+      op: 'delete',
+      version: 1,
+      slide: 2,
+    });
+
+    const told = vi.mocked(toast).mock.calls.find(([said]) => said === 'Slide 2 deleted.');
+    const undo = (told?.[1] as { action: { label: string; onClick: () => void } } | undefined)
+      ?.action;
+    if (!undo) throw new Error('The owner was not offered Undo.');
+    expect(undo.label).toBe('Undo');
+    await act(async () => undo.onClick());
+    await settled(() => railed().length === 3);
+    // The slide as the gateway held it, back where it was.
+    expect(api.editDeckSlides).toHaveBeenLastCalledWith('profile', 'session', deck.id, {
+      op: 'add',
+      version: 2,
+      position: 2,
+      html: SLIDES[1],
     });
   });
 

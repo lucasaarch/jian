@@ -1,4 +1,4 @@
-import { DECK_MAX, DECK_SLIDES_MAX, deckContentSchema } from '@jian/contracts';
+import { DECK_MAX, DECK_SLIDES_MAX, type DeckSlidesEdit, deckContentSchema } from '@jian/contracts';
 import { GatewayError } from '../core/errors.js';
 
 /**
@@ -76,4 +76,31 @@ export function changedSlides(slides: readonly string[], change: SlideChange): s
   }
 
   return next;
+}
+
+/**
+ * The slides after the owner's change by hand. The same changes as the agent's, in words for the
+ * owner: they have no tool to be pointed at. A copy is made of the slide as it is in these slides,
+ * so it is the version the owner was looking at, never one read by the panel before.
+ */
+export function ownerChangedSlides(slides: readonly string[], change: DeckSlidesEdit): string[] {
+  if (change.op === 'delete' && slides.length === 1) {
+    throw new GatewayError(400, 'A deck keeps at least one slide, so its last one stays.');
+  }
+  if (change.op === 'duplicate') {
+    const copied = slides[change.slide - 1];
+    if (copied === undefined) {
+      throw new GatewayError(
+        400,
+        `The deck has ${slideCount(slides.length)}, so there is no slide ${change.slide}.`,
+      );
+    }
+    return changedSlides(slides, { op: 'add', html: copied, position: change.slide + 1 });
+  }
+  if (change.op === 'add') {
+    return changedSlides(slides, { op: 'add', html: change.html, position: change.position });
+  }
+  if (change.op === 'delete') return changedSlides(slides, { op: 'delete', slide: change.slide });
+
+  return changedSlides(slides, { op: 'move', slide: change.slide, to: change.to });
 }

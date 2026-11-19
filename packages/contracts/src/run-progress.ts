@@ -1,5 +1,9 @@
 import { z } from 'zod';
-import { SESSION_ARTIFACT_MAX, sessionArtifactTypeSchema } from './session-artifacts.js';
+import {
+  DECK_SLIDES_MAX,
+  SESSION_ARTIFACT_MAX,
+  sessionArtifactTypeSchema,
+} from './session-artifacts.js';
 
 /**
  * Which tool server a call went to, and the tool by the server's own name. The name the agent
@@ -51,8 +55,17 @@ export const runProgressSchema = z.strictObject({
       artifactId: z.uuid().optional(),
       title: z.string().max(120).optional(),
       type: sessionArtifactTypeSchema.optional(),
-      /** The source so far; for a deck its slides one after another. */
+      /**
+       * The source so far; for a deck its slides one after another. Empty for a call that changes
+       * one by replacements (`edit_artifact`), which says only which Artifact it changes.
+       */
       content: z.string().max(SESSION_ARTIFACT_MAX).default(''),
+      /**
+       * A deck's slides written in full so far, the one still being written left out, so the
+       * panel draws each as it is finished. Together within one Artifact's bound. Absent for
+       * anything else, and from gateways older than this field.
+       */
+      slides: z.array(z.string().max(SESSION_ARTIFACT_MAX)).max(DECK_SLIDES_MAX).optional(),
     })
     .optional(),
   updatedAt: z.iso.datetime(),

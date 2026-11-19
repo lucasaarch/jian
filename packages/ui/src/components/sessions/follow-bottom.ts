@@ -91,6 +91,12 @@ export function useFollowBottom() {
     const observer = new ResizeObserver(follow);
     follow();
     observer.observe(content);
+    // The end also moves when the view changes height or the room left after the last message
+    // does (the composer floating over it shrinks once its draft is sent). A shorter end drags
+    // the scroll up with it; unless the history hears of it here, in the frame it happens, the
+    // scroll event that tells of it a frame later reads as the reader going up whenever content
+    // arrived in between, and the history stops following.
+    observer.observe(element);
     return () => observer.disconnect();
   }, [place]);
 
@@ -112,9 +118,6 @@ export function useFollowBottom() {
     };
   }, [land]);
 
-  const follow = useCallback(() => {
-    following.current = true;
-  }, []);
   /** Back to the end, gliding unless motion is reduced, and following from there. */
   const toEnd = useCallback(
     (smooth: boolean) => {
@@ -171,7 +174,6 @@ export function useFollowBottom() {
 
   return {
     scroller,
-    follow,
     toEnd,
     onScroll,
     hold,

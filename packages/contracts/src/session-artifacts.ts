@@ -20,9 +20,10 @@ export const SLIDE_HEIGHT = 720;
 
 /**
  * What it is drawn as: a whole page, one React component, a Markdown document, a Mermaid
- * diagram, a deck (a set of slides, each a page of its own; the panel names it Slide), or a
- * spreadsheet (CSV, whose cells may hold formulas). Always a source the agent
- * wrote, never a file as it was: a file it made is sent as a file.
+ * diagram, a deck (a set of slides, each a page of its own; the panel names it Slide), a
+ * spreadsheet (CSV, whose cells may hold formulas), or a diagram of nodes and edges
+ * (`diagramContentSchema`, in JSON). The panel shows both kinds of diagram as one, Diagram.
+ * Always a source the agent wrote, never a file as it was: a file it made is sent as a file.
  */
 export const sessionArtifactTypeSchema = z.enum([
   'html',
@@ -31,6 +32,7 @@ export const sessionArtifactTypeSchema = z.enum([
   'mermaid',
   'deck',
   'sheet',
+  'diagram',
 ]);
 
 /** `private` is read by the owner alone; `public` by anyone holding its link. */
@@ -82,6 +84,107 @@ export const sessionArtifactRevisionSchema = z.strictObject({
     .optional()
     .describe('For a deck, in place of content: every slide again, in order.'),
   title: z.string().trim().min(1).max(120).optional().describe('Only to rename it.'),
+});
+
+/** The most targeted edits one call makes. */
+export const ARTIFACT_EDITS_MAX = 50;
+
+/**
+ * The agent's targeted change to one, as a text editor makes it: each `find` is replaced by its
+ * `replace` in the latest source, whoever wrote it, so a small change costs a few lines instead
+ * of the whole source again. The panel's preview of the call reads exactly these fields.
+ */
+export const artifactSourceEditSchema = z.strictObject({
+  artifactId: artifactIdSchema,
+  edits: z
+    .array(
+      z.strictObject({
+        find: z
+          .string()
+          .min(1)
+          .max(SESSION_ARTIFACT_MAX)
+          .describe(
+            'Text copied exactly from the current source, spaces and line breaks included, with enough around it to occur there exactly once.',
+          ),
+        replace: z
+          .string()
+          .max(SESSION_ARTIFACT_MAX)
+          .describe('What takes its place; empty removes it.'),
+      }),
+    )
+    .min(1)
+    .max(ARTIFACT_EDITS_MAX)
+    .describe('Applied in order, each to the text the one before it left.'),
+  slide: slideNumberSchema
+    .optional()
+    .describe('A deck only, and required for one: the slide the edits are in, counting from 1.'),
+});
+
+/** The agent's change to who reads one, when the owner asked for it. */
+export const artifactShareSchema = z.strictObject({
+  artifactId: artifactIdSchema,
+  visibility: sessionArtifactVisibilitySchema.describe(
+    'public: anyone with its link opens it, and a new link is made each time. private: the link stops working.',
+  ),
+});
+
+/**
+ * The files an Artifact of each type is sent as. `source` is its source saved as it was
+ * written, with that extension; `made` are the files the gateway makes from it (the formats of
+ * `deckExportQuerySchema`). A new type is one line here: the tool that sends one offers, checks
+ * and names in its refusals what this table says.
+ */
+export const ARTIFACT_FILE_FORMATS = {
+  html: { source: 'html', made: [] },
+  react: { source: 'tsx', made: [] },
+  // Drawn files first, in the order a Download menu lists them.
+  markdown: { source: 'md', made: ['pdf', 'docx'] },
+  mermaid: { source: 'mmd', made: [] },
+  // Nodes, edges and where the owner put them, which another diagram tool can read.
+  diagram: { source: 'json', made: [] },
+  // A deck's source is its slides in JSON, which nothing opens: only the drawn files leave.
+  deck: { made: ['pdf', 'pptx', 'png'] },
+  // Its CSV is the values alone, as the panel downloads it; the formulas go in the Excel file.
+  sheet: { made: ['xlsx', 'csv'] },
+} as const satisfies Record<
+  SessionArtifactType,
+  { source?: string; made: readonly DeckExportQuery['format'][] }
+>;
+
+/** Every file a type is sent as, its source first. */
+export function artifactFileFormats(type: SessionArtifactType): string[] {
+  const formats: { source?: string; made: readonly string[] } = ARTIFACT_FILE_FORMATS[type];
+  return [...(formats.source ? [formats.source] : []), ...formats.made];
+}
+
+const fileFormats = [
+  ...new Set(sessionArtifactTypeSchema.options.flatMap((type) => artifactFileFormats(type))),
+] as [string, ...string[]];
+
+/**
+ * An Artifact sent as a file in a conversation, as `send_file` sends one: here, or in another
+ * of the agent's conversations, where a chat or an email takes it to the person.
+ */
+export const artifactSendSchema = z.strictObject({
+  artifactId: artifactIdSchema,
+  format: z
+    .enum(fileFormats)
+    .describe(
+      `The file's extension, one its type has: ${sessionArtifactTypeSchema.options
+        .map((type) => `${type} ${artifactFileFormats(type).join(', ')}`)
+        .join('; ')}.`,
+    ),
+  slide: slideNumberSchema
+    .optional()
+    .describe('A deck as png only, and required for it: the slide, counting from 1.'),
+  version: z.number().int().min(1).optional().describe('Omit for the latest.'),
+  caption: z.string().trim().min(1).max(1000).optional(),
+  sessionId: z
+    .uuid()
+    .optional()
+    .describe(
+      'Another of your conversations to send it in (from list_sessions or your conversations); this one when absent.',
+    ),
 });
 
 /** What the agent gives to read one back, as it now stands or as a version of it was. */
@@ -139,6 +242,44 @@ export const sessionArtifactEditSchema = z.strictObject({
   editKey: z.string().min(8).max(64).optional(),
 });
 
+/** What every change the owner makes by hand carries, as an edit of a page does. */
+const byHand = {
+  /** The version the owner was looking at, which the change is made from. */
+  version: z.number().int().min(1),
+  /** As an edit's: a change carrying the key of the stretch whose version is the latest joins it. */
+  editKey: z.string().min(8).max(64).optional(),
+};
+
+/**
+ * What the owner does to a deck's slides by hand in the panel, with no agent: a slide added (one
+ * the panel made from a layout, in the deck's own styles), one copied, one deleted or one moved.
+ * Like an edit, it becomes a new version of the owner's, made from the version they were looking
+ * at. A deck keeps at least one slide.
+ */
+export const deckSlidesEditSchema = z.discriminatedUnion('op', [
+  z.strictObject({
+    op: z.literal('add'),
+    ...byHand,
+    html: slideHtmlSchema,
+    /** The number it takes, counting from 1; at the end without one. */
+    position: slideNumberSchema.optional(),
+  }),
+  z.strictObject({
+    op: z.literal('duplicate'),
+    ...byHand,
+    /** The slide copied, counting from 1. The copy comes right after it. */
+    slide: slideNumberSchema,
+  }),
+  z.strictObject({ op: z.literal('delete'), ...byHand, slide: slideNumberSchema }),
+  z.strictObject({
+    op: z.literal('move'),
+    ...byHand,
+    slide: slideNumberSchema,
+    /** The number it has afterwards. */
+    to: slideNumberSchema,
+  }),
+]);
+
 export const sessionArtifactSchema = z.strictObject({
   id: z.uuid(),
   sessionId: z.uuid(),
@@ -168,6 +309,7 @@ export const profileArtifactsQuerySchema = z.strictObject({
   limit: z.coerce.number().int().min(1).max(100).default(30),
   /** Words of its title, in any case. */
   q: z.string().trim().min(1).max(120).optional(),
+  /** `diagram` takes in Mermaid ones too: to the owner both are one kind, Diagram. */
   type: sessionArtifactTypeSchema.optional(),
   /** Only those the owner moved to this folder of theirs. */
   folder: z.uuid().optional(),
@@ -312,6 +454,68 @@ export const publicArtifactParamsSchema = z.strictObject({
 });
 
 /**
+ * A file a public Artifact's reader takes away, named by its extension. `html`, `tsx`, `md` and
+ * `mmd` are the source as written; the rest are drawn from it as the owner's downloads are.
+ */
+export const publicArtifactFormatSchema = z.enum([
+  'html',
+  'tsx',
+  'md',
+  'mmd',
+  'json',
+  'csv',
+  'xlsx',
+  'pdf',
+  'docx',
+  'pptx',
+]);
+
+export type PublicArtifactFormat = z.infer<typeof publicArtifactFormatSchema>;
+
+/**
+ * The files each type offers through its public link, in the order its Download menu lists them:
+ * what the agent sends it as (`ARTIFACT_FILE_FORMATS`), drawn files first, less a picture of one
+ * slide, which a reader has no way to pick.
+ */
+const publicFormatsOf = (type: SessionArtifactType): readonly PublicArtifactFormat[] => {
+  const { source, made }: { source?: string; made: readonly string[] } =
+    ARTIFACT_FILE_FORMATS[type];
+  return [...made.filter((format) => format !== 'png'), ...(source ? [source] : [])].map((format) =>
+    publicArtifactFormatSchema.parse(format),
+  );
+};
+
+export const PUBLIC_ARTIFACT_FORMATS: Record<SessionArtifactType, readonly PublicArtifactFormat[]> =
+  {
+    html: publicFormatsOf('html'),
+    react: publicFormatsOf('react'),
+    markdown: publicFormatsOf('markdown'),
+    mermaid: publicFormatsOf('mermaid'),
+    diagram: publicFormatsOf('diagram'),
+    deck: publicFormatsOf('deck'),
+    sheet: publicFormatsOf('sheet'),
+  };
+
+/** How a reader is told each file apart in the Download menu. */
+export const PUBLIC_ARTIFACT_FORMAT_LABEL: Record<PublicArtifactFormat, string> = {
+  html: 'HTML page',
+  tsx: 'Component source (.tsx)',
+  md: 'Markdown (.md)',
+  mmd: 'Mermaid source (.mmd)',
+  json: 'Diagram (.json)',
+  csv: 'CSV',
+  xlsx: 'Excel (.xlsx)',
+  pdf: 'PDF',
+  docx: 'Word (.docx)',
+  pptx: 'PowerPoint (.pptx)',
+};
+
+/** One file of a public Artifact's latest version: a format its type offers. */
+export const publicArtifactExportQuerySchema = z.strictObject({
+  format: publicArtifactFormatSchema,
+});
+
+/**
  * How the panel hands a frame what to draw: one message to the frame's window, with the source
  * (a React component's `compiled`, or one slide of a deck) under this key.
  */
@@ -323,10 +527,14 @@ export const ARTIFACT_FRAME_MESSAGE = 'jianArtifact';
  *
  * - Beside the source, `{ scale }` from the panel opens the frame for editing instead of running
  *   what it was handed; `{ scale }` again says how far the panel scales the frame since.
+ * - `{ insert: { text: true } }` or `{ insert: { image: <a data: URL of a picture> } }` from the
+ *   panel, to a deck's slide only, places a text box or a picture on it, which the owner then
+ *   moves, sizes and deletes in the frame. The picture is read in the panel, from a file the owner
+ *   picked: the frame loads nothing.
  * - `{ collect: <nonce> }` from the panel asks for the edited source. The frame answers that
  *   and nothing else, with `{ collect: <the same nonce>, html }`, or `{ collect, unchanged: true }`
  *   when nothing was edited. `html` is the source in the type's own form whatever the type: a
- *   page's markup, a document's Markdown, a spreadsheet's CSV.
+ *   page's markup, a document's Markdown, a spreadsheet's CSV, a diagram's JSON.
  *
  * The frame says nothing it was not asked, and the panel reads nothing else from it.
  */
@@ -357,6 +565,30 @@ export const ARTIFACT_THEME_MESSAGE = 'jianArtifactTheme';
  */
 export const ARTIFACT_TWEAKS_MESSAGE = 'jianArtifactTweaks';
 
+/**
+ * What went wrong as an Artifact ran, from its frame to the panel, once:
+ * `{ [this]: { message, stack?, componentStack? } }`. A component, a diagram and a document say
+ * it; the shell of their frames relays this key, and nothing else, outward, and only the first
+ * time. It is the Artifact's own word, so the panel reads it as text checked against
+ * `artifactFrameErrorSchema` and never as markup, and it reaches the agent only when the owner
+ * asks for the Artifact to be fixed.
+ */
+export const ARTIFACT_ERROR_MESSAGE = 'jianArtifactError';
+
+/** The longest a frame's error and each of its stacks are kept, in characters. */
+export const ARTIFACT_ERROR_MAX = { message: 2_000, stack: 8_000 } as const;
+
+export const artifactFrameErrorSchema = z.strictObject({
+  /** The error as it reads, its kind first: "TypeError: items.map is not a function". */
+  message: z.string().min(1).max(ARTIFACT_ERROR_MAX.message),
+  /** Where it was thrown, as the browser tells it. */
+  stack: z.string().max(ARTIFACT_ERROR_MAX.stack).optional(),
+  /** For a component, which of its parts was being drawn, as React tells it. */
+  componentStack: z.string().max(ARTIFACT_ERROR_MAX.stack).optional(),
+});
+
+export type ArtifactFrameError = z.infer<typeof artifactFrameErrorSchema>;
+
 export type SessionArtifactType = z.infer<typeof sessionArtifactTypeSchema>;
 export type SessionArtifactVisibility = z.infer<typeof sessionArtifactVisibilitySchema>;
 export type SessionArtifactAuthor = z.infer<typeof sessionArtifactAuthorSchema>;
@@ -367,10 +599,11 @@ export type ArtifactFolders = z.infer<typeof artifactFoldersSchema>;
 export type SessionArtifactVersion = z.infer<typeof sessionArtifactVersionSchema>;
 export type DeckExportQuery = z.infer<typeof deckExportQuerySchema>;
 export type DeckExport = z.infer<typeof deckExportSchema>;
+export type DeckSlidesEdit = z.infer<typeof deckSlidesEditSchema>;
 
 /**
  * The types the owner edits by hand in the panel: a page, a deck one slide at a time, a
- * document and a spreadsheet. What the agent wrote as code (a component, a
+ * document, a spreadsheet and a diagram. What the agent wrote as code (a component, a Mermaid
  * diagram) is changed by asking the agent.
  */
 export const EDITABLE_ARTIFACT_TYPES: readonly SessionArtifactType[] = [
@@ -378,4 +611,5 @@ export const EDITABLE_ARTIFACT_TYPES: readonly SessionArtifactType[] = [
   'deck',
   'markdown',
   'sheet',
+  'diagram',
 ];

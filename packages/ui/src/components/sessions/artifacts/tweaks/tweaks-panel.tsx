@@ -135,7 +135,7 @@ export function TweaksPanel({ tweaks }: { tweaks: Tweaks }) {
   return (
     <aside
       aria-label="Tweaks"
-      className="scroll-inset grid w-64 shrink-0 content-start gap-5 overflow-y-auto border-l border-line bg-canvas p-4 phone:absolute phone:inset-x-0 phone:bottom-0 phone:max-h-[55%] phone:w-full phone:border-t phone:border-l-0"
+      className="scroll-inset grid w-64 shrink-0 content-start gap-5 overflow-y-auto border-l border-glass-edge bg-canvas p-4 phone:absolute phone:inset-x-0 phone:bottom-0 phone:max-h-[55%] phone:w-full phone:border-t phone:border-l-0"
     >
       <div className="flex min-w-0 items-center justify-between gap-2">
         <h3 className="text-[13px] font-semibold text-ink">Tweaks</h3>

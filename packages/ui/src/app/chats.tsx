@@ -58,11 +58,14 @@ const LOADING_PATIENCE = 15_000;
  * agent, it goes to the last one used, or the first; with none, it offers to create one. On a
  * phone the sidebar and what it opens take turns, the sidebar first. `header` is what a host
  * draws over the sidebar's top — the web's bar; a native host draws its own title bar instead.
+ * `corner` is what it draws at the window's top right, over the conversation, as the web's way to
+ * open the Inspector; a phone has none, the Inspector there being a sheet over the chat.
  */
 export function ChatsApp({
   welcomes = false,
   thisMachine,
   header,
+  corner,
 }: {
   /** The computer the panel runs on, for a host that can reach it. */
   thisMachine?: ThisMachine | undefined;
@@ -72,6 +75,7 @@ export function ChatsApp({
    */
   welcomes?: boolean;
   header?: ReactNode;
+  corner?: ReactNode;
 }) {
   const [onboardingAgent, setOnboardingAgent] = useState<Profile>();
   const adopt = useAdoptProfile();
@@ -183,6 +187,7 @@ export function ChatsApp({
         {/* Clip, not hidden: an app never scrolls as a whole, by the wheel, focus or script. */}
         <div className="relative flex h-(--app-height) overflow-clip">
           {sidebar && header}
+          {!phone && corner}
           <ReadFailed>
             {/* Under a page over the whole app, kept as they are but out of the keyboard's and a
                 screen reader's way, as what a dialog covers is. */}

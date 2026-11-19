@@ -7,6 +7,7 @@ import {
   inlineMediaSchema,
   MAX_MEDIA_BYTES,
   MAX_MESSAGE_MEDIA,
+  type MediaMime,
   type ModelConfig,
   mediaMimeOf,
   type Run,
@@ -510,7 +511,7 @@ export class Media {
       }),
       send_file: tool({
         description:
-          'Send a file in this conversation: an attachment from it by media ID, text you write now as a named file (report.md, data.csv, page.html), or a file from the machine by absolute path when you have it. It goes out on the chat this conversation is on. A finished file you made (a PDF, a Word, Excel or PowerPoint file) goes this way, in the panel too; what the owner will look at, use or change there (a page, slides, a document, a diagram) is better made with create_artifact when you have it. Never claim delivery before it is confirmed.',
+          'Send a file in this conversation: an attachment from it by media ID, text you write now as a named file (report.md, data.csv, page.html), or a file from the machine by absolute path when you have it. It goes out on the chat this conversation is on. A finished file you made (a PDF, a Word, Excel or PowerPoint file) goes this way, in the panel too; what the owner will look at, use or change there (a page, slides, a document, a diagram) is better made with create_artifact, and an Artifact already made is sent with send_artifact, when you have them. Never claim delivery before it is confirmed.',
         inputSchema: z.object({
           source: z
             .enum(['mediaId', 'path', 'content'])
@@ -849,30 +850,72 @@ export class Media {
       data = Buffer.from(input.content ?? '', 'utf8');
     }
 
-    if (!data.length) throw new Error('The file is empty');
-    if (data.length > MAX_MEDIA_BYTES) throw new Error('Files over 16 MB cannot be sent');
+    const id = await this.kept(run, key, target, {
+      name,
+      mimeType: mediaMimeOf(undefined, name),
+      data,
+    });
+
+    return this.share(run, id, deliveryId, input.caption, target);
+  }
+
+  /**
+   * Stores a file a tool sent, once per call: `key` comes from the call, so a retry finds the
+   * file it stored before instead of storing it again.
+   */
+  private async kept(
+    run: Run,
+    key: string,
+    sessionId: string,
+    file: { name: string | undefined; mimeType: MediaMime; data: Buffer },
+  ) {
+    if (!file.data.length) throw new Error('The file is empty');
+    if (file.data.length > MAX_MEDIA_BYTES) throw new Error('Files over 16 MB cannot be sent');
 
     const [existing] = await this.store.db
       .select({ id: mediaAssets.id })
       .from(mediaAssets)
       .where(and(eq(mediaAssets.profileId, run.profileId), eq(mediaAssets.sourceKey, key)))
       .limit(1);
-    const id = existing?.id ?? randomUUID();
+    if (existing) return existing.id;
+    const id = randomUUID();
+    await this.store.db.insert(mediaAssets).values({
+      id,
+      profileId: run.profileId,
+      sessionId,
+      runId: run.id,
+      sourceKey: key,
+      mimeType: file.mimeType,
+      name: file.name?.slice(0, 200),
+      data: file.data.toString('base64'),
+      bytes: file.data.length,
+    });
 
-    if (!existing)
-      await this.store.db.insert(mediaAssets).values({
-        id,
-        profileId: run.profileId,
-        sessionId: target,
-        runId: run.id,
-        sourceKey: key,
-        mimeType: mediaMimeOf(undefined, name),
-        name: name?.slice(0, 200),
-        data: data.toString('base64'),
-        bytes: data.length,
-      });
+    return id;
+  }
 
-    return this.share(run, id, deliveryId, input.caption, target);
+  /**
+   * Sends a file the gateway made, such as an Artifact drawn into a PDF, the way `send_file`
+   * sends one: shown in the conversation, and out on its chat when it is one with someone.
+   */
+  async sendMade(
+    run: Run,
+    file: {
+      name: string;
+      mimeType: MediaMime;
+      data: Buffer;
+      caption?: string | undefined;
+      sessionId?: string | undefined;
+    },
+    toolCallId: string,
+  ) {
+    const target = await this.destination(run, file.sessionId);
+    const key = createHash('sha256')
+      .update(JSON.stringify([run.id, toolCallId, 'made']))
+      .digest('hex');
+    const id = await this.kept(run, key, target, file);
+
+    return this.share(run, id, stableUuid(`file:${key}`), file.caption, target);
   }
 
   /** Writes an attachment of this conversation to disk, for the machine tools to open. */

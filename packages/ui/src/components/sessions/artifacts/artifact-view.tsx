@@ -1,6 +1,6 @@
 'use client';
 
-import { EDITABLE_ARTIFACT_TYPES } from '@jian/contracts';
+import { type ArtifactFrameError, EDITABLE_ARTIFACT_TYPES } from '@jian/contracts';
 import {
   ArrowLeft,
   Code,
@@ -10,7 +10,7 @@ import {
   SlidersHorizontal,
 } from 'lucide-react';
 import { type RefObject, useRef, useState } from 'react';
-import { Action, HoverTip, iconButton, SkeletonLine, SkeletonRegion } from '../../../kit';
+import { Action, HoverTip, iconButton } from '../../../kit';
 import type { SessionArtifact } from '../../../lib/api';
 import { useGatewayMode } from '../../../lib/gateway-mode';
 import type { ArtifactDraft } from '../../../lib/stores/artifact-draft';
@@ -18,14 +18,18 @@ import { CodeBlock } from '../../ui/code-block';
 import { InspectorBody } from '../inspector';
 import { ArtifactBar, SaveStatus } from './artifact-bar';
 import { ArtifactDownload } from './artifact-download';
-import { ArtifactFrame } from './artifact-frame';
 import { ArtifactHistory } from './artifact-history';
-import { LiveArtifact, WritingChip } from './artifact-live';
+import { LiveSheet, UpdatingLine, WritingChip } from './artifact-live';
 import { ArtifactOptions } from './artifact-options';
 import { ArtifactSharing } from './artifact-sharing';
+import { ArtifactSkeleton, StagedFrame } from './artifact-stage';
 import { DeckDownload } from './deck/deck-download';
 import { DeckView } from './deck/deck-view';
 import { Presentation } from './deck/presentation';
+import { SlideBuildTools } from './deck/slide-build-tools';
+import { useSlideOps } from './deck/use-slide-ops';
+import { ArtifactFailure } from './failure/artifact-failure';
+import { fixRequest } from './failure/fix-request';
 import { fileName, LANGUAGE } from './source';
 import { TweaksPanel } from './tweaks/tweaks-panel';
 import { useTweaks } from './tweaks/use-tweaks';
@@ -46,14 +50,17 @@ const EDIT_TIP: Partial<Record<SessionArtifact['type'], string>> = {
  * A deck is read as slides, never as code: a slide's markup is still copied from the options,
  * and the deck is taken away as a file from a menu of its own (deck/deck-download.tsx).
  *
- * A page, a deck's slide, a document and a spreadsheet can be edited by hand, in the frame
- * that edits (artifact-frame.tsx). A document and a sheet are open for it as they are shown; a
- * page and a deck open on Edit and close on Done. Nothing is saved by hand: use-autosave.ts asks
+ * A page, a deck's slide, a document, a spreadsheet and a diagram can be edited by hand, in the
+ * frame that edits (artifact-frame.tsx). A document, a sheet and a diagram are open for it as
+ * they are shown; a page and a deck open on Edit and close on Done. Nothing is saved by hand: use-autosave.ts asks
  * the frame for the source as the owner pauses or leaves, and the gateway keeps one stretch of
  * editing as one version of the owner's. The frame saves nothing itself.
  *
  * A React component is tried out beside its canvas, in Tweaks (tweaks/tweaks-panel.tsx): the
  * props it declares and the theme it is drawn in. It opens by itself on one that declares props.
+ *
+ * A component, a diagram or a document that fails as it runs says why, over it
+ * (failure/artifact-failure.tsx), with Fix to ask the agent to mend that version (`onFix`).
  */
 export function ArtifactView({
   api,
@@ -63,6 +70,7 @@ export function ArtifactView({
   page = false,
   onBack,
   draft,
+  onFix,
 }: {
   api: ArtifactsApi;
   profileId: string;
@@ -75,17 +83,21 @@ export function ArtifactView({
   onBack: () => void;
   /** What the agent is writing of this Artifact now, if it is revising it. */
   draft?: ArtifactDraft | undefined;
+  /** Asks the agent, in the Artifact's conversation, for what is given; none where it cannot. */
+  onFix?: ((request: string) => void) | undefined;
 }) {
   const [picked, setPicked] = useState<number>();
   const [code, setCode] = useState(false);
   // The slide of a deck in view, counted from 0.
   const [at, setAt] = useState(0);
-  // A page and a deck are edited after Edit; a document and a sheet are always open.
+  // A page and a deck are edited after Edit; a document, a sheet and a diagram are always open.
   const [toggled, setToggled] = useState(false);
   // The version the owner's stretch of editing started on. It is held from the first change: an
   // update of the agent's meanwhile must not take the page from under the owner's hands.
   const [held, setHeld] = useState<number>();
   const [presenting, setPresenting] = useState(false);
+  // What the frame of a version said went wrong, held with that version: another starts clean.
+  const [failure, setFailure] = useState<{ version: number; error: ArtifactFrameError }>();
   const frame = useRef<HTMLIFrameElement>(null);
   // Only a server gateway makes one public, or draws a deck or a document into a PDF, so nothing
   // else offers either; until the gateway says which it is, neither does this.
@@ -97,11 +109,21 @@ export function ArtifactView({
   // What is read as code, copied and downloaded: the source as written, or the slide in view.
   const source = slide === undefined ? read.data?.content : slides?.[slide];
   const editable = EDITABLE_ARTIFACT_TYPES.includes(artifact.type);
-  const direct = artifact.type === 'markdown' || artifact.type === 'sheet';
+  const direct =
+    artifact.type === 'markdown' || artifact.type === 'sheet' || artifact.type === 'diagram';
   const writing = Boolean(draft && !draft.done);
-  // What the agent writes shows in place of the version until the owner has begun to edit it.
-  const streaming = Boolean(draft?.content) && held === undefined;
+  // A spreadsheet written again whole fills in where it stands, in place of the version, until the
+  // owner has begun to edit it. Anything else keeps its version in view while it changes: what
+  // is half written of a page or a component draws nothing worth seeing.
+  const streaming = artifact.type === 'sheet' && Boolean(draft?.content) && held === undefined;
   const editing = editable && !code && !streaming && (direct || toggled);
+  // Only what can fail as it is drawn says so; a frame open for editing runs nothing.
+  const fails =
+    (artifact.type === 'react' || artifact.type === 'mermaid' || artifact.type === 'markdown') &&
+    !editing;
+  const onFailure = fails
+    ? (error: ArtifactFrameError) => setFailure({ version, error })
+    : undefined;
   // What has a drawing and a source to switch between: all but a deck.
   const sourced = artifact.type !== 'deck';
   const component = artifact.type === 'react';
@@ -131,6 +153,18 @@ export function ArtifactView({
     }
     return true;
   };
+  // A deck's slides, added, copied, moved and deleted by hand, each after what is typed is kept.
+  const ops = useSlideOps({
+    api,
+    profileId,
+    artifact,
+    from: held === undefined ? version : undefined,
+    settle,
+    shown: (index) => {
+      setPicked(undefined);
+      setAt(index);
+    },
+  });
 
   return (
     <>
@@ -140,7 +174,11 @@ export function ArtifactView({
         title={artifact.title}
         old={held !== undefined || version === artifact.version ? undefined : version}
         status={
-          writing ? <WritingChip /> : editing ? <SaveStatus state={autosave.state} /> : undefined
+          writing ? (
+            <WritingChip updating />
+          ) : editing ? (
+            <SaveStatus state={autosave.state} />
+          ) : undefined
         }
         back={
           <HoverTip tip="All artifacts" hoverOnly side="bottom">
@@ -156,17 +194,20 @@ export function ArtifactView({
         }
         options={
           editing && !direct ? (
-            <Action
-              size="small"
-              tone="primary"
-              onClick={() =>
-                void settle().then((kept) => {
-                  if (kept) setToggled(false);
-                })
-              }
-            >
-              Done
-            </Action>
+            <>
+              {slides && <SlideBuildTools frame={frame} used={source?.length ?? 0} />}
+              <Action
+                size="small"
+                tone="primary"
+                onClick={() =>
+                  void settle().then((kept) => {
+                    if (kept) setToggled(false);
+                  })
+                }
+              >
+                Done
+              </Action>
+            </>
           ) : (
             <>
               {sourced && (
@@ -221,7 +262,7 @@ export function ArtifactView({
                   tip={
                     slide === undefined
                       ? (EDIT_TIP[artifact.type] ?? 'Edit the text')
-                      : 'Edit this slide’s text'
+                      : 'Edit this slide'
                   }
                   side="bottom"
                   align="end"
@@ -283,6 +324,7 @@ export function ArtifactView({
                         : fileName(artifact, version)
                     }
                     what="Source"
+                    component={artifact.type === 'react' ? artifact.title : undefined}
                   />
                 </>
               )}
@@ -291,21 +333,24 @@ export function ArtifactView({
         }
       />
 
+      {writing && !streaming && <UpdatingLine />}
+      {failure?.version === version && !code && !streaming && (
+        <ArtifactFailure
+          key={version}
+          type={artifact.type}
+          error={failure.error}
+          busy={writing}
+          onFix={onFix && (() => onFix(fixRequest(artifact, version, failure.error)))}
+        />
+      )}
       {streaming && draft ? (
-        <LiveArtifact draft={draft} />
+        <LiveSheet content={draft.content} done={draft.done} />
       ) : read.isError ? (
         <p role="alert" className="px-(--inspector-inset) pt-3 text-sm text-muted">
           {read.error instanceof Error ? read.error.message : 'The Artifact could not be read.'}
         </p>
       ) : !read.data ? (
-        <SkeletonRegion
-          label="Loading artifact…"
-          className="grid gap-2 px-(--inspector-inset) pt-3"
-        >
-          {['w-1/3', 'w-1/2', 'w-2/5'].map((width) => (
-            <SkeletonLine key={width} className={width} />
-          ))}
-        </SkeletonRegion>
+        <ArtifactSkeleton />
       ) : code ? (
         <InspectorBody className="px-(--inspector-inset)">
           <CodeBlock text={source ?? ''} language={LANGUAGE[artifact.type]} wrapped />
@@ -316,32 +361,38 @@ export function ArtifactView({
           title={artifact.title}
           slides={slides}
           at={slide}
-          onAt={setAt}
+          // Another slide while one is open for editing: what was typed is kept first.
+          onAt={(index) =>
+            editing ? void settle().then((kept) => kept && setAt(index)) : setAt(index)
+          }
           editing={editing}
           frame={frame}
+          ops={ops}
         />
       ) : component ? (
         // The frame stays mounted while Tweaks opens and shuts beside it.
         <div className="relative flex min-h-0 flex-1">
-          <ArtifactFrame
+          <StagedFrame
             key={version}
             type={artifact.type}
             title={artifact.title}
             source={read.data.compiled ?? read.data.content}
             frame={frame}
-            className="min-h-0 min-w-0 flex-1 border-0"
+            className="min-h-0 w-full min-w-0 flex-1 border-0"
             scheme={tweaks.scheme === 'auto' ? undefined : tweaks.scheme}
+            onFailure={onFailure}
           />
           {tweaksShown && <TweaksPanel tweaks={tweaks} />}
         </div>
       ) : (
-        <ArtifactFrame
+        <StagedFrame
           key={`${version}:${editing}`}
           type={artifact.type}
           title={artifact.title}
           source={read.data.compiled ?? read.data.content}
           editing={editing}
           frame={frame}
+          onFailure={onFailure}
         />
       )}
       {presenting && slides && read.data && (

@@ -8,7 +8,8 @@ import { useInspectorHosted } from './inspector-host';
 
 /**
  * The Inspector's first line, at the top of the window: what it follows, quietly, then its
- * options and the way to put it away, clear of the window's buttons a host draws there.
+ * options and the way to put it away, clear of the window's buttons a host draws there. In the
+ * Inspector it ends the head, and draws the line under it (crew.css).
  */
 export function InspectorBar({
   children,
@@ -31,7 +32,10 @@ export function InspectorBar({
   const hosted = useInspectorHosted() || !closer;
 
   return (
-    <div className="flex h-10 shrink-0 items-center gap-2 pr-[calc(var(--window-controls,0px)+var(--inspector-inset))] pl-(--inspector-inset) text-muted">
+    <div
+      data-inspector-head="bar"
+      className="flex h-10 shrink-0 items-center gap-2 pr-[calc(var(--window-controls,0px)+var(--inspector-inset))] pl-(--inspector-inset) text-muted"
+    >
       {children}
       {!spread && <span className="flex-1" />}
       {/* Nothing to hold, it takes no place: an empty one would still cost the line its gap. */}
@@ -71,6 +75,7 @@ export function InspectorHeader({
 }) {
   return (
     <header
+      data-inspector-head="header"
       className={`grid shrink-0 gap-3 border-b border-glass-edge px-[var(--inspector-content-inset,var(--inspector-inset))] pb-5 ${flush ? 'pt-4' : 'pt-1'}`}
     >
       <h2 className="text-[17px] leading-snug font-semibold tracking-tight text-balance text-ink">

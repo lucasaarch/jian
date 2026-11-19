@@ -15,22 +15,34 @@ vi.mock('../../lib/events', () => ({
 
 import { History } from './history';
 
-/** Every observer the page made: the test DOM lays nothing out, so a test says when sizes change. */
-let observers: ResizeObserverCallback[] = [];
+/**
+ * Every observer the page made and what each one watches: the test DOM lays nothing out, so a
+ * test says when the size of an element changes, and only its observers hear of it.
+ */
+type Watch = { callback: ResizeObserverCallback; targets: Set<Element> };
+let observers: Watch[] = [];
 class Observer {
-  constructor(private callback: ResizeObserverCallback) {
-    observers.push(callback);
+  private watch: Watch;
+  constructor(callback: ResizeObserverCallback) {
+    this.watch = { callback, targets: new Set() };
+    observers.push(this.watch);
   }
-  observe() {}
-  unobserve() {}
+  observe(target: Element) {
+    this.watch.targets.add(target);
+  }
+  unobserve(target: Element) {
+    this.watch.targets.delete(target);
+  }
   disconnect() {
-    observers = observers.filter((callback) => callback !== this.callback);
+    observers = observers.filter((watch) => watch !== this.watch);
   }
 }
 
 /** The view's geometry in px, as a browser would report it, with a reader who can scroll it. */
 type Glide = { behavior?: ScrollBehavior; finish: () => void };
 const geometry = (view: HTMLElement, height: number) => {
+  const content = view.firstElementChild;
+  if (!content) throw new Error('No conversation in the history');
   let client = 500;
   let top = height - client;
   let total = height;
@@ -70,7 +82,7 @@ const geometry = (view: HTMLElement, height: number) => {
       }),
     /** Content grows by `below` px under the reader and `above` px over them, kept in place. */
     grow: (below: number, above = 0) =>
-      resize(() => {
+      resize(content, () => {
         total += below + above;
         top += above;
       }),
@@ -85,17 +97,30 @@ const geometry = (view: HTMLElement, height: number) => {
       }),
     /** The view itself gets shorter or taller, as the composer grows or the window changes. */
     view: (height: number) =>
-      resize(() => {
+      resize(view, () => {
         client = height;
+        top = Math.max(0, Math.min(top, total - client));
+      }),
+    /**
+     * The room left after the last message shrinks by `by` px, as it does when the composer
+     * floating over the end sends a draft of several lines: the end comes up, and a view at it
+     * is pulled up with it. The view's own box changes; the conversation's does not.
+     */
+    room: (by: number) =>
+      resize(view, () => {
+        total -= by;
+        top = Math.max(0, Math.min(top, total - client));
       }),
   };
 };
 
-/** Sizes change: every observer hears it, and what waits a frame for it is let through. */
-const resize = (change: () => void) =>
+/** A size changes: the observers of that element hear it, and what waits a frame is let through. */
+const resize = (target: Element, change: () => void) =>
   act(async () => {
     change();
-    for (const callback of observers) callback([], {} as ResizeObserver);
+    for (const { callback, targets } of observers) {
+      if (targets.has(target)) callback([], {} as ResizeObserver);
+    }
     if (vi.isFakeTimers()) await vi.advanceTimersByTimeAsync(40);
     else await new Promise((resolve) => setTimeout(resolve, 40));
   });
@@ -136,8 +161,13 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 
+/** The conversation on screen; a higher `revision` is the owner having sent a message. */
+const draw = (revision = 0) =>
+  act(async () =>
+    root.render(<History api={api} profileId="profile" sessionId="session" revision={revision} />),
+  );
 const mount = async () => {
-  await act(async () => root.render(<History api={api} profileId="profile" sessionId="session" />));
+  await draw();
   await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
   const view = element.querySelector<HTMLElement>('.message-history');
   if (!view) throw new Error('No history on screen');
@@ -292,6 +322,44 @@ it('stays at the end when tools land between a scroll and its event', async () =
   await view.grow(200);
 
   expect(view.top).toBe(1700);
+});
+
+it('goes to the end when the owner sends, wherever they had scrolled, and follows the answer', async () => {
+  const view = await mount();
+  await view.scroll(0);
+  // The owner's line is drawn from the outbox and takes its size before the history hears that
+  // a message was sent.
+  await arrives('Can you check the logs?');
+  await view.grow(120);
+
+  expect(view.top).toBe(0);
+
+  await draw(1);
+
+  expect(view.top).toBe(1620);
+  expect(shown()).toBe(false);
+
+  await view.grow(300);
+
+  expect(view.top).toBe(1920);
+
+  // Sending does not take the scroll from the reader for good: going up still stops following.
+  await view.scroll(1000);
+  await view.grow(200);
+
+  expect(view.top).toBe(1000);
+});
+
+it('keeps following when the room after the end shrinks and the answer lands before its scroll is heard', async () => {
+  const view = await mount();
+  // The composer sends a long draft and shrinks; the end comes up and pulls the view with it.
+  // The answer starts arriving before the scroll that made is heard.
+  await view.room(40);
+  await view.late(300);
+  await view.grow(0);
+
+  expect(view.top).toBe(1760);
+  expect(shown()).toBe(false);
 });
 
 it('marks the last row growing while away, as an answer being written does', async () => {

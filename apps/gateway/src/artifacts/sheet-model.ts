@@ -1,7 +1,8 @@
 /**
  * What a spreadsheet's source means, as script kept as text: the body of
  * `(source) => { … }` that reads the CSV into `rows` and works each cell out (`valueAt`,
- * `shown`), formulas included, with no page in reach.
+ * `shown`), formulas included, with no page in reach. It also moves formulas as rows and
+ * columns are put in or taken out (`reshape`), or as a formula is copied elsewhere (`moved`).
  *
  * The frame draws it (sheet-frame.ts) and the gateway runs the very same text to cache a
  * formula's value in an Excel file (sheet-export.ts), so the file and the panel can never
@@ -10,7 +11,8 @@
  * No template literal inside: this file is one already.
  */
 export const SHEET_MODEL = String.raw`
-  const parse = (text) => {
+  // CSV, or with a tab for a separator what a spreadsheet puts on the clipboard.
+  const parse = (text, sep = ',') => {
     const rows = [];
     let row = [];
     let cell = '';
@@ -22,7 +24,7 @@ export const SHEET_MODEL = String.raw`
         else if (text[i + 1] === '"') { cell += '"'; i++; }
         else quoted = false;
       } else if (c === '"' && cell === '') quoted = true;
-      else if (c === ',') { row.push(cell); cell = ''; }
+      else if (c === sep) { row.push(cell); cell = ''; }
       else if (c === '\n' || c === '\r') {
         if (c === '\r' && text[i + 1] === '\n') i++;
         row.push(cell); rows.push(row); row = []; cell = '';
@@ -58,8 +60,77 @@ export const SHEET_MODEL = String.raw`
     return [Number(found[2]) - 1, columnOf(found[1])];
   };
 
+  // Every reference written in a formula, handed to change as its ends ({ r, c, fixedR, fixedC },
+  // one for B2, two for B2:C9), and put back as change answers, or as it was for null. Text in
+  // quotes is no reference, and neither is part of a longer word: LOG10( is a function.
+  const REF = /(\$?)([A-Za-z]{1,3})(\$?)(\d+)(?::(\$?)([A-Za-z]{1,3})(\$?)(\d+))?/y;
+  const rewrite = (formula, change) => {
+    let out = '';
+    for (let i = 0; i < formula.length;) {
+      if (formula[i] === '"') {
+        let j = i + 1;
+        while (j < formula.length && !(formula[j] === '"' && formula[j + 1] !== '"')) {
+          j += formula[j] === '"' ? 2 : 1;
+        }
+        out += formula.slice(i, j + 1);
+        i = j + 1;
+        continue;
+      }
+      REF.lastIndex = i;
+      const m = /[A-Za-z0-9_.$]/.test(formula[i - 1] || '') ? null : REF.exec(formula);
+      if (m && !/[A-Za-z0-9_.(]/.test(formula[i + m[0].length] || '')) {
+        const end = (fixedC, column, fixedR, row) =>
+          ({ r: Number(row) - 1, c: columnOf(column.toUpperCase()), fixedR: !!fixedR, fixedC: !!fixedC });
+        const ends = m[6] ? [end(m[1], m[2], m[3], m[4]), end(m[5], m[6], m[7], m[8])] : [end(m[1], m[2], m[3], m[4])];
+        const put = ends.some((e) => e.r < 0) ? null : change(ends);
+        out += put === null ? m[0] : put;
+        i += m[0].length;
+        continue;
+      }
+      out += formula[i];
+      i++;
+    }
+    return out;
+  };
+  const named = (ends) =>
+    ends.map((e) => (e.fixedC ? '$' : '') + letters(e.c) + (e.fixedR ? '$' : '') + (e.r + 1)).join(':');
+
+  // A formula once rows (axis 'r') or columns (axis 'c') are put in before index at (count > 0)
+  // or taken out from it (count < 0), as Excel moves it: what was past them moves with them, a
+  // range they cut through grows or shrinks, and what pointed only at cells taken out is #REF!.
+  // A $ does not hold a reference in place here; it only holds it when copied.
+  const shifted = (formula, axis, at, count) =>
+    rewrite(formula, (ends) => {
+      if (count > 0) {
+        if (!ends.some((e) => e[axis] >= at)) return null;
+        return named(ends.map((e) => ({ ...e, [axis]: e[axis] >= at ? e[axis] + count : e[axis] })));
+      }
+      const past = at - count;
+      const low = Math.min(...ends.map((e) => e[axis]));
+      const high = Math.max(...ends.map((e) => e[axis]));
+      if (high < at) return null;
+      if (low >= at && high < past) return '#REF!';
+      return named(ends.map((e) => {
+        const p = e[axis];
+        const moved = p < at ? p : p >= past ? p + count : p === low ? at : at - 1;
+        return { ...e, [axis]: moved };
+      }));
+    });
+
+  // A formula copied rows and columns away: what is not held by a $ moves as far, and a
+  // reference pushed off the top or the left is #REF!.
+  const moved = (formula, rows, columns) =>
+    rewrite(formula, (ends) => {
+      const next = ends.map((e) => ({
+        ...e,
+        r: e.fixedR ? e.r : e.r + rows,
+        c: e.fixedC ? e.c : e.c + columns,
+      }));
+      return next.some((e) => e.r < 0 || e.c < 0) ? '#REF!' : named(next);
+    });
+
   const fail = (code) => { const error = new Error(code); error.code = code; throw error; };
-  const TOKEN = /\s*(?:(\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)|("(?:[^"]|"")*")|(\$?[A-Za-z]{1,3}\$?\d+(?::\$?[A-Za-z]{1,3}\$?\d+)?)|([A-Za-z_][A-Za-z0-9_.]*)|(<>|<=|>=|[-+*\/^&=<>(),%]))/y;
+  const TOKEN = /\s*(?:(\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)|("(?:[^"]|"")*")|(\$?[A-Za-z]{1,3}\$?\d+(?::\$?[A-Za-z]{1,3}\$?\d+)?)|([A-Za-z_][A-Za-z0-9_.]*)|(<>|<=|>=|[-+*\/^&=<>(),%])|(#REF!))/y;
   const tokens = (text) => {
     const found = [];
     for (let from = 0; from < text.length;) {
@@ -74,12 +145,31 @@ export const SHEET_MODEL = String.raw`
       else if (m[2]) found.push({ s: m[2].slice(1, -1).replaceAll('""', '"') });
       else if (m[3]) found.push({ ref: m[3].replaceAll('$', '').toUpperCase() });
       else if (m[4]) found.push({ name: m[4].toUpperCase() });
-      else found.push({ op: m[5] });
+      else if (m[5]) found.push({ op: m[5] });
+      else found.push({ lost: true });
     }
     return found;
   };
 
   let rows = parse(source);
+  // Rows or columns put in or taken out of the sheet itself, every formula following them.
+  const reshape = (axis, at, count) => {
+    const blank = (n, fill) => Array.from({ length: n }, fill);
+    if (axis === 'r') {
+      if (count < 0) rows.splice(at, -count);
+      else if (at < rows.length) rows.splice(at, 0, ...blank(count, () => []));
+    } else {
+      for (const row of rows) {
+        if (count < 0) row.splice(at, -count);
+        else if (at < row.length) row.splice(at, 0, ...blank(count, () => ''));
+      }
+    }
+    for (const row of rows) {
+      for (let c = 0; c < row.length; c++) {
+        if (row[c].startsWith('=')) row[c] = '=' + shifted(row[c].slice(1), axis, at, count);
+      }
+    }
+  };
   const raw = (r, c) => (rows[r] && rows[r][c]) || '';
   const literal = (text) => {
     const trimmed = text.trim();
@@ -214,6 +304,7 @@ export const SHEET_MODEL = String.raw`
       if ('n' in token) return token.n;
       if ('s' in token) return token.s;
       if (token.ref) return reference(token.ref);
+      if (token.lost) fail('#REF!');
       if (token.name === 'TRUE' && !is('(')) return true;
       if (token.name === 'FALSE' && !is('(')) return false;
       if (token.name) {

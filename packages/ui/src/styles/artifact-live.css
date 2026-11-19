@@ -1,0 +1,156 @@
+@reference "tailwindcss";
+@reference "./themes.css";
+
+/* An Artifact the agent is still making or changing (components/sessions/artifacts/live). Every
+   motion here is decoration: reduced motion stops it (flight.css) and leaves each thing where it
+   ends, a block in place, a sheen out of sight. */
+@layer components {
+  /* A block of the shape of what is coming: the skeleton's ground, arriving in its turn, with a
+     light passing over it. `--sheen-delay` staggers the light along a shape. */
+  .building-block {
+    position: relative;
+    overflow: hidden;
+    border-radius: 0.375rem;
+    background: color-mix(in srgb, var(--ink) 7%, transparent);
+    animation: arrive 360ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  }
+  .building-block::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      color-mix(in srgb, var(--ink) 9%, transparent),
+      transparent
+    );
+    transform: translateX(-100%);
+    animation: building-sheen 2.4s ease-in-out infinite;
+    animation-delay: var(--sheen-delay, 0s);
+  }
+  /* What arrives whole, as a finished slide: it eases in, once. */
+  .building-arrive {
+    animation: arrive 360ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  }
+  /* The dotted canvas a component is drawn on, as its frame draws it. */
+  .building-canvas {
+    background-color: color-mix(in srgb, var(--ink) 3%, transparent);
+    background-image: radial-gradient(
+      color-mix(in srgb, var(--ink) 14%, transparent) 1px,
+      transparent 1.4px
+    );
+    background-size: 14px 14px;
+    background-position: 7px 7px;
+  }
+  /* The lines between a diagram's nodes, drawn as they come. */
+  .building-link {
+    stroke: color-mix(in srgb, var(--ink) 18%, transparent);
+    stroke-width: 1.5;
+    stroke-dasharray: 4 4;
+    animation:
+      arrive 360ms ease-out both,
+      building-flow 1.6s linear infinite;
+  }
+
+  /* A spreadsheet as it is written: a sheet's grid, its letters and numbers in the margins,
+     which stay in view as it scrolls. */
+  .live-sheet {
+    @apply text-[13px] text-ink;
+  }
+  .live-sheet table {
+    border-collapse: separate;
+    border-spacing: 0;
+    min-width: 100%;
+  }
+  .live-sheet th,
+  .live-sheet td {
+    @apply h-7 border-r border-b border-glass-edge px-2 whitespace-nowrap;
+  }
+  .live-sheet thead th {
+    @apply sticky top-0 z-[1] bg-canvas text-center text-xs font-normal text-muted;
+  }
+  .live-sheet-corner,
+  .live-sheet-number {
+    @apply sticky left-0 z-[1] bg-canvas text-right text-xs font-normal text-muted tabular-nums;
+    min-width: 2.5rem;
+  }
+  .live-sheet-corner {
+    @apply top-0 z-[2];
+  }
+  .live-sheet-column {
+    min-width: 6rem;
+    animation: arrive 260ms ease-out both;
+  }
+  .live-sheet-row {
+    animation: arrive 260ms ease-out both;
+  }
+  .live-sheet-cell {
+    transition: background-color 400ms ease-out;
+  }
+  /* The cell being written: gently marked, a caret at its end. */
+  .live-sheet-cell[data-writing] {
+    @apply bg-glass-press;
+  }
+  .live-sheet-caret {
+    display: inline-block;
+    width: 1px;
+    height: 1em;
+    margin-left: 1px;
+    vertical-align: text-bottom;
+    background: var(--ink);
+    animation: blink 1s steps(1) infinite;
+  }
+  /* A formula waits for the sheet to work it out: its text quiet, a light passing over it. */
+  .live-sheet-formula {
+    background-image: linear-gradient(
+      90deg,
+      transparent 30%,
+      color-mix(in srgb, var(--ink) 7%, transparent) 50%,
+      transparent 70%
+    );
+    background-size: 300% 100%;
+    animation: building-formula 2.4s ease-in-out infinite;
+  }
+
+  /* An Artifact being changed: a light along the top of the version in view, taking no room. */
+  .artifact-updating {
+    position: relative;
+    z-index: 10;
+    height: 0;
+    pointer-events: none;
+  }
+  .artifact-updating::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 33%;
+    height: 2px;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      color-mix(in srgb, var(--ink) 40%, transparent),
+      transparent
+    );
+    animation: crew-sweep 1.6s ease-in-out infinite;
+  }
+}
+
+@keyframes building-sheen {
+  to {
+    transform: translateX(100%);
+  }
+}
+@keyframes building-flow {
+  to {
+    stroke-dashoffset: -16;
+  }
+}
+@keyframes building-formula {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: 0 0;
+  }
+}

@@ -163,8 +163,10 @@ import {
   artifactFrameQuerySchema,
   deckExportQuerySchema,
   deckExportSchema,
+  deckSlidesEditSchema,
   profileArtifactPageSchema,
   profileArtifactsQuerySchema,
+  publicArtifactExportQuerySchema,
   publicArtifactParamsSchema,
   sessionArtifactEditSchema,
   sessionArtifactSchema,
@@ -220,7 +222,7 @@ export type Operation = {
   response: z.ZodType;
   status?: number;
   stream?: boolean;
-  responseContentType?: 'text/plain';
+  responseContentType?: 'text/plain' | 'application/octet-stream';
   /**
    * The body of every refusal, for an operation that speaks another API's dialect. Absent,
    * refusals share the gateway's own error body.
@@ -1625,6 +1627,17 @@ export const operations: Operation[] = [
     response: sessionArtifactSchema,
   },
   {
+    // The owner's change to a deck's slides from the panel (add, duplicate, delete, move), a new
+    // version as an edit is. A paired phone only reads, and is refused with a 403.
+    method: 'POST',
+    path: `${session}/artifacts/:artifactId/slides`,
+    operationId: 'editDeckSlides',
+    access: 'admin',
+    status: 201,
+    body: deckSlidesEditSchema,
+    response: sessionArtifactSchema,
+  },
+  {
     // Only a server gateway makes one public; a desktop app's own refuses with a 409. Its name,
     // its pin and its folder are the owner's alone: a paired phone that asks to change one of
     // those is refused with a 403.
@@ -1710,6 +1723,21 @@ export const operations: Operation[] = [
     access: 'public',
     params: publicArtifactParamsSchema,
     response: z.string(),
+  },
+  {
+    // The same proof, for one file of that Artifact's latest version, as an attachment: a format
+    // its type offers (PUBLIC_ARTIFACT_FORMATS). Nothing else of it, nor any other version. A
+    // desktop app's own gateway serves nothing public and answers 404. Drawing a PDF or a
+    // PowerPoint file takes the gateway's browser, so one link draws one file at a time and a
+    // reader asking for more meanwhile is refused with a 429.
+    method: 'GET',
+    path: '/v1/public-artifacts/:token/export',
+    operationId: 'exportPublicArtifact',
+    access: 'public',
+    params: publicArtifactParamsSchema,
+    query: publicArtifactExportQuerySchema,
+    response: z.string(),
+    responseContentType: 'application/octet-stream',
   },
   {
     method: 'GET',

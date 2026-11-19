@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { useStore } from 'zustand';
 import { useShallow } from 'zustand/react/shallow';
@@ -114,13 +114,16 @@ export function History({
     store,
     useShallow(({ error, behind, toolsUnread }) => ({ error, behind, toolsUnread })),
   );
-  const { scroller, follow, toEnd, onScroll, hold } = useFollowBottom();
+  const { scroller, toEnd, onScroll, hold } = useFollowBottom();
   const { more, earlier, read, near } = useEarlier(store, reader, scroller);
 
-  // Sending is a return to the end, wherever the reader had scrolled.
-  useEffect(() => {
-    if (revision) follow();
-  }, [revision, follow]);
+  // Sending is a return to the end, wherever the reader had scrolled, before the next paint. The
+  // owner's line is drawn from the outbox before the revision changes, and has often taken its
+  // size by then: a history only told to follow again waited for the next change of size, and
+  // left a reader who had scrolled up where they were until the answer began to grow.
+  useLayoutEffect(() => {
+    if (revision) toEnd(false);
+  }, [revision, toEnd]);
 
   // The drawer beside the conversation follows these agents from outside the history.
   useEffect(() => {

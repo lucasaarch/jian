@@ -14,12 +14,14 @@ export const frameStyle = (theme: FrameTheme | undefined) => `
 html, body { margin: 0; }
 body { padding: 16px; font: 15px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif;
   overflow-wrap: anywhere; }
-body.react, body.deck, body.sheet, body.markdown { padding: 0; }
+body.react, body.deck, body.sheet, body.markdown, body.mermaid, body.diagram { padding: 0; }
 ${canvasStyle()}
 #failure { margin: 12px; padding: 12px; border-radius: 8px; white-space: pre-wrap;
   font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; color: #b42318;
   background: color-mix(in srgb, #b42318 12%, transparent); }
 #failure:empty { display: none; }
+#failure strong { font-weight: 600; }
+#failure .trace { opacity: .72; }
 img, svg { max-width: 100%; height: auto; }
 pre { overflow-x: auto; padding: 12px; border-radius: 8px;
   background: color-mix(in srgb, CanvasText 8%, transparent); }
@@ -32,6 +34,15 @@ ${documentStyle()}
 ${PLAYER_STYLE}`;
 
 /**
+ * The ground of a canvas and its dots, one 18px apart: a component's, and the one a diagram is
+ * panned and zoomed on (canvas-frame.ts), so the two read as the same surface.
+ */
+export const CANVAS_GROUND = 'light-dark(#f4f4f5, #0d0d0f)';
+export const CANVAS_DOT =
+  'radial-gradient(light-dark(#00000024, #ffffff1c) 1px, transparent 1.4px)';
+export const CANVAS_SPACING = 18;
+
+/**
  * A component stands centred on a canvas of dots, the canvas's ground being its own so a component
  * drawn light on a dark panel still has a light canvas. `safe` keeps one larger than the view
  * reachable by scrolling, from its start. `filled` is a component that paints its own ground over
@@ -40,9 +51,10 @@ ${PLAYER_STYLE}`;
  */
 function canvasStyle() {
   return `
-body.react { background-color: light-dark(#f4f4f5, #0d0d0f);
-  background-image: radial-gradient(light-dark(#00000024, #ffffff1c) 1px, transparent 1.4px);
-  background-size: 18px 18px; background-position: 9px 9px; }
+body.react { background-color: ${CANVAS_GROUND};
+  background-image: ${CANVAS_DOT};
+  background-size: ${CANVAS_SPACING}px ${CANVAS_SPACING}px;
+  background-position: ${CANVAS_SPACING / 2}px ${CANVAS_SPACING / 2}px; }
 body.react #root { box-sizing: border-box; min-height: 100vh; padding: 56px 32px; display: flex;
   flex-direction: column; align-items: safe center; justify-content: safe center; }
 body.react.filled { background: none; }
@@ -53,7 +65,8 @@ body.react.filled #root { display: block; padding: 0; }`;
  * A Markdown document as a page to read: one centred column of about 44rem with room around it,
  * and a rhythm that gives headings more space above than below. It is also what is printed to
  * PDF, so print is always the light scheme with no column limit, and nothing that should stay
- * whole is split across a page.
+ * whole is split across a page. A callout is the one block of HTML the editor writes
+ * (`<div class="callout">`, kept as it is in the Markdown), and is drawn here so it reads as one.
  */
 function documentStyle() {
   const edge = 'color-mix(in srgb, CanvasText 14%, transparent)';
@@ -90,6 +103,9 @@ body.markdown table { display: block; max-width: 100%; overflow-x: auto; font-si
 body.markdown :is(th, td) { padding: 7px 12px; border-color: ${edge}; }
 body.markdown th { text-align: start; font-weight: 600; background: ${soft}; }
 body.markdown img { border-radius: 8px; }
+body.markdown .callout { margin: 0 0 1.1em; padding: 14px 18px; border-radius: 10px;
+  border: 1px solid ${edge}; background: ${soft}; }
+body.markdown .callout > :last-child { margin-bottom: 0; }
 @media print {
   :root { color-scheme: light !important; }
   body.markdown #root { max-width: none; padding: 0; min-height: 0; }

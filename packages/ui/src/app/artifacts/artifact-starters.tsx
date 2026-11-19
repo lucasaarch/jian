@@ -15,7 +15,7 @@ const STARTERS: { type: SessionArtifact['type']; prompt: string }[] = [
   { type: 'sheet', prompt: 'Make a spreadsheet as an Artifact of ' },
   { type: 'html', prompt: 'Build a web page as an Artifact that ' },
   { type: 'react', prompt: 'Build a React component as an Artifact that ' },
-  { type: 'mermaid', prompt: 'Draw a Mermaid diagram as an Artifact of ' },
+  { type: 'diagram', prompt: 'Draw a diagram as an Artifact of ' },
 ];
 
 /**

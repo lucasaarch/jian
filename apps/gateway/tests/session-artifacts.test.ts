@@ -145,6 +145,79 @@ describe('what the agent makes', () => {
     expect(version.compiled).not.toContain('<number>');
   });
 
+  it('keeps a diagram as JSON whose every reference holds, its places optional', async () => {
+    const { services, app, owner, session, at, make } = await setup();
+    const diagram = (body: object) => ({
+      title: 'Flow',
+      type: 'diagram',
+      content: JSON.stringify(body),
+    });
+
+    await expect(
+      make({ title: 'Flow', type: 'diagram', content: 'graph TD; A-->B' }),
+    ).rejects.toMatchObject({ statusCode: 400, message: /given as JSON/ });
+    // A line to a node that does not exist is refused, naming where it is and what does exist.
+    await expect(
+      make(
+        diagram({
+          nodes: [
+            { id: 'web', label: 'Web' },
+            { id: 'api', label: 'API', group: 'back' },
+          ],
+          edges: [{ from: 'web', to: 'db' }],
+        }),
+      ),
+    ).rejects.toMatchObject({
+      statusCode: 400,
+      message: expect.stringMatching(
+        /nodes\.1\.group: No group has the id "back"\. There are none\..*edges\.0\.to: No node has the id "db"\. They are "web", "api"\./,
+      ),
+    });
+    await expect(
+      make(
+        diagram({
+          nodes: [
+            { id: 'a', label: 'A' },
+            { id: 'a', label: 'Again' },
+          ],
+        }),
+      ),
+    ).rejects.toMatchObject({ message: /nodes\.1\.id: "a" is the id of another/ });
+    await expect(make(diagram({ nodes: [{ id: 'a', label: 'A', x: 10 }] }))).rejects.toMatchObject({
+      message: /both x and y/,
+    });
+    await expect(
+      make(diagram({ nodes: [{ id: 'a', label: 'A', colour: 'blue' }] })),
+    ).rejects.toMatchObject({ message: /colour/ });
+
+    // Places are optional: the frame lays out what has none, and the source is kept as written.
+    const content = JSON.stringify({
+      nodes: [
+        { id: 'web', label: 'Web' },
+        { id: 'api', label: 'API', x: 200, y: 40, shape: 'diamond', color: 'teal' },
+      ],
+      edges: [{ from: 'web', to: 'api', label: 'calls', style: 'dashed' }],
+    });
+    const made = await make({ title: 'Flow', type: 'diagram', content });
+    expect((await app.inject({ url: at(`/${made.id}/versions/1`), headers })).json().content).toBe(
+      content,
+    );
+
+    // The owner's own save is held to the same form.
+    const save = (body: string) =>
+      app.inject({
+        method: 'POST',
+        url: at(`/${made.id}/versions`),
+        headers,
+        payload: { version: 1, content: body },
+      });
+    expect((await save('{"nodes": [], "edges": [{"from": "x", "to": "y"}]}')).statusCode).toBe(400);
+    const moved = '{"nodes": [{"id": "web", "label": "Web", "x": 0, "y": 0}]}';
+    expect((await save(moved)).statusCode).toBe(201);
+    const read = await services.artifacts.read(owner.id, session.id, { artifactId: made.id });
+    expect(read).toMatchObject({ version: 2, writtenBy: 'owner', content: moved });
+  });
+
   it('keeps a spreadsheet as CSV, its formulas included', async () => {
     const { app, at, make } = await setup();
     const sheet = await make({
@@ -235,10 +308,11 @@ describe('who reads an Artifact', () => {
         "form-action 'none'",
         "frame-src 'none'",
         "frame-ancestors 'none'",
-        'sandbox allow-scripts',
+        // The page saves its own downloads; the Artifact's frame is given scripts alone.
+        'sandbox allow-scripts allow-downloads',
       ]),
     );
-    expect(policy).not.toMatch(/allow-same-origin|unsafe-eval|https?:|\*/);
+    expect(policy).not.toMatch(/allow-same-origin|allow-popups|allow-top|unsafe-eval|https?:|\*/);
     // The source arrives as data, and what it holds never reads as the page's own markup.
     expect(page.body).toContain('Hello \\u003c/script&#62;\\u003cscript&#62;alert(1)');
     expect(page.body).not.toContain('<script>alert(1)');
@@ -317,12 +391,13 @@ describe('who reads an Artifact', () => {
     };
 
     expect((await app.inject({ url: file(deck.id, 'format=pdf') })).statusCode).toBe(401);
-    // A public link reads the deck and is proof of nothing else: it draws no file.
+    // A public link is proof of its own page and files alone (below), never of the owner's.
     const { publicPath } = (await setVisibility(deck.id, 'public')).json();
     const secret = publicPath.split('/').at(-1);
     expect(await answered(file(deck.id, 'format=pdf'), `Bearer ${secret}`)).toMatch(/^401 /);
-    expect((await app.inject({ url: `${publicPath}/export?format=pdf` })).statusCode).toBe(401);
-    expect(await answered(`${publicPath}/export?format=pdf`)).toMatch(/^404 /);
+    // Nor of what the owner's files have and its own do not: a picture of one slide.
+    expect(await answered(`${publicPath}/export?format=png`)).toBe('400 Invalid request');
+    expect(await answered(`${publicPath}/export?format=pdf&slide=1`)).toBe('400 Invalid request');
 
     // Nor through another conversation, with the credential.
     const elsewhere = await services.sessions.createSession(owner.id, { channel: 'api' });
@@ -372,7 +447,7 @@ describe('the frame the panel draws one in', () => {
     const { app, make } = await setup();
     await make({ title: 'Secret plan', type: 'markdown', content: 'Only for the owner' });
 
-    for (const type of ['html', 'react', 'markdown', 'mermaid', 'deck', 'sheet']) {
+    for (const type of ['html', 'react', 'markdown', 'mermaid', 'deck', 'sheet', 'diagram']) {
       const frame = await app.inject({ url: `/v1/artifact-frames/${type}` });
       expect(frame.statusCode).toBe(200);
       expect(frame.headers['content-type']).toBe('text/html; charset=utf-8');
@@ -407,15 +482,21 @@ describe('the frame the panel draws one in', () => {
       expect(own).not.toContain('allowfullscreen');
     }
     // The others are drawn by a page of the gateway's, which the shell posts the source on to.
-    // A component's shell alone says something back: its tweaks, under that one key.
-    for (const type of ['react', 'markdown', 'mermaid', 'sheet']) {
+    // A component's shell says something back: its tweaks, under that one key. Of what can fail
+    // as it runs, a component, a diagram and a document, the shell relays what went wrong, once,
+    // under its own key. A sheet's says nothing.
+    for (const type of ['react', 'markdown', 'mermaid', 'sheet', 'diagram']) {
       const own = (await app.inject({ url: `/v1/artifact-frames/${type}` })).body.replace(
         /srcdoc="[^"]*"/,
         '',
       );
-      expect(own.match(/postMessage/g)).toHaveLength(type === 'react' ? 2 : 1);
+      expect(own.match(/postMessage/g)).toHaveLength({ react: 3, sheet: 1 }[type] ?? 2);
       if (type === 'react')
         expect(own).toContain('parent.postMessage({ jianArtifactTweaks: said }');
+      if (type !== 'sheet') {
+        expect(own).toContain('parent.postMessage({ jianArtifactError: said }');
+        expect(own).toContain('if (!said || reported) return;');
+      }
       expect(own).toContain('frame.contentWindow.postMessage');
       expect(own).toContain('frame.remove()');
       expect(own).not.toMatch(/document\.(open|write)|allowfullscreen/);
@@ -427,7 +508,7 @@ describe('the frame the panel draws one in', () => {
   it('edits in a frame of its own, as sealed, that only answers its parent', async () => {
     const { app } = await setup();
 
-    for (const type of ['html', 'deck', 'markdown', 'sheet']) {
+    for (const type of ['html', 'deck', 'markdown', 'sheet', 'diagram']) {
       const frame = await app.inject({ url: `/v1/artifact-frames/${type}?edit=1` });
       expect(frame.statusCode).toBe(200);
       const policy = String(frame.headers['content-security-policy']);
@@ -939,5 +1020,209 @@ describe('what the owner edits by hand', () => {
       'agent',
       'owner',
     ]);
+  });
+});
+
+describe('what the owner builds of a deck by hand', () => {
+  /** A paired phone's credential: it reads the conversation as the owner does. */
+  async function phoneOf(app: FastifyInstance) {
+    const pairing = await app.inject({ method: 'POST', url: '/v1/devices/pairings', headers });
+    const phone = (
+      await app.inject({
+        method: 'POST',
+        url: '/v1/devices/pair',
+        payload: { code: pairing.json().code, name: 'Pixel', platform: 'android' },
+      })
+    ).json() as { token: string };
+    return { authorization: `Bearer ${phone.token}` };
+  }
+
+  it('adds, copies, moves and deletes slides as versions of the owner’s', async () => {
+    const { app, at, make } = await setup();
+    const deck = await make({ title: 'Plan', type: 'deck', slides: [slide('A'), slide('B')] });
+    const change = (payload: object) =>
+      app.inject({ method: 'POST', url: at(`/${deck.id}/slides`), headers, payload });
+    const version = async (number: number) =>
+      sessionArtifactVersionSchema.parse(
+        (await app.inject({ url: at(`/${deck.id}/versions/${number}`), headers })).json(),
+      );
+
+    const added = await change({ op: 'add', version: 1, html: slide('New'), position: 2 });
+    expect(added.statusCode).toBe(201);
+    expect(sessionArtifactSchema.parse(added.json())).toMatchObject({ id: deck.id, version: 2 });
+    expect(await version(2)).toMatchObject({
+      author: 'owner',
+      slides: [slide('A'), slide('New'), slide('B')],
+    });
+    // At the end without a place named.
+    expect((await change({ op: 'add', version: 2, html: slide('End') })).json()).toMatchObject({
+      version: 3,
+    });
+    // A copy comes right after the slide it was made of.
+    expect((await change({ op: 'duplicate', version: 3, slide: 1 })).json()).toMatchObject({
+      version: 4,
+    });
+    expect((await version(4)).slides).toEqual([
+      slide('A'),
+      slide('A'),
+      slide('New'),
+      slide('B'),
+      slide('End'),
+    ]);
+    expect((await change({ op: 'move', version: 4, slide: 5, to: 1 })).statusCode).toBe(201);
+    expect((await change({ op: 'delete', version: 5, slide: 2 })).statusCode).toBe(201);
+    expect((await version(6)).slides).toEqual([slide('End'), slide('A'), slide('New'), slide('B')]);
+
+    // Made from the version the owner was looking at, as an edit is: an older one comes back
+    // with the change, and every version between stays as it was.
+    expect((await change({ op: 'delete', version: 1, slide: 1 })).json()).toMatchObject({
+      version: 7,
+    });
+    expect((await version(7)).slides).toEqual([slide('B')]);
+    expect((await version(6)).slides).toHaveLength(4);
+  });
+
+  it('builds on the stretch the owner is editing, and never writes over the agent’s', async () => {
+    const { services, app, owner, session, at, make } = await setup();
+    const deck = await make({ title: 'Plan', type: 'deck', slides: [slide('A'), slide('B')] });
+    const post = (rest: string, payload: object) =>
+      app.inject({ method: 'POST', url: at(`/${deck.id}${rest}`), headers, payload });
+    const slides = async (number: number) =>
+      sessionArtifactVersionSchema.parse(
+        (await app.inject({ url: at(`/${deck.id}/versions/${number}`), headers })).json(),
+      ).slides;
+    const stretch = 'stretch-of-slides';
+
+    // A slide's text edited in a stretch, then a slide added with the stretch's key: the same
+    // version, holding both, though the add names the version the stretch started from.
+    await post('/versions', {
+      version: 1,
+      slide: 1,
+      content: slide('A, edited'),
+      editKey: stretch,
+    });
+    const joined = await post('/slides', {
+      op: 'add',
+      version: 1,
+      html: slide('C'),
+      editKey: stretch,
+    });
+    expect(joined.json()).toMatchObject({ version: 2 });
+    expect(await slides(2)).toEqual([slide('A, edited'), slide('B'), slide('C')]);
+    const moved = await post('/slides', {
+      op: 'move',
+      version: 2,
+      slide: 3,
+      to: 1,
+      editKey: stretch,
+    });
+    expect(moved.json()).toMatchObject({ version: 2 });
+    expect(await slides(2)).toEqual([slide('C'), slide('A, edited'), slide('B')]);
+
+    // Without the key, a change made after the edit was saved builds on the version it names:
+    // the owner's, with their text in it.
+    const copied = await post('/slides', { op: 'duplicate', version: 2, slide: 2 });
+    expect(copied.json()).toMatchObject({ version: 3 });
+    expect(await slides(3)).toEqual([
+      slide('C'),
+      slide('A, edited'),
+      slide('A, edited'),
+      slide('B'),
+    ]);
+
+    // The agent wrote meanwhile: the stretch's key no longer joins anything, and the change is a
+    // version above the agent's, which stays as it wrote it.
+    await services.artifacts.changeSlide(owner.id, session.id, 'update', {
+      artifactId: deck.id,
+      slide: 1,
+      html: slide('Agent'),
+    });
+    const late = await post('/slides', { op: 'delete', version: 3, slide: 4, editKey: stretch });
+    expect(late.json()).toMatchObject({ version: 5 });
+    expect((await slides(4))?.[0]).toBe(slide('Agent'));
+    expect(await slides(5)).toEqual([slide('C'), slide('A, edited'), slide('A, edited')]);
+  });
+
+  it('keeps at least one slide, and refuses what is not a change it can make', async () => {
+    const { services, app, at, make } = await setup();
+    const deck = await make({ title: 'Plan', type: 'deck', slides: [slide('Only')] });
+    const page = await make({ title: 'Page', type: 'html', content: slide('Page') });
+    const diagram = await make({ title: 'Flow', type: 'mermaid', content: 'graph TD; A-->B' });
+    const change = (artifactId: string, payload: object) =>
+      app.inject({ method: 'POST', url: at(`/${artifactId}/slides`), headers, payload });
+
+    const last = await change(deck.id, { op: 'delete', version: 1, slide: 1 });
+    expect(last.statusCode).toBe(400);
+    expect(last.body).toContain('keeps at least one slide');
+    // It names no tool: the owner has none.
+    expect(last.body).not.toContain('update_slide');
+    for (const payload of [
+      { op: 'delete', version: 1, slide: 2 },
+      { op: 'duplicate', version: 1, slide: 2 },
+      { op: 'move', version: 1, slide: 1, to: 2 },
+      { op: 'add', version: 1, html: slide('x'), position: 3 },
+      { op: 'add', version: 1, html: '' },
+      { op: 'add', version: 1, html: 'x'.repeat(SESSION_ARTIFACT_MAX + 1) },
+      { op: 'rotate', version: 1, slide: 1 },
+      { op: 'delete', slide: 1 },
+      { op: 'delete', version: 1, slide: 1, content: slide('x') },
+    ]) {
+      expect((await change(deck.id, payload)).statusCode, payload.op).toBe(400);
+    }
+    const unknown = { op: 'add', version: 2, html: slide('x') };
+    expect((await change(deck.id, unknown)).statusCode).toBe(404);
+    // Only a deck has slides, and what is not edited by hand is not edited this way either.
+    const added = { op: 'add', version: 1, html: slide('x') };
+    expect((await change(page.id, added)).statusCode).toBe(400);
+    expect((await change(diagram.id, added)).statusCode).toBe(409);
+
+    const versions = await services.store.db
+      .select()
+      .from(sessionArtifactVersions)
+      .where(eq(sessionArtifactVersions.artifactId, deck.id));
+    expect(versions).toHaveLength(1);
+  });
+
+  it('takes a change only from the owner, through the deck’s own conversation', async () => {
+    const { services, app, owner, at, make, setVisibility } = await setup();
+    const deck = await make({ title: 'Plan', type: 'deck', slides: [slide('A'), slide('B')] });
+    const payload = { op: 'add', version: 1, html: slide('Stranger') };
+    const url = at(`/${deck.id}/slides`);
+
+    expect((await app.inject({ method: 'POST', url, payload })).statusCode).toBe(401);
+    const { publicPath } = (await setVisibility(deck.id, 'public')).json();
+    const secret = publicPath.split('/').at(-1);
+    const link = { authorization: `Bearer ${secret}` };
+    expect((await app.inject({ method: 'POST', url, headers: link, payload })).statusCode).toBe(
+      401,
+    );
+
+    // A paired phone reads the deck, but builds nothing of it.
+    const device = await phoneOf(app);
+    expect((await app.inject({ url: at(), headers: device })).statusCode).toBe(200);
+    expect((await app.inject({ method: 'POST', url, headers: device, payload })).statusCode).toBe(
+      403,
+    );
+
+    // Another conversation of the same agent, or another agent, finds no such deck.
+    const elsewhere = await services.sessions.createSession(owner.id, { channel: 'api' });
+    const other = await services.profiles.createProfile({ name: 'Other', instructions: 'Help.' });
+    const theirs = await services.sessions.createSession(other.id, { channel: 'api' });
+    for (const [sessionId, profileId] of [
+      [elsewhere.id, owner.id],
+      [theirs.id, other.id],
+      [deck.sessionId, other.id],
+    ] as const) {
+      const refused = await app.inject({
+        method: 'POST',
+        url: at(`/${deck.id}/slides`, sessionId, profileId),
+        headers,
+        payload,
+      });
+      expect(refused.statusCode).toBe(404);
+    }
+
+    expect((await app.inject({ url: at(), headers })).json()).toMatchObject([{ version: 1 }]);
+    expect((await app.inject({ url: publicPath })).body).not.toContain('Stranger');
   });
 });

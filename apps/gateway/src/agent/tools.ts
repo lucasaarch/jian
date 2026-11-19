@@ -1,5 +1,8 @@
 import {
   agentCallSchema,
+  artifactSendSchema,
+  artifactShareSchema,
+  artifactSourceEditSchema,
   contactNameSchema,
   conversationSubagentInputSchema,
   decisionUseSchema,
@@ -38,6 +41,7 @@ import {
 } from '../errands/email-parts.js';
 import type { Outreach } from '../errands/port.js';
 import { X_TOOL_GROUPS } from '../integrations/x/catalog/index.js';
+import type { Media } from '../media/service.js';
 import { sameSubject } from '../memories/duplicates.js';
 import type { MemoryWriter } from '../memories/port.js';
 import type { PeerAgents } from '../peers/port.js';
@@ -134,7 +138,12 @@ export type ToolServices = {
     'spawnInConversation' | 'awaitReport' | 'cancelInConversation' | 'focusInspector'
   >;
   sshKeys: Pick<SshKeys, 'list' | 'create' | 'remove' | 'sync'>;
-  artifacts?: Pick<SessionArtifacts, 'create' | 'revise' | 'read' | 'changeSlide'>;
+  artifacts?: Pick<
+    SessionArtifacts,
+    'create' | 'revise' | 'read' | 'changeSlide' | 'editSource' | 'share' | 'file'
+  >;
+  /** How an Artifact sent as a file reaches the conversation, as send_file's do. */
+  media?: Pick<Media, 'sendMade'>;
   remote?: Pick<
     Remote,
     'list' | 'execute' | 'executeComputer' | 'update' | 'executeFiles' | 'offersFiles'
@@ -206,7 +215,10 @@ export function skillFor(
   return skill;
 }
 
-/** What the agent needs of an Artifact it made. Never its link: making one public is the owner's. */
+/**
+ * What the agent needs of an Artifact it made. Never its link: only share_artifact answers one,
+ * when the owner asked for it to be shared.
+ */
 const madeArtifact = (artifact: (SessionArtifact & { slides?: number }) | undefined) =>
   artifact && {
     artifactId: artifact.id,
@@ -246,6 +258,18 @@ export function profileTools(
 ): ToolSet {
   const coordination = new Coordination(services);
   const rechecked = new Set<string>();
+  // On WhatsApp, Telegram or email nobody sees the Inspector: what was made reaches the person
+  // only when it is sent. Told with the result, as only then is the conversation's channel read.
+  const shown = async (artifact: Parameters<typeof madeArtifact>[0]) => {
+    const made = madeArtifact(artifact);
+    if (!made) return made;
+    const { channel } = await services.sessions.session(run.profileId, run.sessionId);
+    if (!isChatChannel(channel) && channel !== 'email') return made;
+    return {
+      ...made,
+      note: `This conversation is on ${channel}, where nobody sees the Inspector: the owner finds it in the panel, under Artifacts. To show it here, send it with send_artifact in a format that suits, or give its link with share_artifact when they asked for one.`,
+    };
+  };
 
   const tools: ToolSet = {
     react_to_message: tool({
@@ -453,21 +477,28 @@ export function profileTools(
       ? {
           create_artifact: tool({
             description:
-              'Make an Artifact: something the owner sees drawn in the Inspector beside this conversation, under its Artifacts tab, instead of reading its source in your reply. Worth it for what the owner looks at, uses or changes and keeps working on — a page, an interactive component, a document, a spreadsheet, a diagram, a set of slides — not for a short answer or a snippet, and not for a finished file (a PDF, a Word or Excel file), which send_file sends. `type` says how `content` is drawn: html is a whole page with its own styles and scripts; react is one component, the default export, importing only react and react-dom and styled with its own CSS or inline styles; it stands centred on a dotted canvas at its own size, unless its outer element paints a background, which then fills the view. A component also exports `tweaks`, the props the owner tries it with beside it, never saved: `export const tweaks = { title: "Hello", rounded: true, accent: "#7c3aed", size: { type: "number", min: 8, max: 64, default: 16 }, tone: { options: ["calm", "loud"] } }` (a default alone gives its type: text, number, boolean or a #hex color; options make a choice); each reaches the default export as a prop, its default first. Both open in the theme of the panel, light or dark (the page has color-scheme set and a dark class on <html> in dark), so do not force a white page or a fixed text colour: leave the background unset, use currentColor, or give both themes colours with light-dark() or the .dark class (not prefers-color-scheme, which follows the system, not the panel); markdown is a document; sheet is a spreadsheet as CSV, one row a line, where a cell starting with = is a formula (=SUM(B2:B9), =B2*C2, =IF(A2>0,"yes","no"); SUM, AVERAGE, MIN, MAX, COUNT, COUNTA, ROUND, ABS, IF, AND, OR, NOT, CONCAT); mermaid is a diagram’s source. deck is a set of slides (a presentation) and takes `slides` instead of `content`: each slide a whole HTML page of its own, styles included, laid out for a fixed 1280x720 canvas that is scaled to fit. It runs sealed: nothing loads from the network (no CDN script, stylesheet, font or remote image, and no fetch — embed a picture as a data: address), and it cannot call your tools or Jian. Returns the artifactId the other Artifact tools take.',
+              'Make an Artifact: something the owner sees drawn in the Inspector beside this conversation, under its Artifacts tab, instead of reading its source in your reply. Worth it for what the owner looks at, uses or changes and keeps working on — a page, an interactive component, a document, a spreadsheet, a diagram, a set of slides — not for a short answer or a snippet, and not for a finished file (a PDF, a Word or Excel file), which send_file sends. `type` says how `content` is drawn: html is a whole page with its own styles and scripts; react is one component, the default export, importing only react and react-dom and styled with its own CSS or inline styles; it stands centred on a dotted canvas at its own size, unless its outer element paints a background, which then fills the view. A component also exports `tweaks`, the props the owner tries it with beside it, never saved: `export const tweaks = { title: "Hello", rounded: true, accent: "#7c3aed", size: { type: "number", min: 8, max: 64, default: 16 }, tone: { options: ["calm", "loud"] } }` (a default alone gives its type: text, number, boolean or a #hex color; options make a choice); each reaches the default export as a prop, its default first. Both open in the theme of the panel, light or dark (the page has color-scheme set and a dark class on <html> in dark), so do not force a white page or a fixed text colour: leave the background unset, use currentColor, or give both themes colours with light-dark() or the .dark class (not prefers-color-scheme, which follows the system, not the panel); markdown is a document; sheet is a spreadsheet as CSV, one row a line, where a cell starting with = is a formula (=SUM(B2:B9), =B2*C2, =IF(A2>0,"yes","no"); SUM, AVERAGE, MIN, MAX, COUNT, COUNTA, ROUND, ABS, IF, AND, OR, NOT, CONCAT); diagram is a diagram of boxes and lines as JSON, which the owner can also move and edit by hand: {"direction": "TB" (default) or "LR", "nodes": [{"id": "api", "label": "API", "shape": rect|rounded|ellipse|diamond|note|text, "color": gray|blue|teal|green|yellow|orange|red|purple|pink, "group": "backend"}], "edges": [{"from": "web", "to": "api", "label": "HTTPS", "style": solid|dashed, "arrow": end|both|none}], "groups": [{"id": "backend", "label": "Backend"}]}, all but id, label, from and to optional; leave out x and y and the nodes are laid out in layers for you, or give a node both, its centre in pixels with y going down. Every from, to and group must name an id that exists. Once the owner has arranged one, every node has x and y: when you update it keep those, and place a new node yourself near its neighbours or leave it unplaced to have it set beside the rest. Prefer diagram for flowcharts, architecture, processes, org charts and mind maps; mermaid is Mermaid source, for what only it draws: sequence, gantt, class, state, ER and timeline diagrams, which the owner changes by asking you. Both open fitted on a canvas the owner pans and zooms. deck is a set of slides (a presentation) and takes `slides` instead of `content`: each slide a whole HTML page of its own, styles included, laid out for a fixed 1280x720 canvas that is scaled to fit. It runs sealed: nothing loads from the network (no CDN script, stylesheet, font or remote image, and no fetch — embed a picture as a data: address), and it cannot call your tools or Jian. Returns the artifactId the other Artifact tools take.',
             inputSchema: sessionArtifactCreateSchema,
             execute: async (input) =>
-              madeArtifact(await services.artifacts?.create(run.profileId, run.sessionId, input)),
+              shown(await services.artifacts?.create(run.profileId, run.sessionId, input)),
+          }),
+          edit_artifact: tool({
+            description:
+              'Change part of an Artifact of this conversation, as you edit a file: each `find` is text copied exactly from its current source, and is replaced by its `replace`, in order. Use it for every change to an Artifact that already exists, a word or a whole section, in one place or many: only what you name changes, and the rest stays exactly as it is. It edits the latest version, whoever wrote it; the owner may have edited it by hand, so read_artifact_source first unless you just wrote it, and copy `find` from that. A `find` that matches nothing, or more than one place, refuses the whole call and says which edit; nothing is changed then. A deck is edited one slide at a time: name it with `slide`. Each call is a new version the owner can go back from.',
+            inputSchema: artifactSourceEditSchema,
+            execute: async (input) =>
+              shown(await services.artifacts?.editSource(run.profileId, run.sessionId, input)),
           }),
           update_artifact: tool({
             description:
-              'Give an Artifact of this conversation a new version: the whole content again, not a patch (for a deck every slide again, as `slides`; to change one slide use update_slide). The owner sees the new one and can go back to any earlier version. The owner may have edited it by hand since you wrote it, and your version goes on top of their edit, so read_artifact_source first when that is possible and build on it. The owner watches the content as you write it. Its type stays; make another Artifact for another type.',
+              'Give an Artifact of this conversation a new version with the whole content written again (for a deck every slide again, as `slides`). Only to rewrite most of it: for a change to part of it, use edit_artifact, which keeps the rest exactly as it is and costs a fraction of this. The owner sees the new one and can go back to any earlier version. The owner may have edited it by hand since you wrote it, and your version goes on top of their edit, so read_artifact_source first when that is possible and build on it. The owner watches the content as you write it. Its type stays; make another Artifact for another type.',
             inputSchema: sessionArtifactRevisionSchema,
             execute: async (input) =>
-              madeArtifact(await services.artifacts?.revise(run.profileId, run.sessionId, input)),
+              shown(await services.artifacts?.revise(run.profileId, run.sessionId, input)),
           }),
           read_artifact_source: tool({
             description:
-              'Read an Artifact of this conversation back: its source as it now stands, or as a version of it was, and whether you or the owner wrote that version. The owner edits a web page, a deck’s slides, a document and a spreadsheet by hand in the panel, which is kept by itself as a version of theirs you have never seen, so read before you update one you did not just write. A deck answers its slides, numbered from 1, or with `slide` that one alone.',
+              'Read an Artifact of this conversation back: its source as it now stands, or as a version of it was, and whether you or the owner wrote that version. The owner edits a web page, a deck’s slides, a document, a spreadsheet and a diagram of nodes and edges by hand in the panel, which is kept by itself as a version of theirs you have never seen, so read before you edit or update one you did not just write; copy edit_artifact’s `find` from what it answers. A deck answers its slides, numbered from 1, or with `slide` that one alone.',
             inputSchema: sessionArtifactReadSchema,
             execute: async (input) => services.artifacts?.read(run.profileId, run.sessionId, input),
           }),
@@ -476,16 +507,16 @@ export function profileTools(
               'Add one slide to a deck, at the end or at `position`, without writing the others again. Like every change to a deck it makes a new version of the whole deck, which the owner can go back from. Returns how many slides the deck then has.',
             inputSchema: deckSlideAddSchema,
             execute: async (input) =>
-              madeArtifact(
+              shown(
                 await services.artifacts?.changeSlide(run.profileId, run.sessionId, 'add', input),
               ),
           }),
           update_slide: tool({
             description:
-              'Write one slide of a deck again, leaving the others as they are. `html` replaces that slide whole, so start from what read_artifact_source answers for it when the owner may have edited it.',
+              'Write one slide of a deck again, leaving the others as they are. `html` replaces that slide whole, so start from what read_artifact_source answers for it when the owner may have edited it. For a change to part of a slide, use edit_artifact with `slide`.',
             inputSchema: deckSlideUpdateSchema,
             execute: async (input) =>
-              madeArtifact(
+              shown(
                 await services.artifacts?.changeSlide(
                   run.profileId,
                   run.sessionId,
@@ -499,7 +530,7 @@ export function profileTools(
               'Take one slide out of a deck; those after it move one up. The version before still holds it. A deck keeps at least one slide.',
             inputSchema: deckSlideDeleteSchema,
             execute: async (input) =>
-              madeArtifact(
+              shown(
                 await services.artifacts?.changeSlide(
                   run.profileId,
                   run.sessionId,
@@ -513,10 +544,60 @@ export function profileTools(
               'Move one slide of a deck to another place in its order: `slide` is its number now and `to` the number it has afterwards.',
             inputSchema: deckSlideMoveSchema,
             execute: async (input) =>
-              madeArtifact(
+              shown(
                 await services.artifacts?.changeSlide(run.profileId, run.sessionId, 'move', input),
               ),
           }),
+          share_artifact: tool({
+            description:
+              'Make an Artifact of this conversation public, so anyone with its link can open it, or private again, which stops its link working. Only when the owner asked for it to be shared or unshared, never on your own: anyone the link reaches can read it. Each time it is made public it gets a new link, and an earlier one never works again. Answers the link to give the owner. Only a gateway on a server makes one public; the desktop app’s own gateway refuses.',
+            inputSchema: artifactShareSchema,
+            execute: async (input) => {
+              const { artifact, link } = (await services.artifacts?.share(
+                run.profileId,
+                run.sessionId,
+                input,
+              )) ?? { artifact: undefined, link: null };
+              if (!artifact) return undefined;
+              const about = { artifactId: artifact.id, title: artifact.title };
+              if (artifact.visibility === 'private') {
+                return { ...about, visibility: 'private', note: 'Its link no longer works.' };
+              }
+              return link
+                ? { ...about, visibility: 'public', link }
+                : {
+                    ...about,
+                    visibility: 'public',
+                    path: artifact.publicPath,
+                    note: 'This gateway does not know the address the internet reaches it at (JIAN_PUBLIC_URL is not set), so this is only the path. Tell the owner: the link is this path after the address they open Jian at, and setting JIAN_PUBLIC_URL makes it whole.',
+                  };
+            },
+          }),
+          ...(services.media
+            ? {
+                send_artifact: tool({
+                  description:
+                    'Send an Artifact of this conversation as a file the owner can keep or forward, in this conversation or, with sessionId, in another of yours: on a WhatsApp, Telegram or email conversation it reaches them there, away from the panel. Use it when they ask for the file, in the format they asked for among those its type has. A deck’s PDF, PowerPoint or picture and a document’s PDF are drawn by the gateway’s browser, which the desktop app’s own gateway does not have. Never claim delivery before it returns.',
+                  inputSchema: artifactSendSchema,
+                  execute: async (input, options) => {
+                    const artifacts = services.artifacts;
+                    const media = services.media;
+                    if (!artifacts || !media) return undefined;
+                    const { name, mimeType, data, version } = await artifacts.file(
+                      run.profileId,
+                      run.sessionId,
+                      input,
+                    );
+                    const sent = await media.sendMade(
+                      run,
+                      { name, mimeType, data, caption: input.caption, sessionId: input.sessionId },
+                      options.toolCallId,
+                    );
+                    return { ...sent, name, version };
+                  },
+                }),
+              }
+            : {}),
         }
       : {}),
 
@@ -1063,6 +1144,19 @@ export function profileTools(
     delete tools.search_email;
   }
 
+  // The owner's card names the Artifact by its title, where the call has only its id.
+  for (const name of ['share_artifact', 'send_artifact']) {
+    const artifacts = services.artifacts;
+    if (!tools[name] || !artifacts) continue;
+    Object.assign(tools[name], {
+      cardInput: async (input: unknown) => {
+        const { artifactId } = (input ?? {}) as { artifactId?: unknown };
+        const { title } = await artifacts.read(run.profileId, run.sessionId, { artifactId });
+        return { ...(input as object), title };
+      },
+    } satisfies Pick<OwnerGate, 'cardInput'>);
+  }
+
   // Not an action that asks: it answers the person this conversation is with, as a chat's
   // turn does by ending. An email turn's own answer is never sent.
   if (replyTo) {
@@ -1272,15 +1366,18 @@ export const TOOL_GROUPS = {
   },
   artifacts: {
     summary:
-      'make something the owner sees drawn beside this conversation — a web page, a React component, a Markdown document, a spreadsheet, a Mermaid diagram or a deck of slides — read it back, give it new versions, and add, rewrite, remove or move one slide of a deck',
+      'make something the owner sees drawn beside this conversation — a web page, a React component, a Markdown document, a spreadsheet, a diagram (of its own or in Mermaid) or a deck of slides — read it back, edit part of it or write it again, add, rewrite, remove or move one slide of a deck, make it public when the owner asks, and send it as a file',
     tools: [
       'create_artifact',
+      'edit_artifact',
       'update_artifact',
       'read_artifact_source',
       'add_slide',
       'update_slide',
       'delete_slide',
       'move_slide',
+      'share_artifact',
+      'send_artifact',
     ],
   },
   self: {

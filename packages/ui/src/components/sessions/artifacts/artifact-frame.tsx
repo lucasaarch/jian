@@ -2,13 +2,20 @@
 
 import {
   ARTIFACT_EDIT_MESSAGE,
+  ARTIFACT_ERROR_MESSAGE,
   ARTIFACT_FRAME_MESSAGE,
   ARTIFACT_THEME_MESSAGE,
+  type ArtifactFrameError,
+  artifactFrameErrorSchema,
   type SessionArtifactType,
 } from '@jian/contracts';
 import { type CSSProperties, type RefObject, useEffect, useRef, useState } from 'react';
+import { useAppearance } from '../../../lib/appearance';
 import { gatewayConnection } from '../../../platform/gateway';
 import { useThemeChoice } from '../../shell/theme';
+
+/** Milliseconds after its source was handed over when a frame is shown, painted or not. */
+const REVEAL_LATEST = 1000;
 
 /**
  * One Artifact, drawn. What an agent wrote runs here, so the frame is sealed three ways:
@@ -32,8 +39,17 @@ import { useThemeChoice } from '../../shell/theme';
  * when it changes, so nothing reloads. `scheme` holds it to one theme instead, as a component's
  * tweaks do.
  *
- * A component's frame also says its tweaks and takes their values (tweaks/use-tweaks.ts), the
- * one thing read from a frame that draws: checked, and drawn as fields, never run.
+ * A component's frame also says its tweaks and takes their values (tweaks/use-tweaks.ts):
+ * checked, and drawn as fields, never run. A component's, a diagram's and a document's frame say
+ * what went wrong as they ran, once (`onFailure`): checked, and drawn as text.
+ *
+ * It stays unseen until it has drawn: until the gateway's frame has loaded, been handed its
+ * source and had two frames to paint it. Until it loads, the element holds the browser's own
+ * empty page, whose colour scheme is the browser's and not the element's, and a frame whose
+ * scheme differs from its element's is painted on an opaque canvas: in a dark panel, white, for
+ * as long as the gateway takes to answer. Over a slow link that was a white flash every time an
+ * Artifact opened. Kept at no opacity, rather than out of the layout, it still loads and lays out;
+ * a caller shows what stands for it meanwhile (artifact-stage.tsx).
  *
  * Mount it with a key per Artifact, version and way of showing it: a new source is a new frame.
  */
@@ -50,6 +66,7 @@ export function ArtifactFrame({
   lazy = false,
   onReady,
   scheme,
+  onFailure,
 }: {
   type: SessionArtifactType;
   title: string;
@@ -74,15 +91,20 @@ export function ArtifactFrame({
   lazy?: boolean;
   /**
    * Told once the source was handed over and the frame has had two frames to paint it, so a
-   * caller can keep what was on screen until then and no blank page shows in between.
+   * caller can keep what was on screen until then and no blank page shows in between. The frame
+   * itself comes into sight then too.
    */
   onReady?: () => void;
   /** The theme it is drawn in whatever the panel's, as the owner picks among a component's tweaks. */
   scheme?: 'light' | 'dark' | undefined;
+  /** Told what went wrong as the Artifact ran, as its frame says it: the first time only. */
+  onFailure?: ((error: ArtifactFrameError) => void) | undefined;
 }) {
   const own = useRef<HTMLIFrameElement>(null);
   const element = frame ?? own;
   const handed = useRef(false);
+  const [drawn, setDrawn] = useState(false);
+  const { still } = useAppearance();
   const panel = useThemeChoice().theme;
   const theme = scheme ?? panel;
   // The address is the first theme's for good: a new one would load the frame again.
@@ -92,6 +114,24 @@ export function ArtifactFrame({
     if (!handed.current) return;
     element.current?.contentWindow?.postMessage({ [ARTIFACT_THEME_MESSAGE]: theme }, '*');
   }, [theme, element]);
+
+  const failed = useRef(onFailure);
+  failed.current = onFailure;
+  // Only a frame asked about is listened to: of any other, the panel hears nothing at all.
+  const listens = Boolean(onFailure);
+  useEffect(() => {
+    if (!listens) return;
+    let told = false;
+    const hear = (event: MessageEvent) => {
+      if (told || !failed.current || event.source !== element.current?.contentWindow) return;
+      const said = artifactFrameErrorSchema.safeParse(event.data?.[ARTIFACT_ERROR_MESSAGE]);
+      if (!said.success) return;
+      told = true;
+      failed.current(said.data);
+    };
+    window.addEventListener('message', hear);
+    return () => window.removeEventListener('message', hear);
+  }, [element, listens]);
 
   // The panel being resized changes the scale while a page is open for editing.
   useEffect(() => {
@@ -112,7 +152,12 @@ export function ArtifactFrame({
       {...(lazy ? { loading: 'lazy' as const } : {})}
       src={`${gatewayConnection().origin}/v1/artifact-frames/${type}?${query}`}
       className={className}
-      style={{ colorScheme: theme, ...style }}
+      style={{
+        colorScheme: theme,
+        opacity: drawn ? undefined : 0,
+        transition: still ? undefined : 'opacity 160ms ease-out',
+        ...style,
+      }}
       onLoad={(event) => {
         // Only the first load is the gateway's frame. A page that loads again, or takes itself
         // somewhere else, is handed nothing.
@@ -131,7 +176,17 @@ export function ArtifactFrame({
           },
           '*',
         );
-        if (onReady) requestAnimationFrame(() => requestAnimationFrame(onReady));
+        // Two frames to paint, and a timer besides: a window out of sight is given no frames, and
+        // what it holds must not wait for them to be shown once it is back.
+        let told = false;
+        const ready = () => {
+          if (told) return;
+          told = true;
+          setDrawn(true);
+          onReady?.();
+        };
+        requestAnimationFrame(() => requestAnimationFrame(ready));
+        setTimeout(ready, REVEAL_LATEST);
       }}
     />
   );
