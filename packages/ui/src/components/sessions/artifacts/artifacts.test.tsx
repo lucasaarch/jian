@@ -364,7 +364,9 @@ describe('the frame an Artifact runs in', () => {
 
     // Any other token here, `allow-same-origin` above all, would give the Artifact the panel.
     expect(frame()?.getAttribute('sandbox')).toBe('allow-scripts');
-    expect(frame()?.getAttribute('src')).toBe(`${window.location.origin}/v1/artifact-frames/react`);
+    expect(frame()?.getAttribute('src')).toBe(
+      `${window.location.origin}/v1/artifact-frames/react?theme=dark`,
+    );
     // The address names a type and nothing of the Artifact.
     expect(frame()?.getAttribute('src')).not.toContain(counter.id);
     expect(frame()?.hasAttribute('srcdoc')).toBe(false);
@@ -526,7 +528,7 @@ describe('editing one by hand', () => {
 
     expect(frame()?.getAttribute('sandbox')).toBe('allow-scripts');
     expect(frame()?.getAttribute('src')).toBe(
-      `${window.location.origin}/v1/artifact-frames/html?edit=1`,
+      `${window.location.origin}/v1/artifact-frames/html?edit=1&theme=dark`,
     );
     expect(frame()?.getAttribute('src')).not.toContain(page.id);
     const { sent } = await loaded();
@@ -536,7 +538,9 @@ describe('editing one by hand', () => {
     expect(button('History')).toBeUndefined();
 
     await click(named('Cancel'));
-    expect(frame()?.getAttribute('src')).toBe(`${window.location.origin}/v1/artifact-frames/html`);
+    expect(frame()?.getAttribute('src')).toBe(
+      `${window.location.origin}/v1/artifact-frames/html?theme=dark`,
+    );
     expect(button('History')).toBeDefined();
   });
 
@@ -573,7 +577,9 @@ describe('editing one by hand', () => {
     expect(viewed(api)).toBe(3);
     expect(older()).toBeUndefined();
     await settled(() => Boolean(frame()));
-    expect(frame()?.getAttribute('src')).toBe(`${window.location.origin}/v1/artifact-frames/html`);
+    expect(frame()?.getAttribute('src')).toBe(
+      `${window.location.origin}/v1/artifact-frames/html?theme=dark`,
+    );
 
     // Said again, the same answer is nobody's: no second version.
     await answer(element.contentWindow, { collect: word, html: '<p>Again</p>' });
@@ -673,7 +679,9 @@ describe('a deck of slides', () => {
     ]);
     for (const item of frames()) {
       expect(item.getAttribute('sandbox')).toBe('allow-scripts');
-      expect(item.getAttribute('src')).toBe(`${window.location.origin}/v1/artifact-frames/deck`);
+      expect(item.getAttribute('src')).toBe(
+        `${window.location.origin}/v1/artifact-frames/deck?theme=dark`,
+      );
       expect(item.hasAttribute('srcdoc')).toBe(false);
     }
     expect(large()?.title).toBe('Plan, slide 1');
@@ -731,7 +739,7 @@ describe('a deck of slides', () => {
     await click(button('Edit'));
 
     // Only the slide in view opens for editing, and it stays in view until saved or cancelled.
-    expect(frames().filter((item) => item.src.endsWith('?edit=1'))).toEqual([large()]);
+    expect(frames().filter((item) => item.src.includes('?edit=1'))).toEqual([large()]);
     expect(button('Slide 1')?.disabled).toBe(true);
     expect(button('Next slide')?.disabled).toBe(true);
     // Present is in the toolbar, which Save and Cancel replace while a slide is open.
@@ -764,7 +772,9 @@ describe('a deck of slides', () => {
     // The player the public link runs, sealed like any Artifact's frame.
     const player = presented()?.querySelector('iframe') as HTMLIFrameElement;
     expect(player.getAttribute('sandbox')).toBe('allow-scripts');
-    expect(player.getAttribute('src')).toMatch(/\/v1\/artifact-frames\/deck\?present=1$/);
+    expect(player.getAttribute('src')).toMatch(
+      /\/v1\/artifact-frames\/deck\?present=1&theme=dark$/,
+    );
     // Nothing of the old panel-only player is drawn.
     expect(presented()?.querySelectorAll('iframe')).toHaveLength(1);
 

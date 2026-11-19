@@ -334,6 +334,12 @@ export const artifactFrameQuerySchema = z.strictObject({
    * handed the whole deck and never edits; only a deck has it.
    */
   present: z.literal('1').optional(),
+  /**
+   * The panel's theme, so the frame sets the same `color-scheme` as the element that holds it:
+   * with a different one the browser paints an opaque canvas behind it, which is a flash of white
+   * in a dark panel. Without it (a public link) the frame follows the reader's system.
+   */
+  theme: z.enum(['dark', 'light']).optional(),
 });
 
 /** The whole proof of a public Artifact's reader: 32 random bytes, in base64url. */
@@ -367,6 +373,12 @@ export const ARTIFACT_EDIT_MESSAGE = 'jianArtifactEdit';
  * reader pressed Escape or its end button. The shell relays that and nothing else the frame says.
  */
 export const ARTIFACT_PRESENT_MESSAGE = 'jianArtifactPresent';
+
+/**
+ * The panel's theme changed: `{ [this]: 'dark' | 'light' }` to the frame, which passes it inward.
+ * The first theme is the frame's `theme` query; this only follows later changes.
+ */
+export const ARTIFACT_THEME_MESSAGE = 'jianArtifactTheme';
 
 export type SessionArtifactType = z.infer<typeof sessionArtifactTypeSchema>;
 export type SessionArtifactVisibility = z.infer<typeof sessionArtifactVisibilitySchema>;

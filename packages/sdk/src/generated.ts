@@ -25800,6 +25800,7 @@ export interface operations {
             query?: {
                 edit?: "1";
                 present?: "1";
+                theme?: "dark" | "light";
             };
             header?: never;
             path: {

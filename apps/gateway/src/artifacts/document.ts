@@ -2,13 +2,15 @@ import {
   ARTIFACT_EDIT_MESSAGE,
   ARTIFACT_FRAME_MESSAGE,
   ARTIFACT_PRESENT_MESSAGE,
+  ARTIFACT_THEME_MESSAGE,
   EDITABLE_ARTIFACT_TYPES,
   type SessionArtifactType,
 } from '@jian/contracts';
 import { GatewayError } from '../core/errors.js';
 import { BOARD } from './board-frame.js';
 import { EDITORS } from './edit-frame.js';
-import { PLAYER, PLAYER_EMBEDDED, PLAYER_STYLE } from './player.js';
+import { type FrameTheme, frameStyle } from './frame-style.js';
+import { PLAYER, PLAYER_EMBEDDED } from './player.js';
 import { type RuntimeFile, runtimeSource } from './runtime.js';
 import { SHEET } from './sheet-frame.js';
 
@@ -58,26 +60,6 @@ export function artifactPolicy(ancestors: "'self'" | "'none'"): string {
     'sandbox allow-scripts',
   ].join('; ');
 }
-
-const STYLE = `
-:root { color-scheme: light dark; }
-html, body { margin: 0; }
-body { padding: 16px; font: 15px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif;
-  overflow-wrap: anywhere; }
-body.react, body.deck, body.sheet, body.board { padding: 0; }
-#failure { margin: 12px; padding: 12px; border-radius: 8px; white-space: pre-wrap;
-  font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; color: #b42318;
-  background: color-mix(in srgb, #b42318 12%, transparent); }
-#failure:empty { display: none; }
-img, svg { max-width: 100%; height: auto; }
-pre { overflow-x: auto; padding: 12px; border-radius: 8px;
-  background: color-mix(in srgb, CanvasText 8%, transparent); }
-code { font: .875em ui-monospace, SFMono-Regular, Menlo, monospace; }
-table { border-collapse: collapse; }
-th, td { padding: 4px 10px; border: 1px solid color-mix(in srgb, CanvasText 20%, transparent); }
-blockquote { margin-inline: 0; padding-inline-start: 12px;
-  border-inline-start: 3px solid color-mix(in srgb, CanvasText 25%, transparent); }
-${PLAYER_STYLE}`;
 
 // A whole page, written into the one being read. This runs while the page is still parsed, so
 // the source carries on from here and the page loads once. Never `document.open` on a page that
@@ -168,18 +150,26 @@ function page(
   artifact?: { title: string; source: string },
   editing = false,
   presented = false,
+  theme?: FrameTheme,
 ): string {
   const { libraries } = DRAW[type];
   const body = presented ? PLAYER_EMBEDDED : DRAW[type].body;
 
   return `<!doctype html>
-<html lang="en">
+<html lang="en"${theme === 'dark' ? ' class="dark"' : ''}>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
 <title>${escaped(artifact?.title ?? 'Artifact')}</title>
-<style>${STYLE}</style>
+<style>${frameStyle(theme)}</style>${
+    // A public link names no theme: its dark class follows the reader system, for the
+    // Tailwind-style dark: variants a component may use.
+    theme
+      ? ''
+      : `
+<script>if (matchMedia('(prefers-color-scheme: dark)').matches) document.documentElement.classList.add('dark');</script>`
+  }
 </head>
 <body class="${type}">
 <pre id="failure"></pre>
@@ -194,6 +184,13 @@ function page(
   const fail = (error) => { failure.textContent = String((error && error.message) || error); };
   addEventListener('error', (event) => fail(event.message));
   addEventListener('unhandledrejection', (event) => fail(event.reason));
+  // The panel's theme changed. Only its own window may say so, and it carries nothing else.
+  addEventListener('message', (event) => {
+    const theme = event.source === parent && event.data && event.data.${ARTIFACT_THEME_MESSAGE};
+    if (theme !== 'dark' && theme !== 'light') return;
+    document.documentElement.style.colorScheme = theme;
+    document.documentElement.classList.toggle('dark', theme === 'dark');
+  });
   // A script element made here runs at once, under the page's policy, with no eval.
   const run = (code) => {
     const script = document.createElement('script');
@@ -220,6 +217,26 @@ ${editing ? '' : body}
 </html>
 `;
 }
+
+/**
+ * What an HTML page is given ahead of its own markup in the panel, so it opens in the panel's
+ * theme and never on the browser's white: its scheme, the dark class that Tailwind-style dark:
+ * variants read, and a listener for the theme changing later. It goes after the doctype, which
+ * stays first so the page is not drawn in quirks mode. The page's own styles come after and win,
+ * so a page that sets a ground of its own keeps it.
+ */
+const dressing = (theme: FrameTheme) =>
+  `<meta name="color-scheme" content="${theme}"><script>(() => {
+const apply = (theme) => {
+  document.documentElement.style.colorScheme = theme;
+  document.documentElement.classList.toggle('dark', theme === 'dark');
+};
+apply('${theme}');
+addEventListener('message', (event) => {
+  const theme = event.source === parent && event.data && event.data.${ARTIFACT_THEME_MESSAGE};
+  if (theme === 'dark' || theme === 'light') apply(theme);
+});
+})();</script>`;
 
 /**
  * What the gateway answers: a shell that holds the Artifact's page in a sandboxed `srcdoc` frame.
@@ -256,6 +273,8 @@ function shell(
   hears: 'nothing' | 'once' | 'always' | 'present',
   fullscreen = false,
   sheet = false,
+  theme?: FrameTheme,
+  dressed = false,
 ): string {
   const out = hears === 'present' ? ARTIFACT_PRESENT_MESSAGE : ARTIFACT_EDIT_MESSAGE;
   const held =
@@ -263,6 +282,35 @@ function shell(
       ? ''
       : `
 <iframe id="artifact" sandbox="allow-scripts" referrerpolicy="no-referrer"${fullscreen ? ' allowfullscreen' : ''} srcdoc="${escaped(inner)}"></iframe>`;
+  // What is added goes after a leading doctype, which has to stay first.
+  const dress = dressed
+    ? `
+  const dressing = ${embedded({ dark: dressing('dark'), light: dressing('light') })};
+  const dress = (source) => {
+    const at = (/^\\s*<!doctype[^>]*>/i.exec(source) || [''])[0].length;
+    return source.slice(0, at) + (scheme ? dressing[scheme] : '') + source.slice(at);
+  };`
+    : '';
+  // Only a frame the panel named a theme for listens for the theme: a public link follows the
+  // reader's system and says nothing inward.
+  const follows = theme
+    ? `
+  // The panel's theme: this frame's scheme, and what the page inside is told as it changes.
+  let scheme = ${JSON.stringify(theme ?? null)};
+  const tell = () => {
+    if (!scheme) return;
+    for (const held of document.querySelectorAll('iframe')) {
+      if (held.contentWindow) held.contentWindow.postMessage({ ${ARTIFACT_THEME_MESSAGE}: scheme }, '*');
+    }
+  };
+  addEventListener('message', (event) => {
+    const given = event.source === parent && event.data && event.data.${ARTIFACT_THEME_MESSAGE};
+    if (given !== 'dark' && given !== 'light') return;
+    scheme = given;
+    document.documentElement.style.colorScheme = given;
+    tell();
+  });${dress}`
+    : '';
   const made = `
   const hear = (event) => {
     const source = event.source === parent && event.data && event.data.${ARTIFACT_FRAME_MESSAGE};
@@ -271,7 +319,7 @@ function shell(
     const frame = document.createElement('iframe');
     frame.setAttribute('sandbox', 'allow-scripts');
     frame.setAttribute('referrerpolicy', 'no-referrer');
-    frame.srcdoc = source;
+    frame.srcdoc = ${dressed ? 'dress(source)' : 'source'};
     hold(frame, () => {});
     document.body.append(frame);
   };
@@ -292,7 +340,7 @@ function shell(
       ? ''
       : `
   const hear = (event) => {
-    if (event.source !== parent || !event.data) return;
+    if (event.source !== parent || !event.data${theme ? ` || event.data.${ARTIFACT_THEME_MESSAGE}` : ''}) return;
     ${hears === 'always' ? '' : "removeEventListener('message', hear);"}
     waiting.push(event.data);
     relay();
@@ -315,19 +363,20 @@ function shell(
 <meta charset="utf-8">
 <meta name="robots" content="noindex, nofollow">
 <title>${escaped(title)}</title>
-<style>:root { color-scheme: light dark; }
+<style>:root { color-scheme: ${theme ?? 'light dark'}; }
 html, body, iframe { margin: 0; width: 100%; height: 100%; border: 0; display: block; }
 html, body { background: transparent; }${sheet ? '\nhtml.drawn { background: #fff; }' : ''}</style>
 </head>
 <body>${held}
 <script>
 (() => {
+${follows}
   const hold = (frame, ready) => {
     let loaded = false;
     frame.addEventListener('load', () => {
       if (loaded) return frame.remove();
       loaded = true;
-      document.documentElement.classList.add('drawn');
+      document.documentElement.classList.add('drawn');${theme ? '\n      tell();' : ''}
       ready();
     });
   };${inner === null ? made : relayed}
@@ -345,22 +394,43 @@ const frames = new Map<string, string>();
  * is the one the owner edits by hand in, which only `EDITABLE_ARTIFACT_TYPES` have. `present` is
  * a deck's player, already presenting, for the panel's own presentation of it.
  */
-export function artifactFrame(type: SessionArtifactType, editing = false, present = false): string {
+export function artifactFrame(
+  type: SessionArtifactType,
+  editing = false,
+  present = false,
+  theme?: FrameTheme,
+): string {
   if (editing && !(EDITABLE_ARTIFACT_TYPES.includes(type) && EDITORS[type])) {
     throw new GatewayError(400, 'This kind of Artifact is not edited by hand.');
   }
   if (present && (type !== 'deck' || editing)) {
     throw new GatewayError(400, 'Only a deck is presented, and not while it is edited.');
   }
-  const key = `${type}:${editing}:${present}`;
+  const key = `${type}:${editing}:${present}:${theme ?? ''}`;
   let frame = frames.get(key);
 
   if (!frame) {
     frame = present
-      ? shell('Artifact', page(type, undefined, false, true), 'present')
+      ? shell('Artifact', page(type, undefined, false, true, theme), 'present', false, false, theme)
       : editing
-        ? shell('Artifact', page(type, undefined, true), 'always', false, type === 'deck')
-        : shell('Artifact', DRAW[type].whole ? null : page(type), 'once', false, type === 'deck');
+        ? shell(
+            'Artifact',
+            page(type, undefined, true, false, theme),
+            'always',
+            false,
+            type === 'deck',
+            theme,
+          )
+        : shell(
+            'Artifact',
+            DRAW[type].whole ? null : page(type, undefined, false, false, theme),
+            'once',
+            false,
+            type === 'deck',
+            theme,
+            // A slide keeps its own page; only an HTML page takes the panel's theme.
+            type === 'html' && theme !== undefined,
+          );
     frames.set(key, frame);
   }
 
