@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { OAuthClientInformation, OAuthClientProvider } from '@ai-sdk/mcp';
 import type { GatewayVault } from '../security/gateway-vault.js';
+import { NO_CLIENT_DOCUMENT, wantsClientDocument } from './mcp-client-document.js';
 import { mcpOauthClientSecretKey, mcpSecret } from './mcp-connect.js';
 import type { McpOAuthClient } from './types.js';
 
@@ -15,6 +16,21 @@ type Stored = {
   verifier?: string;
   state?: string;
   dynamic?: boolean;
+  /**
+   * The authorization server takes this gateway's client id metadata document. Kept as a mark,
+   * not as the id: the id is worked out again each time, so it follows `JIAN_PUBLIC_URL`.
+   */
+  document?: boolean;
+};
+
+/**
+ * Being a client by a metadata document (`mcp-client-document.ts`): its address, absent when
+ * this gateway has no HTTPS one, and the client that reads the authorization server's metadata
+ * to tell whether it wants one.
+ */
+export type ClientDocument = {
+  url: string | undefined;
+  fetch: typeof globalThis.fetch;
 };
 
 const owner = (server: string) => `${mcpSecret(server)}:oauth`;
@@ -26,7 +42,11 @@ const owner = (server: string) => `${mcpSecret(server)}:oauth`;
  *
  * When the authorization server has no `registration_endpoint` (GitHub Copilot MCP, and others
  * that skip RFC 7591), the owner supplies a pre-registered client id (and optional secret).
- * `clientInformation` returns those instead of attempting dynamic registration.
+ * `clientInformation` returns those instead of attempting dynamic registration. One that takes a
+ * client id metadata document instead (ElevenLabs) needs nothing from the owner: the client id
+ * is the document's address on this gateway. The SDK asks for the client before it shows this
+ * the server's metadata, so `validateAuthorizationServerURL`, which it calls first, reads that
+ * metadata to choose, once, before any client exists.
  *
  * `redirectToAuthorization` does not open a browser: nothing here has one. It records the URL
  * for the panel to show, and the sign-in finishes when the owner comes back through the
@@ -41,7 +61,7 @@ export class McpOAuth implements OAuthClientProvider {
     private readonly pending: Map<string, string>,
     /** Pre-registered client when the AS does not offer dynamic registration. */
     private readonly oauth?: McpOAuthClient,
-    private readonly env: NodeJS.ProcessEnv = process.env,
+    private readonly options: { env?: NodeJS.ProcessEnv; document?: ClientDocument } = {},
   ) {}
 
   private async read(): Promise<Stored> {
@@ -99,29 +119,59 @@ export class McpOAuth implements OAuthClientProvider {
 
   private async staticClientSecret(): Promise<string | undefined> {
     if (this.oauth?.secretFromEnv) {
-      return this.env[this.oauth.secretFromEnv]?.trim() || undefined;
+      return (this.options.env ?? process.env)[this.oauth.secretFromEnv]?.trim() || undefined;
     }
 
     return this.vault.read(mcpOauthClientSecretKey(this.server));
   }
 
   async clientInformation(): Promise<OAuthClientInformation | undefined> {
-    const stored = (await this.read()).client as OAuthClientInformation | undefined;
+    const { client, document } = await this.read();
 
-    if (stored) {
-      return stored;
+    if (client) {
+      return client as OAuthClientInformation;
     }
 
-    if (!this.oauth?.clientId) {
+    if (this.oauth?.clientId) {
+      const clientSecret = await this.staticClientSecret();
+
+      return {
+        client_id: this.oauth.clientId,
+        ...(clientSecret ? { client_secret: clientSecret } : {}),
+      };
+    }
+
+    if (!document) {
       return undefined;
     }
 
-    const clientSecret = await this.staticClientSecret();
+    // Signed in by a document, and the gateway has since lost its HTTPS address: undefined
+    // would send the SDK to register, and the owner would read a refusal about the wrong thing.
+    if (!this.options.document?.url) {
+      throw new Error(NO_CLIENT_DOCUMENT);
+    }
 
-    return {
-      client_id: this.oauth.clientId,
-      ...(clientSecret ? { client_secret: clientSecret } : {}),
-    };
+    return { client_id: this.options.document.url };
+  }
+
+  /**
+   * Chooses how this gateway becomes the authorization server's client, before the SDK asks
+   * which client it is. A stored or pre-registered client needs no choice, and neither does a
+   * server that registers clients, which the SDK does itself; only one that takes a document
+   * and nothing else makes this one, and refuses where the document could not be fetched.
+   */
+  async validateAuthorizationServerURL(_server: string | URL, authorizationServer: string | URL) {
+    const document = this.options.document;
+
+    if (!document || this.oauth?.clientId) return;
+
+    const stored = await this.read();
+
+    if (stored.client || stored.document) return;
+    if (!(await wantsClientDocument(authorizationServer, document.fetch))) return;
+    if (!document.url) throw new Error(NO_CLIENT_DOCUMENT);
+
+    await this.write({ document: true });
   }
 
   async saveClientInformation(client: unknown) {
@@ -168,7 +218,7 @@ export class McpOAuth implements OAuthClientProvider {
     }
 
     await this.write({
-      ...(scope === 'client' ? { client: undefined, dynamic: undefined } : {}),
+      ...(scope === 'client' ? { client: undefined, dynamic: undefined, document: undefined } : {}),
       ...(scope === 'tokens' ? { tokens: undefined } : {}),
       ...(scope === 'verifier' ? { verifier: undefined } : {}),
     });

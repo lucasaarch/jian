@@ -189,6 +189,23 @@ export const mcpStatusSchema = z.strictObject({
   checkedAt: z.iso.datetime(),
 });
 
+/**
+ * Who this gateway is to an authorization server that takes a client id metadata document (the
+ * MCP spec's alternative to registering): the server fetches it from `client_id`, its own
+ * address, and lets the sign-in return only to `redirect_uris`. It names no secret, as there is
+ * none: the client is public and proves each sign-in with PKCE.
+ */
+export const mcpClientDocumentSchema = z.strictObject({
+  client_id: z.url(),
+  client_name: z.literal('Jian'),
+  client_uri: z.url(),
+  logo_uri: z.url().optional(),
+  redirect_uris: z.array(z.url()).length(1),
+  grant_types: z.tuple([z.literal('authorization_code'), z.literal('refresh_token')]),
+  response_types: z.tuple([z.literal('code')]),
+  token_endpoint_auth_method: z.literal('none'),
+});
+
 export const identitySchema = z.strictObject({
   role: z.string().max(1000).default(''),
   tone: z.string().max(1000).default(''),
@@ -465,6 +482,7 @@ export const memoryEditSchema = z.strictObject({
 });
 
 export type McpStatus = z.infer<typeof mcpStatusSchema>;
+export type McpClientDocument = z.infer<typeof mcpClientDocumentSchema>;
 export type McpServer = z.infer<typeof mcpSchema>;
 export type SessionObjective = z.infer<typeof sessionObjectiveSchema>;
 export type McpValue = z.infer<typeof mcpValueSchema>;

@@ -83,6 +83,7 @@ import {
 import {
   gatewaySessionInputSchema,
   gatewaySessionTargetSchema,
+  mcpClientDocumentSchema,
   mcpDraftCheckSchema,
   mcpServerListInputSchema,
   mcpServerListSchema,
@@ -1184,6 +1185,17 @@ export const operations: Operation[] = [
     params: z.strictObject({ name: z.string().regex(/^[a-z0-9_]{1,30}$/) }),
     query: z.looseObject({ code: z.string().optional(), state: z.string().optional() }),
     response: z.string(),
+  },
+  {
+    // Fetched by an authorization server that takes a client id metadata document, from the
+    // client id this gateway gave it. Public as the callback is: it is metadata, with no secret,
+    // and the name it carries is held to the server name's rule before it is written into it.
+    method: 'GET',
+    path: '/v1/mcp-servers/:name/oauth/client',
+    operationId: 'getMcpClientDocument',
+    access: 'public',
+    params: z.strictObject({ name: z.string().regex(/^[a-z0-9_]{1,30}$/) }),
+    response: mcpClientDocumentSchema,
   },
   {
     method: 'GET',

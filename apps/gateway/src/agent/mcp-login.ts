@@ -1,7 +1,8 @@
 import { auth } from '@ai-sdk/mcp';
-import type { McpServer, McpStatus } from '@jian/contracts';
+import type { McpClientDocument, McpServer, McpStatus } from '@jian/contracts';
 import { GatewayError } from '../core/errors.js';
 import type { GatewayVault } from '../security/gateway-vault.js';
+import { clientDocument, clientDocumentUrl } from './mcp-client-document.js';
 import { McpOAuth } from './mcp-oauth.js';
 import { mcpOauthClient } from './mcp-oauth-client.js';
 import type { McpOAuthProviders } from './types.js';
@@ -30,7 +31,14 @@ export class McpLogins {
 
   /** Handed to the MCP client, which asks it for tokens and for somewhere to send the owner. */
   readonly provider: McpOAuthProviders = (server, oauth) =>
-    new McpOAuth(this.vault, server, this.callback(server), this.pending, oauth);
+    new McpOAuth(this.vault, server, this.callback(server), this.pending, oauth, {
+      document: { url: clientDocumentUrl(this.publicUrl, server), fetch: this.fetcher },
+    });
+
+  /** Who this gateway is to a server's authorization server; none without an HTTPS address. */
+  clientDocument(server: string): McpClientDocument | undefined {
+    return clientDocument(this.publicUrl, server, this.callback(server));
+  }
 
   /** Where the owner has to go, if the last attempt decided they had to go somewhere. */
   authorizationUrl(server: string): string | undefined {

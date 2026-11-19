@@ -42,6 +42,7 @@ const read = vi.hoisted(() => ({
   githubIntegration: vi.fn(),
   xIntegration: vi.fn(),
   mcpServers: vi.fn(),
+  health: vi.fn(),
 }));
 vi.mock('../../lib/query/client', () => ({ panelApi: () => read }));
 
@@ -90,6 +91,7 @@ beforeEach(() => {
   read.githubIntegration.mockReset().mockResolvedValue(none);
   read.xIntegration.mockReset().mockResolvedValue(none);
   read.mcpServers.mockReset().mockResolvedValue([]);
+  read.health.mockReset().mockResolvedValue({ status: 'ok', service: 'jian', mode: 'server' });
   api.replaceMcpServers.mockClear();
   api.saveXApp.mockReset();
   api.checkMcpServer.mockReset().mockImplementation(async (name: string) => ({
@@ -272,6 +274,39 @@ it('connects an MCP app as an OAuth server, beside the servers already there', a
       auth: 'oauth',
     }),
   ]);
+});
+
+it('offers ElevenLabs only where the gateway has an HTTPS address it can sign in from', async () => {
+  read.health.mockResolvedValue({ status: 'ok', service: 'jian', mode: 'local' });
+  await show('elevenlabs');
+  expect(button('Connect ElevenLabs', host)).toBeUndefined();
+  expect(host.textContent).toContain('the desktop app’s own gateway does not have');
+
+  await act(async () => root?.unmount());
+  read.health.mockResolvedValue({ status: 'ok', service: 'jian', mode: 'server' });
+  await show('elevenlabs');
+  expect(host.textContent).toContain('JIAN_PUBLIC_URL');
+  await press('Connect ElevenLabs', host);
+  expect(api.replaceMcpServers).toHaveBeenCalledWith([
+    expect.objectContaining({
+      name: 'elevenlabs',
+      url: 'https://api.elevenlabs.io/v1/mcp',
+      auth: 'oauth',
+    }),
+  ]);
+});
+
+it('counts a server saved at another known address under its app', async () => {
+  read.mcpServers.mockResolvedValue([
+    { name: 'voice_eu', transport: 'http', url: 'https://api.eu.residency.elevenlabs.io/v1/mcp' },
+    { name: 'avatars', transport: 'http', url: 'https://mcp.heygen.com/mcp/v1' },
+  ]);
+
+  await show('elevenlabs');
+  expect(host.textContent).toContain('voice_eu');
+  await act(async () => root?.unmount());
+  await show('heygen');
+  expect(host.textContent).toContain('avatars');
 });
 
 it('lists an app’s accounts and tools, and connects another account', async () => {
