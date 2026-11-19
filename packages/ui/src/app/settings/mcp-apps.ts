@@ -129,6 +129,14 @@ const heygenMark: AppMark = {
   path: 'M6 22h13a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h1zm6-17.001c1.647 0 3 1.351 3 3C15 9.647 13.647 11 12 11S9 9.647 9 7.999c0-1.649 1.353-3 3-3zM6 17.25c0-2.219 2.705-4.5 6-4.5s6 2.281 6 4.5V18H6v-.75z',
 };
 
+/**
+ * Composio: not its logo, which no openly licensed set carries, but a neutral glyph from Boxicons
+ * (MIT), tiles for the many apps it reaches.
+ */
+const composioMark: AppMark = {
+  path: 'M10 3H4a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4a1 1 0 0 0-1-1zM9 9H5V5h4v4zm11-6h-6a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4a1 1 0 0 0-1-1zm-1 6h-4V5h4v4zm-9 4H4a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1v-6a1 1 0 0 0-1-1zm-1 6H5v-4h4v4zm8-6c-2.206 0-4 1.794-4 4s1.794 4 4 4 4-1.794 4-4-1.794-4-4-4zm0 6c-1.103 0-2-.897-2-2s.897-2 2-2 2 .897 2 2-.897 2-2 2z',
+};
+
 /** `by` is written only where the maker is not called what the app is. */
 const CATALOG: Array<Omit<McpApp, 'url' | 'formerUrls' | 'by'> & { by?: string }> = [
   {
@@ -194,6 +202,14 @@ const CATALOG: Array<Omit<McpApp, 'url' | 'formerUrls' | 'by'> & { by?: string }
     description: 'The actions you set up on Zapier, across the apps it connects.',
     category: 'productivity',
     icon: siZapier,
+  },
+  {
+    id: 'composio',
+    name: 'Composio',
+    description:
+      'Hundreds of apps through one connection: Composio asks you to sign in to each app the first time the agent needs it.',
+    category: 'productivity',
+    icon: composioMark,
   },
   {
     id: 'make',

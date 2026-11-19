@@ -19,4 +19,10 @@ describe('the app a saved server is', () => {
     expect(mcpAppOf('https://mcp.higgsfield.ai.example.com/mcp')).toBeUndefined();
     expect(mcpAppOf('https://api.elevenlabs.io/v1/mcp/other')).toBeUndefined();
   });
+
+  it('is Composio at Composio Connect, and no app at one of its toolkit addresses', () => {
+    expect(mcpAppOf('https://connect.composio.dev/mcp')).toBe('composio');
+    expect(mcpAppOf('https://connect.composio.dev/mcp/')).toBe('composio');
+    expect(mcpAppOf('https://backend.composio.dev/v3/mcp/abc')).toBeUndefined();
+  });
 });
