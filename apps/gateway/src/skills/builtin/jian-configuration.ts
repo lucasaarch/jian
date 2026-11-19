@@ -52,14 +52,15 @@ In the main sidebar, in place of the chat: what every agent is given, in tabs, w
 
 ## Agent settings
 
-One agent's own, from the agent chooser at the foot of the sidebar. Like the app's Settings, it
-takes the whole window: its pages are listed where the sidebar was, under Back.
+One agent's own, from the agent chooser at the foot of the sidebar. Like Settings, it takes the
+whole window, its pages listed where the sidebar was, under Back.
 
 - **Identity**: name, picture, instructions, summary for the team and boundaries, and Compact
   conversations: whether its conversations are summarised near the model's limit, the default,
   or at a size the owner sets. See \`managing-context\`.
 - **Memories**: this agent's, as a list with a search and tabs for Permanent and Flash (temporary
-  ones that expire). A row opens its page: Edit, links, projects, and Forget under More.
+  ones). A row opens its page: Edit, links, projects, and Forget under More.
+- **Command secrets**: keys its commands may use (\`machine-tools\`).
 - **Channels**: on a server gateway, WhatsApp, Telegram, Email and API Server, with contact
   approvals and groups. Email goes through Resend or Cloudflare, chosen when it is connected,
   with JIAN_PUBLIC_URL set so the provider can reach the gateway. Resend takes an API key with

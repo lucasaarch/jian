@@ -7,6 +7,7 @@ import {
   Brain,
   Compass,
   Globe,
+  KeyRound,
   MessagesSquare,
   Plus,
   Search,
@@ -201,6 +202,15 @@ export function useAgentCommands({
         keywords: ['agent', 'memory', 'remember', 'facts'],
         icon: <Brain size={15} />,
         run: () => useAgentOverlay.getState().openSettings('memories'),
+      },
+      {
+        id: 'command-secrets',
+        group: 'Agent',
+        title: 'Command secrets',
+        detail: current.name,
+        keywords: ['agent', 'secret', 'api key', 'token', 'environment', 'credential'],
+        icon: <KeyRound size={15} />,
+        run: () => useAgentOverlay.getState().openSettings('secrets'),
       },
       // A server's alone: on this computer's gateway there is no such page.
       ...(server

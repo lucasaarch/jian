@@ -37,6 +37,7 @@ export const keys = {
   channels: (profileId: string) => ['profile', profileId, 'channels'] as const,
   contacts: (profileId: string) => ['profile', profileId, 'contacts'] as const,
   memories: (profileId: string) => ['profile', profileId, 'memories'] as const,
+  commandSecrets: (profileId: string) => ['profile', profileId, 'command-secrets'] as const,
   activities: (profileId: string) => ['profile', profileId, 'activities'] as const,
   /** Every conversation's context at once, which a turn anywhere in the profile makes stale. */
   contexts: (profileId: string) => ['profile', profileId, 'context'] as const,

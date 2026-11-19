@@ -28,6 +28,8 @@ import {
 import { z } from 'zod';
 import { isChatChannel } from '../channels/kinds.js';
 import { findContactBySession } from '../channels/repository.js';
+import { secretForms } from '../command-secrets/forms.js';
+import type { CommandSecrets } from '../command-secrets/service.js';
 import { fitPrompt, promptTokens, tokenCounter, truncatePrompt } from '../context/budget.js';
 import { withTurnNote } from '../context/build.js';
 import {
@@ -150,6 +152,7 @@ import {
   redactText,
   type StepResult,
 } from './results.js';
+import type { CommandSecretAccess } from './shell.js';
 import { type StepRequest, summaryCall } from './summary-call.js';
 import { plainTitle, type TitleModel, writeTitle } from './title.js';
 import { reason, toolFailure } from './tool-failure.js';
@@ -273,6 +276,8 @@ export type RuntimeServices = ToolServices & {
   objectives?: Pick<ObjectiveContinuation, 'continueAfter'>;
   workspaces?: Pick<Workspaces, 'forRun' | 'cloned' | 'touched'>;
   worktrees?: WorktreeService;
+  /** The owner's secrets for agents' commands: what a run offers, lends, and masks. */
+  commandSecrets?: Pick<CommandSecrets, 'usable' | 'reveal' | 'masks'>;
 };
 
 /**
@@ -317,6 +322,17 @@ async function actsOnComputer(
     actsHere?: (input: unknown, callId: string, signal?: AbortSignal) => Promise<boolean>;
   };
   return actsHere ? actsHere(input, callId, signal) : true;
+}
+
+/** What a run's `run_command` may lend: none offered when the agent has none to use. */
+async function commandSecretAccess(
+  commandSecrets: Pick<CommandSecrets, 'usable' | 'reveal'>,
+  profileId: string,
+): Promise<CommandSecretAccess | undefined> {
+  const offered = await commandSecrets.usable(profileId);
+  return offered.length
+    ? { offered, reveal: (names) => commandSecrets.reveal(profileId, names) }
+    : undefined;
 }
 
 export class AgentRuntime {
@@ -555,7 +571,7 @@ export class AgentRuntime {
   ) {
     const input = redactOutput(call.input, secrets);
     const written =
-      describer && !plainOnly(call.toolName)
+      describer && !plainOnly(call.toolName, call.input)
         ? await describeAction(describer, run, call, input, secrets)
         : null;
     const card =
@@ -702,6 +718,13 @@ export class AgentRuntime {
         if (selectedEnvKey) {
           secrets.add(selectedEnvKey);
         }
+      }
+
+      // Every command secret, in each form a command could print it, whichever agent may use it
+      // and whether or not this run lends one: a value written to a shared file by one command is
+      // there for any later one to read back.
+      for (const value of (await this.services.commandSecrets?.masks()) ?? []) {
+        for (const form of secretForms(value)) secrets.add(form);
       }
 
       // Anthropic checks that a subscription request comes from Claude Code, and the system
@@ -953,6 +976,11 @@ export class AgentRuntime {
           () => scale,
           email,
           replyTo,
+          // The owner's own conversations alone: a subagent acts on Auto, where nobody approves
+          // a command before it runs, and a look back runs no command at all.
+          !run.subagent && !learning && !session.remoteMachineId && this.services.commandSecrets
+            ? await commandSecretAccess(this.services.commandSecrets, profileId)
+            : undefined,
         ),
         ...(!learning && this.options.github && gitPlace
           ? githubGitTools({

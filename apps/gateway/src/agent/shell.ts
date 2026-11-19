@@ -3,7 +3,10 @@ import { writeFile } from 'node:fs/promises';
 import { isAbsolute, join } from 'node:path';
 import { type ToolSet, tool } from 'ai';
 import { z } from 'zod';
+import { secretForms } from '../command-secrets/forms.js';
+import type { OfferedSecret } from '../command-secrets/service.js';
 import { fileTools } from './files.js';
+import { redactText } from './results.js';
 import { confine, confined, reachableFolders } from './workspace.js';
 import { onOwnerComputer, workspaceHome, workspaceTemp } from './workspace-home.js';
 
@@ -166,28 +169,77 @@ const RUN_COMMAND = {
     "Run a command on the owner's computer, as the owner, and read what it printed. It starts in this chat's first folder, or in their home, which is also $HOME. Nothing confines it, so it can change anything of theirs: touch only what the task needs. Prefer a single command over a shell pipeline you cannot inspect. Anything destructive needs the owner to have asked for it in this conversation.",
 };
 
+/**
+ * The owner's command secrets this run may hand a command: what the agent is told of them, and
+ * how their values are read for one command, which refuses any this agent may not use.
+ */
+export type CommandSecretAccess = {
+  offered: readonly OfferedSecret[];
+  reveal: (names: readonly string[]) => Promise<Record<string, string>>;
+};
+
+/** What the agent reads of the secrets it may use: names and what each is for, never a value. */
+function secretsDescription(offered: readonly OfferedSecret[]): string {
+  const listed = offered
+    .map(({ name, description }) => `${name}${description ? ` (${description})` : ''}`)
+    .join('; ');
+
+  return ` The owner keeps secrets for your commands. Name the ones a command needs in \`secrets\`, and it gets each as an environment variable of that name, for that command alone: write "$NAME" in the command, never a value. You never see a value: wherever one would be printed it comes back as [REDACTED]. Send a secret only to the service it is for, and never write it to a file. Where this conversation asks before acting, the owner approves each such command, seeing which secrets it gets. Yours: ${listed}.`;
+}
+
+const refused = (stderr: string) => ({ exitCode: 126, stdout: '', stderr });
+
 export function shellTools(
   gitAccess: { readOnly: string[]; writable: string[]; sshCommand?: string } = {
     readOnly: [],
     writable: [],
   },
+  secrets?: CommandSecretAccess,
 ): ToolSet {
+  const names = secrets?.offered.map((secret) => secret.name) ?? [];
+  const base = z.object({
+    command: z.string().trim().min(1).max(4000),
+    cwd: absolute.optional(),
+    timeoutMs: z.number().int().min(1000).max(TIMEOUT_MS).default(30_000),
+  });
+  // Offered only to a run with secrets to use, and only theirs: a name it does not have fails
+  // the call's own check, before the call is approved or anything runs.
+  const [first, ...rest] = names;
+  const inputSchema = first
+    ? base.extend({
+        secrets: z
+          .array(z.enum([first, ...rest]))
+          .max(names.length)
+          .optional(),
+      })
+    : base;
+
   return {
     run_command: tool({
-      description: onOwnerComputer() ? RUN_COMMAND.owner : RUN_COMMAND.server,
-      inputSchema: z.object({
-        command: z.string().trim().min(1).max(4000),
-        cwd: absolute.optional(),
-        timeoutMs: z.number().int().min(1000).max(TIMEOUT_MS).default(30_000),
-      }),
-      execute: async ({ command, cwd, timeoutMs }) => {
+      description:
+        (onOwnerComputer() ? RUN_COMMAND.owner : RUN_COMMAND.server) +
+        (secrets?.offered.length ? secretsDescription(secrets.offered) : ''),
+      inputSchema,
+      execute: async (input: z.infer<typeof base> & { secrets?: string[] }) => {
+        const { command, cwd, timeoutMs } = input;
         if (/(?:^|[;&|\s])ssh-keygen(?:\s|$)/.test(command)) {
-          return {
-            exitCode: 126,
-            stdout: '',
-            stderr: 'SSH keys must be managed with the SSH key tools, not ssh-keygen.',
-          };
+          return refused('SSH keys must be managed with the SSH key tools, not ssh-keygen.');
         }
+        // Checked again here, at the moment it runs: an approved call is run from what was
+        // stored, not through the schema, and a secret may have been taken away since.
+        let lent: Record<string, string> = {};
+        if (input.secrets?.length) {
+          if (!secrets) return refused('Not run: this run has no command secrets to use.');
+          try {
+            lent = await secrets.reveal(input.secrets);
+          } catch (error) {
+            return refused(error instanceof Error ? error.message : 'Not run.');
+          }
+        }
+        // Masked here, before the result leaves the tool, in every form a command could print a
+        // value in; the run masks every secret of the installation again in what it records.
+        const masks = new Set(Object.values(lent).flatMap(secretForms));
+        const mask = (text: string) => (masks.size ? redactText(text, masks) : text);
         const home = await workspaceHome();
         const temp = await workspaceTemp();
         const directory = cwd ? await confine(cwd, 'read') : (reachableFolders()[0] ?? home);
@@ -199,7 +251,12 @@ export function shellTools(
             shell.args,
             {
               cwd: directory,
-              env: commandEnvironment({ home, temp }, process.env, gitAccess.sshCommand),
+              // The secrets reach the command as its environment alone: never its text, which
+              // the owner's timeline and the approval card show.
+              env: {
+                ...commandEnvironment({ home, temp }, process.env, gitAccess.sshCommand),
+                ...lent,
+              },
               timeout: timeoutMs,
               // Read past what is kept, so the end that is kept is the command's real end: a
               // command stopped at this size ends with whatever it printed by then.
@@ -212,8 +269,9 @@ export function shellTools(
               resolvePromise({
                 // Zero is success; a string here is a signal, such as a command that timed out.
                 exitCode: typeof status === 'number' ? status : status ? String(status) : 0,
-                stdout: clip(stdout, MAX_OUTPUT),
-                stderr: clip(stderr, MAX_OUTPUT),
+                // Masked whole, then cut: a cut through a value would leave part of it.
+                stdout: clip(mask(stdout), MAX_OUTPUT),
+                stderr: clip(mask(stderr), MAX_OUTPUT),
               });
             },
           );

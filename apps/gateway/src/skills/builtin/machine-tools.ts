@@ -20,9 +20,10 @@ A command may write only in this directory and read only it and the system's too
 supports it. The file tools, \`send_file\` and \`save_attachment\` follow the same line.
 
 A command does not inherit the gateway's environment: it gets \`PATH\`, \`HOME\`, the locale
-and a few install paths, and nothing else — no \`DATABASE_URL\`, no \`NODE_ENV\`, no keys.
-When a project needs a variable, set it in the command itself. Point database tests at a
-database made for them, never at the gateway's own. The network is not restricted.
+and a few install paths, and nothing else — no \`DATABASE_URL\`, no \`NODE_ENV\`, no keys but
+the command secrets you name (below). When a project needs a variable, set it in the command
+itself. Point database tests at a database made for them, never at the gateway's own. The network
+is not restricted.
 
 Check where you are: \`echo $JIAN_TOOLBOX\`. If it prints \`1\` you are in the Jian image and
 what follows holds. Otherwise the gateway runs directly on the owner's machine: find what
@@ -54,8 +55,8 @@ and the refusal above does not stop it. That calls for care, and is no way aroun
 read Jian's own data through a command.
 
 A command does not inherit the gateway's environment: it gets \`PATH\`, \`HOME\`, the locale and the
-owner's SSH agent, and nothing else — no \`NODE_ENV\`, no keys of the gateway's. When a project
-needs a variable, set it in the command itself.
+owner's SSH agent, and nothing else — no \`NODE_ENV\`, no keys but the command secrets you name
+(below). When a project needs a variable, set it in the command itself.
 
 Find what exists with \`command -v <tool>\`, and install nothing here unless the owner asks.
 
@@ -122,6 +123,16 @@ the image. Install what the task needs, not what might be handy, and say what yo
 
 `;
 
+const COMMAND_SECRETS = `The owner can keep keys for your commands in Jian, such as a transcription service's API key:
+command secrets, added in this agent's settings. When you have any, \`run_command\`'s description
+lists their names and what each is for. Name the ones a command needs in its \`secrets\` and write
+\`"$NAME"\` in the command: each reaches that one command as an environment variable, and whatever
+it prints of one comes back as [REDACTED]. You never see a value. Where the conversation asks
+before acting, the owner approves each such command. When a task needs a key you do not have, ask
+the owner to add it there; never ask them to paste one into the chat.
+
+`;
+
 const SERVER_LOGINS = `## Logins and keys
 
 - The shell's \`git\` reaches private repositories with the installation's SSH keys only. For
@@ -179,12 +190,12 @@ export const machineTools: Skill = {
   name: 'machine-tools',
   description:
     'Use before running commands or installing anything: what the machine has, how to install more without root, logins and keys, and the limits of a command.',
-  instructions: `# The machine you run commands on\n\n${SERVER_FILES}${IMAGE}${SERVER_INSTALLS}${SERVER_LOGINS}${LIMITS}`,
+  instructions: `# The machine you run commands on\n\n${SERVER_FILES}${IMAGE}${SERVER_INSTALLS}${SERVER_LOGINS}${COMMAND_SECRETS}${LIMITS}`,
 };
 
 const onOwnerComputer: Skill = {
   ...machineTools,
-  instructions: `# The computer you run commands on\n\n${OWNER_FILES}${OWNER_LOGINS}${LIMITS}`,
+  instructions: `# The computer you run commands on\n\n${OWNER_FILES}${OWNER_LOGINS}${COMMAND_SECRETS}${LIMITS}`,
 };
 
 export const machineToolsFor = (owner: boolean): Skill => (owner ? onOwnerComputer : machineTools);

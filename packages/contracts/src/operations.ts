@@ -14,6 +14,12 @@ import {
   telegramUpdateSchema,
 } from './channels.js';
 import {
+  commandSecretCreateSchema,
+  commandSecretParamsSchema,
+  commandSecretSchema,
+  commandSecretUpdateSchema,
+} from './command-secrets.js';
+import {
   artifactPageSchema,
   artifactQuerySchema,
   leaseInputSchema,
@@ -615,6 +621,39 @@ export const operations: Operation[] = [
     access: 'admin',
     params: z.strictObject({ keyId: z.uuid() }),
     response: z.strictObject({ id: z.uuid() }),
+  },
+  {
+    method: 'GET',
+    path: `${profile}/command-secrets`,
+    operationId: 'listCommandSecrets',
+    access: 'admin',
+    response: z.array(commandSecretSchema),
+  },
+  {
+    method: 'POST',
+    path: `${profile}/command-secrets`,
+    operationId: 'createCommandSecret',
+    access: 'admin',
+    body: commandSecretCreateSchema,
+    response: commandSecretSchema,
+    status: 201,
+  },
+  {
+    method: 'PATCH',
+    path: `${profile}/command-secrets/:name`,
+    operationId: 'updateCommandSecret',
+    access: 'admin',
+    params: commandSecretParamsSchema,
+    body: commandSecretUpdateSchema,
+    response: commandSecretSchema,
+  },
+  {
+    method: 'DELETE',
+    path: `${profile}/command-secrets/:name`,
+    operationId: 'deleteCommandSecret',
+    access: 'admin',
+    params: commandSecretParamsSchema,
+    response: z.strictObject({ name: z.string() }),
   },
   {
     method: 'GET',

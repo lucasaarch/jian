@@ -184,6 +184,40 @@ export const gatewaySecrets = pgTable('gateway_secrets', {
 });
 
 /**
+ * Secrets the owner keeps for agents' commands, by the environment variable a command reads them
+ * as. The value is in `gateway_secrets` under `command:<name>`, never here: a secret is the
+ * installation's, as a provider key is, so one key several agents use is typed and replaced once.
+ * Which agents may use it is `command_secret_agents`.
+ */
+export const commandSecrets = pgTable('command_secrets', {
+  name: text('name').primaryKey(),
+  description: text('description'),
+  createdAt,
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  lastUsedAt: timestamp('last_used_at', { withTimezone: true }),
+});
+
+/**
+ * The agents whose commands may receive a command secret. A deleted agent loses its rows; a
+ * secret no agent may use any more goes with it (`CommandSecrets.forgetAgent`).
+ */
+export const commandSecretAgents = pgTable(
+  'command_secret_agents',
+  {
+    name: text('name')
+      .notNull()
+      .references(() => commandSecrets.name, { onDelete: 'cascade' }),
+    profileId: uuid('profile_id')
+      .notNull()
+      .references(() => profiles.id, { onDelete: 'cascade' }),
+  },
+  (table) => [
+    primaryKey({ columns: [table.name, table.profileId] }),
+    index('command_secret_agents_profile').on(table.profileId),
+  ],
+);
+
+/**
  * The installation's MCP servers, reached by every agent. The document keeps no typed value:
  * those live in `gateway_secrets`, addressed by the server's name. `position` is the owner's
  * order, which is the order a run's tool catalog reads in.

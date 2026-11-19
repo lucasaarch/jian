@@ -8,6 +8,7 @@ import { registerOpenAiRoutes } from './channels/openai/routes.js';
 import { registerChannelRoutes } from './channels/routes.js';
 import type { Channels } from './channels/service.js';
 import type { WhatsAppConnections } from './channels/whatsapp/connections.js';
+import { registerCommandSecretRoutes } from './command-secrets/routes.js';
 import { registerCoordinationRoutes } from './coordination/routes.js';
 import { Coordination } from './coordination/service.js';
 import { registerDecisionRoutes } from './decisions/routes.js';
@@ -194,6 +195,7 @@ export function createApp(
     registerSecurityRoutes(routes, options);
     registerDeviceRoutes(routes, options);
     registerSshRoutes(routes, options);
+    registerCommandSecretRoutes(routes, options);
     registerPushRoutes(routes, options);
     registerRemoteRoutes(routes, options);
     registerSkillRoutes(routes, options);

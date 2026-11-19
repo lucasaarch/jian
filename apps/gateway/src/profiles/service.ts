@@ -25,14 +25,15 @@ export class Profiles {
   ) {}
 
   /**
-   * Run ahead of every delete, inside the same transaction the row dies in. Wired once, from
-   * outside — `Profiles` does not know `Channels` exists, only that something may need telling
-   * before a profile it is watching disappears (a live WhatsApp socket, an open webhook).
+   * Run ahead of every delete, in the order wired, inside the same transaction the row dies in.
+   * Wired from outside — `Profiles` does not know `Channels` exists, only that something may need
+   * telling before a profile it is watching disappears (a live WhatsApp socket, an open webhook,
+   * a command secret only it could use).
    */
-  private beforeDelete?: (profileId: string, tx: Queryable) => Promise<void>;
+  private beforeDelete: ((profileId: string, tx: Queryable) => Promise<void>)[] = [];
 
   useBeforeDelete(hook: (profileId: string, tx: Queryable) => Promise<void>): void {
-    this.beforeDelete = hook;
+    this.beforeDelete.push(hook);
   }
 
   async profile(id: string, reader: Queryable = this.store.db) {
@@ -143,7 +144,7 @@ export class Profiles {
     await this.profile(id);
 
     await this.store.transaction(id, async (tx) => {
-      await this.beforeDelete?.(id, tx);
+      for (const hook of this.beforeDelete) await hook(id, tx);
       await deleteProfileRow(tx, id);
     });
 
