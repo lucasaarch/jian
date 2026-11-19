@@ -2,7 +2,9 @@ import { generateText, type JSONValue, type LanguageModel, type LanguageModelUsa
 import type { Judge } from '../decisions/service.js';
 import { noul } from '../decisions/service.js';
 import { withClaudeCodeIdentity } from '../providers/claude-subscription.js';
+import type { OfferedSecret } from '../secrets/service.js';
 import { type ActionKind, requestText, secretNames } from './guard.js';
+import { lentNames } from './shell.js';
 
 /**
  * In a conversation on Auto, what may not run. Very little: an action whose harm cannot be
@@ -151,17 +153,20 @@ export type GuardModel = {
 export function guardrail({
   judge,
   model,
+  offered = [],
   signal,
 }: {
   judge?: Judge;
   model?: GuardModel;
+  /** The Secrets the run's commands may use: naming one variable lends all of its Secret. */
+  offered?: readonly OfferedSecret[];
   signal?: AbortSignal;
 }): Guardrail {
   return async ({ toolName, kind, input }) => {
     const ruled = ruleVerdict(toolName, kind, input);
     if (!ruled.allowed) return ruled;
 
-    const lent = toolName === 'run_command' ? secretNames(input) : [];
+    const lent = toolName === 'run_command' ? lentNames(offered, secretNames(input)) : [];
     // A command handed the owner's secrets is where a credential leaks if anywhere: the judge
     // is told so in words, not left to notice a field of the call.
     const action = [

@@ -2,7 +2,6 @@ import { existsSync, mkdtempSync, realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { reservedSecretEnvName } from '@jian/contracts';
-import { sql } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { afterAll, afterEach, describe, expect, it } from 'vitest';
 import { plainDescription } from '../src/agent/guard.js';
@@ -18,6 +17,7 @@ import { secretForms } from '../src/secrets/forms.js';
 import { secretFieldKey } from '../src/secrets/service.js';
 import { Telemetry } from '../src/telemetry/service.js';
 import { mockModel } from './helpers/model.js';
+import { everythingStored, leaksOf } from './helpers/secrets.js';
 import { testServices } from './helpers/services.js';
 
 const root = realpathSync(mkdtempSync(join(tmpdir(), 'jian-secrets-')));
@@ -68,24 +68,7 @@ const single = (envName: string, more: Record<string, unknown> = {}) => ({
   ...more,
 });
 
-/** Every row of every table, as text: what a backup of the installation would carry. */
-async function everythingStored(services: Awaited<ReturnType<typeof testServices>>) {
-  const read = async <T>(query: ReturnType<typeof sql>) =>
-    ((await services.store.db.execute(query)) as unknown as { rows: T[] }).rows;
-  const tables = await read<{ name: string }>(
-    sql`select table_name as name from information_schema.tables where table_schema = 'public'`,
-  );
-  const rows: string[] = [];
-  for (const { name } of tables) {
-    const found = await read<{ row: string }>(
-      sql`select t::text as row from ${sql.identifier(name)} t`,
-    );
-    rows.push(...found.map((item) => item.row));
-  }
-  return rows.join('\n');
-}
-
-const leaks = (text: string) => secretForms(VALUE).filter((form) => text.includes(form));
+const leaks = leaksOf(VALUE);
 
 describe('keeping a Secret', () => {
   it('never returns a sensitive value, from any route', async () => {
@@ -252,7 +235,7 @@ describe('keeping a Secret', () => {
       payload: { profileIds: [agent.id, other.id] },
     });
     expect(await services.secrets.reveal(other.id, ['ASSEMBLYAI_API_KEY'])).toEqual({
-      ASSEMBLYAI_API_KEY: VALUE,
+      ASSEMBLYAI_API_KEY: { value: VALUE, sensitive: true },
     });
   });
 
@@ -360,8 +343,8 @@ describe('the fields of a Secret', () => {
       { label: 'User', envName: 'ACME_USER', sensitive: false, value: 'ana' },
     ]);
     expect(await services.secrets.reveal(agent.id, ['ACME_KEY'])).toEqual({
-      ACME_KEY: VALUE,
-      ACME_USER: 'ana',
+      ACME_KEY: { value: VALUE, sensitive: true },
+      ACME_USER: { value: 'ana', sensitive: false },
     });
     // A field that went away takes its value with it.
     expect(
@@ -456,7 +439,7 @@ describe('Secrets agents make', () => {
       grants: [{ profileId: agent.id, grantedByProfileId: null }],
     });
     expect(await services.secrets.reveal(agent.id, ['VEGA_SHARED'])).toEqual({
-      VEGA_SHARED: VALUE,
+      VEGA_SHARED: { value: VALUE, sensitive: true },
     });
     expect(
       await services.gatewayVault.read(secretFieldKey(alone.id, 'VEGA_ALONE')),
@@ -657,6 +640,32 @@ describe('lending a secret to one command', () => {
     expect(result.stdout).toBe('[REDACTED]');
   });
 
+  it('masks a field made sensitive after the run started', async () => {
+    const { services, agent } = await installation();
+    const made = await services.secrets.create(
+      agent.id,
+      {
+        title: 'Acme login',
+        fields: [{ label: 'User', envName: 'ACME_USER', sensitive: false, value: VALUE }],
+      },
+      byOwner,
+    );
+    const shell = await shellOf(services, agent.id);
+    await services.secrets.update(
+      agent.id,
+      made.id,
+      { fields: [{ label: 'User', envName: 'ACME_USER', sensitive: true }] },
+      byOwner,
+    );
+
+    const result = await shell.run({
+      command: 'printf "%s" "$ACME_USER"',
+      secrets: ['ACME_USER'],
+      timeoutMs: 10_000,
+    });
+    expect(result.stdout).toBe('[REDACTED]');
+  });
+
   it('names on the approval card every variable the command gets', async () => {
     const { services, agent } = await installation();
     await services.secrets.create(
@@ -850,6 +859,41 @@ describe('a command with a secret on Auto', () => {
       },
     });
     expect(prompts[0]).toContain("receives the owner's secrets ASSEMBLYAI_API_KEY");
+  });
+
+  it('tells the guardrail every variable of the Secret a command names', async () => {
+    const prompts: string[] = [];
+    const judge = guardrail({
+      model: {
+        model: mockModel({
+          doGenerate: async (options) => {
+            prompts.push(JSON.stringify(options.prompt));
+            return stop('ALLOW');
+          },
+        }),
+        subscription: false,
+        account: async () => {},
+      },
+      offered: [
+        {
+          id: '00000000-0000-4000-8000-000000000001',
+          title: 'Acme login',
+          description: null,
+          sites: [],
+          fields: [
+            { label: 'User', envName: 'ACME_USER', sensitive: false, value: 'ana' },
+            { label: 'Password', envName: 'ACME_PASSWORD', sensitive: true, value: null },
+          ],
+        },
+      ],
+    });
+
+    await judge({
+      toolName: 'run_command',
+      kind: 'machine',
+      input: { command: 'acme login', secrets: ['ACME_USER'] },
+    });
+    expect(prompts[0]).toContain("receives the owner's secrets ACME_USER, ACME_PASSWORD");
   });
 
   it('writes its card from the call itself', () => {

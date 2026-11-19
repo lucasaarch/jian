@@ -59,7 +59,7 @@ it('carries every command secret across with its value, variable and agents', as
     });
   }
   expect(await services.secrets.reveal(vega.id, ['ASSEMBLYAI_API_KEY'])).toEqual({
-    ASSEMBLYAI_API_KEY: VALUE,
+    ASSEMBLYAI_API_KEY: { value: VALUE, sensitive: true },
   });
   await expect(db.execute(sql`SELECT 1 FROM command_secrets`)).rejects.toThrow();
   await expect(db.execute(sql`SELECT 1 FROM command_secret_agents`)).rejects.toThrow();

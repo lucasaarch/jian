@@ -5,7 +5,7 @@ import { secretEnvNameSchema } from '@jian/contracts';
 import { type ToolSet, tool } from 'ai';
 import { z } from 'zod';
 import { secretForms } from '../secrets/forms.js';
-import type { OfferedSecret } from '../secrets/service.js';
+import type { LentValue, OfferedSecret } from '../secrets/service.js';
 import { fileTools } from './files.js';
 import { redactText } from './results.js';
 import { confine, confined, reachableFolders } from './workspace.js';
@@ -173,11 +173,12 @@ const RUN_COMMAND = {
 /**
  * The owner's Secrets this run may hand a command: what the agent is told of them, and how their
  * values are read for one command. `reveal` takes variable names, and each one lends the whole
- * Secret it belongs to; it refuses any this agent may not use.
+ * Secret it belongs to; it refuses any this agent may not use. `offered` may be empty when the
+ * agent can save a Secret during the run.
  */
 export type SecretAccess = {
   offered: readonly OfferedSecret[];
-  reveal: (envNames: readonly string[]) => Promise<Record<string, string>>;
+  reveal: (envNames: readonly string[]) => Promise<Record<string, LentValue>>;
 };
 
 /** What the agent reads of the Secrets it may use: names and what each is for, never a value. */
@@ -189,14 +190,15 @@ function secretsDescription(offered: readonly OfferedSecret[]): string {
     })
     .join('; ');
 
-  return ` The owner keeps Secrets for your commands. Name a variable of the one a command needs in \`secrets\`, and it gets every variable of that Secret, for that command alone: write "$NAME" in the command, never a value. You never see a sensitive value: wherever one would be printed it comes back as [REDACTED]. Send a Secret only to the service it is for, and never write it to a file. Where this conversation asks before acting, the owner approves each such command, seeing which variables it gets. Yours: ${listed}.`;
+  return ` The owner keeps Secrets for your commands. Name a variable of the one a command needs in \`secrets\`, and it gets every variable of that Secret, for that command alone: write "$NAME" in the command, never a value. You never see a sensitive value: wherever one would be printed it comes back as [REDACTED]. Send a Secret only to the service it is for, and never write it to a file. Where this conversation asks before acting, the owner approves each such command, seeing which variables it gets. Yours: ${listed || 'none yet'}.`;
 }
 
 /**
  * Every variable a call would hand a command: naming one lends its whole Secret, so the card
- * the owner approves lists them all, not only the ones the agent wrote.
+ * the owner approves, and what Auto's guardrail is told, list them all, not only the ones the
+ * agent wrote. Read from what the run was offered: a Secret saved since shows as the names given.
  */
-function lentNames(offered: readonly OfferedSecret[], asked: readonly string[]): string[] {
+export function lentNames(offered: readonly OfferedSecret[], asked: readonly string[]): string[] {
   const lent = new Set<string>();
   for (const name of asked) {
     const whole = offered.find(({ fields }) => fields.some(({ envName }) => envName === name));
@@ -230,7 +232,7 @@ export function shellTools(
       tool({
         description:
           (onOwnerComputer() ? RUN_COMMAND.owner : RUN_COMMAND.server) +
-          (secrets?.offered.length ? secretsDescription(secrets.offered) : ''),
+          (secrets ? secretsDescription(secrets.offered) : ''),
         inputSchema,
         execute: async (input: z.infer<typeof base> & { secrets?: string[] }) => {
           const { command, cwd, timeoutMs } = input;
@@ -239,7 +241,7 @@ export function shellTools(
           }
           // Checked again here, at the moment it runs: an approved call is run from what was
           // stored, not through the schema, and a Secret may have been taken away since.
-          let lent: Record<string, string> = {};
+          let lent: Record<string, LentValue> = {};
           if (input.secrets?.length) {
             if (!secrets) return refused('Not run: this run has no Secrets to use.');
             try {
@@ -250,17 +252,12 @@ export function shellTools(
           }
           // Masked here, before the result leaves the tool, in every form a command could print a
           // value in; the run masks every sensitive value of the installation again in what it
-          // records. Only sensitive fields: a username lent with them prints as it is. A variable
-          // the run did not know when it started (a Secret saved since) is masked, to be safe.
-          const plain = new Set(
-            (secrets?.offered ?? []).flatMap(({ fields }) =>
-              fields.filter((field) => !field.sensitive).map((field) => field.envName),
-            ),
-          );
+          // records. Only sensitive fields, as they are now: a username lent with them prints as
+          // it is, and a field the owner made sensitive since the run began is masked.
           const masks = new Set(
-            Object.entries(lent)
-              .filter(([name]) => !plain.has(name))
-              .flatMap(([, value]) => secretForms(value)),
+            Object.values(lent)
+              .filter((field) => field.sensitive)
+              .flatMap((field) => secretForms(field.value)),
           );
           const mask = (text: string) => (masks.size ? redactText(text, masks) : text);
           const home = await workspaceHome();
@@ -278,7 +275,9 @@ export function shellTools(
                 // the owner's timeline and the approval card show.
                 env: {
                   ...commandEnvironment({ home, temp }, process.env, gitAccess.sshCommand),
-                  ...lent,
+                  ...Object.fromEntries(
+                    Object.entries(lent).map(([name, field]) => [name, field.value]),
+                  ),
                 },
                 timeout: timeoutMs,
                 // Read past what is kept, so the end that is kept is the command's real end: a

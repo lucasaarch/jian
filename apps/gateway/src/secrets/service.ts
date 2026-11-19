@@ -31,6 +31,12 @@ export type OfferedSecret = {
   fields: SecretField[];
 };
 
+/**
+ * A variable a command gets, and whether it is masked in what the command prints: read with the
+ * value, so a field made sensitive while a run goes on is masked from its next command.
+ */
+export type LentValue = { value: string; sensitive: boolean };
+
 /** The masking floor (`forms.ts`): shorter, a sensitive value would mask ordinary output. */
 const SHORTEST_SENSITIVE = 8;
 
@@ -307,7 +313,7 @@ export class Secrets {
    * from the agent since the run started is refused, as is any variable it may not use, before
    * anything runs.
    */
-  async reveal(profileId: string, envNames: readonly string[]): Promise<Record<string, string>> {
+  async reveal(profileId: string, envNames: readonly string[]): Promise<Record<string, LentValue>> {
     const wanted = [...new Set(envNames)];
     if (!wanted.length) return {};
     const allowed = await this.store.db
@@ -332,14 +338,18 @@ export class Secrets {
 
     const ids = [...new Set(allowed.map((row) => row.secretId))];
     const fields = await this.store.db
-      .select({ envName: secretFields.envName, vaultKey: secretFields.vaultKey })
+      .select({
+        envName: secretFields.envName,
+        vaultKey: secretFields.vaultKey,
+        sensitive: secretFields.sensitive,
+      })
       .from(secretFields)
       .where(inArray(secretFields.secretId, ids));
-    const values: Record<string, string> = {};
+    const values: Record<string, LentValue> = {};
     for (const field of fields) {
       const value = await this.vault.read(field.vaultKey);
       if (value === undefined) throw notHere();
-      values[field.envName] = value;
+      values[field.envName] = { value, sensitive: field.sensitive };
     }
     await this.store.db
       .update(secretEntries)
