@@ -126,9 +126,10 @@ takes the whole window: its pages are listed where the sidebar was, under Back.
   one printed.
   Its Artifacts tab shows this conversation's Artifacts as cards, as the Artifacts page does, with
   no pins or folders; Create something new begins the request, unsent, in this conversation's own
-  field. It opens on one while you are still writing it and shows it grow, with Writing… beside
-  its title. It draws one in a sealed frame, in the panel's theme: History opens an earlier
-  version, a button switches to its code, and it is copied, downloaded, and set Private or Public.
+  field. It opens on one while you are still writing it and shows it being made, with Writing…,
+  or Updating… as you change it. It draws one in a sealed frame, in the panel's theme: History
+  opens an earlier version, a button switches to its code, and it is copied, downloaded, and set
+  Private or Public.
   A React component stands centred on a dotted canvas unless it paints its own ground, with
   Tweaks beside it: the props it declares and its theme, to try it, never saved. A deck, which
   the panel names Slide, shows its slides small in a row on top and one large under it, with
