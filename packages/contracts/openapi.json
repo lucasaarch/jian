@@ -44885,6 +44885,18 @@
               "type": "string",
               "const": "1"
             }
+          },
+          {
+            "name": "theme",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "dark",
+                "light"
+              ]
+            }
           }
         ],
         "responses": {

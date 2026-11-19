@@ -4,6 +4,7 @@ import type { AddressInfo } from 'node:net';
 import {
   ARTIFACT_EDIT_MESSAGE,
   ARTIFACT_FRAME_MESSAGE,
+  ARTIFACT_THEME_MESSAGE,
   type SessionArtifactType,
 } from '@jian/contracts';
 import { type Browser, chromium, type Frame, type Page } from 'playwright';
@@ -74,7 +75,16 @@ describe.runIf(existsSync(process.env.PLAYWRIGHT_EXECUTABLE_PATH ?? chromium.exe
 
         asked.push(url.pathname);
         if (kind === 'frame') {
-          return send(artifactFrame(type, url.searchParams.has('edit')), artifactPolicy("'self'"));
+          const theme = url.searchParams.get('theme') || null;
+          return send(
+            artifactFrame(
+              type,
+              url.searchParams.has('edit'),
+              false,
+              theme === null ? undefined : (theme as 'dark'),
+            ),
+            artifactPolicy("'self'"),
+          );
         }
         if (kind === 'public') {
           const source = type === 'deck' ? DECK : (SOURCE[type] ?? '');
@@ -87,7 +97,7 @@ describe.runIf(existsSync(process.env.PLAYWRIGHT_EXECUTABLE_PATH ?? chromium.exe
           const edit = url.searchParams.has('edit');
           const wait = url.searchParams.has('wait');
           return send(`<!doctype html><body style="margin:0">
-<iframe id="held" sandbox="allow-scripts" style="border:0;width:900px;height:600px" src="/frame/${url.searchParams.get('type')}${edit ? '?edit=1' : ''}"></iframe>
+<iframe id="held" sandbox="allow-scripts" style="border:0;width:900px;height:600px" src="/frame/${url.searchParams.get('type')}?${edit ? 'edit=1&' : ''}theme=${url.searchParams.get('theme') ?? ''}"></iframe>
 <script>
 const held = document.getElementById('held');
 window.answers = [];
@@ -165,6 +175,69 @@ ${wait ? '' : "held.addEventListener('load', window.hand, { once: true });"}
         expect(await read(page), type).toContain(text);
         await page.close();
       }
+    });
+
+    it("follows the panel's theme, not the system's, and changes with it", async () => {
+      // A dark panel on a light system: the frame must be dark all the way in, or the browser
+      // paints an opaque white canvas behind it.
+      for (const type of ['html', 'react', 'markdown'] as const) {
+        handed.set(`theme-${type}`, SOURCE[type] ?? '');
+        const page = await browser.newPage({ colorScheme: 'light' });
+        await page.goto(`${origin}/panel/theme-${type}?type=${type}&theme=dark`);
+        await expect
+          .poll(() => read(page), { message: type })
+          .toMatch(/A page ran|A component|A document/);
+        const looks = async () =>
+          (
+            await Promise.all(
+              page
+                .frames()
+                .filter((frame) => frame.parentFrame())
+                .map((frame) =>
+                  frame
+                    .evaluate(
+                      "getComputedStyle(document.documentElement).colorScheme + ',' + document.documentElement.classList.contains('dark')",
+                    )
+                    .catch(() => ''),
+                ),
+            )
+          ).filter(Boolean);
+        await expect.poll(async () => (await looks()).length, { message: type }).toBeGreaterThan(0);
+        expect(await looks(), type).toSatisfy((all: string[]) =>
+          all.every((look) => look.startsWith('dark,')),
+        );
+        // The page that runs in the frame carries the class that dark: variants read.
+        expect(await looks(), type).toContain('dark,true');
+
+        await page.evaluate(
+          `document.getElementById('held').contentWindow.postMessage({ ${ARTIFACT_THEME_MESSAGE}: 'light' }, '*')`,
+        );
+        await expect
+          .poll(async () => (await looks()).every((look) => look === 'light,false'), {
+            message: type,
+          })
+          .toBe(true);
+        await page.close();
+      }
+    });
+
+    it('lays a document out as a column of its own, which prints on the whole page', async () => {
+      const page = await browser.newPage({ viewport: { width: 1200, height: 800 } });
+      await page.goto(`${origin}/public/markdown`);
+      await expect.poll(() => read(page)).toContain('A document');
+      const root = async () =>
+        (await page
+          .frames()
+          .at(-1)
+          ?.evaluate(
+            "(() => { const r = document.getElementById('root'); return [r.getBoundingClientRect().width, getComputedStyle(r).maxWidth, getComputedStyle(document.documentElement).colorScheme]; })()",
+          )) as [number, string, string];
+      const [width, max] = await root();
+      expect([width, max]).toEqual([704, '704px']);
+      // Printed to PDF: the light scheme and no column, whatever the reader's system.
+      await page.emulateMedia({ media: 'print', colorScheme: 'dark' });
+      expect(await root()).toEqual([expect.any(Number), 'none', 'light']);
+      await page.close();
     });
 
     it("keeps a slide's frame clear until the slide has drawn, then white under it", async () => {

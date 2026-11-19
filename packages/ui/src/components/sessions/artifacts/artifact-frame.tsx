@@ -3,10 +3,12 @@
 import {
   ARTIFACT_EDIT_MESSAGE,
   ARTIFACT_FRAME_MESSAGE,
+  ARTIFACT_THEME_MESSAGE,
   type SessionArtifactType,
 } from '@jian/contracts';
-import { type CSSProperties, type RefObject, useEffect, useRef } from 'react';
+import { type CSSProperties, type RefObject, useEffect, useRef, useState } from 'react';
 import { gatewayConnection } from '../../../platform/gateway';
+import { useThemeChoice } from '../../shell/theme';
 
 /**
  * One Artifact, drawn. What an agent wrote runs here, so the frame is sealed three ways:
@@ -24,6 +26,10 @@ import { gatewayConnection } from '../../../platform/gateway';
  * `editing` loads the other frame of the type, the one the owner edits by hand in. It is as
  * sealed, and runs nothing of the Artifact. The panel reads one thing from it, and only when
  * the owner saves: the edited markup, asked for and checked in edit.ts.
+ *
+ * The frame follows the panel's theme, not the system's: it is loaded with the theme the panel
+ * has (a frame whose colour scheme differs from its element is painted white behind it), and told
+ * when it changes, so nothing reloads.
  *
  * Mount it with a key per Artifact, version and way of showing it: a new source is a new frame.
  */
@@ -70,12 +76,24 @@ export function ArtifactFrame({
   const own = useRef<HTMLIFrameElement>(null);
   const element = frame ?? own;
   const handed = useRef(false);
+  const { theme } = useThemeChoice();
+  // The address is the first theme's for good: a new one would load the frame again.
+  const [first] = useState(theme);
+
+  useEffect(() => {
+    if (!handed.current) return;
+    element.current?.contentWindow?.postMessage({ [ARTIFACT_THEME_MESSAGE]: theme }, '*');
+  }, [theme, element]);
 
   // The panel being resized changes the scale while a page is open for editing.
   useEffect(() => {
     if (!editing || !handed.current) return;
     element.current?.contentWindow?.postMessage({ [ARTIFACT_EDIT_MESSAGE]: { scale } }, '*');
   }, [editing, scale, element]);
+
+  const query = [editing ? 'edit=1' : presenting ? 'present=1' : '', `theme=${first}`]
+    .filter(Boolean)
+    .join('&');
 
   return (
     <iframe
@@ -84,14 +102,18 @@ export function ArtifactFrame({
       sandbox="allow-scripts"
       referrerPolicy="no-referrer"
       {...(lazy ? { loading: 'lazy' as const } : {})}
-      src={`${gatewayConnection().origin}/v1/artifact-frames/${type}${editing ? '?edit=1' : presenting ? '?present=1' : ''}`}
+      src={`${gatewayConnection().origin}/v1/artifact-frames/${type}?${query}`}
       className={className}
-      style={style}
+      style={{ colorScheme: first, ...style }}
       onLoad={(event) => {
         // Only the first load is the gateway's frame. A page that loads again, or takes itself
         // somewhere else, is handed nothing.
         if (handed.current) return;
         handed.current = true;
+        // The theme may have changed while the frame was loading.
+        if (theme !== first) {
+          event.currentTarget.contentWindow?.postMessage({ [ARTIFACT_THEME_MESSAGE]: theme }, '*');
+        }
         // A sealed frame's origin cannot be named, so the target is `*`. What is sent is only
         // the Artifact's own source.
         event.currentTarget.contentWindow?.postMessage(
