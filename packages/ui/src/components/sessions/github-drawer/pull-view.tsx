@@ -2,16 +2,16 @@
 
 import { useQueryClient } from '@tanstack/react-query';
 import { ArrowRight, Check, Copy, RefreshCw, Sparkles } from 'lucide-react';
-import { useState } from 'react';
+import { type ReactNode, useState } from 'react';
 import { toast } from 'sonner';
-import { Action, Segmented } from '../../../kit';
+import { Action, HoverTip, Segmented } from '../../../kit';
 import { iconButton } from '../../../kit/icon-button';
 import type { GatewayApi, GitHubMergeMethod, GitHubPull } from '../../../lib/api';
 import { date } from '../../../lib/format';
 import { keys } from '../../../lib/query/keys';
 import { FileFilter, WrapSwitch } from '../diff-controls';
 import { InspectorBody } from '../inspector';
-import { MergeButton, MergeConfirm } from './merge';
+import { MergeButton, MergeConfirm, mergeBlocked } from './merge';
 import { CheckMark, Person, StatePill, Written } from './parts';
 import { Changes, Checks, checksStanding, Reviews } from './pull-sections';
 
@@ -21,19 +21,48 @@ type PullApi = Pick<
   'githubPullFile' | 'markGithubPullReady' | 'mergeGithubPull' | 'updateGithubPullBranch'
 >;
 
-/** What stands in the way of merging. A clean branch needs no line: its merge button says it. */
-const mergeable: Record<
-  Exclude<GitHubPull['mergeable'], 'clean'>,
-  { note: string; colour: string }
-> = {
-  conflicts: { note: 'This branch has conflicts with the base branch.', colour: 'text-bad' },
-  blocked: {
-    note: 'Merging is blocked by the repository’s rules or pending reviews.',
-    colour: 'text-warn',
-  },
-  behind: { note: 'This branch is behind the base branch.', colour: 'text-warn' },
-  unknown: { note: 'Checking whether it can merge…', colour: 'text-muted' },
-};
+/** What stands in the way of merging. A clean branch needs no word: its merge button says it. */
+function mergeNote(pull: GitHubPull): string | undefined {
+  switch (pull.mergeable) {
+    case 'conflicts':
+      return 'This branch has conflicts with the base branch.';
+    case 'blocked':
+      return pull.canBypassRules
+        ? 'Merging is blocked by the repository’s rules or pending reviews. Jian’s GitHub App may bypass them.'
+        : 'Merging is blocked by the repository’s rules or pending reviews. To merge from here anyway, add Jian’s GitHub App to the bypass list of the branch’s rulesets.';
+    case 'behind':
+      return 'This branch is behind the base branch.';
+    case 'unknown':
+      return 'Checking whether it can merge…';
+    default:
+      return undefined;
+  }
+}
+
+/**
+ * Where the pull request stands, on the action it is about, under the pointer or the keyboard's
+ * focus, instead of a line of its own. A disabled button takes neither, so the wrapper takes the
+ * focus in its place; read aloud, the words follow the button.
+ */
+function StatusTip({
+  note,
+  disabled = false,
+  children,
+}: {
+  note: string | undefined;
+  disabled?: boolean;
+  children: ReactNode;
+}) {
+  if (!note) return children;
+  return (
+    <HoverTip tip={note}>
+      <span className="inline-flex" tabIndex={disabled ? 0 : undefined}>
+        {children}
+        <span className="sr-only">{note}</span>
+      </span>
+    </HoverTip>
+  );
+}
 
 type PullTab = 'changes' | 'description' | 'checks' | 'reviews';
 /** The tab each pull request was left on, for as long as the panel is open. */
@@ -70,9 +99,10 @@ const checksNames = {
 /**
  * A pull request: where it stands and its branches in one line, its title, whether it can merge
  * and what to do about it, then its changes, description, checks and reviews. Its head is kept
- * short, since everything it takes comes off the diffs under it. A branch in conflict offers the
- * agent's way to settle it in the place of merging and of the line saying so. The owner merges
- * from any conversation, since only the owner reads the panel.
+ * short, since everything it takes comes off the diffs under it: what stands in the way of merging
+ * reads on its action, which is disabled when it cannot go on. A branch in conflict offers the
+ * agent's way to settle it in the place of merging. The owner merges from any conversation, since
+ * only the owner reads the panel.
  */
 export function PullView({
   api,
@@ -125,12 +155,8 @@ export function PullView({
   const behind = open && pull.mergeable === 'behind';
   const fixable = open && pull.mergeable === 'conflicts' && Boolean(fixConflicts);
   const readyForReview = open && pull.draft;
-  const merging = open && !pull.draft && pull.mergeable !== 'conflicts';
-  const state = pull.draft
-    ? { note: 'A draft does not merge until it is marked ready.', colour: 'text-muted' }
-    : pull.mergeable === 'clean'
-      ? undefined
-      : mergeable[pull.mergeable];
+  const merging = open && !pull.draft;
+  const note = mergeNote(pull);
 
   const merge = async (method: GitHubMergeMethod) => {
     setBusy(true);
@@ -236,43 +262,46 @@ export function PullView({
               <Copy size={13} aria-hidden="true" />
             </button>
           </div>
-          {open && (
-            <div className="grid gap-2.5">
-              {state && !fixable && !behind && (
-                <p className={`text-xs ${state.colour}`}>{state.note}</p>
+          {(fixable || merging || behind || readyForReview) && (
+            <div className="flex flex-wrap gap-2">
+              {fixable ? (
+                <StatusTip note={note}>
+                  <Action tone="outline" size="small" busy={fixing} onClick={() => void fix()}>
+                    {!fixing && <Sparkles size={13} aria-hidden="true" />}
+                    Fix merge conflicts
+                  </Action>
+                </StatusTip>
+              ) : behind ? (
+                <StatusTip note={note}>
+                  <Action
+                    tone="outline"
+                    size="small"
+                    busy={updating}
+                    onClick={() => void updateBranch()}
+                  >
+                    {!updating && <RefreshCw size={13} aria-hidden="true" />}
+                    Update branch
+                  </Action>
+                </StatusTip>
+              ) : (
+                merging && (
+                  <StatusTip note={note} disabled={mergeBlocked(pull)}>
+                    <MergeButton pull={pull} merge={setConfirming} />
+                  </StatusTip>
+                )
               )}
-              {(fixable || merging || behind || readyForReview) && (
-                <div className="flex flex-wrap gap-2">
-                  {fixable ? (
-                    <Action tone="outline" size="small" busy={fixing} onClick={() => void fix()}>
-                      {!fixing && <Sparkles size={13} aria-hidden="true" />}
-                      Fix merge conflicts
-                    </Action>
-                  ) : behind ? (
-                    <Action
-                      tone="outline"
-                      size="small"
-                      busy={updating}
-                      onClick={() => void updateBranch()}
-                    >
-                      {!updating && <RefreshCw size={13} aria-hidden="true" />}
-                      Update branch
-                    </Action>
-                  ) : (
-                    merging && <MergeButton pull={pull} merge={setConfirming} />
-                  )}
-                  {readyForReview && (
-                    <Action
-                      tone="outline"
-                      size="small"
-                      busy={readying}
-                      onClick={() => void markReady()}
-                    >
-                      {!readying && <Check size={13} aria-hidden="true" />}
-                      Mark as Ready
-                    </Action>
-                  )}
-                </div>
+              {readyForReview && (
+                <StatusTip note="A draft does not merge until it is marked ready.">
+                  <Action
+                    tone="outline"
+                    size="small"
+                    busy={readying}
+                    onClick={() => void markReady()}
+                  >
+                    {!readying && <Check size={13} aria-hidden="true" />}
+                    Mark as Ready
+                  </Action>
+                </StatusTip>
               )}
             </div>
           )}

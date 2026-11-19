@@ -2105,6 +2105,9 @@
                         "unknown"
                       ]
                     },
+                    "canBypassRules": {
+                      "type": "boolean"
+                    },
                     "mergeMethods": {
                       "maxItems": 3,
                       "type": "array",
