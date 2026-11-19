@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process';
 import { createDecipheriv, pbkdf2Sync } from 'node:crypto';
 import { existsSync } from 'node:fs';
-import { copyFile, mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -95,17 +95,39 @@ const decrypt = (encrypted: Uint8Array, key: Buffer, version: number) => {
   return (version >= 24 ? plain.subarray(32) : plain).toString('utf8');
 };
 
+/** What the owner is told when macOS keeps a browser's own files from Jian. */
+const NEEDS_DISK_ACCESS = (browser: string) =>
+  `macOS did not let Jian read ${browser}'s cookies. Give Jian Full Disk Access in System Settings › Privacy & Security, then try again.`;
+
+/**
+ * The bytes of a browser's file, into a file of ours. Only the bytes: `copyFile` also carries the
+ * file's ACLs and extended attributes, which macOS can refuse to copy (EPERM) where reading the
+ * file itself is allowed. Where reading is refused too, macOS wants Full Disk Access for Jian.
+ */
+async function copyBytes(from: string, to: string, browser: string) {
+  let bytes: Buffer;
+  try {
+    bytes = await readFile(from);
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === 'EPERM' || code === 'EACCES') throw new Error(NEEDS_DISK_ACCESS(browser));
+    throw error;
+  }
+  await writeFile(to, bytes, { mode: 0o600 });
+}
+
 /** A copy is read, not the file: the browser may hold it open, and it must never be written. */
 export async function readChromiumCookies(
   file: string,
   password: string,
   now = Date.now() / 1000,
+  browser = 'the browser',
 ): Promise<ImportedCookie[]> {
   const temporary = await mkdtemp(join(tmpdir(), 'jian-cookies-'));
   try {
     const copy = join(temporary, 'Cookies');
-    await copyFile(file, copy);
-    if (existsSync(`${file}-wal`)) await copyFile(`${file}-wal`, `${copy}-wal`);
+    await copyBytes(file, copy, browser);
+    if (existsSync(`${file}-wal`)) await copyBytes(`${file}-wal`, `${copy}-wal`, browser);
     const database = new DatabaseSync(copy);
     try {
       const key = pbkdf2Sync(password, 'saltysalt', 1003, 16, 'sha1');
@@ -227,7 +249,12 @@ async function read(source: CookieSourceId): Promise<ImportedCookie[]> {
   const browser = CHROMIUM[source];
   const file = browser && (await chromiumCookieFile(browser.dir));
   if (!browser || !file) throw new Error('No cookies were found for that browser');
-  return readChromiumCookies(file, await keychainPassword(browser.keychain));
+  return readChromiumCookies(
+    file,
+    await keychainPassword(browser.keychain),
+    Date.now() / 1000,
+    browser.name,
+  );
 }
 
 export async function importCookies(
