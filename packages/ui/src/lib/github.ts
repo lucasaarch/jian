@@ -23,7 +23,7 @@ export function githubOutcome(
   if (!result) return undefined;
   if (result === 'connected') return { text: 'GitHub account connected.', failed: false };
   if (result === 'registered') {
-    return { text: 'GitHub App registered. Open its details to connect accounts.', failed: false };
+    return { text: 'GitHub App registered. Now connect an account.', failed: false };
   }
 
   return {

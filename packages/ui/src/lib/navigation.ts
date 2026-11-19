@@ -26,6 +26,55 @@ export const artifactsPath = (profileId: string) => agentPath(profileId, 'artifa
 /** Whether a pathname is an agent's Artifacts. */
 export const onArtifacts = (pathname: string) => /^\/agents\/[^/]+\/artifacts\/?$/.test(pathname);
 
+/**
+ * What the agent can use, in place of its chat: the connectors and the skills every agent
+ * shares. Given a tab, the address opens Plugins on it.
+ */
+export const pluginsPath = (profileId: string, tab?: 'connectors' | 'skills') =>
+  agentPath(profileId, tab ? `plugins?tab=${tab}` : 'plugins');
+
+/** One skill's own page, under Plugins: built-in or of the library, by its name. */
+export const skillPath = (profileId: string, name: string) =>
+  agentPath(profileId, `plugins/skills/${encodeURIComponent(name)}`);
+
+/**
+ * One connector's own page, under Plugins, by its id: `github`, an app of the catalog, or
+ * `custom:` and the name of a server the owner added. `from` is the tab it was opened from,
+ * which its way back returns to.
+ */
+export const connectorPath = (profileId: string, id: string, from?: 'connectors') =>
+  agentPath(
+    profileId,
+    `plugins/connectors/${encodeURIComponent(id)}${from ? `?from=${from}` : ''}`,
+  );
+
+const SKILL = /^\/agents\/[^/]+\/plugins\/skills\/([^/]+)\/?$/;
+const CONNECTOR = /^\/agents\/[^/]+\/plugins\/connectors\/([^/]+)\/?$/;
+
+/** What an address of that shape names, as it was written before it was escaped. */
+function namedAt(shape: RegExp, pathname: string): string | undefined {
+  const name = shape.exec(pathname)?.[1];
+
+  try {
+    return name && decodeURIComponent(name);
+  } catch {
+    // An address cut mid-escape names nothing; the page says there is no such plugin.
+    return name;
+  }
+}
+
+/** The skill whose page a pathname is, by its name; undefined anywhere else. */
+export const skillAt = (pathname: string) => namedAt(SKILL, pathname);
+
+/** The connector whose page a pathname is, by its id; undefined anywhere else. */
+export const connectorAt = (pathname: string) => namedAt(CONNECTOR, pathname);
+
+/** Whether a pathname is an agent's Plugins, or the page of one skill or connector under them. */
+export const onPlugins = (pathname: string) =>
+  /^\/agents\/[^/]+\/plugins\/?$/.test(pathname) ||
+  SKILL.test(pathname) ||
+  CONNECTOR.test(pathname);
+
 /** What the agent does at a time, in place of its chat. */
 export const schedulesPath = (profileId: string) => agentPath(profileId, 'schedules');
 

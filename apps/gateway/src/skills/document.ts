@@ -7,6 +7,8 @@ export type SkillDocument = {
   name: string;
   description: string;
   instructions: string;
+  /** As the frontmatter names it, when it does: "MIT". */
+  license?: string;
 };
 
 function unquote(value: string): string {
@@ -17,8 +19,8 @@ function unquote(value: string): string {
 
 /**
  * Reads the open SKILL.md format: a YAML block between `---` fences, then markdown.
- * Only `name` and `description` are read, so the nested keys other runtimes add — allowed
- * tools, MCP dependencies — are skipped rather than misparsed. Not a YAML implementation.
+ * Only `name`, `description` and `license` are read, so the nested keys other runtimes add —
+ * allowed tools, MCP dependencies — are skipped rather than misparsed. Not a YAML implementation.
  */
 export function parseSkillDocument(text: string, fallbackName?: string): SkillDocument {
   const match = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/.exec(text.replace(/^﻿/, ''));
@@ -40,6 +42,7 @@ export function parseSkillDocument(text: string, fallbackName?: string): SkillDo
   const name = (fields.get('name') ?? fallbackName ?? '').toLowerCase();
   const description = fields.get('description') ?? '';
   const instructions = (match[2] as string).trim();
+  const license = fields.get('license')?.slice(0, 100);
 
   if (!/^[a-z0-9_-]{1,64}$/.test(name)) {
     throw new GatewayError(422, 'SKILL.md needs a name of letters, digits, hyphens or underscores');
@@ -57,5 +60,6 @@ export function parseSkillDocument(text: string, fallbackName?: string): SkillDo
     name,
     description: description.slice(0, 300),
     instructions: instructions.slice(0, MAX_INSTRUCTIONS),
+    ...(license ? { license } : {}),
   };
 }

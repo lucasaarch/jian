@@ -23,18 +23,20 @@ const SECURITY_HEADERS = [
  * is now. The query goes along: GitHub's outcome rides on `/settings/integrations/github`.
  */
 const MOVED = [
-  // The gateway's screens left the agent for Settings, its integrations onto one page, and
-  // Remote became Machines.
+  // The gateway's screens left the agent for Settings, its integrations for Plugins, and Remote
+  // became Machines.
   ['/agents/:profileId/:page(providers|models|ssh-keys)/:rest*', '/settings/:page'],
-  ['/agents/:profileId/integrations/:rest*', '/settings/apps'],
+  ['/agents/:profileId/integrations/:rest*', '/agents/:profileId/plugins'],
   ['/agents/:profileId/remote/:rest*', '/settings/machines'],
-  // Integrations became Apps and MCP servers. Its addresses stay for good: GitHub and X send the
-  // owner back to them, as every gateway, old or new, is told to.
+  // Integrations became Apps and MCP servers, and those became Plugins, which the panel sends
+  // `/settings/apps` on to once it knows the agent in use. These addresses stay for good: GitHub
+  // and X send the owner back to them, as every gateway, old or new, is told to.
   ['/settings/integrations/:rest*', '/settings/apps'],
   ['/settings/remote', '/settings/machines'],
-  // An agent's skills, memories and channels are pages of its settings overlay, which these
-  // older addresses open before going on to its chats.
-  ['/agents/:profileId/:tab(skills|memories|channels)', '/agents/:profileId/customize/:tab'],
+  // Skills are every agent's, a tab of Plugins. An agent's memories and channels are pages of
+  // its settings overlay, which these older addresses open before going on to its chats.
+  ['/agents/:profileId/skills', '/agents/:profileId/plugins?tab=skills'],
+  ['/agents/:profileId/:tab(memories|channels)', '/agents/:profileId/customize/:tab'],
   ['/agents/:profileId/identity', '/agents/:profileId/settings'],
   // Projects are created and chosen in the composer; their screen is gone.
   ['/agents/:profileId/projects/:rest*', '/agents/:profileId/sessions'],

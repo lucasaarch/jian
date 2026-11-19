@@ -1513,7 +1513,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/profiles/{profileId}/built-in-skills": {
+    "/v1/skills": {
         parameters: {
             query?: never;
             header?: never;
@@ -1521,16 +1521,17 @@ export interface paths {
             cookie?: never;
         };
         /** @description Required permission: admin. */
-        get: operations["listBuiltinSkills"];
+        get: operations["listSkills"];
         put?: never;
-        post?: never;
+        /** @description Required permission: admin. */
+        post: operations["createSkill"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/v1/profiles/{profileId}/skills/import": {
+    "/v1/skills/import": {
         parameters: {
             query?: never;
             header?: never;
@@ -1541,6 +1542,92 @@ export interface paths {
         put?: never;
         /** @description Required permission: admin. */
         post: operations["importSkill"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/skills/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** @description Required permission: admin. */
+        delete: operations["deleteSkill"];
+        options?: never;
+        head?: never;
+        /** @description Required permission: admin. */
+        patch: operations["updateSkill"];
+        trace?: never;
+    };
+    "/v1/skills/{name}/enabled": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** @description Required permission: admin. */
+        put: operations["setSkillEnabled"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/skills/{name}/upstream": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Required permission: admin. */
+        get: operations["checkSkillUpstream"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/skills/{name}/update": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Required permission: admin. */
+        post: operations["updateSkillFromSource"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/built-in-skills": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Required permission: admin. */
+        get: operations["listBuiltinSkills"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -16716,13 +16803,11 @@ export interface operations {
             };
         };
     };
-    listBuiltinSkills: {
+    listSkills: {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                profileId: string;
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
@@ -16743,13 +16828,154 @@ export interface operations {
                             ref?: string;
                             marketplace?: string;
                             plugin?: string;
+                            license?: string;
                             /** Format: date-time */
                             importedAt: string;
                         };
                         /** @constant */
                         writtenBy?: "agent";
+                        /** Format: uuid */
+                        authorProfileId?: string;
                         enabled: boolean;
+                        version: number;
+                        /** Format: date-time */
+                        createdAt: string;
+                        /** Format: date-time */
+                        updatedAt: string;
                     }[];
+                };
+            };
+            /** @description Error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    createSkill: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    name: string;
+                    description: string;
+                    instructions: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Success */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        name: string;
+                        description: string;
+                        instructions: string;
+                        origin?: {
+                            /** Format: uri */
+                            url: string;
+                            ref?: string;
+                            marketplace?: string;
+                            plugin?: string;
+                            license?: string;
+                            /** Format: date-time */
+                            importedAt: string;
+                        };
+                        /** @constant */
+                        writtenBy?: "agent";
+                        /** Format: uuid */
+                        authorProfileId?: string;
+                        enabled: boolean;
+                        version: number;
+                        /** Format: date-time */
+                        createdAt: string;
+                        /** Format: date-time */
+                        updatedAt: string;
+                    };
                 };
             };
             /** @description Error */
@@ -16839,9 +17065,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                profileId: string;
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody: {
@@ -16861,111 +17085,730 @@ export interface operations {
                 content: {
                     "application/json": {
                         name: string;
+                        description: string;
                         instructions: string;
-                        /** @default  */
-                        summary: string;
-                        /** @default null */
-                        avatar: string | null;
-                        /**
-                         * @default {
-                         *       "provider": "openai",
-                         *       "modelId": "unconfigured"
-                         *     }
-                         */
-                        model: {
-                            /** @enum {string} */
-                            provider: "openai" | "anthropic" | "google" | "openrouter" | "ollama" | "openai-compatible" | "openai-codex";
-                            modelId: string;
-                            apiKeyEnv?: string;
-                            /** Format: uuid */
-                            providerId?: string;
-                            /** @enum {string} */
-                            credential?: "key" | "subscription";
+                        origin?: {
                             /** Format: uri */
-                            baseURL?: string;
-                            /** @enum {string} */
-                            reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
-                            fast?: boolean;
+                            url: string;
+                            ref?: string;
+                            marketplace?: string;
+                            plugin?: string;
+                            license?: string;
+                            /** Format: date-time */
+                            importedAt: string;
                         };
-                        /**
-                         * @default {
-                         *       "role": "",
-                         *       "tone": "",
-                         *       "goals": [],
-                         *       "boundaries": []
-                         *     }
-                         */
-                        identity: {
-                            /** @default  */
-                            role: string;
-                            /** @default  */
-                            tone: string;
-                            /** @default [] */
-                            goals: string[];
-                            /** @default [] */
-                            boundaries: string[];
-                        };
-                        /**
-                         * @default {
-                         *       "inputTokens": 32000,
-                         *       "outputTokens": 4096,
-                         *       "memoryTokens": 1500,
-                         *       "historyTokens": 6000,
-                         *       "toolResultTokens": 1500,
-                         *       "maxSteps": 500,
-                         *       "compactAt": "auto"
-                         *     }
-                         */
-                        contextPolicy: {
-                            /** @default 32000 */
-                            inputTokens: number;
-                            /** @default 4096 */
-                            outputTokens: number;
-                            /** @default 1500 */
-                            memoryTokens: number;
-                            /** @default 6000 */
-                            historyTokens: number;
-                            /** @default 1500 */
-                            toolResultTokens: number;
-                            /** @default 500 */
-                            maxSteps: number;
-                            /** @default auto */
-                            compactAt: "auto" | number;
-                            maxRunTokens?: number;
-                        };
-                        /** @default [] */
-                        skills: {
-                            name: string;
-                            description: string;
-                            instructions: string;
-                            origin?: {
-                                /** Format: uri */
-                                url: string;
-                                ref?: string;
-                                marketplace?: string;
-                                plugin?: string;
-                                /** Format: date-time */
-                                importedAt: string;
-                            };
-                            /** @constant */
-                            writtenBy?: "agent";
-                        }[];
-                        /**
-                         * @default [
-                         *       "discernment-nudge"
-                         *     ]
-                         */
-                        disabledSkills: string[];
-                        /** @default true */
-                        allowShell: boolean;
+                        /** @constant */
+                        writtenBy?: "agent";
                         /** Format: uuid */
-                        id: string;
+                        authorProfileId?: string;
+                        enabled: boolean;
+                        version: number;
+                        /** Format: date-time */
+                        createdAt: string;
+                        /** Format: date-time */
+                        updatedAt: string;
+                    }[];
+                };
+            };
+            /** @description Error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    deleteSkill: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": null;
+                };
+            };
+            /** @description Error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    updateSkill: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    description?: string;
+                    instructions?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        name: string;
+                        description: string;
+                        instructions: string;
+                        origin?: {
+                            /** Format: uri */
+                            url: string;
+                            ref?: string;
+                            marketplace?: string;
+                            plugin?: string;
+                            license?: string;
+                            /** Format: date-time */
+                            importedAt: string;
+                        };
+                        /** @constant */
+                        writtenBy?: "agent";
+                        /** Format: uuid */
+                        authorProfileId?: string;
+                        enabled: boolean;
                         version: number;
                         /** Format: date-time */
                         createdAt: string;
                         /** Format: date-time */
                         updatedAt: string;
                     };
+                };
+            };
+            /** @description Error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    setSkillEnabled: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    enabled: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        name: string;
+                        enabled: boolean;
+                    };
+                };
+            };
+            /** @description Error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    checkSkillUpstream: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        changed: boolean;
+                        /** Format: date-time */
+                        checkedAt: string;
+                    };
+                };
+            };
+            /** @description Error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    updateSkillFromSource: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        name: string;
+                        description: string;
+                        instructions: string;
+                        origin?: {
+                            /** Format: uri */
+                            url: string;
+                            ref?: string;
+                            marketplace?: string;
+                            plugin?: string;
+                            license?: string;
+                            /** Format: date-time */
+                            importedAt: string;
+                        };
+                        /** @constant */
+                        writtenBy?: "agent";
+                        /** Format: uuid */
+                        authorProfileId?: string;
+                        enabled: boolean;
+                        version: number;
+                        /** Format: date-time */
+                        createdAt: string;
+                        /** Format: date-time */
+                        updatedAt: string;
+                    };
+                };
+            };
+            /** @description Error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listBuiltinSkills: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        name: string;
+                        description: string;
+                        instructions: string;
+                        origin?: {
+                            /** Format: uri */
+                            url: string;
+                            ref?: string;
+                            marketplace?: string;
+                            plugin?: string;
+                            license?: string;
+                            /** Format: date-time */
+                            importedAt: string;
+                        };
+                        /** @constant */
+                        writtenBy?: "agent";
+                        enabled: boolean;
+                    }[];
                 };
             };
             /** @description Error */
@@ -17140,29 +17983,6 @@ export interface operations {
                             compactAt: "auto" | number;
                             maxRunTokens?: number;
                         };
-                        /** @default [] */
-                        skills: {
-                            name: string;
-                            description: string;
-                            instructions: string;
-                            origin?: {
-                                /** Format: uri */
-                                url: string;
-                                ref?: string;
-                                marketplace?: string;
-                                plugin?: string;
-                                /** Format: date-time */
-                                importedAt: string;
-                            };
-                            /** @constant */
-                            writtenBy?: "agent";
-                        }[];
-                        /**
-                         * @default [
-                         *       "discernment-nudge"
-                         *     ]
-                         */
-                        disabledSkills: string[];
                         /** @default true */
                         allowShell: boolean;
                         /** Format: uuid */
@@ -17341,29 +18161,6 @@ export interface operations {
                         compactAt?: "auto" | number;
                         maxRunTokens?: number;
                     };
-                    /** @default [] */
-                    skills?: {
-                        name: string;
-                        description: string;
-                        instructions: string;
-                        origin?: {
-                            /** Format: uri */
-                            url: string;
-                            ref?: string;
-                            marketplace?: string;
-                            plugin?: string;
-                            /** Format: date-time */
-                            importedAt: string;
-                        };
-                        /** @constant */
-                        writtenBy?: "agent";
-                    }[];
-                    /**
-                     * @default [
-                     *       "discernment-nudge"
-                     *     ]
-                     */
-                    disabledSkills?: string[];
                     /** @default true */
                     allowShell?: boolean;
                 };
@@ -17450,29 +18247,6 @@ export interface operations {
                             compactAt: "auto" | number;
                             maxRunTokens?: number;
                         };
-                        /** @default [] */
-                        skills: {
-                            name: string;
-                            description: string;
-                            instructions: string;
-                            origin?: {
-                                /** Format: uri */
-                                url: string;
-                                ref?: string;
-                                marketplace?: string;
-                                plugin?: string;
-                                /** Format: date-time */
-                                importedAt: string;
-                            };
-                            /** @constant */
-                            writtenBy?: "agent";
-                        }[];
-                        /**
-                         * @default [
-                         *       "discernment-nudge"
-                         *     ]
-                         */
-                        disabledSkills: string[];
                         /** @default true */
                         allowShell: boolean;
                         /** Format: uuid */
@@ -17659,29 +18433,6 @@ export interface operations {
                             compactAt: "auto" | number;
                             maxRunTokens?: number;
                         };
-                        /** @default [] */
-                        skills: {
-                            name: string;
-                            description: string;
-                            instructions: string;
-                            origin?: {
-                                /** Format: uri */
-                                url: string;
-                                ref?: string;
-                                marketplace?: string;
-                                plugin?: string;
-                                /** Format: date-time */
-                                importedAt: string;
-                            };
-                            /** @constant */
-                            writtenBy?: "agent";
-                        }[];
-                        /**
-                         * @default [
-                         *       "discernment-nudge"
-                         *     ]
-                         */
-                        disabledSkills: string[];
                         /** @default true */
                         allowShell: boolean;
                         /** Format: uuid */
@@ -17941,23 +18692,6 @@ export interface operations {
                         compactAt?: "auto" | number;
                         maxRunTokens?: number;
                     };
-                    skills?: {
-                        name: string;
-                        description: string;
-                        instructions: string;
-                        origin?: {
-                            /** Format: uri */
-                            url: string;
-                            ref?: string;
-                            marketplace?: string;
-                            plugin?: string;
-                            /** Format: date-time */
-                            importedAt: string;
-                        };
-                        /** @constant */
-                        writtenBy?: "agent";
-                    }[];
-                    disabledSkills?: string[];
                     allowShell?: boolean;
                     expectedVersion: number;
                 };
@@ -18044,29 +18778,6 @@ export interface operations {
                             compactAt: "auto" | number;
                             maxRunTokens?: number;
                         };
-                        /** @default [] */
-                        skills: {
-                            name: string;
-                            description: string;
-                            instructions: string;
-                            origin?: {
-                                /** Format: uri */
-                                url: string;
-                                ref?: string;
-                                marketplace?: string;
-                                plugin?: string;
-                                /** Format: date-time */
-                                importedAt: string;
-                            };
-                            /** @constant */
-                            writtenBy?: "agent";
-                        }[];
-                        /**
-                         * @default [
-                         *       "discernment-nudge"
-                         *     ]
-                         */
-                        disabledSkills: string[];
                         /** @default true */
                         allowShell: boolean;
                         /** Format: uuid */
@@ -18365,29 +19076,6 @@ export interface operations {
                                 compactAt: "auto" | number;
                                 maxRunTokens?: number;
                             };
-                            /** @default [] */
-                            skills: {
-                                name: string;
-                                description: string;
-                                instructions: string;
-                                origin?: {
-                                    /** Format: uri */
-                                    url: string;
-                                    ref?: string;
-                                    marketplace?: string;
-                                    plugin?: string;
-                                    /** Format: date-time */
-                                    importedAt: string;
-                                };
-                                /** @constant */
-                                writtenBy?: "agent";
-                            }[];
-                            /**
-                             * @default [
-                             *       "discernment-nudge"
-                             *     ]
-                             */
-                            disabledSkills: string[];
                             /** @default true */
                             allowShell: boolean;
                             /** Format: uuid */

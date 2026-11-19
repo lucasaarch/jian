@@ -92,6 +92,32 @@ export function PageHeading({
 }
 
 /**
+ * The quiet way back, in words: an arrow and where it leads, 2rem tall. Above the heading of a
+ * page opened from a screen's list ("Plugins" over one skill), and at the top of a room's list.
+ * It starts on the column's edge; a list that insets its rows passes the same inset.
+ */
+export function BackLink({
+  onClick,
+  className = '',
+  children,
+}: {
+  onClick: () => void;
+  className?: string;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`flex h-8 w-fit items-center gap-2 text-[13px] text-muted transition-colors hover:text-ink ${className}`}
+    >
+      <ArrowLeft size={15} aria-hidden="true" />
+      {children}
+    </button>
+  );
+}
+
+/**
  * The row under the heading that narrows what the screen shows: a search that takes the room
  * left, then its filters. Controls in it are 2rem tall, as the heading's actions are. It stays
  * at the column's top while what it narrows scrolls away under it, on a ground that hides what

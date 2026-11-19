@@ -23,6 +23,10 @@ vi.mock('./gateway-pages', () => ({
   GatewayPage: ({ page }: { page: string }) => <p>Gateway page {page}</p>,
   GatewayPageWaiting: () => null,
 }));
+vi.mock('./plugins/plugins-screen', () => ({ PluginsScreen: () => <p data-plugins>Plugins</p> }));
+vi.mock('./plugins/connector-page', () => ({
+  ConnectorPage: ({ id }: { id: string }) => <p data-connector>Connector {id}</p>,
+}));
 vi.mock('../components/notifications/chat-notices', () => ({ ChatNotices: () => null }));
 vi.mock('../lib/query/stream', () => ({ useEventStream: () => {} }));
 const gateway = vi.hoisted(() => ({ deleteProfile: vi.fn() }));
@@ -100,9 +104,9 @@ const pressEscape = () =>
   );
 
 it('opens Settings on the page its address names, over the agent’s chats', async () => {
-  const host = await render('/settings/apps');
+  const host = await render('/settings/models');
 
-  expect(dialog()?.textContent).toContain('Gateway page apps');
+  expect(dialog()?.textContent).toContain('Gateway page models');
   expect(host.querySelector('[data-conversation]')).not.toBeNull();
   // One list: the web keeps no other gateway to tell its pages apart from.
   const nav = dialog()?.querySelector('nav[aria-label="Settings"]');
@@ -110,10 +114,37 @@ it('opens Settings on the page its address names, over the agent’s chats', asy
   expect(nav?.textContent).not.toMatch(/^.*\bApp\b/);
 });
 
-it('opens Apps from the old Integrations addresses, which GitHub and X send the owner back to', async () => {
-  await render('/settings/integrations/github?github=installed');
+it('sends the old Integrations addresses, which GitHub and X send the owner back to, on to that connector', async () => {
+  const host = await render('/settings/integrations/github?github=installed');
 
-  expect(dialog()?.textContent).toContain('Gateway page apps');
+  // With the outcome still in the query, for the connector's page to say.
+  expect(memoryNavigation.current()).toBe(
+    `/agents/${profile.id}/plugins/connectors/github?github=installed`,
+  );
+  expect(host.querySelector('[data-connector]')?.textContent).toBe('Connector github');
+  expect(dialog()).toBeNull();
+  for (const unmount of roots.splice(0)) act(unmount);
+
+  const back = await render('/settings/integrations?x=connected');
+  expect(memoryNavigation.current()).toBe(`/agents/${profile.id}/plugins/connectors/x?x=connected`);
+  expect(back.querySelector('[data-connector]')?.textContent).toBe('Connector x');
+  for (const unmount of roots.splice(0)) act(unmount);
+
+  // With nothing to say, the old address is only Plugins.
+  const plain = await render('/settings/integrations');
+  expect(memoryNavigation.current()).toBe(`/agents/${profile.id}/plugins`);
+  expect(plain.querySelector('[data-plugins]')).not.toBeNull();
+});
+
+it('sends the addresses of Apps and MCP servers, once pages of Settings, on to Plugins', async () => {
+  for (const address of ['/settings/apps', '/settings/mcp-servers']) {
+    const host = await render(address);
+
+    expect(memoryNavigation.current()).toBe(`/agents/${profile.id}/plugins`);
+    expect(host.querySelector('[data-plugins]')).not.toBeNull();
+    expect(dialog()).toBeNull();
+    for (const unmount of roots.splice(0)) act(unmount);
+  }
 });
 
 it('keeps the address on the settings page open, and goes back to the chat on close', async () => {

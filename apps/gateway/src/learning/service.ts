@@ -1,7 +1,8 @@
-import { LEARNING_SESSION_CHANNEL, type Profile, type Run, type Session } from '@jian/contracts';
+import { LEARNING_SESSION_CHANNEL, type Run, type Session } from '@jian/contracts';
 import { type Judge, noul } from '../decisions/service.js';
 import { listRecentRuns } from '../runs/repository.js';
 import { findOwnSession } from '../sessions/repository.js';
+import { readSkillLibrary } from '../skills/repository.js';
 import type { Store } from '../storage/database.js';
 
 /** A turn with this many tool calls did enough work to be worth looking back on. */
@@ -27,7 +28,6 @@ export type TurnWork = {
 
 type LearningServices = {
   store: Store;
-  profiles: { profile(id: string): Promise<Profile> };
   sessions: { learningSession(profileId: string): Promise<Session> };
   /** Asks whether the work holds anything to keep before a whole turn is spent finding out. */
   judge?: Judge;
@@ -60,8 +60,6 @@ export class Learning {
   ) {}
 
   async consider(run: Run, work: TurnWork): Promise<Run | undefined> {
-    const profile = await this.services.profiles.profile(run.profileId);
-
     // Read, not opened: a profile gets its Learning conversation on its first look back.
     const learning = await findOwnSession(
       this.services.store.db,
@@ -95,7 +93,10 @@ export class Learning {
     if (!reason) return undefined;
 
     const periodic = work.tools.length < MANY_TOOLS && !failed.length;
-    const yours = profile.skills.filter((skill) => skill.writtenBy === 'agent');
+    // The library is every agent's; what this one may rewrite is what it wrote.
+    const yours = (await readSkillLibrary(this.services.store.db)).skills.filter(
+      (skill) => skill.authorProfileId === run.profileId,
+    );
     const material = periodic
       ? [
           'Recent turns, oldest first:',

@@ -28,9 +28,8 @@ from the rest is a bug.
 | Row of tabs or thumbnails that can outgrow its bar | `ScrollStrip`: no scrollbar, wheel and fades |
 | Anything over the page | `Overlay`, `OverlayActions`, `ConfirmDialog` |
 | Room of pages with a list | `Page` with `SettingsLayout`, `SettingsGroup`, `SettingsRow` |
-| A screen's column, heading and cards | `PageBody`, `PageHeading`, `PageToolbar`, `SectionHeading`, `surfaceCard` |
-| Things to connect, side by side | `SettingsCards` holding a `SettingsCard` each |
-| Waiting | `Skeleton`, `SkeletonRegion`, `SettingsPageSkeleton`, `SettingsCardSkeleton`, `Progress` |
+| A screen's column, heading and cards | `PageBody`, `PageHeading`, `BackLink`, `PageToolbar`, `SectionHeading`, `surfaceCard` |
+| Waiting | `Skeleton`, `SkeletonRegion`, `SettingsPageSkeleton`, `Progress` |
 | State or a hint | `StatusPill`, `InfoTip`, `HoverTip` |
 | An agent | `AgentFace`, `AgentHero` |
 | Search and run | `CommandPalette` |
@@ -55,19 +54,24 @@ Use the kit's own phone width with the `phone:` variant, or `usePhone` in code.
 - **A room of pages takes the app's place.** Settings and agent settings, and only they, are a kit
   `Page` holding a `SettingsLayout`: its list stands where the sidebar was, under a Back button,
   and the open page where the conversation was. The conversation stays mounted beneath, inert,
-  and Escape goes back. Anything else of the agent's (schedules, Artifacts, pull requests,
+  and Escape goes back. Anything else of the agent's (schedules, Artifacts, pull requests, Plugins,
   activity) is a screen in the chat's place, with the sidebar beside it; never an `Overlay`.
 - **Every screen has one anatomy.** Settings, agent settings and each of their pages, schedules,
-  Artifacts, pull requests, activity, skills and memories, and any new screen of the kind, are
+  Artifacts, pull requests, Plugins, activity and memories, and any new screen of the kind, are
   built from `page-layout.tsx`. The `page-anatomy` skill says how to build a new one:
   - `PageBody`: the column, 60rem at most on every screen alike, rows, cards or a table.
   - `PageHeading`: an `h1` in `text-xl`, what acts on the whole screen without adding to it
     (Refresh, Edit, settings) at its right as `outline` `small` actions 2rem tall, and an arrow
-    `iconButton` back only on a screen opened from a list inside it (one skill, one schedule).
+    `iconButton` back only on a screen opened from a list inside it (one schedule).
+  - `BackLink`: an arrow and the name of the screen a page was opened from, above the heading
+    of a page with one of its own ("Plugins" over one skill or connector, whose header and
+    details column are `app/plugins/plugin-page.tsx`) and at the top of Settings' list.
   - `PageToolbar` under it: the search taking the room left, then its `Segmented` and
     `FilterSelect`s, then what adds to the list (New, Create, Import) at its right end, as the
-    same actions. It sticks under the title bar while the page scrolls. No bar of tools of its
-    own at the window's top.
+    same actions, each an `Action size="field"`. Every control in that row is the same box to
+    the pixel: 2rem tall overall, `rounded-lg`, 13px text. Never size one with a
+    `className="h-8"` patch; a kit piece that does not match is fixed in the kit. It sticks
+    under the title bar while the page scrolls. No bar of tools of its own at the window's top.
   - Sections: `SettingsGroup`, or a `SectionHeading` (`text-xs` muted) over the content.
   - Cards: `surfaceCard` with `p-4`, never another radius, ground or border.
   - Spacing: `gap-7` between sections (`gap-5` on a phone), `gap-4` from heading to toolbar to

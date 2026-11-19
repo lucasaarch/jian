@@ -191,7 +191,7 @@ export function SchedulesScreen({ profileId }: { profileId: string }) {
             value={typed}
             onValueChange={setTyped}
           />
-          <Action tone="outline" size="small" className="h-8" onClick={() => open(NEW)}>
+          <Action tone="outline" size="field" onClick={() => open(NEW)}>
             <Plus size={14} aria-hidden="true" />
             New schedule
           </Action>

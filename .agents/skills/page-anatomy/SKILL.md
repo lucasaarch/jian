@@ -11,7 +11,7 @@ for the pieces; this one is about how a screen goes together.
 
 ## Where a screen lives
 
-- **In the chat's place**, with the sidebar beside it: Schedules, Artifacts, Pull requests,
+- **In the chat's place**, with the sidebar beside it: Schedules, Artifacts, Pull requests, Plugins,
   Activity. This is the default for anything of the agent's that is listed, read or managed.
   - An address in `lib/navigation.ts`: `xPath(profileId)` and `onX(pathname)`.
   - A branch in `app/chats.tsx`, in `AgentChats` and in `opened`, so a phone shows it.
@@ -32,7 +32,7 @@ for the pieces; this one is about how a screen goes together.
     <PageToolbar>
       <SearchField label="Search x" className="min-w-44 flex-1" … />
       {/* Segmented, FilterSelect… */}
-      <Action tone="outline" size="small" className="h-8" …>
+      <Action tone="outline" size="field" …>
         <Plus size={14} aria-hidden="true" />
         New x
       </Action>
@@ -46,8 +46,8 @@ for the pieces; this one is about how a screen goes together.
 - **One width.** `PageBody` is 60rem at most on every screen, rows, forms, cards or a table.
   Never pass a width of your own or wrap the content in another `max-w-*`.
 - **The heading** is the title and its one line. What acts on the whole screen without adding
-  to it (Refresh, settings) sits at its right: `Action tone="outline" size="small"
-  className="h-8"`, or `iconButton`s with a `HoverTip`. No bar of tools at the window's top
+  to it (Refresh, settings) sits at its right: `Action tone="outline" size="field"`, or
+  `iconButton`s with a `HoverTip`. Never patch a size with `className="h-8"`. No bar of tools at the window's top
   (`ScreenHeader`): that is only for a document open full size, as an Artifact is.
 - **The toolbar** is sticky: it stays under the title bar while the page scrolls. Put the search
   first, taking the room left, then filters, then what adds to the list (New schedule, New
@@ -72,6 +72,10 @@ dialog or a side list:
   `router.replace(xPath)`. Copy `open`/`close` from `app/schedules/schedules-screen.tsx`.
 - Its page is the same anatomy: `PageHeading` with `onBack` and `backLabel` naming the list.
 - An id no longer listed (deleted meanwhile) shows the list.
+
+A plugin (one skill, one connector) is the exception: it has an address of its own under
+Plugins (`skillPath`, `connectorPath`), a `BackLink` to Plugins over its header, and the header
+and details column of `app/plugins/plugin-page.tsx`.
 
 ## Checks
 

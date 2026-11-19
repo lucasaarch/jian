@@ -7,7 +7,6 @@ import {
 } from './providers.js';
 import { ABSOLUTE_PATH } from './remote.js';
 import { secretSchema } from './security.js';
-import { skillOriginSchema } from './skills.js';
 
 const endpointSchema = z.url().refine((value) => {
   const url = new URL(value);
@@ -65,33 +64,6 @@ export const modelSchema = z
       ctx.addIssue({ code: 'custom', message: 'baseURL must use HTTP(S)' });
     }
   });
-
-export const skillNameSchema = z.string().regex(/^[a-z0-9_-]{1,64}$/);
-
-/**
- * Built-in skills a new profile starts without: useful to some owners, noise to others, so each
- * owner decides. They still ship, and are switched on under Skills.
- */
-export const OPT_IN_SKILLS = ['discernment-nudge'] as const;
-
-export const skillSchema = z.strictObject({
-  name: skillNameSchema,
-  description: z.string().min(1).max(300),
-  instructions: z.string().min(1).max(12_000),
-  // Present only on a skill the owner imported.
-  origin: skillOriginSchema.optional(),
-  // Set on a skill the agent wrote for itself: the only skills it may change or remove. What
-  // the owner wrote or imported stays theirs, so "who wrote this instruction" stays answerable.
-  writtenBy: z.literal('agent').optional(),
-});
-
-/**
- * A skill shipped with the gateway. The owner cannot edit or remove one — only switch it off
- * for a profile — so the instructions travel with it: what an agent is told has to be readable.
- */
-export const builtinSkillSchema = skillSchema.extend({
-  enabled: z.boolean(),
-});
 
 /**
  * A value the gateway sends but never shows back: typed once and kept encrypted, or read from
@@ -298,14 +270,6 @@ export const profileSchema = z.strictObject({
   model: modelSchema.default({ provider: 'openai', modelId: 'unconfigured' }),
   identity: identitySchema.default(() => identitySchema.parse({})),
   contextPolicy: contextPolicySchema.default(() => contextPolicySchema.parse({})),
-  skills: z.array(skillSchema).max(20).default([]),
-  // Built-in skills this profile should not carry. Imported skills are removed from `skills`;
-  // a built-in one cannot be removed, only switched off here.
-  // Built-in skills that start switched off, for the owner to turn on in Skills.
-  disabledSkills: z
-    .array(skillNameSchema)
-    .max(20)
-    .default([...OPT_IN_SKILLS]),
   /**
    * Deprecated. Workspace-confined shell and file tools are always available; the panel no
    * longer exposes this switch. Kept on the wire so older clients keep parsing. Ignored for
@@ -317,7 +281,7 @@ export const profileSchema = z.strictObject({
 export const profilePatchSchema = profileSchema.partial().extend({
   expectedVersion: z.number().int().positive(),
   // Without the default: a patch that does not mention the summary was filling one in, and
-  // every edit made elsewhere — a skill switched off, an MCP server added — erased it.
+  // every edit made elsewhere, such as a renamed agent, erased it.
   summary: summaryText.optional(),
   // Absent keeps the current picture; an explicit null removes it.
   avatar: avatarSchema.nullable().optional(),
@@ -326,8 +290,6 @@ export const profilePatchSchema = profileSchema.partial().extend({
   // Replaced whole, not merged: a client changing one field (`compactAt`) sends the rest as it
   // read it, or what it left out goes back to its default.
   contextPolicy: contextPolicySchema.optional(),
-  skills: z.array(skillSchema).max(20).optional(),
-  disabledSkills: z.array(skillNameSchema).max(20).optional(),
   allowShell: z.boolean().optional(),
 });
 
@@ -488,7 +450,6 @@ export const memoryEditSchema = z.strictObject({
 });
 
 export type McpStatus = z.infer<typeof mcpStatusSchema>;
-export type Skill = z.infer<typeof skillSchema>;
 export type McpServer = z.infer<typeof mcpSchema>;
 export type SessionObjective = z.infer<typeof sessionObjectiveSchema>;
 export type McpValue = z.infer<typeof mcpValueSchema>;

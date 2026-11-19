@@ -45,15 +45,10 @@ describe('HTTP services', () => {
     expect(api.headers['x-robots-tag']).toContain('noindex');
   });
 
-  it('serves the built-in skills of a profile with their instructions', async () => {
-    const { app, services } = await setup();
-    const profile = await services.profiles.createProfile(input);
+  it('serves the built-in skills with their instructions', async () => {
+    const { app } = await setup();
 
-    const response = await app.inject({
-      method: 'GET',
-      url: `/v1/profiles/${profile.id}/built-in-skills`,
-      headers,
-    });
+    const response = await app.inject({ method: 'GET', url: '/v1/built-in-skills', headers });
 
     expect(response.statusCode).toBe(200);
 

@@ -1,23 +1,23 @@
 'use client';
 
-import { Brain, MessagesSquare, Sparkles, UserRound } from 'lucide-react';
+import { Brain, MessagesSquare, UserRound } from 'lucide-react';
 import { Suspense, useEffect } from 'react';
 import { Page, SettingsLayout, type SettingsPage } from '../kit';
 import { useGatewayMode } from '../lib/gateway-mode';
-import { activityPath, agentPath } from '../lib/navigation';
+import { activityPath, agentPath, pluginsPath } from '../lib/navigation';
 import { useContacts } from '../lib/query/agent';
 import { type AgentSettingsPage, useAgentOverlay } from '../lib/stores/agent-overlay';
 import { usePathname, useRouter } from '../platform/navigation';
 import { AgentSettingsContent } from './agent-settings';
 import { ChannelsPage, ChannelsWaiting } from './customize/channels-page';
 import { MemoriesPage, MemoriesWaiting } from './customize/memories-page';
-import { SkillsPage, SkillsWaiting } from './customize/skills-page';
 
 /**
  * What an address from before these were overlays asks to open. Links and bookmarks keep working:
- * the overlay opens, and the address goes on to the agent's chats.
+ * the overlay opens, and the address goes on to the agent's chats. Skills were a page of these
+ * settings, and the first of them, before they became every agent's in Plugins.
  */
-function askedAt(pathname: string): AgentSettingsPage | 'activity' | undefined {
+function askedAt(pathname: string): AgentSettingsPage | 'activity' | 'skills' | undefined {
   // The agent's own address was its Overview, which is its Activity now.
   if (/^\/agents\/[^/]+\/?$/.test(pathname)) return 'activity';
   if (/^\/agents\/[^/]+\/settings\/?$/.test(pathname)) return 'identity';
@@ -53,12 +53,6 @@ function AgentSettingsOverlay({ profileId }: { profileId: string }) {
       keywords: ['name', 'instructions', 'avatar', 'summary', 'reset', 'delete', 'agent'],
     },
     {
-      id: 'skills',
-      label: 'Skills',
-      icon: <Sparkles size={15} />,
-      keywords: ['skill', 'abilities', 'import'],
-    },
-    {
       id: 'memories',
       label: 'Memories',
       icon: <Brain size={15} />,
@@ -85,16 +79,12 @@ function AgentSettingsOverlay({ profileId }: { profileId: string }) {
         current={page}
         onSelect={(next) => select(next as AgentSettingsPage)}
         startOnPage={page !== 'identity'}
-        ownHeading={page === 'skills' || page === 'memories'}
+        ownHeading={page === 'memories'}
         searchLabel="Search agent settings"
         backLabel="Agent settings"
       >
         {page === 'identity' ? (
           <AgentSettingsContent profileId={profileId} />
-        ) : page === 'skills' ? (
-          <Suspense key={page} fallback={<SkillsWaiting />}>
-            <SkillsPage />
-          </Suspense>
         ) : page === 'memories' ? (
           <Suspense key={page} fallback={<MemoriesWaiting />}>
             <MemoriesPage />
@@ -117,8 +107,10 @@ export function AgentOverlays({ profileId }: { profileId: string }) {
   const asked = askedAt(pathname);
   useEffect(() => {
     if (!asked) return;
-    if (asked === 'activity') {
-      router.replace(activityPath(profileId));
+    if (asked === 'activity' || asked === 'skills') {
+      router.replace(
+        asked === 'skills' ? pluginsPath(profileId, 'skills') : activityPath(profileId),
+      );
       return;
     }
     openSettings(asked);

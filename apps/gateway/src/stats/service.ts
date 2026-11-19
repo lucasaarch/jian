@@ -10,6 +10,7 @@ import { and, count, desc, eq, gte, sql } from 'drizzle-orm';
 import type { ProviderKind } from '../providers/catalog.js';
 import type { CatalogEntry } from '../providers/catalog-source.js';
 import type { SubscriptionUsageReader } from '../providers/subscription-usage.js';
+import { readSkillLibrary } from '../skills/repository.js';
 import type { Store } from '../storage/database.js';
 import { checkpoints, memories, runs, sessions } from '../storage/schema.js';
 
@@ -300,7 +301,10 @@ export class Stats {
         turns: lifetime?.turns ?? 0,
         workedMs: Math.round(Number(lifetime?.worked ?? 0)),
         conversations: conversations?.total ?? 0,
-        skillsWritten: profile.skills.filter((skill) => skill.writtenBy === 'agent').length,
+        // The library is the installation's; these are the ones this agent wrote into it.
+        skillsWritten: (await readSkillLibrary(db)).skills.filter(
+          (skill) => skill.authorProfileId === profile.id,
+        ).length,
         memories: kept?.total ?? 0,
       },
       period: {

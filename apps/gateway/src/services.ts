@@ -34,6 +34,7 @@ import { ObjectiveContinuation } from './sessions/continuation.js';
 import { isPullCreation } from './sessions/created-pulls.js';
 import { Sessions } from './sessions/service.js';
 import { Settings } from './settings/service.js';
+import { SkillLibrary } from './skills/library.js';
 import { SshKeys } from './ssh/service.js';
 import { Stats } from './stats/service.js';
 import type { Store } from './storage/database.js';
@@ -75,6 +76,7 @@ export type Services = {
   gatewayVault: GatewayVault;
   sshKeys: SshKeys;
   mcp: McpServers;
+  skillLibrary: SkillLibrary;
   remote: Remote;
   push: PushNotifications;
   mobilePush: MobilePush;
@@ -219,7 +221,7 @@ export function buildServices({
     mobilePush,
     runs,
     peers: new Peers({ profiles, sessions, runs, store }, clock),
-    learning: new Learning({ store, profiles, sessions, runs, judge: decisions.judge }, clock),
+    learning: new Learning({ store, sessions, runs, judge: decisions.judge }, clock),
     // Without a catalog nothing has a list price, and every model counts as unknown.
     stats: new Stats(
       store,
@@ -249,6 +251,7 @@ export function buildServices({
     gatewayVault,
     sshKeys,
     mcp: new McpServers(store, gatewayVault, clock),
+    skillLibrary: new SkillLibrary(store, clock),
     remote,
     push,
   };

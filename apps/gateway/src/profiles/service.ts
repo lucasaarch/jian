@@ -68,14 +68,8 @@ export class Profiles {
     });
   }
 
-  /** A profile may only name its own live provider, and one skill per name. */
+  /** A profile may only name its own live provider. */
   private async validateReferences(profile: Profile, reader: Queryable) {
-    const names = profile.skills.map((skill) => skill.name);
-
-    if (new Set(names).size !== names.length) {
-      throw new GatewayError(400, 'Skill names must be unique within a profile');
-    }
-
     const providerId = profile.model.providerId;
 
     if (!providerId) {
@@ -158,7 +152,7 @@ export class Profiles {
 
   /**
    * The profile forgets everything it lived: sessions, memories and its activity. What the
-   * owner gave it stays — name, instructions, skills, permissions, channels, contacts and
+   * owner gave it stays — name, instructions, permissions, channels, contacts and
    * secrets. Refused while an answer is running, which would otherwise
    * write into a conversation that no longer exists.
    */

@@ -80,7 +80,6 @@ import {
   openAiModelListSchema,
 } from './openai.js';
 import {
-  builtinSkillSchema,
   gatewaySessionInputSchema,
   gatewaySessionTargetSchema,
   mcpDraftCheckSchema,
@@ -174,7 +173,18 @@ import {
   sessionArtifactVersionSchema,
 } from './session-artifacts.js';
 import { sessionFileQuerySchema, sessionFileSchema, sessionFilesSchema } from './session-files.js';
-import { skillImportSchema } from './skills.js';
+import {
+  builtinSkillSchema,
+  librarySkillSchema,
+  MAX_LIBRARY_SKILLS,
+  skillCreateSchema,
+  skillEnabledRecordSchema,
+  skillEnabledSchema,
+  skillImportSchema,
+  skillNameSchema,
+  skillPatchSchema,
+  skillUpstreamSchema,
+} from './skills.js';
 import { sshKeyCreateSchema, sshKeySchema } from './ssh.js';
 import {
   terminalInputSchema,
@@ -1177,19 +1187,83 @@ export const operations: Operation[] = [
     response: z.array(activityDaySchema).max(400),
   },
   {
+    // Not bounded by the library's cap: what a migration merged from many agents may exceed it.
     method: 'GET',
-    path: `${profile}/built-in-skills`,
-    operationId: 'listBuiltinSkills',
+    path: '/v1/skills',
+    operationId: 'listSkills',
     access: 'admin',
-    response: z.array(builtinSkillSchema).max(50),
+    response: z.array(librarySkillSchema),
   },
   {
     method: 'POST',
-    path: `${profile}/skills/import`,
+    path: '/v1/skills',
+    operationId: 'createSkill',
+    access: 'admin',
+    body: skillCreateSchema,
+    response: librarySkillSchema,
+    status: 201,
+  },
+  {
+    // Answers the skills it imported, not the whole library.
+    method: 'POST',
+    path: '/v1/skills/import',
     operationId: 'importSkill',
     access: 'admin',
     body: skillImportSchema,
-    response: profileRecordSchema,
+    response: z.array(librarySkillSchema).max(MAX_LIBRARY_SKILLS),
+  },
+  {
+    method: 'PATCH',
+    path: '/v1/skills/:name',
+    operationId: 'updateSkill',
+    access: 'admin',
+    params: z.strictObject({ name: skillNameSchema }),
+    body: skillPatchSchema,
+    response: librarySkillSchema,
+  },
+  {
+    method: 'DELETE',
+    path: '/v1/skills/:name',
+    operationId: 'deleteSkill',
+    access: 'admin',
+    params: z.strictObject({ name: skillNameSchema }),
+    response: z.null(),
+    status: 204,
+  },
+  {
+    // A built-in skill's name or a library one's: both are switched here.
+    method: 'PUT',
+    path: '/v1/skills/:name/enabled',
+    operationId: 'setSkillEnabled',
+    access: 'admin',
+    params: z.strictObject({ name: skillNameSchema }),
+    body: skillEnabledSchema,
+    response: skillEnabledRecordSchema,
+  },
+  {
+    // Reads an imported skill's source again, and says whether it differs from the library's.
+    method: 'GET',
+    path: '/v1/skills/:name/upstream',
+    operationId: 'checkSkillUpstream',
+    access: 'admin',
+    params: z.strictObject({ name: skillNameSchema }),
+    response: skillUpstreamSchema,
+  },
+  {
+    // Copies an imported skill from its source again, over what the library holds.
+    method: 'POST',
+    path: '/v1/skills/:name/update',
+    operationId: 'updateSkillFromSource',
+    access: 'admin',
+    params: z.strictObject({ name: skillNameSchema }),
+    response: librarySkillSchema,
+  },
+  {
+    method: 'GET',
+    path: '/v1/built-in-skills',
+    operationId: 'listBuiltinSkills',
+    access: 'admin',
+    response: z.array(builtinSkillSchema).max(50),
   },
   {
     method: 'GET',

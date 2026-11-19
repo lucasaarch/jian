@@ -124,15 +124,12 @@ describe('deleting a profile', () => {
 });
 
 describe('profile configuration changes', () => {
-  it('preserves skills, MCP configuration and permissions on a name-only edit', async () => {
+  it('preserves the summary and the model on a name-only edit', async () => {
     const services = await testServices();
 
     const profile = await services.profiles.createProfile({
       ...profileInput,
       summary: 'Looks after deliveries.',
-      skills: [
-        { name: 'deploy', description: 'Deployment guide', instructions: 'Check the release.' },
-      ],
     });
 
     const updated = await services.profiles.updateProfile(profile.id, {
@@ -140,7 +137,7 @@ describe('profile configuration changes', () => {
       name: 'New name',
     });
 
-    expect(updated.skills).toHaveLength(1);
+    expect(updated.model).toEqual(profile.model);
     // The only thing other profiles ever see of this one, and every screen edits something else.
     expect(updated.summary).toBe('Looks after deliveries.');
   });

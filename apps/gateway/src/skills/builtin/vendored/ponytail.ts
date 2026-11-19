@@ -25,7 +25,7 @@ Fix root causes in the responsible shared layer, not symptoms in one caller. Pre
 
 Never cut trust-boundary validation, authorization, security, data-loss prevention, error handling, accessibility or required tests. For a nontrivial change, leave a runnable regression check. Match the project's conventions. Run the smallest sufficient proof and report only what actually passed.
 
-Default mode is full. The owner can send /ponytail lite, /ponytail full, /ponytail ultra or /ponytail off as a separate message. That choice persists in this conversation until another command changes it. Lite builds what was asked and briefly names a simpler alternative; ultra questions speculative scope more aggressively. Neither mode weakens safety or overrides explicit requirements. The owner can also turn this built-in skill off for the whole agent in Skills.
+Default mode is full. The owner can send /ponytail lite, /ponytail full, /ponytail ultra or /ponytail off as a separate message. That choice persists in this conversation until another command changes it. Lite builds what was asked and briefly names a simpler alternative; ultra questions speculative scope more aggressively. Neither mode weakens safety or overrides explicit requirements. The owner can also turn this built-in skill off for every agent under Plugins → Skills.
 
 Do not apply these coding rules to unrelated conversation.`,
 };

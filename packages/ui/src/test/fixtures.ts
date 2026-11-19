@@ -1,4 +1,4 @@
-import type { Profile } from '../lib/api';
+import type { LibrarySkill, Profile } from '../lib/api';
 
 /**
  * The synthetic agent and usage the unit tests render with. Fictional from end to end; nothing
@@ -22,7 +22,6 @@ const profileBase = {
     maxRunTokens: 500000,
     compactAt: 'auto' as const,
   },
-  disabledSkills: [],
   allowShell: false,
   version: 3,
   createdAt: at(60 * 24 * 30),
@@ -41,15 +40,56 @@ export const profile: Profile = {
     goals: ['Keep the day moving', 'Close loops without being asked twice'],
     boundaries: ['Never send money', 'Ask before writing to someone new'],
   },
-  skills: [
-    {
-      name: 'concise',
-      description: 'Answer in the first sentence; every word earns its place.',
-      instructions: 'Lead with the answer.',
-      origin: { url: 'https://github.com/example/skills', importedAt: at(60 * 24 * 7) },
-    },
-  ],
 };
+
+const written = { version: 1, createdAt: at(60 * 24 * 7), updatedAt: at(60 * 24 * 7) };
+
+/**
+ * The installation's skill library, one of each way a skill gets there: copied from a
+ * repository, written by the owner, written by the agent above, and written by an agent since
+ * deleted, which is the one switched off.
+ */
+export const librarySkills: LibrarySkill[] = [
+  {
+    name: 'concise',
+    description: 'Answer in the first sentence; every word earns its place.',
+    instructions: 'Lead with the answer.',
+    origin: {
+      url: 'https://github.com/example/skills',
+      ref: 'main',
+      license: 'MIT',
+      importedAt: at(60 * 24 * 7),
+    },
+    enabled: true,
+    ...written,
+    version: 3,
+  },
+  {
+    name: 'standup-notes',
+    description: 'Turn the day into three lines for the morning standup.',
+    instructions: 'Yesterday, today, blockers.',
+    enabled: true,
+    ...written,
+  },
+  {
+    name: 'trip-planning',
+    description: 'Plan a trip: dates first, then stays, then the way between them.',
+    instructions: 'Ask for the dates before anything else.',
+    writtenBy: 'agent',
+    authorProfileId: profile.id,
+    enabled: true,
+    ...written,
+  },
+  {
+    name: 'invoice-check',
+    description: 'Read an invoice and say what does not add up.',
+    instructions: 'Sum the lines before trusting the total.',
+    writtenBy: 'agent',
+    authorProfileId: '0b9f6d0e-55a1-4c38-9a3e-7d1c2b3a4f50',
+    enabled: false,
+    ...written,
+  },
+];
 
 export const statsFor = (days: number) => {
   const shown = Math.min(days, 90);

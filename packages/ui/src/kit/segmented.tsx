@@ -25,10 +25,12 @@ export function Segmented<T extends string>({
       aria-label={label}
       value={[value]}
       // As wide as its choices, wherever it stands: a row of tabs does not stretch across a page.
+      // Boxed, it is a field's box: 32px tall overall, border and inset included, with a field's
+      // corners and text, so it lines up to the pixel beside a search, a filter or a row input.
       className={
         flat
           ? 'inline-flex w-fit gap-0.5'
-          : 'inline-flex w-fit gap-0.5 rounded-lg border border-glass-edge bg-glass-hover p-0.5'
+          : 'inline-flex h-8 w-fit gap-0.5 rounded-lg border border-glass-edge bg-glass-hover p-0.5'
       }
     >
       {options.map((option) => (
@@ -38,7 +40,7 @@ export function Segmented<T extends string>({
           onClick={(event) => onChange(option.value, { x: event.clientX, y: event.clientY })}
           // A choice is never broken over two lines: in a row too narrow for them all, it is the
           // row that scrolls (ScrollStrip).
-          className="inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-xs whitespace-nowrap text-muted transition-colors hover:text-ink data-pressed:bg-glass-press data-pressed:text-ink"
+          className={`inline-flex items-center gap-1.5 rounded-md px-2.5 whitespace-nowrap text-muted transition-colors hover:text-ink data-pressed:bg-glass-press data-pressed:text-ink ${flat ? 'h-7 text-xs' : 'h-full text-[13px]'}`}
         >
           {option.icon}
           {option.label}

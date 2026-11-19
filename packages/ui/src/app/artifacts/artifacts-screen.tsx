@@ -186,7 +186,7 @@ export function ArtifactsScreen({
               setFilter((was) => ({ ...was, type: type as SessionArtifact['type'] | '' }))
             }
           />
-          <Action tone="outline" size="small" className="h-8" onClick={() => name({ kind: 'new' })}>
+          <Action tone="outline" size="field" onClick={() => name({ kind: 'new' })}>
             <FolderPlus size={14} aria-hidden="true" />
             New folder
           </Action>

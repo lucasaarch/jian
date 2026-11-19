@@ -15,18 +15,32 @@ export const skillFields = {
 
 /** What a skill import asks for, and what it does with it. */
 export const skillImportHint =
-  'The GitHub address of a skill, or of a folder of skills. The instructions are copied once.';
+  'The GitHub address of a skill, or of a folder of skills. A copy is kept here, updated when you ask.';
 export const skillImportPlaceholder = 'https://github.com/owner/repository/tree/main/skills/deploy';
 
-/**
- * A skill from a form's named fields. An edit keeps who wrote it: the agent may still refine a
- * skill of its own.
- */
-export function skillFrom(form: FormData, previous?: Skill): Skill {
+/** A skill from a form's named fields. */
+export function skillFrom(form: FormData): Skill {
   return {
     name: String(form.get('name')),
     description: String(form.get('description')),
     instructions: String(form.get('instructions')),
-    ...(previous?.writtenBy ? { writtenBy: previous.writtenBy } : {}),
   };
+}
+
+/** What a plain YAML value may not hold without quotes: a colon, a hash, a leading mark. */
+const NEEDS_QUOTES = /[:#]|^[\s"'&*!|>%@`[\]{},?-]|\s$/;
+
+/**
+ * A skill as the document it is kept as, `SKILL.md`: its name, what it is for and, when its
+ * source said one, its license, then the instructions.
+ */
+export function skillDocument(skill: Skill, license?: string): string {
+  const value = (text: string) => (NEEDS_QUOTES.test(text) ? JSON.stringify(text) : text);
+  const head = [
+    `name: ${skill.name}`,
+    `description: ${value(skill.description)}`,
+    ...(license ? [`license: ${value(license)}`] : []),
+  ];
+
+  return `---\n${head.join('\n')}\n---\n\n${skill.instructions.trim()}\n`;
 }

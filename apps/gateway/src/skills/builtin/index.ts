@@ -1,4 +1,4 @@
-import type { McpServer, Profile, Skill } from '@jian/contracts';
+import { type LibrarySkill, type McpServer, OPT_IN_SKILLS, type Skill } from '@jian/contracts';
 import { isGitHubIntegrationServer } from '../../agent/github-mcp.js';
 import { onOwnerComputer } from '../../agent/workspace-home.js';
 import { aboutJian } from './about-jian.js';
@@ -33,10 +33,10 @@ import { worktrees } from './worktrees.js';
 import { x } from './x.js';
 
 /**
- * Skills every profile carries without importing anything. They ship with the gateway rather
- * than being copied into each profile: a default that lives in the profile row goes stale the
- * day it is written, counts against the twenty the owner may import, and leaves no way to say
- * which instructions an installation was actually running.
+ * Skills every agent carries without importing anything. They ship with the gateway rather
+ * than being copied into the library: a default stored in a row goes stale the day it is
+ * written, counts against what the owner may add, and leaves no way to say which instructions
+ * an installation was actually running.
  */
 const ALWAYS: readonly Skill[] = [
   aboutJian,
@@ -64,7 +64,7 @@ const ALWAYS: readonly Skill[] = [
   ...ponytailSkills,
   webResearch,
   x,
-  // Starts switched off on a new profile (OPT_IN_SKILLS); the owner turns it on in Skills.
+  // Starts switched off on a new installation (OPT_IN_SKILLS); the owner turns it on in Skills.
   discernmentNudge,
 ];
 
@@ -109,30 +109,52 @@ export function builtinSkills(
 }
 
 /**
- * What the profile can load this run. An imported skill wins over a built-in of the same
- * name, so an owner who disagrees with a default replaces it by importing over it.
+ * The installation's library as a run reads it: its skills, and the names switched off, which
+ * may be a library skill's or a built-in one's.
+ */
+export type SkillLibraryState = {
+  skills: readonly LibrarySkill[];
+  disabled: readonly string[];
+};
+
+/** An installation whose owner has added nothing and switched nothing. */
+export const NO_LIBRARY: SkillLibraryState = { skills: [], disabled: OPT_IN_SKILLS };
+
+/**
+ * What any agent can load this run: the built-in skills and the library's, less what is
+ * switched off. A library skill wins over a built-in of the same name, on or off, so an owner
+ * who disagrees with a default replaces it by importing over it.
  */
 export function availableSkills(
-  profile: Profile,
+  library: SkillLibraryState,
   servers: readonly McpServer[],
   has: RunSkills = {},
 ): Skill[] {
-  const own = new Set(profile.skills.map((skill) => skill.name));
-  const disabled = new Set(profile.disabledSkills);
+  const held = new Set(library.skills.map((skill) => skill.name));
+  const disabled = new Set(library.disabled);
 
   return [
     ...builtinSkills(servers, has).filter(
-      (skill) => !own.has(skill.name) && !disabled.has(skill.name),
+      (skill) => !held.has(skill.name) && !disabled.has(skill.name),
     ),
-    ...profile.skills,
+    // What the agent follows, without the library's bookkeeping.
+    ...library.skills
+      .filter((skill) => skill.enabled)
+      .map(({ name, description, instructions, origin, writtenBy }) => ({
+        name,
+        description,
+        instructions,
+        ...(origin ? { origin } : {}),
+        ...(writtenBy ? { writtenBy } : {}),
+      })),
   ];
 }
 
 export function findSkill(
-  profile: Profile,
+  library: SkillLibraryState,
   servers: readonly McpServer[],
   name: string,
   has: RunSkills = {},
 ): Skill | undefined {
-  return availableSkills(profile, servers, has).find((skill) => skill.name === name);
+  return availableSkills(library, servers, has).find((skill) => skill.name === name);
 }

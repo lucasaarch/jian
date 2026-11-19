@@ -18,7 +18,14 @@ export {
 } from './menu';
 export { Overlay, OverlayActions } from './overlay';
 export { Page } from './page';
-export { PageBody, PageHeading, PageToolbar, SectionHeading, surfaceCard } from './page-layout';
+export {
+  BackLink,
+  PageBody,
+  PageHeading,
+  PageToolbar,
+  SectionHeading,
+  surfaceCard,
+} from './page-layout';
 export { Picker, PickerAction, PickerRow } from './picker';
 export { Progress } from './progress';
 export { RowInput, RowTextArea } from './row-field';
@@ -32,7 +39,6 @@ export {
   SelectButton,
   SelectField,
 } from './select-field';
-export { SettingsCard, SettingsCards } from './settings-card';
 export {
   SettingsGroup,
   SettingsLayout,
@@ -40,7 +46,6 @@ export {
   SettingsRow,
 } from './settings-layout';
 export {
-  SettingsCardSkeleton,
   SettingsPageSkeleton,
   SettingsRowSkeleton,
   SettingsRowsSkeleton,

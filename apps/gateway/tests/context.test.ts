@@ -29,9 +29,11 @@ async function fixture() {
       boundaries: ['No external writes'],
     },
     model: { provider: 'openai', modelId: 'gpt-4o', apiKeyEnv: 'JIAN_PROVIDER_TEST' },
-    skills: [
-      { name: 'lookup', description: 'Search the catalog', instructions: 'Private skill body' },
-    ],
+  });
+  await services.skillLibrary.create({
+    name: 'lookup',
+    description: 'Search the catalog',
+    instructions: 'Private skill body',
   });
 
   const session = await services.sessions.createSession(profile.id, { title: 'Test' });
@@ -237,6 +239,7 @@ describe('context', () => {
 
     const context = buildContext(run, {
       servers: [],
+      library: await services.skillLibrary.read(),
       memories: await services.memories.memories(profile.id),
       activities: [],
       history: await services.sessions.messages(profile.id, run.sessionId),

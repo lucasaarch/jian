@@ -7,6 +7,7 @@ import {
   newChatPath,
   onActivity,
   onArtifacts,
+  onPlugins,
   onPulls,
   onSchedules,
 } from '../lib/navigation';
@@ -37,9 +38,11 @@ export function PhoneBar({ profileId }: { profileId: string }) {
         ? 'Pull requests'
         : onArtifacts(pathname)
           ? 'Artifacts'
-          : onActivity(pathname)
-            ? 'Activity'
-            : 'New chat';
+          : onPlugins(pathname)
+            ? 'Plugins'
+            : onActivity(pathname)
+              ? 'Activity'
+              : 'New chat';
 
   return (
     <header className="glass-bar flex shrink-0 items-center gap-1 border-b border-line px-1.5 pt-[env(safe-area-inset-top)]">

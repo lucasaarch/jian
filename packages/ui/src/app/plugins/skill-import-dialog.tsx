@@ -5,8 +5,8 @@ import { skillImportHint, skillImportPlaceholder } from '../../components/skills
 import { Action, Overlay, OverlayActions, TextField } from '../../kit';
 
 /**
- * Copies a skill, or a folder of them, from GitHub into the agent's own. The address is
- * forgotten once it is imported, so the next opening starts empty.
+ * Copies a skill, or a folder of them, from GitHub into the library every agent shares. The
+ * address is forgotten once it is imported, so the next opening starts empty.
  */
 export function SkillImportDialog({
   open,
@@ -35,7 +35,7 @@ export function SkillImportDialog({
       <form className="grid w-full gap-5 p-7" onSubmit={submit}>
         <header className="grid gap-1.5 pr-10">
           <h2 className="text-lg font-semibold tracking-tight">Import from GitHub</h2>
-          <p className="text-sm text-muted">Each agent keeps its own copy.</p>
+          <p className="text-sm text-muted">Copied into the library every agent shares.</p>
         </header>
         <TextField
           label="Address"

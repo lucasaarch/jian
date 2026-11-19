@@ -1,6 +1,6 @@
 import type { Skill } from '@jian/contracts';
 
-const PER_AGENT = `Memories, conversations, skills and the browser's logins stay per agent. Files do not.`;
+const PER_AGENT = `Memories, conversations and the browser's logins stay per agent. Files do not.`;
 
 const SERVER_FILES = `Commands run with \`run_command\`, in the \`shell\` tool group: load it with \`load_tools\`
 first. They run on the machine the gateway runs on, as whoever started it.

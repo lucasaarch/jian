@@ -5,6 +5,8 @@ const PAGES = [
   'appearance',
   'providers',
   'models',
+  // No longer pages of Settings: the panel sends these two on to Plugins, which needs the agent
+  // in use, known only there. They stay addresses so a bookmark or GitHub's way back still lands.
   'apps',
   'mcp-servers',
   'ssh-keys',

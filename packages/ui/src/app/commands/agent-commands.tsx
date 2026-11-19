@@ -3,6 +3,7 @@
 import {
   Activity,
   AlarmClock,
+  Blocks,
   Brain,
   Compass,
   Globe,
@@ -29,6 +30,7 @@ import {
   agentPath,
   artifactsPath,
   newChatPath,
+  pluginsPath,
   schedulesPath,
 } from '../../lib/navigation';
 import { useAgentOverlay } from '../../lib/stores/agent-overlay';
@@ -159,14 +161,37 @@ export function useAgentCommands({
         run: place(artifactsPath(current.id)),
       },
       {
+        id: 'plugins',
+        group: 'Agent',
+        title: 'Plugins',
+        detail: current.name,
+        keywords: [
+          'connector',
+          'app',
+          'mcp',
+          'server',
+          'tools',
+          'github',
+          'x',
+          'twitter',
+          'aws',
+          'account',
+          'connect',
+          'integrations',
+        ],
+        icon: <Blocks size={15} />,
+        run: place(pluginsPath(current.id)),
+      },
+      {
         id: 'skills',
         group: 'Agent',
         keys: { key: 'k', shift: true, alt: true },
         title: 'Skills',
         detail: current.name,
-        keywords: ['agent', 'skill', 'abilities'],
+        keywords: ['agent', 'skill', 'abilities', 'plugins', 'library', 'import'],
         icon: <Sparkles size={15} />,
-        run: () => useAgentOverlay.getState().openSettings('skills'),
+        // Every agent's, so a tab of Plugins and no longer a page of this agent's settings.
+        run: place(pluginsPath(current.id, 'skills')),
       },
       {
         id: 'memories',

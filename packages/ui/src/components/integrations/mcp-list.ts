@@ -7,7 +7,7 @@ import { queries } from '../../lib/query/profile';
 import type { SectionActions } from '../props';
 
 /** Which server a form edits: its place in the list, or a new one. */
-export type McpEditing = number | 'new';
+type McpEditing = number | 'new';
 
 /**
  * The installation's MCP servers and what changes them. The list is saved whole, and a value the
