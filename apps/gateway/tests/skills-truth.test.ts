@@ -55,7 +55,8 @@ const github = {
 // With what only a desktop's run is told: this file runs as a server.
 const everything = [
   ...builtinSkills([github], { worktrees: true }),
-  machineToolsFor(true),
+  machineToolsFor(true, 'manage'),
+  machineToolsFor(false, 'manage'),
   sshKeysFor(true),
   // As a conversation on a connected machine is told it, with and without file tools there.
   videoProductionFor({ files: true }),
@@ -103,6 +104,8 @@ const GONE = [
   // Settings → Apps and Settings → MCP servers became Plugins → Connectors, and each agent's
   // Skills page became Plugins → Skills.
   /Settings (→|>) (Apps|MCP servers)/,
+  // Command secrets became Secrets, which agents also keep.
+  /Command secrets/,
   // Only the linked-device WhatsApp channel remains.
   /WhatsApp Business/,
 ];
@@ -183,6 +186,17 @@ describe('what the built-in skills say', () => {
     );
     // Never a share of the window: on a 1M model the turn is summarised at a fifth of it.
     expect(said).not.toMatch(/half full|above about 50%/);
+  });
+
+  it('teaches the Secret tools only to a run that has them', () => {
+    const tools = /list_secrets|save_secret|delete_secret|share_secret/;
+
+    for (const owner of [true, false]) {
+      expect(machineToolsFor(owner, 'manage').instructions).toMatch(tools);
+      expect(machineToolsFor(owner, 'lend').instructions).not.toMatch(tools);
+      expect(machineToolsFor(owner, 'lend').instructions).toContain('`secrets`');
+      expect(machineToolsFor(owner, 'none').instructions).not.toMatch(/Secrets|`secrets`/);
+    }
   });
 
   it('never teaches X to a run that does not have it', () => {
