@@ -494,11 +494,15 @@ export const isAppServer = (server: {
   args?: readonly string[];
 }) => isAwsServer(server) || MCP_APPS.some((app) => isAt(app, server.url));
 
-/** The app's own name, or the first free one after it, so Connect never replaces a server. */
+/**
+ * The app's own name, or the first free one after it, so Connect never replaces a server. A
+ * server's name is `^[a-z0-9_]{1,30}$`, which an app id with a hyphen (`reactive-resume`) is not.
+ */
 export function freeName(app: McpApp, taken: string[]) {
-  if (!taken.includes(app.id)) return app.id;
+  const own = app.id.replace(/[^a-z0-9_]/g, '_').slice(0, 30);
+  if (!taken.includes(own)) return own;
   for (let count = 2; ; count += 1) {
-    const name = `${app.id.slice(0, 27)}_${count}`;
+    const name = `${own.slice(0, 27)}_${count}`;
     if (!taken.includes(name)) return name;
   }
 }
