@@ -1,19 +1,23 @@
 'use client';
 
 import { Menu } from '@base-ui/react/menu';
-import { Copy, Download, Ellipsis } from 'lucide-react';
-import { iconButton, MenuEntry, menuPopup } from '../../../kit';
+import { COMPONENT_PROMPT_TARGETS, componentPrompt } from '@jian/contracts';
+import { Copy, Download, Ellipsis, Sparkles } from 'lucide-react';
+import { iconButton, MenuEntry, MenuSubmenu, menuPopup } from '../../../kit';
 import { copy, download } from './source';
 
 /**
  * What else the open Artifact's bar can do, behind its one button: take its source away, as
  * text or as a file. For a deck that is the slide in view, which is the page being read, and
- * only as text: a deck's files have a menu of their own (deck/deck-download.tsx).
+ * only as text: a deck's files have a menu of their own (deck/deck-download.tsx). A component
+ * is also copied as a prompt for another AI, to use it as it is or in another framework: the
+ * same prompt its public page copies.
  */
 export function ArtifactOptions({
   source,
   file,
   what,
+  component,
 }: {
   /** The source as written; undefined until it is read. */
   source: string | undefined;
@@ -21,6 +25,8 @@ export function ArtifactOptions({
   file?: string;
   /** What is copied, as the owner is told: "Source", or "Slide". */
   what: string;
+  /** A React component's title, which its prompts are headed by; absent for every other type. */
+  component?: string;
 }) {
   return (
     <Menu.Root>
@@ -37,6 +43,20 @@ export function ArtifactOptions({
             >
               Copy source
             </MenuEntry>
+            {component !== undefined && source !== undefined && (
+              <MenuSubmenu icon={<Sparkles size={14} />} label="Copy prompt for">
+                {COMPONENT_PROMPT_TARGETS.map((target) => (
+                  <MenuEntry
+                    key={target.id}
+                    onClick={() =>
+                      void copy(componentPrompt(target.id, { title: component, source }), 'Prompt')
+                    }
+                  >
+                    {target.label}
+                  </MenuEntry>
+                ))}
+              </MenuSubmenu>
+            )}
             {file !== undefined && (
               <MenuEntry
                 icon={<Download size={14} />}

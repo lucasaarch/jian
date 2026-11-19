@@ -11,6 +11,7 @@ import {
 import { type Browser, chromium, type Frame, type Page } from 'playwright';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { artifactFrame, artifactPolicy, publishedArtifact } from '../src/artifacts/document.js';
+import { attachment } from '../src/artifacts/public-files.js';
 
 /**
  * The Artifact pages in a real browser. What they are made of is checked as text elsewhere
@@ -30,6 +31,18 @@ const SOURCE: Partial<Record<SessionArtifactType, string>> = {
   sheet: 'Item,Cost\nA,2\nB,3\nTotal,=SUM(B2:B3)*21\n',
 };
 const DECK = JSON.stringify({ slides: [slide('First'), slide('Second'), slide('Third')] });
+
+/** A public link's secret, which its downloads are addressed by. */
+const LINK = 'L'.repeat(43);
+/** The component as written, which is what its prompts carry; `SOURCE.react` is it compiled. */
+const WRITTEN = `export default function Counter() {\n  return <p>A component</p>;\n}\n`;
+/**
+ * A page whose own markup says what Jian's styles would change: a table, a body left to the
+ * browser's margin, and attributes on its `html` that its dressing must not take away.
+ */
+const TABLE = `<!doctype html><html class="own" style="--own: 1"><head><title>T</title></head><body><table><tr><td id="cell">A table ran</td></tr></table></body></html>`;
+/** Public pages by a name of their own: the type each is drawn as, and its source. */
+const PUBLIC: Record<string, [SessionArtifactType, string]> = { table: ['html', TABLE] };
 
 const embedded = (value: unknown) => JSON.stringify(value).replaceAll('<', '\\u003c');
 
@@ -83,10 +96,28 @@ describe.runIf(existsSync(process.env.PLAYWRIGHT_EXECUTABLE_PATH ?? chromium.exe
             artifactPolicy("'self'"),
           );
         }
-        if (kind === 'public') {
-          const source = type === 'deck' ? DECK : (SOURCE[type] ?? '');
-          return send(publishedArtifact(type, 'Shared', source), artifactPolicy("'none'"));
+        // A public page's download, as the gateway answers one: an attachment.
+        if (kind === 'public' && url.pathname.endsWith('/export')) {
+          response.writeHead(200, {
+            'content-type': 'text/html; charset=utf-8',
+            'content-disposition': attachment('Shared', 'html'),
+          });
+          return response.end('<p>Saved</p>');
         }
+        if (kind === 'public') {
+          const [drawn, source] = PUBLIC[name] ?? [
+            type,
+            type === 'deck' ? DECK : (SOURCE[type] ?? ''),
+          ];
+          return send(
+            publishedArtifact(drawn, 'Shared', source, {
+              token: LINK,
+              written: drawn === 'react' ? WRITTEN : source,
+            }),
+            artifactPolicy("'none'", true),
+          );
+        }
+        if (kind === 'blank') return send('<!doctype html><title>Blank</title>');
         // The panel's part, as artifact-frame.tsx plays it: the frame, and its source once it loads.
         // Editing, it also asks for the edit (`collect`) and keeps what the frame answers, not the
         // notice that something changed, which comes unasked. `wait`
@@ -419,6 +450,96 @@ exports.default = (props) =>
       await deck.keyboard.press('Escape');
       await settled('3 / 3', false);
       await deck.close();
+    });
+
+    it('draws a public web page as the panel does, with nothing of Jian’s styles in it', async () => {
+      const page = await browser.newPage({ colorScheme: 'dark' });
+      await page.goto(`${origin}/public/table`);
+      await expect.poll(() => read(page)).toContain('A table ran');
+      const inner = page.frames().find((frame) => frame.parentFrame() === page.mainFrame());
+      const looks = await inner?.evaluate(() => {
+        const cell = getComputedStyle(document.getElementById('cell') as Element);
+        const root = document.documentElement;
+        return {
+          // The browser's own margin and an unbordered cell: no frame style of Jian's.
+          margin: getComputedStyle(document.body).margin,
+          border: cell.borderTopStyle,
+          padding: cell.paddingLeft,
+          classes: [...root.classList].sort(),
+          own: getComputedStyle(root).getPropertyValue('--own').trim(),
+          // The meta's scheme, used dark: the browser's own text is light.
+          text: getComputedStyle(document.body).color,
+        };
+      });
+      expect(looks).toEqual({
+        margin: '8px',
+        border: 'none',
+        padding: '1px',
+        // Its own class kept beside the dark one the reader's system gives it.
+        classes: ['dark', 'own'],
+        own: '1',
+        text: 'rgb(255, 255, 255)',
+      });
+      await page.close();
+    });
+
+    it('shows a public page’s toolbar only when it is come for, and saves its files', async () => {
+      const page = await browser.newPage({ viewport: { width: 1000, height: 700 } });
+      await page.goto(`${origin}/public/table`);
+      await expect.poll(() => read(page)).toContain('A table ran');
+      const bar = () =>
+        page.evaluate(() => getComputedStyle(document.getElementById('bar') as Element).opacity);
+      // The toolbar is the page's own, not the Artifact's frame's.
+      expect(
+        await page
+          .frames()
+          .at(-1)
+          ?.evaluate(() => document.getElementById('bar')),
+      ).toBeNull();
+      expect(await bar()).toBe('0');
+
+      // At the top edge it comes in, and away from it goes again.
+      await page.mouse.move(500, 300);
+      await page.mouse.move(500, 3);
+      await expect.poll(bar).toBe('1');
+      await page.mouse.move(500, 400);
+      await expect.poll(bar).toBe('0');
+
+      // The keyboard finds it first.
+      await page.keyboard.press('Tab');
+      await expect.poll(bar).toBe('1');
+      expect(
+        await page.evaluate(() => document.activeElement?.closest('#downloads') !== null),
+      ).toBe(true);
+
+      // A download is saved by the page, which the sandbox lets it alone do.
+      await page.keyboard.press('ArrowDown');
+      const saved = page.waitForEvent('download');
+      await page.keyboard.press('Enter');
+      expect((await saved).suggestedFilename()).toBe('Shared.html');
+      expect(asked).toContain(`/public/${LINK}/export`);
+      await page.close();
+    });
+
+    it('copies a component’s prompt for another framework from its public page', async () => {
+      const context = await browser.newContext();
+      await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin });
+      const page = await context.newPage();
+      await page.goto(`${origin}/public/react`);
+      await expect.poll(() => read(page)).toContain('A component');
+
+      await page.mouse.move(500, 3);
+      await page.click('#prompts .tool');
+      await page.click('[data-target="vue"]');
+      await expect.poll(() => page.textContent('#prompts .tool')).toBe('Copied');
+
+      // Read back where the clipboard may be read: a page of the same address, unsandboxed.
+      const reader = await context.newPage();
+      await reader.goto(`${origin}/blank`);
+      const copied = await reader.evaluate(() => navigator.clipboard.readText());
+      expect(copied).toContain('Vue 3 single-file component');
+      expect(copied).toContain(`\`\`\`tsx\n${WRITTEN}\`\`\`\n`);
+      await context.close();
     });
   },
 );

@@ -235,10 +235,11 @@ describe('who reads an Artifact', () => {
         "form-action 'none'",
         "frame-src 'none'",
         "frame-ancestors 'none'",
-        'sandbox allow-scripts',
+        // The page saves its own downloads; the Artifact's frame is given scripts alone.
+        'sandbox allow-scripts allow-downloads',
       ]),
     );
-    expect(policy).not.toMatch(/allow-same-origin|unsafe-eval|https?:|\*/);
+    expect(policy).not.toMatch(/allow-same-origin|allow-popups|allow-top|unsafe-eval|https?:|\*/);
     // The source arrives as data, and what it holds never reads as the page's own markup.
     expect(page.body).toContain('Hello \\u003c/script&#62;\\u003cscript&#62;alert(1)');
     expect(page.body).not.toContain('<script>alert(1)');
@@ -317,12 +318,13 @@ describe('who reads an Artifact', () => {
     };
 
     expect((await app.inject({ url: file(deck.id, 'format=pdf') })).statusCode).toBe(401);
-    // A public link reads the deck and is proof of nothing else: it draws no file.
+    // A public link is proof of its own page and files alone (below), never of the owner's.
     const { publicPath } = (await setVisibility(deck.id, 'public')).json();
     const secret = publicPath.split('/').at(-1);
     expect(await answered(file(deck.id, 'format=pdf'), `Bearer ${secret}`)).toMatch(/^401 /);
-    expect((await app.inject({ url: `${publicPath}/export?format=pdf` })).statusCode).toBe(401);
-    expect(await answered(`${publicPath}/export?format=pdf`)).toMatch(/^404 /);
+    // Nor of what the owner's files have and its own do not: a picture of one slide.
+    expect(await answered(`${publicPath}/export?format=png`)).toBe('400 Invalid request');
+    expect(await answered(`${publicPath}/export?format=pdf&slide=1`)).toBe('400 Invalid request');
 
     // Nor through another conversation, with the credential.
     const elsewhere = await services.sessions.createSession(owner.id, { channel: 'api' });

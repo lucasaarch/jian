@@ -165,6 +165,7 @@ import {
   deckExportSchema,
   profileArtifactPageSchema,
   profileArtifactsQuerySchema,
+  publicArtifactExportQuerySchema,
   publicArtifactParamsSchema,
   sessionArtifactEditSchema,
   sessionArtifactSchema,
@@ -220,7 +221,7 @@ export type Operation = {
   response: z.ZodType;
   status?: number;
   stream?: boolean;
-  responseContentType?: 'text/plain';
+  responseContentType?: 'text/plain' | 'application/octet-stream';
   /**
    * The body of every refusal, for an operation that speaks another API's dialect. Absent,
    * refusals share the gateway's own error body.
@@ -1710,6 +1711,21 @@ export const operations: Operation[] = [
     access: 'public',
     params: publicArtifactParamsSchema,
     response: z.string(),
+  },
+  {
+    // The same proof, for one file of that Artifact's latest version, as an attachment: a format
+    // its type offers (PUBLIC_ARTIFACT_FORMATS). Nothing else of it, nor any other version. A
+    // desktop app's own gateway serves nothing public and answers 404. Drawing a PDF or a
+    // PowerPoint file takes the gateway's browser, so one link draws one file at a time and a
+    // reader asking for more meanwhile is refused with a 429.
+    method: 'GET',
+    path: '/v1/public-artifacts/:token/export',
+    operationId: 'exportPublicArtifact',
+    access: 'public',
+    params: publicArtifactParamsSchema,
+    query: publicArtifactExportQuerySchema,
+    response: z.string(),
+    responseContentType: 'application/octet-stream',
   },
   {
     method: 'GET',

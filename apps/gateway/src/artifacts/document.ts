@@ -11,6 +11,7 @@ import { GatewayError } from '../core/errors.js';
 import { EDITORS } from './edit-frame.js';
 import { type FrameTheme, frameStyle } from './frame-style.js';
 import { PLAYER, PLAYER_EMBEDDED } from './player.js';
+import { publicPage } from './public-page.js';
 import { type RuntimeFile, runtimeSource } from './runtime.js';
 import { SHEET } from './sheet-frame.js';
 
@@ -45,7 +46,15 @@ import { SHEET } from './sheet-frame.js';
  * link never serves it. The other is a component's tweaks (ARTIFACT_TWEAKS_MESSAGE): the shell
  * relays that key alone, and the panel takes it as data to draw fields from, checked first.
  */
-export function artifactPolicy(ancestors: "'self'" | "'none'"): string {
+export function artifactPolicy(
+  ancestors: "'self'" | "'none'",
+  /**
+   * The public page's own leave to save a file, for its Download menu (public-page.ts). The
+   * Artifact's frame inside it is still given `allow-scripts` alone, and a frame never has a flag
+   * its own `sandbox` attribute does not grant.
+   */
+  downloads = false,
+): string {
   return [
     "default-src 'none'",
     "script-src 'unsafe-inline'",
@@ -58,7 +67,7 @@ export function artifactPolicy(ancestors: "'self'" | "'none'"): string {
     "form-action 'none'",
     "frame-src 'none'",
     `frame-ancestors ${ancestors}`,
-    'sandbox allow-scripts',
+    `sandbox allow-scripts${downloads ? ' allow-downloads' : ''}`,
   ].join('; ');
 }
 
@@ -72,8 +81,8 @@ const WRITE = `document.write(source);`;
  * `root` and `run` in reach. `libraries` are the type's files below, in their order.
  *
  * `whole` is a type whose source is a page already. In the panel the shell makes the frame out
- * of it and no page of ours stands between (`shell` below); `body` is then only how its public
- * page, which arrives holding the source, draws it.
+ * of it and no page of ours stands between (`shell` below). On a public link a web page is its
+ * frame too (`publishedArtifact`), and a deck's `body` is the player that holds its slides.
  */
 const DRAW: Record<
   SessionArtifactType,
@@ -287,6 +296,32 @@ addEventListener('message', (event) => {
 })();</script>`;
 
 /**
+ * Where a page's dressing goes: after its doctype and after its own `<html>` start tag when it
+ * has one. Before that tag, the dressing's class and scheme would be on the element first, and a
+ * browser keeps an attribute already there over the tag's own: a page's `<html class="…">` or
+ * `style` would be lost.
+ */
+const DRESSED_AT = /^\s*(?:<!doctype[^>]*>)?\s*(?:<!--[\s\S]*?-->\s*)*(?:<html\b[^>]*>)?/i;
+
+/**
+ * An HTML page as its public link draws it: the agent's page alone, as in the panel, with only
+ * what it needs to follow the reader's system as the panel's theme is followed there. Its scheme,
+ * which `light-dark()` and the browser's own colours read, and the dark class Tailwind-style
+ * dark: variants read, kept as the system changes. None of Jian's styles.
+ */
+const publicWebPage = (source: string) => {
+  const at = DRESSED_AT.exec(source)?.[0].length ?? 0;
+  const dressing = `<meta name="color-scheme" content="light dark"><script>(() => {
+const dark = matchMedia('(prefers-color-scheme: dark)');
+const apply = () => document.documentElement.classList.toggle('dark', dark.matches);
+apply();
+dark.addEventListener('change', apply);
+})();</script>`;
+
+  return source.slice(0, at) + dressing + source.slice(at);
+};
+
+/**
  * What the gateway answers: a shell that holds the Artifact's page in a sandboxed `srcdoc` frame.
  * Loading a `srcdoc` is no request, so `frame-src 'none'` lets it be and refuses every later
  * navigation of the frame. Should one still get through, the frame is removed rather than kept:
@@ -342,12 +377,13 @@ function shell(
       ? ''
       : `
 <iframe id="artifact" sandbox="allow-scripts" referrerpolicy="no-referrer"${fullscreen ? ' allowfullscreen' : ''} srcdoc="${escaped(inner)}"></iframe>`;
-  // What is added goes after a leading doctype, which has to stay first.
+  // What is added goes after a leading doctype, which has to stay first, and after the page's
+  // own `<html>` tag (DRESSED_AT), as on a public link.
   const dress = dressed
     ? `
   const dressing = ${embedded({ dark: dressing('dark'), light: dressing('light') })};
   const dress = (source) => {
-    const at = (/^\\s*<!doctype[^>]*>/i.exec(source) || [''])[0].length;
+    const at = (new RegExp(${embedded(DRESSED_AT.source)}, 'i').exec(source) || [''])[0].length;
     return source.slice(0, at) + (scheme ? dressing[scheme] : '') + source.slice(at);
   };`
     : '';
@@ -510,13 +546,25 @@ export function artifactFrame(
 }
 
 /**
- * One Artifact as a page of its own, which is what a public link answers. Only a deck's frame may
- * take the whole screen, to be presented: that frame runs the gateway's own player, and each
- * slide, which is what the agent wrote, sits one frame further in with no such leave.
+ * One Artifact as a page of its own, which is what a public link answers: the gateway's page
+ * with its toolbar (public-page.ts), holding the Artifact drawn exactly as the panel draws it. A
+ * web page is its own source in the frame, as in the panel, with nothing of Jian's around it;
+ * every other type is the page of its type, the panel's own. Only a deck's frame may take the
+ * whole screen, to be presented: that frame runs the gateway's own player, and each slide, which
+ * is what the agent wrote, sits one frame further in with no such leave.
+ *
+ * `token` addresses its downloads; `written` is a component's source as written, for its prompts.
  */
 export const publishedArtifact = (
   type: SessionArtifactType,
   title: string,
   source: string,
+  link: { token?: string; written?: string } = {},
 ): string =>
-  shell(title, page(type, { title, source }), 'nothing', { fullscreen: type === 'deck' });
+  publicPage(type === 'html' ? publicWebPage(source) : page(type, { title, source }), {
+    type,
+    title,
+    token: link.token,
+    written: link.written,
+    fullscreen: type === 'deck',
+  });
