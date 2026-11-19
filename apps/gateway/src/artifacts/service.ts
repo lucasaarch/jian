@@ -1,16 +1,25 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import {
+  ARTIFACT_FILE_FORMATS,
   type ArtifactFolder,
   type ArtifactFolders,
+  artifactFileFormats,
+  artifactSendSchema,
+  artifactShareSchema,
+  artifactSourceEditSchema,
   type DeckExport,
+  type DeckExportQuery,
   deckExportQuerySchema,
   deckSlideAddSchema,
   deckSlideDeleteSchema,
   deckSlideMoveSchema,
   deckSlideUpdateSchema,
   EDITABLE_ARTIFACT_TYPES,
+  type MediaMime,
+  mediaMimeOf,
   type ProfileArtifact,
   profileArtifactsQuerySchema,
+  SESSION_ARTIFACT_MAX,
   type SessionArtifact,
   type SessionArtifactAuthor,
   type SessionArtifactType,
@@ -32,6 +41,7 @@ import type { Queryable, Store } from '../storage/database.js';
 import { sessionArtifacts, sessionArtifactVersions } from '../storage/schema.js';
 import { changedSlides, deckContent, type SlideChange, slidesOf } from './deck.js';
 import { documentDocx } from './document-export.js';
+import { editedSource } from './edits.js';
 import { exportDeck, exportDocumentPdf, MIME } from './export.js';
 import { createFolder, deleteFolder, listFolders, ownFolder, renameFolder } from './folders.js';
 import { pageProfileArtifacts } from './listing.js';
@@ -109,6 +119,20 @@ function kept(type: SessionArtifactType, given: Given): string {
   return given.content;
 }
 
+const tooLong = (what: string) =>
+  new GatewayError(
+    400,
+    `${what} would be over ${SESSION_ARTIFACT_MAX.toLocaleString('en')} characters after these edits. Nothing was changed.`,
+  );
+
+/** A title as a file is named: words a file system and every chat app take, never empty. */
+const fileTitle = (title: string) =>
+  title
+    .replace(/[^\p{L}\p{N} _-]+/gu, '-')
+    .replace(/\s+/g, ' ')
+    .replace(/^[\s-]+|[\s-]+$/g, '')
+    .slice(0, 80) || 'artifact';
+
 /** What the owner's copy of an Artifact is called after the one it was made from. */
 const COPY = ' (copy)';
 
@@ -149,6 +173,11 @@ export class SessionArtifacts {
      * public, and nothing that arrived public in its data is served.
      */
     private readonly local = false,
+    /**
+     * `JIAN_PUBLIC_URL`, where the internet reaches this gateway's `/v1` routes: what turns a
+     * public Artifact's path into a link the agent can hand on. Absent, it has only the path.
+     */
+    private readonly publicUrl?: string,
   ) {}
 
   /**
@@ -337,6 +366,63 @@ export class SessionArtifacts {
       await this.shown(tx, profileId, sessionId, revised.id);
 
       return { ...revised, slides: slides.length };
+    });
+  }
+
+  /**
+   * The agent's targeted edits to one: each `find` replaced in the latest version, whoever wrote
+   * it, which becomes a new version checked as any other is (a component must still compile). A
+   * deck's edits are in one slide, the rest kept as they are. The row is held, as for a slide,
+   * so an edit never applies to a version another change is replacing at that moment.
+   */
+  async editSource(
+    profileId: string,
+    sessionId: string,
+    input: unknown,
+  ): Promise<SessionArtifact & { slides?: number }> {
+    const { artifactId, edits, slide } = artifactSourceEditSchema.parse(input);
+
+    return this.store.transaction(profileId, async (tx) => {
+      const current = await this.find(tx, profileId, sessionId, artifactId, true);
+      const latest = await this.stored(tx, current.id, current.version);
+      let content: string;
+      let slides: number | undefined;
+
+      if (current.type === 'deck') {
+        const all = slidesOf(latest.content);
+        if (slide === undefined) {
+          throw new GatewayError(
+            400,
+            `A deck is edited one slide at a time: say which \`slide\`, counting from 1. It has ${all.length}.`,
+          );
+        }
+        const html = all[slide - 1];
+        if (html === undefined) {
+          throw new GatewayError(
+            400,
+            `The deck has ${all.length} ${all.length === 1 ? 'slide' : 'slides'}, so there is no slide ${slide}.`,
+          );
+        }
+        const edited = editedSource(html, edits, `slide ${slide}`);
+        if (edited.length > SESSION_ARTIFACT_MAX) throw tooLong(`Slide ${slide}`);
+        const changed = changedSlides(all, { op: 'update', slide, html: edited });
+        content = deckContent(changed);
+        slides = changed.length;
+      } else {
+        if (slide !== undefined) {
+          throw new GatewayError(
+            400,
+            `Only a deck has slides, and this Artifact is ${current.type}. Leave \`slide\` out.`,
+          );
+        }
+        const edited = editedSource(latest.content, edits, 'the source');
+        if (edited.length > SESSION_ARTIFACT_MAX) throw tooLong('The source');
+        content = kept(current.type, { content: edited });
+      }
+      const revised = await this.versioned(tx, current, content, 'agent');
+      await this.shown(tx, profileId, sessionId, revised.id);
+
+      return slides === undefined ? revised : { ...revised, slides };
     });
   }
 
@@ -691,6 +777,74 @@ export class SessionArtifacts {
 
       return recordOf(assertFound(row, 'Artifact'));
     });
+  }
+
+  /**
+   * The agent's change to who reads one, made as the owner's is: public is a new link each time,
+   * private takes it away. Answers the link as the internet reaches it when the gateway knows
+   * its own address, and null in its place when it does not, beside the path.
+   */
+  async share(
+    profileId: string,
+    sessionId: string,
+    input: unknown,
+  ): Promise<{ artifact: SessionArtifact; link: string | null }> {
+    const { artifactId, visibility } = artifactShareSchema.parse(input);
+    const artifact = await this.update(profileId, sessionId, artifactId, { visibility });
+    const link =
+      artifact.publicPath && this.publicUrl
+        ? new URL(artifact.publicPath, this.publicUrl).toString()
+        : null;
+
+    return { artifact, link };
+  }
+
+  /**
+   * A version as a file to send: its source as it was written, or a file `export` makes of it.
+   * A format its type does not have (`ARTIFACT_FILE_FORMATS`) is refused with those it has,
+   * before anything is read or drawn. It reads and changes nothing.
+   */
+  async file(
+    profileId: string,
+    sessionId: string,
+    input: unknown,
+  ): Promise<{ name: string; mimeType: MediaMime; data: Buffer; version: number }> {
+    const wanted = artifactSendSchema.parse(input);
+    const artifact = await this.find(this.store.db, profileId, sessionId, wanted.artifactId);
+    const formats = artifactFileFormats(artifact.type);
+
+    if (!formats.includes(wanted.format)) {
+      throw new GatewayError(
+        400,
+        `This ${artifact.type} Artifact is sent as ${formats.join(' or ')}, not ${wanted.format}.`,
+      );
+    }
+    if (wanted.slide !== undefined && wanted.format !== 'png') {
+      throw new GatewayError(400, 'Only a picture of a deck is of one slide: leave `slide` out.');
+    }
+    const version = wanted.version ?? artifact.version;
+    const name = `${fileTitle(artifact.title)}${wanted.slide ? ` - slide ${wanted.slide}` : ''}.${wanted.format}`;
+    const { source } = ARTIFACT_FILE_FORMATS[artifact.type] as { source?: string };
+
+    if (wanted.format === source) {
+      const { content } = await this.stored(this.store.db, artifact.id, version);
+      const type = mediaMimeOf(undefined, name);
+      // A component's and a diagram's source have no type of their own: they are text.
+      const mimeType = type === 'application/octet-stream' ? 'text/plain' : type;
+
+      return { name, mimeType, data: Buffer.from(content, 'utf8'), version };
+    }
+    const made = await this.export(profileId, sessionId, artifact.id, version, {
+      format: wanted.format as DeckExportQuery['format'],
+      ...(wanted.slide === undefined ? {} : { slide: wanted.slide }),
+    });
+
+    return {
+      name,
+      mimeType: mediaMimeOf(made.mimeType, name),
+      data: Buffer.from(made.data, 'base64'),
+      version,
+    };
   }
 
   /**

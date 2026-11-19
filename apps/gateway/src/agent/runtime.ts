@@ -159,7 +159,6 @@ import {
   MACHINE_FILES_SUMMARY,
   profileTools,
   skillFor,
-  TOOL_GROUPS,
   type ToolServices,
 } from './tools.js';
 import type { ModelResolver, RuntimeOptions } from './types.js';
@@ -1024,11 +1023,10 @@ export class AgentRuntime {
           },
         }),
       };
-      // Only the panel has an Inspector to bring something to; a channel's chat does not.
-      if (session.channel !== GATEWAY_SESSION_CHANNEL) {
-        delete tools.open_in_inspector;
-        for (const name of TOOL_GROUPS.artifacts.tools) delete tools[name];
-      }
+      // Only the panel has an Inspector to bring something to; a channel's chat does not. An
+      // Artifact is still made there: the owner finds it in the panel, and the person on the
+      // channel gets it as a file or a link (tools.ts tells the agent so with each result).
+      if (session.channel !== GATEWAY_SESSION_CHANNEL) delete tools.open_in_inspector;
       if (defaults?.image === 'disabled') delete tools.generate_image;
       if (defaults?.speech === 'disabled') {
         delete tools.generate_speech;

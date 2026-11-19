@@ -68,7 +68,8 @@ an image or a voice note asked for here and meant for someone there. \`generate_
 
 In a conversation in the panel, what the owner will look at, use or change there (a page,
 slides, a Markdown document, a spreadsheet to work in, a diagram) is better made
-with \`create_artifact\`, as its own type.
+with \`create_artifact\`, as its own type. There, an Artifact already made goes out as a file
+with \`send_artifact\`, in the format asked for, not by writing its source into \`send_file\`.
 A finished file (a PDF, a Word, Excel or PowerPoint file, a picture) is sent with \`send_file\`.
 
 Send a file when the answer is a file: a spreadsheet, a report someone will keep or forward,

@@ -26,6 +26,8 @@ const ACTION_KINDS: Partial<Record<string, ActionKind>> = {
   merge_worktree: 'machine',
   remove_worktree: 'machine',
   send_file: 'message',
+  // An Artifact sent as a file is a file that leaves, as send_file's is.
+  send_artifact: 'message',
   send_session_message: 'message',
   message_contact: 'message',
   send_email: 'message',
@@ -237,6 +239,20 @@ const PLAIN: Record<
         }
       : { title: `Remove worktree ${field(input, 'name')}`, confirm: 'Remove' },
   send_file: (input) => ({ title: 'Send a file', detail: field(input, 'path'), confirm: 'Send' }),
+  send_artifact: (input) => ({
+    title: field(input, 'format')
+      ? `Send an Artifact as a ${field(input, 'format')?.toUpperCase()} file`
+      : 'Send an Artifact as a file',
+    detail: field(input, 'title'),
+    confirm: 'Send',
+  }),
+  share_artifact: (input) => ({
+    title: 'Make an Artifact public',
+    detail: [field(input, 'title'), 'Anyone with its link will be able to open it.']
+      .filter(Boolean)
+      .join('\n'),
+    confirm: 'Make public',
+  }),
   send_session_message: (input) => ({
     title: 'Send a message',
     detail: field(input, 'text'),
@@ -346,6 +362,10 @@ function xPlain(toolName: string, input: unknown) {
  */
 export function actionKind(toolName: string, input: unknown): ActionKind | undefined {
   if (toolName === 'github_git') return field(input, 'action') === 'push' ? 'service' : 'machine';
+  // Public hands what the owner made to anyone with the link; private only takes it back.
+  if (toolName === 'share_artifact') {
+    return field(input, 'visibility') === 'private' ? undefined : 'message';
+  }
   return ACTION_KINDS[toolName];
 }
 
