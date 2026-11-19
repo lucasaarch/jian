@@ -4,6 +4,19 @@ Every release of Jian, newest first.
 
 <!-- Generated from docs/releases by scripts/changelog.mjs. Edit the release note, then run `make changelog`. -->
 
+## 1.12.3 — 2026-11-19
+
+A Claude model that thinks for a long time no longer has its turn cut off after five minutes.
+
+### Models
+
+* **Long thinking finishes:** On Claude Opus 4.7 and newer, a turn that thought for more than five minutes before writing anything, such as at Extra High effort over a large file, was stopped as if the model had stalled. Those models now stream a summary of their thinking as they go, so the gateway can tell that they are still working. What they think and what it costs stay the same.
+
+### Upgrading
+
+* The desktop app updates itself to this release. Remote workers update themselves as well.
+* **Servers:** Recreate the gateway and web containers with the 1.12.3 images, or follow the `latest` tags. This release has no migration.
+
 ## 1.12.2 — 2026-11-19
 
 The desktop app no longer quits when it opens an Artifact from a server gateway, and a web page stays in the panel's theme while you edit it.
