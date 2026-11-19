@@ -1,7 +1,7 @@
 import type { PanelUsage } from '@jian/contracts';
 import { type Client, profile } from './params';
 import { result } from './result';
-import type { ScheduleInput, SchedulePatch } from './types';
+import type { CommandSecretPatch, NewCommandSecret, ScheduleInput, SchedulePatch } from './types';
 
 /** What the agent carries between runs: what it remembers and what it knows how to do. */
 export const resourceCalls = (client: Client) => ({
@@ -15,6 +15,28 @@ export const resourceCalls = (client: Client) => ({
   createSshKey: (body: { name: string }) => result(client.POST('/v1/ssh-keys', { body })),
   deleteSshKey: (keyId: string) =>
     result(client.DELETE('/v1/ssh-keys/{keyId}', { params: { path: { keyId } } })),
+  commandSecrets: (profileId: string) =>
+    result(client.GET('/v1/profiles/{profileId}/command-secrets', { params: profile(profileId) })),
+  createCommandSecret: (profileId: string, body: NewCommandSecret) =>
+    result(
+      client.POST('/v1/profiles/{profileId}/command-secrets', {
+        params: profile(profileId),
+        body,
+      }),
+    ),
+  updateCommandSecret: (profileId: string, name: string, body: CommandSecretPatch) =>
+    result(
+      client.PATCH('/v1/profiles/{profileId}/command-secrets/{name}', {
+        params: { path: { profileId, name } },
+        body,
+      }),
+    ),
+  deleteCommandSecret: (profileId: string, name: string) =>
+    result(
+      client.DELETE('/v1/profiles/{profileId}/command-secrets/{name}', {
+        params: { path: { profileId, name } },
+      }),
+    ),
   devices: () => result(client.GET('/v1/devices')),
   createDevicePairing: () => result(client.POST('/v1/devices/pairings')),
   updateDevice: (deviceId: string, body: { name?: string; previews?: boolean }) =>

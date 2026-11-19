@@ -1,7 +1,7 @@
 'use client';
 
 import { panelFeatureOf } from '@jian/contracts';
-import { Brain, MessagesSquare, UserRound } from 'lucide-react';
+import { Brain, KeyRound, MessagesSquare, UserRound } from 'lucide-react';
 import { Suspense, useEffect } from 'react';
 import { Page, SettingsLayout, type SettingsPage } from '../kit';
 import { useGatewayMode } from '../lib/gateway-mode';
@@ -12,6 +12,7 @@ import { useUsage } from '../lib/usage';
 import { usePathname, useRouter } from '../platform/navigation';
 import { AgentSettingsContent } from './agent-settings';
 import { ChannelsPage, ChannelsWaiting } from './customize/channels-page';
+import { CommandSecretsPage } from './customize/command-secrets-page';
 import { MemoriesPage, MemoriesWaiting } from './customize/memories-page';
 
 /**
@@ -61,6 +62,12 @@ function AgentSettingsOverlay({ profileId }: { profileId: string }) {
       icon: <Brain size={15} />,
       keywords: ['memory', 'remember', 'facts'],
     },
+    {
+      id: 'secrets',
+      label: 'Command secrets',
+      icon: <KeyRound size={15} />,
+      keywords: ['secret', 'key', 'api key', 'token', 'environment', 'variable', 'credential'],
+    },
     ...(server
       ? [
           {
@@ -92,6 +99,8 @@ function AgentSettingsOverlay({ profileId }: { profileId: string }) {
           <Suspense key={page} fallback={<MemoriesWaiting />}>
             <MemoriesPage />
           </Suspense>
+        ) : page === 'secrets' ? (
+          <CommandSecretsPage key={page} />
         ) : (
           <Suspense key={page} fallback={<ChannelsWaiting />}>
             <ChannelsPage />

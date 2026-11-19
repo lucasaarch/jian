@@ -77,7 +77,7 @@ import { fileLinkTools } from './file-link-tools.js';
 import { type FileBackend, fileTools } from './files.js';
 import { remoteTools } from './remote-tools.js';
 import { artifactPage } from './results.js';
-import { shellTools } from './shell.js';
+import { type CommandSecretAccess, shellTools } from './shell.js';
 
 /** What the tool set reaches for on the profile's behalf during a run. */
 const jevQuestionSchema = z.discriminatedUnion('type', [
@@ -266,6 +266,8 @@ export function profileTools(
   email = false,
   /** In an email conversation, the correspondent `reply_email` answers. */
   replyTo?: string,
+  /** The owner's command secrets this run's `run_command` may hand a command. */
+  commandSecrets?: CommandSecretAccess,
 ): ToolSet {
   const coordination = new Coordination(services);
   const rechecked = new Set<string>();
@@ -1208,7 +1210,7 @@ export function profileTools(
   // The shell and the file tools are always available, and so is every connected
   // machine; a conversation aimed at one machine works there instead of locally: its commands
   // through run_remote_command, its files through the same file tools when its worker has them.
-  if (!remoteTarget) Object.assign(tools, shellTools(gitAccess));
+  if (!remoteTarget) Object.assign(tools, shellTools(gitAccess, commandSecrets));
   else if (machineFiles) Object.assign(tools, fileTools(machineFiles));
   // A link reads the gateway's own files, so only a run whose files are here gets one.
   if (!remoteTarget && services.fileLinks) {

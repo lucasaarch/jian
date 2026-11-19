@@ -33,6 +33,7 @@ const FIXED = [
   'agent_identity',
   'memories',
   'agent_channels',
+  'agent_secrets',
   // Settings, by page.
   'settings_general',
   'settings_appearance',

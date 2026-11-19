@@ -2,6 +2,7 @@ import { localPlace, remotePlace } from './agent/github-git-place.js';
 import { prepareGitAccess } from './agent/worker-workspace.js';
 import { SessionArtifacts } from './artifacts/service.js';
 import { Contacts } from './channels/contacts.js';
+import { CommandSecrets } from './command-secrets/service.js';
 import { Contexts } from './context/service.js';
 import type { Clock } from './core/clock.js';
 import { Decisions } from './decisions/service.js';
@@ -76,6 +77,7 @@ export type Services = {
   vault: Vault;
   gatewayVault: GatewayVault;
   sshKeys: SshKeys;
+  commandSecrets: CommandSecrets;
   mcp: McpServers;
   skillLibrary: SkillLibrary;
   remote: Remote;
@@ -183,6 +185,8 @@ export function buildServices({
     decisions.judge,
   );
   const sshKeys = new SshKeys(store, gatewayVault);
+  const commandSecrets = new CommandSecrets(store, gatewayVault, clock);
+  profiles.useBeforeDelete((profileId, tx) => commandSecrets.forgetAgent(profileId, tx));
   const worktrees = new Worktrees(
     store,
     clock,
@@ -253,6 +257,7 @@ export function buildServices({
     vault,
     gatewayVault,
     sshKeys,
+    commandSecrets,
     mcp: new McpServers(store, gatewayVault, clock),
     skillLibrary: new SkillLibrary(store, clock),
     remote,
