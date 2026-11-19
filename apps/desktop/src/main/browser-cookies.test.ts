@@ -96,19 +96,22 @@ describe('reading a Chromium cookie store', () => {
     expect(names).not.toContain('bound');
   });
 
-  it('says to give Jian Full Disk Access when macOS keeps the store from it', async () => {
-    const file = chromium(24);
-    // What macOS answers a reader it does not allow; root reads past it, so the check needs a user.
-    chmodSync(file, 0o000);
-    try {
-      if (process.getuid?.() === 0) return;
-      await expect(readChromiumCookies(file, PASSWORD, NOW, 'Chrome')).rejects.toThrow(
-        "macOS did not let Jian read Chrome's cookies. Give Jian Full Disk Access",
-      );
-    } finally {
-      chmodSync(file, 0o600);
-    }
-  });
+  // A file no one may read stands for what macOS answers a reader it does not allow. Windows
+  // has no such mode bits, and root reads past them, so neither can play it.
+  it.skipIf(process.platform === 'win32' || process.getuid?.() === 0)(
+    'says to give Jian Full Disk Access when macOS keeps the store from it',
+    async () => {
+      const file = chromium(24);
+      chmodSync(file, 0o000);
+      try {
+        await expect(readChromiumCookies(file, PASSWORD, NOW, 'Chrome')).rejects.toThrow(
+          "macOS did not let Jian read Chrome's cookies. Give Jian Full Disk Access",
+        );
+      } finally {
+        chmodSync(file, 0o600);
+      }
+    },
+  );
 
   it('brings no value under a wrong password', async () => {
     const cookies = await readChromiumCookies(chromium(24), 'not-the-password', NOW);
