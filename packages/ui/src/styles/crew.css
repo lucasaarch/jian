@@ -245,3 +245,22 @@
     display: none;
   }
 }
+
+/* One line under the Inspector's whole head, whatever the tab, so what it holds starts below a
+   rule: under the row of tabs when the tab has nothing more (a terminal), under the tab's own bar
+   when it has one (data-inspector-head="bar"), or under what heads the tab below that bar, which
+   draws its own (data-inspector-head="header": a subagent's or an issue's heading, a pull
+   request's sections, the browser's address). Never two: each one under the last hides the line
+   above it. A colour, not a width, so nothing moves by a pixel as the tab changes. */
+.inspector-tabs {
+  border-bottom: 1px solid var(--glass-edge);
+}
+.inspector-host:has([data-inspector-head]) .inspector-tabs {
+  border-bottom-color: transparent;
+}
+.inspector-host [data-inspector-head="bar"] {
+  border-bottom: 1px solid var(--glass-edge);
+}
+.inspector-host:has([data-inspector-head="header"]) [data-inspector-head="bar"] {
+  border-bottom-color: transparent;
+}

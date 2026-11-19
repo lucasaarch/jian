@@ -386,7 +386,7 @@ export function InspectorHost({
             {/* The close button sits at the Inspector's edge, the one its content keeps to. */}
             <div
               // Full screen with the sidebar put away reaches the title bar's own buttons.
-              className={`relative z-40 flex h-10 shrink-0 items-center gap-1 pr-[calc(var(--window-controls,0px)+var(--inspector-inset))] ${full && wholePanel && !sidebar ? 'pl-52' : 'pl-(--inspector-inset)'} [-webkit-app-region:no-drag]`}
+              className={`inspector-tabs relative z-40 flex h-10 shrink-0 items-center gap-1 pr-[calc(var(--window-controls,0px)+var(--inspector-inset))] ${full && wholePanel && !sidebar ? 'pl-52' : 'pl-(--inspector-inset)'} [-webkit-app-region:no-drag]`}
             >
               <div className="flex min-w-0 flex-1 items-center gap-1">
                 <InspectorTabs

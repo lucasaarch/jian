@@ -51,6 +51,7 @@ export {
   syncBrowserInspector,
   useInspectorShowing,
 } from './components/sessions/inspector-host';
+export { InspectorOpener } from './components/sessions/inspector-opener';
 export { Notifications } from './components/shell/notice';
 export { QueryProvider } from './components/shell/query';
 export { ThemeSync, useThemeChoice } from './components/shell/theme';

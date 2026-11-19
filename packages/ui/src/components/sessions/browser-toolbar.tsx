@@ -176,6 +176,7 @@ export function BrowserToolbar({
   })();
   return (
     <form
+      data-inspector-head="header"
       className="flex shrink-0 items-center gap-2 border-b border-glass-edge px-(--inspector-inset) pt-1 pb-3"
       onSubmit={(event) => {
         event.preventDefault();
