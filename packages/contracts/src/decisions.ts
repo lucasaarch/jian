@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { secretSchema } from './security.js';
+import { credentialSchema } from './security.js';
 
 /**
  * The service that answers the gateway's own questions — whether a group message calls an
@@ -37,7 +37,7 @@ export const decisionUseSchema = z.enum([
 
 export const decisionsInputSchema = z.strictObject({
   provider: decisionProviderSchema,
-  apiKey: secretSchema,
+  apiKey: credentialSchema,
 });
 
 export const decisionUsesSchema = z.strictObject({

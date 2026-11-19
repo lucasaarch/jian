@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { secretSchema } from './security.js';
+import { credentialSchema } from './security.js';
 
 /**
  * One vocabulary for reasoning effort across providers: it maps onto OpenAI's
@@ -83,7 +83,7 @@ export const providerInputSchema = z.strictObject({
     'openai-compatible',
   ]),
   // Local servers may need no key; Ollama Cloud may.
-  secret: secretSchema.optional(),
+  secret: credentialSchema.optional(),
   credential: providerCredentialSchema.optional(),
   // For Ollama, the server root; for an OpenAI-compatible server, its API root through `/v1`.
   baseURL: z

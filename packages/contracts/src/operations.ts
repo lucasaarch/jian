@@ -14,12 +14,6 @@ import {
   telegramUpdateSchema,
 } from './channels.js';
 import {
-  commandSecretCreateSchema,
-  commandSecretParamsSchema,
-  commandSecretSchema,
-  commandSecretUpdateSchema,
-} from './command-secrets.js';
-import {
   artifactPageSchema,
   artifactQuerySchema,
   leaseInputSchema,
@@ -164,6 +158,12 @@ import {
   scheduleRecordSchema,
   scheduleRunSchema,
 } from './schedules.js';
+import {
+  secretCreateSchema,
+  secretParamsSchema,
+  secretSchema,
+  secretUpdateSchema,
+} from './secrets.js';
 import { panelSessionEndSchema, panelSessionInputSchema, panelSessionSchema } from './security.js';
 import {
   artifactFolderInputSchema,
@@ -633,36 +633,36 @@ export const operations: Operation[] = [
   },
   {
     method: 'GET',
-    path: `${profile}/command-secrets`,
-    operationId: 'listCommandSecrets',
+    path: `${profile}/secrets`,
+    operationId: 'listSecrets',
     access: 'admin',
-    response: z.array(commandSecretSchema),
+    response: z.array(secretSchema),
   },
   {
     method: 'POST',
-    path: `${profile}/command-secrets`,
-    operationId: 'createCommandSecret',
+    path: `${profile}/secrets`,
+    operationId: 'createSecret',
     access: 'admin',
-    body: commandSecretCreateSchema,
-    response: commandSecretSchema,
+    body: secretCreateSchema,
+    response: secretSchema,
     status: 201,
   },
   {
     method: 'PATCH',
-    path: `${profile}/command-secrets/:name`,
-    operationId: 'updateCommandSecret',
+    path: `${profile}/secrets/:secretId`,
+    operationId: 'updateSecret',
     access: 'admin',
-    params: commandSecretParamsSchema,
-    body: commandSecretUpdateSchema,
-    response: commandSecretSchema,
+    params: secretParamsSchema,
+    body: secretUpdateSchema,
+    response: secretSchema,
   },
   {
     method: 'DELETE',
-    path: `${profile}/command-secrets/:name`,
-    operationId: 'deleteCommandSecret',
+    path: `${profile}/secrets/:secretId`,
+    operationId: 'deleteSecret',
     access: 'admin',
-    params: commandSecretParamsSchema,
-    response: z.strictObject({ name: z.string() }),
+    params: secretParamsSchema,
+    response: z.strictObject({ id: z.uuid() }),
   },
   {
     method: 'GET',

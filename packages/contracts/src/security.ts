@@ -4,7 +4,7 @@ import { z } from 'zod';
  * A secret is typed where the thing that uses it is configured, and never read back: the
  * gateway encrypts it per profile and the record only shows that it exists.
  */
-export const secretSchema = z.string().min(1).max(16000).meta({ writeOnly: true });
+export const credentialSchema = z.string().min(1).max(16000).meta({ writeOnly: true });
 
 /**
  * The panel signs in once with the host token and then rides a signed, HttpOnly cookie, so the

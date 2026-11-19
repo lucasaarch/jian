@@ -1,7 +1,6 @@
 export * from './artifact-tweaks.js';
 export * from './browser.js';
 export * from './channels.js';
-export * from './command-secrets.js';
 export * from './component-prompt.js';
 export * from './coordination.js';
 export * from './decisions.js';
@@ -26,6 +25,7 @@ export * from './releases.js';
 export * from './remote.js';
 export * from './run-progress.js';
 export * from './schedules.js';
+export * from './secrets.js';
 export * from './security.js';
 export * from './session-artifacts.js';
 export * from './session-files.js';

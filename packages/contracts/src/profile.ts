@@ -6,7 +6,7 @@ import {
   reasoningEffortSchema,
 } from './providers.js';
 import { ABSOLUTE_PATH } from './remote.js';
-import { secretSchema } from './security.js';
+import { credentialSchema } from './security.js';
 
 const endpointSchema = z.url().refine((value) => {
   const url = new URL(value);
@@ -71,7 +71,7 @@ export const modelSchema = z
  */
 export const mcpValueSchema = z.strictObject({
   name: z.string().regex(/^[A-Za-z0-9_-]{1,64}$/),
-  value: secretSchema.optional(),
+  value: credentialSchema.optional(),
   fromEnv: z
     .string()
     .regex(/^JIAN_MCP_[A-Z0-9_]+$/)
@@ -92,7 +92,7 @@ export const mcpAuthSchema = z.enum(['none', 'headers', 'oauth']);
  * to store it, omit `value` to keep the stored one, omit the whole field to clear it.
  */
 export const mcpOauthClientSecretSchema = z.strictObject({
-  value: secretSchema.optional(),
+  value: credentialSchema.optional(),
   fromEnv: z
     .string()
     .regex(/^JIAN_MCP_[A-Z0-9_]+$/)

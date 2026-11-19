@@ -564,7 +564,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/profiles/{profileId}/command-secrets": {
+    "/v1/profiles/{profileId}/secrets": {
         parameters: {
             query?: never;
             header?: never;
@@ -572,17 +572,17 @@ export interface paths {
             cookie?: never;
         };
         /** @description Required permission: admin. */
-        get: operations["listCommandSecrets"];
+        get: operations["listSecrets"];
         put?: never;
         /** @description Required permission: admin. */
-        post: operations["createCommandSecret"];
+        post: operations["createSecret"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/v1/profiles/{profileId}/command-secrets/{name}": {
+    "/v1/profiles/{profileId}/secrets/{secretId}": {
         parameters: {
             query?: never;
             header?: never;
@@ -593,11 +593,11 @@ export interface paths {
         put?: never;
         post?: never;
         /** @description Required permission: admin. */
-        delete: operations["deleteCommandSecret"];
+        delete: operations["deleteSecret"];
         options?: never;
         head?: never;
         /** @description Required permission: admin. */
-        patch: operations["updateCommandSecret"];
+        patch: operations["updateSecret"];
         trace?: never;
     };
     "/v1/profiles/{profileId}/sessions/{sessionId}/subagents": {
@@ -7512,7 +7512,7 @@ export interface operations {
             };
         };
     };
-    listCommandSecrets: {
+    listSecrets: {
         parameters: {
             query?: never;
             header?: never;
@@ -7530,9 +7530,28 @@ export interface operations {
                 };
                 content: {
                     "application/json": {
-                        name: string;
+                        /** Format: uuid */
+                        id: string;
+                        title: string;
                         description: string | null;
+                        sites: string[];
+                        fields: {
+                            label: string;
+                            envName: string;
+                            sensitive: boolean;
+                            value: string | null;
+                        }[];
                         profileIds: string[];
+                        grants: {
+                            /** Format: uuid */
+                            profileId: string;
+                            /** Format: uuid */
+                            grantedByProfileId: string | null;
+                            /** Format: date-time */
+                            grantedAt: string;
+                        }[];
+                        /** Format: uuid */
+                        createdByProfileId: string | null;
                         /** Format: date-time */
                         createdAt: string;
                         /** Format: date-time */
@@ -7625,7 +7644,7 @@ export interface operations {
             };
         };
     };
-    createCommandSecret: {
+    createSecret: {
         parameters: {
             query?: never;
             header?: never;
@@ -7637,9 +7656,15 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": {
-                    name: string;
-                    value: string;
+                    title: string;
                     description?: string;
+                    sites?: string[];
+                    fields: {
+                        label: string;
+                        envName: string;
+                        sensitive: boolean;
+                        value?: string;
+                    }[];
                     profileIds?: string[];
                 };
             };
@@ -7652,9 +7677,28 @@ export interface operations {
                 };
                 content: {
                     "application/json": {
-                        name: string;
+                        /** Format: uuid */
+                        id: string;
+                        title: string;
                         description: string | null;
+                        sites: string[];
+                        fields: {
+                            label: string;
+                            envName: string;
+                            sensitive: boolean;
+                            value: string | null;
+                        }[];
                         profileIds: string[];
+                        grants: {
+                            /** Format: uuid */
+                            profileId: string;
+                            /** Format: uuid */
+                            grantedByProfileId: string | null;
+                            /** Format: date-time */
+                            grantedAt: string;
+                        }[];
+                        /** Format: uuid */
+                        createdByProfileId: string | null;
                         /** Format: date-time */
                         createdAt: string;
                         /** Format: date-time */
@@ -7747,13 +7791,13 @@ export interface operations {
             };
         };
     };
-    deleteCommandSecret: {
+    deleteSecret: {
         parameters: {
             query?: never;
             header?: never;
             path: {
                 profileId: string;
-                name: string;
+                secretId: string;
             };
             cookie?: never;
         };
@@ -7766,7 +7810,8 @@ export interface operations {
                 };
                 content: {
                     "application/json": {
-                        name: string;
+                        /** Format: uuid */
+                        id: string;
                     };
                 };
             };
@@ -7853,21 +7898,28 @@ export interface operations {
             };
         };
     };
-    updateCommandSecret: {
+    updateSecret: {
         parameters: {
             query?: never;
             header?: never;
             path: {
                 profileId: string;
-                name: string;
+                secretId: string;
             };
             cookie?: never;
         };
         requestBody: {
             content: {
                 "application/json": {
-                    value?: string;
+                    title?: string;
                     description?: string | null;
+                    sites?: string[];
+                    fields?: {
+                        label: string;
+                        envName: string;
+                        sensitive: boolean;
+                        value?: string;
+                    }[];
                     profileIds?: string[];
                 };
             };
@@ -7880,9 +7932,28 @@ export interface operations {
                 };
                 content: {
                     "application/json": {
-                        name: string;
+                        /** Format: uuid */
+                        id: string;
+                        title: string;
                         description: string | null;
+                        sites: string[];
+                        fields: {
+                            label: string;
+                            envName: string;
+                            sensitive: boolean;
+                            value: string | null;
+                        }[];
                         profileIds: string[];
+                        grants: {
+                            /** Format: uuid */
+                            profileId: string;
+                            /** Format: uuid */
+                            grantedByProfileId: string | null;
+                            /** Format: date-time */
+                            grantedAt: string;
+                        }[];
+                        /** Format: uuid */
+                        createdByProfileId: string | null;
                         /** Format: date-time */
                         createdAt: string;
                         /** Format: date-time */

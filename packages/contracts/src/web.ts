@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { secretSchema } from './security.js';
+import { credentialSchema } from './security.js';
 
 /**
  * The search service the whole installation shares. One service answers every agent, whatever
@@ -9,7 +9,7 @@ export const webSearchProviderSchema = z.enum(['tavily']);
 
 export const webSearchInputSchema = z.strictObject({
   provider: webSearchProviderSchema,
-  apiKey: secretSchema,
+  apiKey: credentialSchema,
 });
 
 export const webSearchStatusSchema = z.strictObject({
