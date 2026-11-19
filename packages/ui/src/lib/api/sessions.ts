@@ -453,13 +453,14 @@ export const sessionCalls = (client: Client, origin = '') => ({
     ),
   /**
    * What the owner edited by hand, kept as a new version of theirs made from the version they
-   * were editing: a page whole, or the one slide of a deck that `slide` numbers from 1.
+   * were editing: a page whole, or the one slide of a deck that `slide` numbers from 1. Saves
+   * that carry one `editKey` are one stretch of editing: the gateway keeps them as one version.
    */
   editSessionArtifact: (
     profileId: string,
     sessionId: string,
     artifactId: string,
-    edit: { version: number; content: string; slide?: number },
+    edit: { version: number; content: string; slide?: number; editKey?: string },
   ): Promise<SessionArtifact> =>
     result(
       client.POST('/v1/profiles/{profileId}/sessions/{sessionId}/artifacts/{artifactId}/versions', {

@@ -145,38 +145,8 @@ describe('what the agent makes', () => {
     expect(version.compiled).not.toContain('<number>');
   });
 
-  it('refuses a whiteboard that does not fit its form, and keeps one that does', async () => {
+  it('keeps a spreadsheet as CSV, its formulas included', async () => {
     const { app, at, make } = await setup();
-    const board = (items: unknown[]) =>
-      make({ title: 'Plan', type: 'board', content: JSON.stringify({ items }) });
-
-    await expect(
-      make({ title: 'Plan', type: 'board', content: 'a note here' }),
-    ).rejects.toMatchObject({ statusCode: 400, message: /given as JSON/ });
-    await expect(board([{ kind: 'note', x: 0, y: 0, w: 0, h: 10 }])).rejects.toMatchObject({
-      statusCode: 400,
-      message: /items\.0\.w/,
-    });
-    await expect(
-      board([{ kind: 'line', from: [0, 0], to: [10, 10], color: 'red' }]),
-    ).rejects.toMatchObject({ statusCode: 400, message: /items\.0\.color/ });
-
-    const kept = await board([
-      { kind: 'note', x: 0, y: 0, w: 180, h: 140, text: 'Launch' },
-      { kind: 'arrow', from: [180, 70], to: [320, 70], color: '#2563eb' },
-    ]);
-    // The owner's edit is checked as the agent's was.
-    const save = (content: string) =>
-      app.inject({
-        method: 'POST',
-        url: at(`/${kept.id}/versions`),
-        headers,
-        payload: { version: 1, content },
-      });
-    expect((await save('{"items": [{"kind": "star"}]}')).statusCode).toBe(400);
-    expect((await save('{"items": []}')).statusCode).toBe(201);
-
-    // A spreadsheet is CSV, its formulas included, kept as written.
     const sheet = await make({
       title: 'Costs',
       type: 'sheet',
@@ -338,7 +308,7 @@ describe('who reads an Artifact', () => {
       type: 'deck',
       slides: ['A', 'B'].map((text) => `<!doctype html><html><body>${text}</body></html>`),
     });
-    const notes = await make();
+    const page = await make({ title: 'Page', type: 'html', content: '<p>Hello</p>' });
     const file = (id: string, query: string, version = 1) =>
       at(`/${id}/versions/${version}/export?${query}`);
     const answered = async (url: string, authorization = headers.authorization) => {
@@ -361,14 +331,14 @@ describe('who reads an Artifact', () => {
     );
     expect(await answered(file(deck.id, 'format=pdf', 2))).toMatch(/^404 /);
 
-    expect(await answered(file(notes.id, 'format=pdf'))).toMatch(/^400 Only a deck/);
+    expect(await answered(file(page.id, 'format=pdf'))).toMatch(/^400 Only a deck/);
     expect(await answered(file(deck.id, 'format=png'))).toMatch(/^400 .*say which/);
     expect(await answered(file(deck.id, 'format=png&slide=3'))).toMatch(
       /^400 The deck has 2 slides, so there is no slide 3/,
     );
     for (const query of [
       '',
-      'format=docx',
+      'format=gif',
       'format=pdf&fonts=comic',
       'format=png&slide=0',
       'format=png&slide=first',
@@ -402,7 +372,7 @@ describe('the frame the panel draws one in', () => {
     const { app, make } = await setup();
     await make({ title: 'Secret plan', type: 'markdown', content: 'Only for the owner' });
 
-    for (const type of ['html', 'react', 'markdown', 'svg', 'mermaid', 'deck', 'sheet', 'board']) {
+    for (const type of ['html', 'react', 'markdown', 'mermaid', 'deck', 'sheet']) {
       const frame = await app.inject({ url: `/v1/artifact-frames/${type}` });
       expect(frame.statusCode).toBe(200);
       expect(frame.headers['content-type']).toBe('text/html; charset=utf-8');
@@ -437,12 +407,15 @@ describe('the frame the panel draws one in', () => {
       expect(own).not.toContain('allowfullscreen');
     }
     // The others are drawn by a page of the gateway's, which the shell posts the source on to.
-    for (const type of ['react', 'markdown', 'svg', 'mermaid', 'sheet', 'board']) {
+    // A component's shell alone says something back: its tweaks, under that one key.
+    for (const type of ['react', 'markdown', 'mermaid', 'sheet']) {
       const own = (await app.inject({ url: `/v1/artifact-frames/${type}` })).body.replace(
         /srcdoc="[^"]*"/,
         '',
       );
-      expect(own.match(/postMessage/g)).toHaveLength(1);
+      expect(own.match(/postMessage/g)).toHaveLength(type === 'react' ? 2 : 1);
+      if (type === 'react')
+        expect(own).toContain('parent.postMessage({ jianArtifactTweaks: said }');
       expect(own).toContain('frame.contentWindow.postMessage');
       expect(own).toContain('frame.remove()');
       expect(own).not.toMatch(/document\.(open|write)|allowfullscreen/);
@@ -454,7 +427,7 @@ describe('the frame the panel draws one in', () => {
   it('edits in a frame of its own, as sealed, that only answers its parent', async () => {
     const { app } = await setup();
 
-    for (const type of ['html', 'deck', 'markdown', 'sheet', 'board']) {
+    for (const type of ['html', 'deck', 'markdown', 'sheet']) {
       const frame = await app.inject({ url: `/v1/artifact-frames/${type}?edit=1` });
       expect(frame.statusCode).toBe(200);
       const policy = String(frame.headers['content-security-policy']);
@@ -482,7 +455,11 @@ describe('the frame the panel draws one in', () => {
         (_, code) => String.fromCharCode(Number(code)),
       );
       // The page hands the edit to the panel that holds it and to no one else, and reaches nothing.
-      expect(inner.match(/postMessage/g)).toHaveLength(1);
+      // It says to its parent that something changed, and hands the page over when asked: both
+      // to `parent`, and nothing else is ever posted.
+      expect(inner.match(/postMessage/g)?.length).toBe(
+        inner.match(/parent\.postMessage\(/g)?.length,
+      );
       expect(inner).toContain('parent.postMessage(');
       expect(inner).not.toMatch(/fetch\(|XMLHttpRequest|WebSocket|sendBeacon|\.submit\(/);
       // What it is handed is read as a document or as data, never written into the page to run.
@@ -491,7 +468,7 @@ describe('the frame the panel draws one in', () => {
     }
 
     // The types the owner does not edit by hand have no such frame.
-    for (const type of ['react', 'svg', 'mermaid']) {
+    for (const type of ['react', 'mermaid']) {
       expect((await app.inject({ url: `/v1/artifact-frames/${type}?edit=1` })).statusCode).toBe(
         400,
       );
@@ -751,6 +728,100 @@ describe('what the owner edits by hand', () => {
     expect((await version(deck.id, 2)).slides).toEqual([slide('A'), slide('B'), slide('C')]);
   });
 
+  it('keeps one editing stretch as one version, and never writes over the agent’s', async () => {
+    const { services, app, owner, session, at, make } = await setup();
+    const html = await make({ title: 'Page', type: 'html', content: page('Agent') });
+    const save = (artifactId: string, payload: object) =>
+      app.inject({ method: 'POST', url: at(`/${artifactId}/versions`), headers, payload });
+    const content = async (artifactId: string, number: number) =>
+      sessionArtifactVersionSchema.parse(
+        (await app.inject({ url: at(`/${artifactId}/versions/${number}`), headers })).json(),
+      ).content;
+    const stretch = 'stretch-one-key';
+
+    // The first save of a stretch adds the owner's version; the next ones replace its content.
+    expect(
+      (await save(html.id, { version: 1, content: page('a'), editKey: stretch })).json(),
+    ).toMatchObject({ version: 2 });
+    expect(
+      (await save(html.id, { version: 2, content: page('ab'), editKey: stretch })).json(),
+    ).toMatchObject({ version: 2 });
+    expect(
+      (await save(html.id, { version: 2, content: page('abc'), editKey: stretch })).json(),
+    ).toMatchObject({ version: 2 });
+    expect(await content(html.id, 2)).toBe(page('abc'));
+    expect(await content(html.id, 1)).toBe(page('Agent'));
+
+    // Another stretch is another version, even with nothing between.
+    expect(
+      (
+        await save(html.id, { version: 2, content: page('next'), editKey: 'stretch-two-key' })
+      ).json(),
+    ).toMatchObject({ version: 3 });
+    expect(await content(html.id, 2)).toBe(page('abc'));
+
+    // Without a key every save is a version, as before.
+    expect((await save(html.id, { version: 3, content: page('plain') })).json()).toMatchObject({
+      version: 4,
+    });
+    expect((await save(html.id, { version: 4, content: page('plain 2') })).json()).toMatchObject({
+      version: 5,
+    });
+
+    // The agent wrote on top meanwhile: the stretch's next save is a new version above it, and
+    // the agent's is as it wrote it.
+    await services.artifacts.revise(owner.id, session.id, {
+      artifactId: html.id,
+      content: page('Agent again'),
+    });
+    const late = await save(html.id, {
+      version: 5,
+      content: page('late'),
+      editKey: 'stretch-two-key',
+    });
+    expect(late.json()).toMatchObject({ version: 7 });
+    expect(await content(html.id, 6)).toBe(page('Agent again'));
+    expect(await content(html.id, 7)).toBe(page('late'));
+
+    // A key the agent's version never had cannot be replayed to overwrite it either.
+    await services.artifacts.revise(owner.id, session.id, {
+      artifactId: html.id,
+      content: page('Agent 3'),
+    });
+    await save(html.id, { version: 8, content: page('grab'), editKey: 'stretch-two-key' });
+    expect(await content(html.id, 8)).toBe(page('Agent 3'));
+
+    // A deck keeps the slides it already changed in the stretch.
+    const deck = await make({ title: 'Plan', type: 'deck', slides: [slide('A'), slide('B')] });
+    await save(deck.id, { version: 1, slide: 1, content: slide('A1'), editKey: stretch });
+    const again = await save(deck.id, {
+      version: 2,
+      slide: 2,
+      content: slide('B1'),
+      editKey: stretch,
+    });
+    expect(again.json()).toMatchObject({ version: 2 });
+    expect(await content(deck.id, 2)).toContain('B1');
+    expect(await content(deck.id, 2)).toContain('A1');
+
+    // A paired phone still cannot edit, with a key or without.
+    const pairing = await app.inject({ method: 'POST', url: '/v1/devices/pairings', headers });
+    const phone = (
+      await app.inject({
+        method: 'POST',
+        url: '/v1/devices/pair',
+        payload: { code: pairing.json().code, name: 'Pixel', platform: 'android' },
+      })
+    ).json() as { token: string };
+    const refused = await app.inject({
+      method: 'POST',
+      url: at(`/${html.id}/versions`),
+      headers: { authorization: `Bearer ${phone.token}` },
+      payload: { version: 9, content: page('phone'), editKey: stretch },
+    });
+    expect(refused.statusCode).toBe(403);
+  });
+
   it('takes an edit only with the owner’s credential, never through a public link', async () => {
     const { services, app, owner, at, make, setVisibility } = await setup();
     const html = await make({ title: 'Page', type: 'html', content: page('Agent') });
@@ -831,11 +902,7 @@ describe('what the owner edits by hand', () => {
     const { services, app, at, make } = await setup();
     const html = await make({ title: 'Page', type: 'html', content: page('Agent') });
     const deck = await make({ title: 'Plan', type: 'deck', slides: [slide('A')] });
-    const picture = await make({
-      title: 'Logo',
-      type: 'svg',
-      content: '<svg xmlns="http://www.w3.org/2000/svg"/>',
-    });
+    const diagram = await make({ title: 'Flow', type: 'mermaid', content: 'graph TD; A-->B' });
     const save = async (artifactId: string, payload: Record<string, unknown>) =>
       (await app.inject({ method: 'POST', url: at(`/${artifactId}/versions`), headers, payload }))
         .statusCode;
@@ -856,7 +923,7 @@ describe('what the owner edits by hand', () => {
     expect(await save(deck.id, { version: 1, content: slide('x') })).toBe(400);
     expect(await save(deck.id, { version: 1, content: slide('x'), slide: 2 })).toBe(400);
     // The types that are not edited by hand.
-    expect(await save(picture.id, { version: 1, content: '<svg/>' })).toBe(409);
+    expect(await save(diagram.id, { version: 1, content: 'graph TD; B-->A' })).toBe(409);
     expect(await save('not-an-id', { version: 1, content: page('x') })).toBe(400);
     expect(await save(randomUUID(), { version: 1, content: page('x') })).toBe(404);
 

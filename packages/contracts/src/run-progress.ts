@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { SESSION_ARTIFACT_MAX, sessionArtifactTypeSchema } from './session-artifacts.js';
 
 /**
  * Which tool server a call went to, and the tool by the server's own name. The name the agent
@@ -36,6 +37,22 @@ export const runProgressSchema = z.strictObject({
       nextAt: z.iso.datetime(),
       /** Why the last one failed, in a few words: a status or a network failure, never a body. */
       reason: z.string().max(200),
+    })
+    .optional(),
+  /**
+   * An Artifact the agent is writing right now, as far as its tool call has been written. Never a
+   * version: it ends when the tool runs (the version takes over) or fails, and nothing of it is
+   * kept. Whoever may read the run's progress may read it, no one else.
+   */
+  artifact: z
+    .strictObject({
+      toolCallId: z.string().max(200),
+      /** Set when the call revises one, once the model has written its id in full. */
+      artifactId: z.uuid().optional(),
+      title: z.string().max(120).optional(),
+      type: sessionArtifactTypeSchema.optional(),
+      /** The source so far; for a deck its slides one after another. */
+      content: z.string().max(SESSION_ARTIFACT_MAX).default(''),
     })
     .optional(),
   updatedAt: z.iso.datetime(),

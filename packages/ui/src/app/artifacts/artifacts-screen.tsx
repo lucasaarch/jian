@@ -227,7 +227,7 @@ export function ArtifactsScreen({
                   {narrowed
                     ? 'No Artifact matches.'
                     : place.key === ALL
-                      ? 'Nothing here yet. What the agent makes to look at, such as a page, a document, a diagram or a deck of slides, is kept here.'
+                      ? 'Nothing here yet. What the agent makes to look at, such as a page, a document, a diagram or slides, is kept here.'
                       : 'Nothing in this folder yet. Move an Artifact here from the menu on its card.'}
                 </p>
               )

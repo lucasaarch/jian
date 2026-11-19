@@ -2,7 +2,7 @@
 
 import { RotateCcw, X } from 'lucide-react';
 import { useState } from 'react';
-import { Action, SettingsGroup, SettingsRow, TextField } from '../../kit';
+import { Action, PageToolbar, SearchField, SettingsGroup, SettingsRow } from '../../kit';
 import { bindingOf, isMac, shortcutOf } from '../commands/keybindings';
 import { useKeymaps } from '../commands/registry';
 
@@ -23,19 +23,20 @@ export function KeymapsPage() {
     setError(message ? { id, message } : null);
   return (
     <>
-      <div className="grid gap-3">
-        <p className="text-[13px] text-muted">
-          Shortcuts are kept on this computer. Select a shortcut and press {isMac() ? '⌘' : 'Ctrl'}{' '}
-          with a key, optionally with Shift or Alt. Escape cancels; Backspace clears.
-        </p>
-        <TextField
-          label="Find a command"
-          placeholder="Search commands"
+      <p className="text-[13px] text-muted">
+        Shortcuts are kept on this computer. Select a shortcut and press {isMac() ? '⌘' : 'Ctrl'}{' '}
+        with a key, optionally with Shift or Alt. Escape cancels; Backspace clears.
+      </p>
+      <PageToolbar>
+        <SearchField
+          label="Search shortcuts"
+          className="min-w-44 flex-1"
           value={search}
-          onChange={(event) => setSearch(event.target.value)}
+          onValueChange={setSearch}
         />
         <Action
-          className="w-fit"
+          tone="outline"
+          size="field"
           onClick={() => {
             keymaps.reset();
             setError(null);
@@ -44,7 +45,7 @@ export function KeymapsPage() {
         >
           Restore defaults
         </Action>
-      </div>
+      </PageToolbar>
       <SettingsGroup title="Commands" note={`${shown.length} available`}>
         {shown.map((command) => (
           <SettingsRow

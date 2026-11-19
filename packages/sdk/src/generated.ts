@@ -7411,6 +7411,16 @@ export interface operations {
                                 nextAt: string;
                                 reason: string;
                             };
+                            artifact?: {
+                                toolCallId: string;
+                                /** Format: uuid */
+                                artifactId?: string;
+                                title?: string;
+                                /** @enum {string} */
+                                type?: "html" | "react" | "markdown" | "mermaid" | "deck" | "sheet";
+                                /** @default  */
+                                content: string;
+                            };
                             /** Format: date-time */
                             updatedAt: string;
                         };
@@ -10389,6 +10399,16 @@ export interface operations {
                                 nextAt: string;
                                 reason: string;
                             };
+                            artifact?: {
+                                toolCallId: string;
+                                /** Format: uuid */
+                                artifactId?: string;
+                                title?: string;
+                                /** @enum {string} */
+                                type?: "html" | "react" | "markdown" | "mermaid" | "deck" | "sheet";
+                                /** @default  */
+                                content: string;
+                            };
                             /** Format: date-time */
                             updatedAt: string;
                         };
@@ -10668,6 +10688,16 @@ export interface operations {
                                 nextAt: string;
                                 reason: string;
                             };
+                            artifact?: {
+                                toolCallId: string;
+                                /** Format: uuid */
+                                artifactId?: string;
+                                title?: string;
+                                /** @enum {string} */
+                                type?: "html" | "react" | "markdown" | "mermaid" | "deck" | "sheet";
+                                /** @default  */
+                                content: string;
+                            };
                             /** Format: date-time */
                             updatedAt: string;
                         };
@@ -10945,6 +10975,16 @@ export interface operations {
                                 /** Format: date-time */
                                 nextAt: string;
                                 reason: string;
+                            };
+                            artifact?: {
+                                toolCallId: string;
+                                /** Format: uuid */
+                                artifactId?: string;
+                                title?: string;
+                                /** @enum {string} */
+                                type?: "html" | "react" | "markdown" | "mermaid" | "deck" | "sheet";
+                                /** @default  */
+                                content: string;
                             };
                             /** Format: date-time */
                             updatedAt: string;
@@ -21647,6 +21687,16 @@ export interface operations {
                                 nextAt: string;
                                 reason: string;
                             };
+                            artifact?: {
+                                toolCallId: string;
+                                /** Format: uuid */
+                                artifactId?: string;
+                                title?: string;
+                                /** @enum {string} */
+                                type?: "html" | "react" | "markdown" | "mermaid" | "deck" | "sheet";
+                                /** @default  */
+                                content: string;
+                            };
                             /** Format: date-time */
                             updatedAt: string;
                         };
@@ -22034,6 +22084,16 @@ export interface operations {
                                 nextAt: string;
                                 reason: string;
                             };
+                            artifact?: {
+                                toolCallId: string;
+                                /** Format: uuid */
+                                artifactId?: string;
+                                title?: string;
+                                /** @enum {string} */
+                                type?: "html" | "react" | "markdown" | "mermaid" | "deck" | "sheet";
+                                /** @default  */
+                                content: string;
+                            };
                             /** Format: date-time */
                             updatedAt: string;
                         };
@@ -22316,6 +22376,16 @@ export interface operations {
                                 nextAt: string;
                                 reason: string;
                             };
+                            artifact?: {
+                                toolCallId: string;
+                                /** Format: uuid */
+                                artifactId?: string;
+                                title?: string;
+                                /** @enum {string} */
+                                type?: "html" | "react" | "markdown" | "mermaid" | "deck" | "sheet";
+                                /** @default  */
+                                content: string;
+                            };
                             /** Format: date-time */
                             updatedAt: string;
                         };
@@ -22587,6 +22657,16 @@ export interface operations {
                                 /** Format: date-time */
                                 nextAt: string;
                                 reason: string;
+                            };
+                            artifact?: {
+                                toolCallId: string;
+                                /** Format: uuid */
+                                artifactId?: string;
+                                title?: string;
+                                /** @enum {string} */
+                                type?: "html" | "react" | "markdown" | "mermaid" | "deck" | "sheet";
+                                /** @default  */
+                                content: string;
                             };
                             /** Format: date-time */
                             updatedAt: string;
@@ -23408,6 +23488,16 @@ export interface operations {
                                 /** Format: date-time */
                                 nextAt: string;
                                 reason: string;
+                            };
+                            artifact?: {
+                                toolCallId: string;
+                                /** Format: uuid */
+                                artifactId?: string;
+                                title?: string;
+                                /** @enum {string} */
+                                type?: "html" | "react" | "markdown" | "mermaid" | "deck" | "sheet";
+                                /** @default  */
+                                content: string;
                             };
                             /** Format: date-time */
                             updatedAt: string;
@@ -24376,7 +24466,7 @@ export interface operations {
                 before?: string;
                 limit?: number;
                 q?: string;
-                type?: "html" | "react" | "markdown" | "svg" | "mermaid" | "deck" | "sheet" | "board";
+                type?: "html" | "react" | "markdown" | "mermaid" | "deck" | "sheet";
                 folder?: string;
                 project?: string | "none";
                 pinned?: "true" | "false";
@@ -24403,7 +24493,7 @@ export interface operations {
                             sessionId: string;
                             title: string;
                             /** @enum {string} */
-                            type: "html" | "react" | "markdown" | "svg" | "mermaid" | "deck" | "sheet" | "board";
+                            type: "html" | "react" | "markdown" | "mermaid" | "deck" | "sheet";
                             /** @enum {string} */
                             visibility: "private" | "public";
                             version: number;
@@ -24531,7 +24621,7 @@ export interface operations {
                         sessionId: string;
                         title: string;
                         /** @enum {string} */
-                        type: "html" | "react" | "markdown" | "svg" | "mermaid" | "deck" | "sheet" | "board";
+                        type: "html" | "react" | "markdown" | "mermaid" | "deck" | "sheet";
                         /** @enum {string} */
                         visibility: "private" | "public";
                         version: number;
@@ -24746,7 +24836,7 @@ export interface operations {
     exportSessionArtifactVersion: {
         parameters: {
             query?: {
-                format?: "pdf" | "png" | "pptx";
+                format?: "pdf" | "png" | "pptx" | "docx" | "xlsx" | "csv";
                 slide?: number;
                 fonts?: "current" | "basic";
             };
@@ -24873,6 +24963,7 @@ export interface operations {
                     version: number;
                     content: string;
                     slide?: number;
+                    editKey?: string;
                 };
             };
         };
@@ -24890,7 +24981,7 @@ export interface operations {
                         sessionId: string;
                         title: string;
                         /** @enum {string} */
-                        type: "html" | "react" | "markdown" | "svg" | "mermaid" | "deck" | "sheet" | "board";
+                        type: "html" | "react" | "markdown" | "mermaid" | "deck" | "sheet";
                         /** @enum {string} */
                         visibility: "private" | "public";
                         version: number;
@@ -25127,7 +25218,7 @@ export interface operations {
                         sessionId: string;
                         title: string;
                         /** @enum {string} */
-                        type: "html" | "react" | "markdown" | "svg" | "mermaid" | "deck" | "sheet" | "board";
+                        type: "html" | "react" | "markdown" | "mermaid" | "deck" | "sheet";
                         /** @enum {string} */
                         visibility: "private" | "public";
                         version: number;
@@ -25248,7 +25339,7 @@ export interface operations {
                         sessionId: string;
                         title: string;
                         /** @enum {string} */
-                        type: "html" | "react" | "markdown" | "svg" | "mermaid" | "deck" | "sheet" | "board";
+                        type: "html" | "react" | "markdown" | "mermaid" | "deck" | "sheet";
                         /** @enum {string} */
                         visibility: "private" | "public";
                         version: number;
@@ -25803,10 +25894,11 @@ export interface operations {
             query?: {
                 edit?: "1";
                 present?: "1";
+                theme?: "dark" | "light";
             };
             header?: never;
             path: {
-                type: "html" | "react" | "markdown" | "svg" | "mermaid" | "deck" | "sheet" | "board";
+                type: "html" | "react" | "markdown" | "mermaid" | "deck" | "sheet";
             };
             cookie?: never;
         };
@@ -28130,6 +28222,16 @@ export interface operations {
                                 nextAt: string;
                                 reason: string;
                             };
+                            artifact?: {
+                                toolCallId: string;
+                                /** Format: uuid */
+                                artifactId?: string;
+                                title?: string;
+                                /** @enum {string} */
+                                type?: "html" | "react" | "markdown" | "mermaid" | "deck" | "sheet";
+                                /** @default  */
+                                content: string;
+                            };
                             /** Format: date-time */
                             updatedAt: string;
                         };
@@ -29417,6 +29519,16 @@ export interface operations {
                                 nextAt: string;
                                 reason: string;
                             };
+                            artifact?: {
+                                toolCallId: string;
+                                /** Format: uuid */
+                                artifactId?: string;
+                                title?: string;
+                                /** @enum {string} */
+                                type?: "html" | "react" | "markdown" | "mermaid" | "deck" | "sheet";
+                                /** @default  */
+                                content: string;
+                            };
                             /** Format: date-time */
                             updatedAt: string;
                         };
@@ -29688,6 +29800,16 @@ export interface operations {
                                 nextAt: string;
                                 reason: string;
                             };
+                            artifact?: {
+                                toolCallId: string;
+                                /** Format: uuid */
+                                artifactId?: string;
+                                title?: string;
+                                /** @enum {string} */
+                                type?: "html" | "react" | "markdown" | "mermaid" | "deck" | "sheet";
+                                /** @default  */
+                                content: string;
+                            };
                             /** Format: date-time */
                             updatedAt: string;
                         };
@@ -29958,6 +30080,16 @@ export interface operations {
                                 /** Format: date-time */
                                 nextAt: string;
                                 reason: string;
+                            };
+                            artifact?: {
+                                toolCallId: string;
+                                /** Format: uuid */
+                                artifactId?: string;
+                                title?: string;
+                                /** @enum {string} */
+                                type?: "html" | "react" | "markdown" | "mermaid" | "deck" | "sheet";
+                                /** @default  */
+                                content: string;
                             };
                             /** Format: date-time */
                             updatedAt: string;

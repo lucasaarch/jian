@@ -534,13 +534,13 @@ it('starts a conversation that asks for a new one, in the project of the folder 
   await render(gateway());
   const shortcut = () =>
     [...container.querySelectorAll('section[aria-label="Create something new"] button')].find(
-      (item) => item.textContent === 'Deck',
+      (item) => item.textContent === 'Slide',
     );
 
   await click(shortcut());
   expect(memoryNavigation.current()).toBe(`/agents/${profile.id}/sessions?new`);
   // Left written where the new conversation's field reads it; nothing was sent.
-  expect(useDrafts.getState().texts[draftKey(profile.id)]).toMatch(/deck of slides as an Artifact/);
+  expect(useDrafts.getState().texts[draftKey(profile.id)]).toMatch(/Create slides as an Artifact/);
 
   await click(place('Site'));
   await settled(() => titles().length === 1);

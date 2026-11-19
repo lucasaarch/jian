@@ -4,6 +4,8 @@ import type { AddressInfo } from 'node:net';
 import {
   ARTIFACT_EDIT_MESSAGE,
   ARTIFACT_FRAME_MESSAGE,
+  ARTIFACT_THEME_MESSAGE,
+  ARTIFACT_TWEAKS_MESSAGE,
   type SessionArtifactType,
 } from '@jian/contracts';
 import { type Browser, chromium, type Frame, type Page } from 'playwright';
@@ -23,13 +25,9 @@ const SOURCE: Partial<Record<SessionArtifactType, string>> = {
   html: slide('A page'),
   deck: slide('One slide'),
   markdown: '# A document',
-  svg: '<svg xmlns="http://www.w3.org/2000/svg"><text y="20">A picture</text></svg>',
   // A component as the gateway hands it over: compiled to CommonJS.
   react: `exports.default = () => React.createElement('p', null, 'A component');`,
   sheet: 'Item,Cost\nA,2\nB,3\nTotal,=SUM(B2:B3)*21\n',
-  board: JSON.stringify({
-    items: [{ kind: 'note', x: 0, y: 0, w: 180, h: 140, text: 'A board' }],
-  }),
 };
 const DECK = JSON.stringify({ slides: [slide('First'), slide('Second'), slide('Third')] });
 
@@ -74,26 +72,42 @@ describe.runIf(existsSync(process.env.PLAYWRIGHT_EXECUTABLE_PATH ?? chromium.exe
 
         asked.push(url.pathname);
         if (kind === 'frame') {
-          return send(artifactFrame(type, url.searchParams.has('edit')), artifactPolicy("'self'"));
+          const theme = url.searchParams.get('theme') || null;
+          return send(
+            artifactFrame(
+              type,
+              url.searchParams.has('edit'),
+              false,
+              theme === null ? undefined : (theme as 'dark'),
+            ),
+            artifactPolicy("'self'"),
+          );
         }
         if (kind === 'public') {
           const source = type === 'deck' ? DECK : (SOURCE[type] ?? '');
           return send(publishedArtifact(type, 'Shared', source), artifactPolicy("'none'"));
         }
         // The panel's part, as artifact-frame.tsx plays it: the frame, and its source once it loads.
-        // Editing, it also asks for the edit (`collect`) and keeps what the frame answers. `wait`
+        // Editing, it also asks for the edit (`collect`) and keeps what the frame answers, not the
+        // notice that something changed, which comes unasked. `wait`
         // hands the source only when the test calls `hand`.
         if (kind === 'panel') {
           const edit = url.searchParams.has('edit');
           const wait = url.searchParams.has('wait');
           return send(`<!doctype html><body style="margin:0">
-<iframe id="held" sandbox="allow-scripts" style="border:0;width:900px;height:600px" src="/frame/${url.searchParams.get('type')}${edit ? '?edit=1' : ''}"></iframe>
+<iframe id="held" sandbox="allow-scripts" style="border:0;width:900px;height:600px" src="/frame/${url.searchParams.get('type')}?${edit ? 'edit=1&' : ''}theme=${url.searchParams.get('theme') ?? ''}"></iframe>
 <script>
 const held = document.getElementById('held');
 window.answers = [];
+window.tweaks = [];
 addEventListener('message', (event) => {
-  if (event.source === held.contentWindow) window.answers.push(event.data.${ARTIFACT_EDIT_MESSAGE});
+  if (event.source !== held.contentWindow) return;
+  const said = event.data.${ARTIFACT_EDIT_MESSAGE};
+  if (said && 'collect' in said) window.answers.push(said);
+  if (event.data.${ARTIFACT_TWEAKS_MESSAGE}) window.tweaks.push(event.data.${ARTIFACT_TWEAKS_MESSAGE});
 });
+window.tweak = (values) =>
+  held.contentWindow.postMessage({ ${ARTIFACT_TWEAKS_MESSAGE}: { values } }, '*');
 window.collect = (nonce) =>
   held.contentWindow.postMessage({ ${ARTIFACT_EDIT_MESSAGE}: { collect: nonce } }, '*');
 window.hand = () => {
@@ -150,11 +164,9 @@ ${wait ? '' : "held.addEventListener('load', window.hand, { once: true });"}
         html: 'A page ran',
         deck: 'One slide ran',
         markdown: 'A document',
-        svg: 'A picture',
         react: 'A component',
         // Worked out by the sheet itself, which runs no code: (2 + 3) * 21.
         sheet: '105',
-        board: 'A board',
       };
 
       for (const [type, text] of Object.entries(drawn)) {
@@ -165,6 +177,116 @@ ${wait ? '' : "held.addEventListener('load', window.hand, { once: true });"}
         expect(await read(page), type).toContain(text);
         await page.close();
       }
+    });
+
+    it("follows the panel's theme, not the system's, and changes with it", async () => {
+      // A dark panel on a light system: the frame must be dark all the way in, or the browser
+      // paints an opaque white canvas behind it.
+      for (const type of ['html', 'react', 'markdown'] as const) {
+        handed.set(`theme-${type}`, SOURCE[type] ?? '');
+        const page = await browser.newPage({ colorScheme: 'light' });
+        await page.goto(`${origin}/panel/theme-${type}?type=${type}&theme=dark`);
+        await expect
+          .poll(() => read(page), { message: type })
+          .toMatch(/A page ran|A component|A document/);
+        const looks = async () =>
+          (
+            await Promise.all(
+              page
+                .frames()
+                .filter((frame) => frame.parentFrame())
+                .map((frame) =>
+                  frame
+                    .evaluate(
+                      "getComputedStyle(document.documentElement).colorScheme + ',' + document.documentElement.classList.contains('dark')",
+                    )
+                    .catch(() => ''),
+                ),
+            )
+          ).filter(Boolean);
+        await expect.poll(async () => (await looks()).length, { message: type }).toBeGreaterThan(0);
+        expect(await looks(), type).toSatisfy((all: string[]) =>
+          all.every((look) => look.startsWith('dark,')),
+        );
+        // The page that runs in the frame carries the class that dark: variants read.
+        expect(await looks(), type).toContain('dark,true');
+
+        await page.evaluate(
+          `document.getElementById('held').contentWindow.postMessage({ ${ARTIFACT_THEME_MESSAGE}: 'light' }, '*')`,
+        );
+        await expect
+          .poll(async () => (await looks()).every((look) => look === 'light,false'), {
+            message: type,
+          })
+          .toBe(true);
+        await page.close();
+      }
+    });
+
+    it("says a component's tweaks, draws it with the ones the panel sets, on its canvas", async () => {
+      const page = await inPanel(
+        'tweaks',
+        'react',
+        `exports.tweaks = { label: { type: 'text', default: 'Count' }, start: 3, kept: 'yes' };
+exports.default = (props) =>
+  React.createElement('p', { id: 'card', style: { width: '200px', margin: 0 } }, [props.label, props.start, props.kept, Object.keys(props).join('|')].join(' '));`,
+      );
+      const said = () => page.evaluate('window.tweaks');
+      await expect
+        .poll(said)
+        .toEqual([
+          { controls: { label: { type: 'text', default: 'Count' }, start: 3, kept: 'yes' } },
+        ]);
+      await expect.poll(() => read(page)).toContain('Count 3 yes label|start|kept');
+
+      // Only the names it declared are taken: anything else the panel sends is left out.
+      await page.evaluate("window.tweak({ label: 'Clicks', start: 9, other: 'no' })");
+      await expect.poll(() => read(page)).toContain('Clicks 9 yes label|start|kept');
+      const component = page.frames().at(-1) as Frame;
+
+      // A component with no ground of its own stands in the middle of the dotted canvas.
+      const placed = (frame: Frame) =>
+        frame.evaluate(`(() => {
+          const card = document.getElementById('root').firstElementChild.getBoundingClientRect();
+          return { middle: Math.round(card.x + card.width / 2), filled: document.body.classList.contains('filled'), dots: getComputedStyle(document.body).backgroundImage.startsWith('radial-gradient') };
+        })()`);
+      expect(await placed(component)).toEqual({ middle: 450, filled: false, dots: true });
+      await page.close();
+
+      // One that paints the whole view fills it from the corner, with no canvas around it.
+      const full = await inPanel(
+        'tweaks-full',
+        'react',
+        `exports.default = () => React.createElement('main', { style: { background: '#123', minHeight: '100vh', width: '300px' } }, 'Full');`,
+      );
+      await expect.poll(() => read(full)).toContain('Full');
+      expect(await placed(full.frames().at(-1) as Frame)).toEqual({
+        middle: 150,
+        filled: true,
+        dots: false,
+      });
+      // A component that declares no tweaks still says so, with nothing.
+      await expect.poll(() => full.evaluate('window.tweaks')).toEqual([{ controls: {} }]);
+      await full.close();
+    });
+
+    it('lays a document out as a column of its own, which prints on the whole page', async () => {
+      const page = await browser.newPage({ viewport: { width: 1200, height: 800 } });
+      await page.goto(`${origin}/public/markdown`);
+      await expect.poll(() => read(page)).toContain('A document');
+      const root = async () =>
+        (await page
+          .frames()
+          .at(-1)
+          ?.evaluate(
+            "(() => { const r = document.getElementById('root'); return [r.getBoundingClientRect().width, getComputedStyle(r).maxWidth, getComputedStyle(document.documentElement).colorScheme]; })()",
+          )) as [number, string, string];
+      const [width, max] = await root();
+      expect([width, max]).toEqual([704, '704px']);
+      // Printed to PDF: the light scheme and no column, whatever the reader's system.
+      await page.emulateMedia({ media: 'print', colorScheme: 'dark' });
+      expect(await root()).toEqual([expect.any(Number), 'none', 'light']);
+      await page.close();
     });
 
     it("keeps a slide's frame clear until the slide has drawn, then white under it", async () => {
@@ -215,24 +337,6 @@ ${wait ? '' : "held.addEventListener('load', window.hand, { once: true });"}
       await page.close();
     });
 
-    it('adds a note to a whiteboard and hands back its JSON', async () => {
-      const page = await inPanel('board-edit', 'board', SOURCE.board ?? '', true);
-      const board = await editing(page);
-      await expect.poll(() => board.evaluate(() => document.body.innerText)).toContain('A board');
-
-      await board.click('button[aria-label="Note"]');
-      await board.locator('svg[aria-label="Whiteboard"]').click({ position: { x: 600, y: 400 } });
-      await page.keyboard.type('Mine');
-      await page.keyboard.press('Control+Enter');
-
-      const answer = (await collect(page, 'drawn')) as { html: string };
-      const { items } = JSON.parse(answer.html);
-      expect(items).toHaveLength(2);
-      expect(items[0]).toEqual({ kind: 'note', x: 0, y: 0, w: 180, h: 140, text: 'A board' });
-      expect(items[1]).toMatchObject({ kind: 'note', w: 180, h: 140, text: 'Mine' });
-      await page.close();
-    });
-
     it('edits a document as it is drawn and hands back Markdown', async () => {
       const source = [
         '# Title',
@@ -254,6 +358,8 @@ ${wait ? '' : "held.addEventListener('load', window.hand, { once: true });"}
       const document = await editing(page);
 
       await document.click('h1');
+      // What the browser leaves on a block typed into in the panel, which says nothing.
+      await document.evaluate("document.querySelector('h1').setAttribute('style', '')");
       await page.keyboard.press('End');
       await page.keyboard.type(' again');
 

@@ -82,6 +82,7 @@ import { availableSkills, findSkill, type SkillLibraryState } from '../skills/bu
 import type { WebSearch } from '../web/service.js';
 import type { Workspaces } from '../workspaces/service.js';
 import { offersWorktrees } from '../worktrees/offered.js';
+import { ArtifactDraft } from './artifact-draft.js';
 import { AskUserPause, buildRunQuestion } from './ask-user.js';
 import {
   type CacheTtl,
@@ -2460,12 +2461,36 @@ export class AgentRuntime {
       // What the turn did, for looking back on it once it is over.
       const work: Array<{ id: string; name: string; error?: string }> = [];
 
+      const artifactDraft = new ArtifactDraft();
+
       for await (const part of stream.fullStream) {
         alive();
 
         switch (part.type) {
           case 'error':
             streamError ??= part.error;
+            break;
+          // An Artifact is shown as it is written, ahead of the tool that makes its version.
+          case 'tool-input-start':
+            artifactDraft.start(part.id, part.toolName);
+            break;
+          case 'tool-input-delta':
+          case 'tool-input-end': {
+            const draft = await artifactDraft
+              .push(
+                part.id,
+                part.type === 'tool-input-delta' ? part.delta : '',
+                part.type === 'tool-input-end',
+              )
+              .catch(() => undefined);
+
+            if (draft) progress.artifactDraft(draft);
+            break;
+          }
+          // The draft is over either way: the version took over, or nothing was made.
+          case 'tool-result':
+            artifactDraft.end();
+            progress.artifactDraft(undefined);
             break;
           case 'text-delta':
             // Released as it is written, not once the run is over.
@@ -2486,6 +2511,8 @@ export class AgentRuntime {
             const failed = work.find((item) => item.id === part.toolCallId);
 
             if (failed) failed.error = describe(part.error).slice(0, 300);
+            artifactDraft.end();
+            progress.artifactDraft(undefined);
             break;
           }
           case 'finish-step':
@@ -2500,6 +2527,8 @@ export class AgentRuntime {
             break;
         }
       }
+
+      progress.artifactDraft(undefined);
 
       await progress.flush();
 

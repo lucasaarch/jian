@@ -2,13 +2,15 @@ import {
   ARTIFACT_EDIT_MESSAGE,
   ARTIFACT_FRAME_MESSAGE,
   ARTIFACT_PRESENT_MESSAGE,
+  ARTIFACT_THEME_MESSAGE,
+  ARTIFACT_TWEAKS_MESSAGE,
   EDITABLE_ARTIFACT_TYPES,
   type SessionArtifactType,
 } from '@jian/contracts';
 import { GatewayError } from '../core/errors.js';
-import { BOARD } from './board-frame.js';
 import { EDITORS } from './edit-frame.js';
-import { PLAYER, PLAYER_EMBEDDED, PLAYER_STYLE } from './player.js';
+import { type FrameTheme, frameStyle } from './frame-style.js';
+import { PLAYER, PLAYER_EMBEDDED } from './player.js';
 import { type RuntimeFile, runtimeSource } from './runtime.js';
 import { SHEET } from './sheet-frame.js';
 
@@ -38,9 +40,10 @@ import { SHEET } from './sheet-frame.js';
  * `eval` stays refused, which none of the libraries needs.
  *
  * The page takes its source and gives nothing back: it posts no message, and the panel listens
- * for none. The one exception is the frame the owner opens to edit by hand (edit-frame.ts),
- * which runs nothing the agent wrote and answers the panel's request for the edited source; a
- * public link never serves it.
+ * for none. One exception is the frame the owner opens to edit by hand (edit-frame.ts), which
+ * runs nothing the agent wrote and answers the panel's request for the edited source; a public
+ * link never serves it. The other is a component's tweaks (ARTIFACT_TWEAKS_MESSAGE): the shell
+ * relays that key alone, and the panel takes it as data to draw fields from, checked first.
  */
 export function artifactPolicy(ancestors: "'self'" | "'none'"): string {
   return [
@@ -58,26 +61,6 @@ export function artifactPolicy(ancestors: "'self'" | "'none'"): string {
     'sandbox allow-scripts',
   ].join('; ');
 }
-
-const STYLE = `
-:root { color-scheme: light dark; }
-html, body { margin: 0; }
-body { padding: 16px; font: 15px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif;
-  overflow-wrap: anywhere; }
-body.react, body.deck, body.sheet, body.board { padding: 0; }
-#failure { margin: 12px; padding: 12px; border-radius: 8px; white-space: pre-wrap;
-  font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; color: #b42318;
-  background: color-mix(in srgb, #b42318 12%, transparent); }
-#failure:empty { display: none; }
-img, svg { max-width: 100%; height: auto; }
-pre { overflow-x: auto; padding: 12px; border-radius: 8px;
-  background: color-mix(in srgb, CanvasText 8%, transparent); }
-code { font: .875em ui-monospace, SFMono-Regular, Menlo, monospace; }
-table { border-collapse: collapse; }
-th, td { padding: 4px 10px; border: 1px solid color-mix(in srgb, CanvasText 20%, transparent); }
-blockquote { margin-inline: 0; padding-inline-start: 12px;
-  border-inline-start: 3px solid color-mix(in srgb, CanvasText 25%, transparent); }
-${PLAYER_STYLE}`;
 
 // A whole page, written into the one being read. This runs while the page is still parsed, so
 // the source carries on from here and the page loads once. Never `document.open` on a page that
@@ -99,8 +82,6 @@ const DRAW: Record<
   html: { libraries: [], body: WRITE, whole: true },
   // The panel hands its frame one slide, a page like any other; the public page holds them all.
   deck: { libraries: [], body: PLAYER, whole: true },
-  // Markup set this way runs no script element of its own.
-  svg: { libraries: [], body: `root.innerHTML = source;` },
   markdown: {
     libraries: ['marked'],
     body: `run(libraries[0]); root.innerHTML = marked.parse(source);`,
@@ -118,7 +99,6 @@ root.innerHTML = (await mermaid.render('diagram', source)).svg;`,
   },
   // Drawn by scripts of the gateway's own, which read the source as data and never run it.
   sheet: { libraries: [], body: `${SHEET}\nsheet(source, root, false);` },
-  board: { libraries: [], body: `${BOARD}\nboard(source, root, false);` },
   // React ships as CommonJS, and the component arrives compiled to it: each is wrapped in a
   // function and handed a require that knows these few names and nothing else.
   react: {
@@ -144,9 +124,56 @@ define('react-dom', libraries[2]);
 const { createRoot } = define('react-dom/client', libraries[3]);
 // A component written without importing React still finds it.
 window.React = React;
-const Component = define('artifact', source).default;
+const exported = define('artifact', source);
+const Component = exported.default;
 if (!Component) throw new Error('The component must be the default export.');
-createRoot(root).render(React.createElement(Component));`,
+// The props it is drawn with: each tweak's default, then what the owner sets in the panel.
+const declared = exported.tweaks && typeof exported.tweaks === 'object' ? exported.tweaks : {};
+const props = {};
+for (const [key, spec] of Object.entries(declared)) {
+  props[key] = spec && typeof spec === 'object' ? spec.default : spec;
+}
+// Centred on the canvas, unless the component paints a ground of its own over the view: on its
+// root element, as wide or as tall as the view, or on the page's body. Decided once, before the
+// first paint, so nothing moves after.
+const grounds = (style) => style.backgroundColor + style.backgroundImage;
+const ground = grounds(getComputedStyle(document.body));
+const painted = (style) =>
+  style.backgroundImage !== 'none' ||
+  !(style.backgroundColor === 'transparent' || /,\\s*0\\)$/.test(style.backgroundColor));
+const Frame = ({ children }) => {
+  React.useLayoutEffect(() => {
+    const own = root.firstElementChild;
+    const box = getComputedStyle(root);
+    const room = root.clientWidth - parseFloat(box.paddingLeft) - parseFloat(box.paddingRight);
+    const rect = own && own.getBoundingClientRect();
+    const filled =
+      grounds(getComputedStyle(document.body)) !== ground ||
+      Boolean(own && painted(getComputedStyle(own)) &&
+        (rect.width >= room - 1 || rect.height >= innerHeight - 1));
+    document.body.classList.toggle('filled', filled);
+  }, []);
+  return children;
+};
+const view = createRoot(root);
+const paint = () =>
+  view.render(React.createElement(Frame, null, React.createElement(Component, { ...props })));
+addEventListener('message', (event) => {
+  const said = event.source === parent && event.data && event.data.${ARTIFACT_TWEAKS_MESSAGE};
+  const values = said && said.values;
+  if (!values || typeof values !== 'object') return;
+  for (const key of Object.keys(declared)) if (Object.hasOwn(values, key)) props[key] = values[key];
+  paint();
+});
+paint();
+if (parent !== window) {
+  // As plain data: a function or a cycle in it is the panel's to go without.
+  let controls = null;
+  try {
+    controls = JSON.parse(JSON.stringify(declared));
+  } catch {}
+  parent.postMessage({ ${ARTIFACT_TWEAKS_MESSAGE}: { controls } }, '*');
+}`,
   },
 };
 
@@ -168,18 +195,26 @@ function page(
   artifact?: { title: string; source: string },
   editing = false,
   presented = false,
+  theme?: FrameTheme,
 ): string {
   const { libraries } = DRAW[type];
   const body = presented ? PLAYER_EMBEDDED : DRAW[type].body;
 
   return `<!doctype html>
-<html lang="en">
+<html lang="en"${theme === 'dark' ? ' class="dark"' : ''}>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
 <title>${escaped(artifact?.title ?? 'Artifact')}</title>
-<style>${STYLE}</style>
+<style>${frameStyle(theme)}</style>${
+    // A public link names no theme: its dark class follows the reader system, for the
+    // Tailwind-style dark: variants a component may use.
+    theme
+      ? ''
+      : `
+<script>if (matchMedia('(prefers-color-scheme: dark)').matches) document.documentElement.classList.add('dark');</script>`
+  }
 </head>
 <body class="${type}">
 <pre id="failure"></pre>
@@ -194,6 +229,13 @@ function page(
   const fail = (error) => { failure.textContent = String((error && error.message) || error); };
   addEventListener('error', (event) => fail(event.message));
   addEventListener('unhandledrejection', (event) => fail(event.reason));
+  // The panel's theme changed. Only its own window may say so, and it carries nothing else.
+  addEventListener('message', (event) => {
+    const theme = event.source === parent && event.data && event.data.${ARTIFACT_THEME_MESSAGE};
+    if (theme !== 'dark' && theme !== 'light') return;
+    document.documentElement.style.colorScheme = theme;
+    document.documentElement.classList.toggle('dark', theme === 'dark');
+  });
   // A script element made here runs at once, under the page's policy, with no eval.
   const run = (code) => {
     const script = document.createElement('script');
@@ -221,6 +263,29 @@ ${editing ? '' : body}
 `;
 }
 
+/** One Artifact's page on its own, with no shell, for a file drawn from it (export.ts). */
+export { page as artifactPage };
+
+/**
+ * What an HTML page is given ahead of its own markup in the panel, so it opens in the panel's
+ * theme and never on the browser's white: its scheme, the dark class that Tailwind-style dark:
+ * variants read, and a listener for the theme changing later. It goes after the doctype, which
+ * stays first so the page is not drawn in quirks mode. The page's own styles come after and win,
+ * so a page that sets a ground of its own keeps it.
+ */
+const dressing = (theme: FrameTheme) =>
+  `<meta name="color-scheme" content="${theme}"><script>(() => {
+const apply = (theme) => {
+  document.documentElement.style.colorScheme = theme;
+  document.documentElement.classList.toggle('dark', theme === 'dark');
+};
+apply('${theme}');
+addEventListener('message', (event) => {
+  const theme = event.source === parent && event.data && event.data.${ARTIFACT_THEME_MESSAGE};
+  if (theme === 'dark' || theme === 'light') apply(theme);
+});
+})();</script>`;
+
 /**
  * What the gateway answers: a shell that holds the Artifact's page in a sandboxed `srcdoc` frame.
  * Loading a `srcdoc` is no request, so `frame-src 'none'` lets it be and refuses every later
@@ -244,6 +309,9 @@ ${editing ? '' : body}
  * `fullscreen` lets the frame take the whole screen when its reader asks for it. It changes
  * nothing of where the frame can go or what it can reach, and a frame inside it is not given it.
  *
+ * `tweaks` is a component's shell: it also relays the tweaks key, and only that key, both ways,
+ * for as long as the frame lives (ARTIFACT_TWEAKS_MESSAGE).
+ *
  * `sheet` paints the white a slide is drawn on, here, inside the frame the panel holds. The panel
  * rounds that frame's corners, and a white it painted under the frame itself was cut by the
  * corner apart from the slide: it showed past a dark slide as a pale arc. It is painted only once
@@ -254,8 +322,19 @@ function shell(
   title: string,
   inner: string | null,
   hears: 'nothing' | 'once' | 'always' | 'present',
-  fullscreen = false,
-  sheet = false,
+  {
+    fullscreen = false,
+    sheet = false,
+    theme,
+    dressed = false,
+    tweaks = false,
+  }: {
+    fullscreen?: boolean;
+    sheet?: boolean;
+    theme?: FrameTheme | undefined;
+    dressed?: boolean;
+    tweaks?: boolean;
+  } = {},
 ): string {
   const out = hears === 'present' ? ARTIFACT_PRESENT_MESSAGE : ARTIFACT_EDIT_MESSAGE;
   const held =
@@ -263,6 +342,35 @@ function shell(
       ? ''
       : `
 <iframe id="artifact" sandbox="allow-scripts" referrerpolicy="no-referrer"${fullscreen ? ' allowfullscreen' : ''} srcdoc="${escaped(inner)}"></iframe>`;
+  // What is added goes after a leading doctype, which has to stay first.
+  const dress = dressed
+    ? `
+  const dressing = ${embedded({ dark: dressing('dark'), light: dressing('light') })};
+  const dress = (source) => {
+    const at = (/^\\s*<!doctype[^>]*>/i.exec(source) || [''])[0].length;
+    return source.slice(0, at) + (scheme ? dressing[scheme] : '') + source.slice(at);
+  };`
+    : '';
+  // Only a frame the panel named a theme for listens for the theme: a public link follows the
+  // reader's system and says nothing inward.
+  const follows = theme
+    ? `
+  // The panel's theme: this frame's scheme, and what the page inside is told as it changes.
+  let scheme = ${JSON.stringify(theme ?? null)};
+  const tell = () => {
+    if (!scheme) return;
+    for (const held of document.querySelectorAll('iframe')) {
+      if (held.contentWindow) held.contentWindow.postMessage({ ${ARTIFACT_THEME_MESSAGE}: scheme }, '*');
+    }
+  };
+  addEventListener('message', (event) => {
+    const given = event.source === parent && event.data && event.data.${ARTIFACT_THEME_MESSAGE};
+    if (given !== 'dark' && given !== 'light') return;
+    scheme = given;
+    document.documentElement.style.colorScheme = given;
+    tell();
+  });${dress}`
+    : '';
   const made = `
   const hear = (event) => {
     const source = event.source === parent && event.data && event.data.${ARTIFACT_FRAME_MESSAGE};
@@ -271,7 +379,7 @@ function shell(
     const frame = document.createElement('iframe');
     frame.setAttribute('sandbox', 'allow-scripts');
     frame.setAttribute('referrerpolicy', 'no-referrer');
-    frame.srcdoc = source;
+    frame.srcdoc = ${dressed ? 'dress(source)' : 'source'};
     hold(frame, () => {});
     document.body.append(frame);
   };
@@ -292,12 +400,26 @@ function shell(
       ? ''
       : `
   const hear = (event) => {
-    if (event.source !== parent || !event.data) return;
+    if (event.source !== parent || !event.data${theme ? ` || event.data.${ARTIFACT_THEME_MESSAGE}` : ''}${tweaks ? ` || event.data.${ARTIFACT_TWEAKS_MESSAGE}` : ''}) return;
     ${hears === 'always' ? '' : "removeEventListener('message', hear);"}
     waiting.push(event.data);
     relay();
   };
   addEventListener('message', hear);`
+  }${
+    tweaks
+      ? `
+  addEventListener('message', (event) => {
+    const said = event.data && event.data.${ARTIFACT_TWEAKS_MESSAGE};
+    if (!said) return;
+    if (event.source === parent) {
+      waiting.push({ ${ARTIFACT_TWEAKS_MESSAGE}: said });
+      relay();
+    } else if (event.source === frame.contentWindow) {
+      parent.postMessage({ ${ARTIFACT_TWEAKS_MESSAGE}: said }, '*');
+    }
+  });`
+      : ''
   }${
     hears === 'always' || hears === 'present'
       ? `
@@ -315,19 +437,20 @@ function shell(
 <meta charset="utf-8">
 <meta name="robots" content="noindex, nofollow">
 <title>${escaped(title)}</title>
-<style>:root { color-scheme: light dark; }
+<style>:root { color-scheme: ${theme ?? 'light dark'}; }
 html, body, iframe { margin: 0; width: 100%; height: 100%; border: 0; display: block; }
 html, body { background: transparent; }${sheet ? '\nhtml.drawn { background: #fff; }' : ''}</style>
 </head>
 <body>${held}
 <script>
 (() => {
+${follows}
   const hold = (frame, ready) => {
     let loaded = false;
     frame.addEventListener('load', () => {
       if (loaded) return frame.remove();
       loaded = true;
-      document.documentElement.classList.add('drawn');
+      document.documentElement.classList.add('drawn');${theme ? '\n      tell();' : ''}
       ready();
     });
   };${inner === null ? made : relayed}
@@ -345,22 +468,41 @@ const frames = new Map<string, string>();
  * is the one the owner edits by hand in, which only `EDITABLE_ARTIFACT_TYPES` have. `present` is
  * a deck's player, already presenting, for the panel's own presentation of it.
  */
-export function artifactFrame(type: SessionArtifactType, editing = false, present = false): string {
+export function artifactFrame(
+  type: SessionArtifactType,
+  editing = false,
+  present = false,
+  theme?: FrameTheme,
+): string {
   if (editing && !(EDITABLE_ARTIFACT_TYPES.includes(type) && EDITORS[type])) {
     throw new GatewayError(400, 'This kind of Artifact is not edited by hand.');
   }
   if (present && (type !== 'deck' || editing)) {
     throw new GatewayError(400, 'Only a deck is presented, and not while it is edited.');
   }
-  const key = `${type}:${editing}:${present}`;
+  const key = `${type}:${editing}:${present}:${theme ?? ''}`;
   let frame = frames.get(key);
 
   if (!frame) {
     frame = present
-      ? shell('Artifact', page(type, undefined, false, true), 'present')
+      ? shell('Artifact', page(type, undefined, false, true, theme), 'present', { theme })
       : editing
-        ? shell('Artifact', page(type, undefined, true), 'always', false, type === 'deck')
-        : shell('Artifact', DRAW[type].whole ? null : page(type), 'once', false, type === 'deck');
+        ? shell('Artifact', page(type, undefined, true, false, theme), 'always', {
+            sheet: type === 'deck',
+            theme,
+          })
+        : shell(
+            'Artifact',
+            DRAW[type].whole ? null : page(type, undefined, false, false, theme),
+            'once',
+            {
+              sheet: type === 'deck',
+              theme,
+              // A slide keeps its own page; only an HTML page takes the panel's theme.
+              dressed: type === 'html' && theme !== undefined,
+              tweaks: type === 'react',
+            },
+          );
     frames.set(key, frame);
   }
 
@@ -376,4 +518,5 @@ export const publishedArtifact = (
   type: SessionArtifactType,
   title: string,
   source: string,
-): string => shell(title, page(type, { title, source }), 'nothing', type === 'deck');
+): string =>
+  shell(title, page(type, { title, source }), 'nothing', { fullscreen: type === 'deck' });

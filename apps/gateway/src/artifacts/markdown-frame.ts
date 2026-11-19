@@ -19,7 +19,12 @@ const markdownOf = (root) => {
     A: ['href', 'title'], IMG: ['src', 'alt', 'title'], OL: ['start'], CODE: ['class'],
     TH: ['align'], TD: ['align'], INPUT: ['type', 'checked', 'disabled'],
   };
-  const plain = (node) => [...node.attributes].every((a) => (OWN[node.tagName] || []).includes(a.name));
+  // An empty style is what the browser leaves on a block typed into in the panel: it says nothing,
+  // and kept it would turn a heading into HTML.
+  const plain = (node) =>
+    [...node.attributes].every(
+      (a) => (OWN[node.tagName] || []).includes(a.name) || (a.name === 'style' && !a.value.trim()),
+    );
   const escape = (text) => text.replace(/[\\\x60*_[\]<~]/g, '\\$&');
   const lead = (text) => text.replace(/^([#>+-])/, '\\$1').replace(/^(\d+)([.)])/, '$1\\$2');
   const longest = (text, char) => Math.max(0, ...(text.match(new RegExp(char + '+', 'g')) || []).map((run) => run.length));

@@ -4,7 +4,9 @@ import { ARTIFACT_EDIT_MESSAGE, SESSION_ARTIFACT_MAX } from '@jian/contracts';
  * Taking back what the owner edited by hand in a sealed frame. This is the one place the panel
  * reads anything a frame says, so it reads as little as it can:
  *
- * - It listens only while it waits for one answer it asked for, and stops the moment it has it.
+ * - It listens for answers only while it waits for one it asked for, and stops the moment it has
+ *   it. The one other thing it hears, while a page is open for editing, is that something changed
+ *   (`editChanged`): a fact with no content, which only makes it ask sooner.
  * - It hears only the window of the frame it asked, and only an answer carrying the random word
  *   it sent with the question.
  * - The answer is markup, as text, no longer than a page may be. It is never run, never drawn
@@ -44,6 +46,10 @@ export function editAnswer(data: unknown, nonce: string): EditAnswer | undefined
   return { html };
 }
 
+/** Whether a message says the page was changed. It carries nothing else, and is read as only that. */
+export const editChanged = (data: unknown): boolean =>
+  record(record(data)?.[ARTIFACT_EDIT_MESSAGE])?.changed === true;
+
 /**
  * Asks the frame the owner is editing in for the page as it now stands. Answers the markup, or
  * null when nothing was edited; refuses when the frame does not answer in time, or answers
@@ -74,7 +80,7 @@ export function collectEdit(
     };
     const timer = setTimeout(() => {
       settle();
-      reject(new Error('The page did not answer. Try saving again, or cancel the edit.'));
+      reject(new Error('The page did not answer. It will be tried again.'));
     }, within);
 
     window.addEventListener('message', hear);

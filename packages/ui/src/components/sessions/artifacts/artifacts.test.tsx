@@ -2,17 +2,27 @@ import { ARTIFACT_PRESENT_MESSAGE, SESSION_ARTIFACT_MAX } from '@jian/contracts'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
+import { toast } from 'sonner';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { SessionArtifact } from '../../../lib/api';
+import type { DeckExportQuery, SessionArtifact } from '../../../lib/api';
 import { publish } from '../../../lib/events';
 import { keys } from '../../../lib/query/keys';
+import { useArtifactDraft } from '../../../lib/stores/artifact-draft';
 import { useCrew } from '../../../lib/stores/crew';
 import { draftKey, useDrafts } from '../../../lib/stores/drafts';
 import { focusInspector } from '../inspector-host';
 import type { ArtifactsDrawerApi } from './artifact-cards';
 import { ArtifactsDrawer } from './artifacts-drawer';
 import { collectEdit, editAnswer } from './edit';
+import { hearArtifactDraft } from './live';
 import { fileName } from './source';
+
+// The toast is read, not shown: a test says what the owner is told.
+vi.mock('sonner', async (original) => {
+  const real = await original<typeof import('sonner')>();
+
+  return { ...real, toast: Object.assign(vi.fn(), real.toast) };
+});
 
 const SOURCE = 'export default () => <button>Count</button>;';
 const COMPILED = "exports.default = () => React.createElement('button', null, 'Count');";
@@ -52,9 +62,16 @@ const deck: SessionArtifact = {
   title: 'Plan',
   type: 'deck',
 };
+const sheet: SessionArtifact = {
+  ...counter,
+  id: '55555555-5555-4555-8555-555555555555',
+  title: 'Budget',
+  type: 'sheet',
+};
 
 function gateway(artifacts: SessionArtifact[] = [counter, notes, page, deck]) {
   const held = [...artifacts];
+  const keyed = new Map<string, string>();
 
   return {
     held,
@@ -83,7 +100,7 @@ function gateway(artifacts: SessionArtifact[] = [counter, notes, page, deck]) {
         _session: string,
         _artifactId: string,
         _version: number,
-        wanted: { format: 'pdf' | 'png' | 'pptx'; slide?: number; fonts?: 'current' | 'basic' },
+        wanted: { format: DeckExportQuery['format']; slide?: number; fonts?: 'current' | 'basic' },
       ) => ({ mimeType: `test/${wanted.format}`, data: btoa(`drawn as ${wanted.format}`) }),
     ),
     editSessionArtifact: vi.fn(
@@ -91,11 +108,14 @@ function gateway(artifacts: SessionArtifact[] = [counter, notes, page, deck]) {
         _profile: string,
         _session: string,
         artifactId: string,
-        _edit: { version: number; content: string; slide?: number },
+        edit: { version: number; content: string; slide?: number; editKey?: string },
       ) => {
         const index = held.findIndex((item) => item.id === artifactId);
         const current = held[index] as SessionArtifact;
-        const next: SessionArtifact = { ...current, version: current.version + 1 };
+        // As the gateway does: a key already used on the latest version writes over it.
+        const again = edit.editKey !== undefined && keyed.get(artifactId) === edit.editKey;
+        if (edit.editKey) keyed.set(artifactId, edit.editKey);
+        const next: SessionArtifact = { ...current, version: current.version + (again ? 0 : 1) };
         held[index] = next;
         return next;
       },
@@ -172,6 +192,7 @@ afterEach(async () => {
   useCrew.setState({ tabs: [], opened: false, following: undefined });
   useCrew.getState().leave('session');
   useDrafts.getState().forgetAll();
+  useArtifactDraft.setState({ byConversation: {} });
 });
 
 async function settled(done: () => boolean, limit = 100) {
@@ -237,6 +258,13 @@ const starter = (kind: string) =>
     (item) => item.textContent === kind,
   );
 const entries = () => [...document.querySelectorAll<HTMLElement>('[role=menuitem]')];
+/** A bar button's menu, opened once the one before has closed: its entries. */
+async function menu(label: string) {
+  await settled(() => entries().length === 0);
+  await click(button(label));
+  await settled(() => entries().length > 0);
+  return entries();
+}
 
 /** The tab of the conversation's cards, read. */
 async function listed(api = gateway()) {
@@ -279,7 +307,7 @@ describe('the Artifacts tab', () => {
     await search('LAUNCH');
     expect(cards()).toEqual(['Launch notes']);
     // Narrowed, the shortcuts make way for what was found, as on the page.
-    expect(starter('Deck')).toBeUndefined();
+    expect(starter('Slide')).toBeUndefined();
 
     await search('nothing like it');
     expect(cards()).toEqual([]);
@@ -301,11 +329,9 @@ describe('the Artifacts tab', () => {
     useDrafts.getState().write(field, 'Hello ');
     const api = await listed();
 
-    await click(starter('Deck'));
+    await click(starter('Slide'));
 
-    expect(useDrafts.getState().texts[field]).toBe(
-      'Hello\n\nCreate a deck of slides as an Artifact about ',
-    );
+    expect(useDrafts.getState().texts[field]).toBe('Hello\n\nCreate slides as an Artifact about ');
     // Nothing was made: the owner finishes the request and sends it.
     expect(api.duplicateSessionArtifact).not.toHaveBeenCalled();
     expect(api.editSessionArtifact).not.toHaveBeenCalled();
@@ -348,7 +374,7 @@ describe('the Artifacts tab', () => {
     await settled(() => !drawer()?.querySelector('[role=status]'));
 
     expect(drawer()?.textContent).toContain('Nothing here yet');
-    expect(starter('Deck')).toBeDefined();
+    expect(starter('Slide')).toBeDefined();
   });
 
   it('draws nothing while another tab is in front', async () => {
@@ -364,7 +390,9 @@ describe('the frame an Artifact runs in', () => {
 
     // Any other token here, `allow-same-origin` above all, would give the Artifact the panel.
     expect(frame()?.getAttribute('sandbox')).toBe('allow-scripts');
-    expect(frame()?.getAttribute('src')).toBe(`${window.location.origin}/v1/artifact-frames/react`);
+    expect(frame()?.getAttribute('src')).toBe(
+      `${window.location.origin}/v1/artifact-frames/react?theme=dark`,
+    );
     // The address names a type and nothing of the Artifact.
     expect(frame()?.getAttribute('src')).not.toContain(counter.id);
     expect(frame()?.hasAttribute('srcdoc')).toBe(false);
@@ -382,14 +410,71 @@ describe('the frame an Artifact runs in', () => {
     expect(sent).toHaveBeenCalledTimes(1);
   });
 
-  it('is never listened to by the panel', async () => {
+  it('is never listened to by the panel, but for a component’s tweaks', async () => {
     const heard = vi.spyOn(window, 'addEventListener');
 
-    await opened(counter);
+    await opened(page);
     await loaded();
 
     expect(heard.mock.calls.filter(([type]) => type === 'message')).toEqual([]);
     heard.mockRestore();
+  });
+
+  it('draws the tweaks a component says, from its own frame only, and sends their values', async () => {
+    await opened(counter);
+    const { element, sent } = await loaded();
+    const tweaks = () => drawer()?.querySelector('aside[aria-label="Tweaks"]');
+    const say = (source: unknown, controls: unknown) =>
+      act(async () => {
+        window.dispatchEvent(
+          new MessageEvent('message', {
+            data: { jianArtifactTweaks: { controls } },
+            source: source as MessageEventSource,
+          }),
+        );
+      });
+    const values = () =>
+      sent.mock.calls.filter(([said]) => said.jianArtifactTweaks).at(-1)?.[0].jianArtifactTweaks;
+
+    // Another window saying it is heard as nothing at all.
+    await say({ postMessage: vi.fn() }, { label: 'Count' });
+    expect(tweaks()).toBeNull();
+
+    // From its own frame: drawn, open by itself, a tweak that does not fit left out, and the
+    // component sent every value shown.
+    await say(element.contentWindow, {
+      label: 'Count',
+      size: { type: 'number', min: 8, max: 64, default: 16 },
+      'not a prop': true,
+      __proto__x: { type: 'nothing' },
+    });
+    expect(tweaks()?.querySelector('input:not([type])')).toHaveProperty('value', 'Count');
+    expect(tweaks()?.textContent).toContain('Size');
+    expect(tweaks()?.textContent).not.toContain('not a prop');
+    expect(values()).toEqual({ values: { label: 'Count', size: 16 } });
+
+    const field = tweaks()?.querySelector('input:not([type])') as HTMLInputElement;
+    const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+    await act(async () => {
+      set?.call(field, 'Clicks');
+      field.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    expect(values()).toEqual({ values: { label: 'Clicks', size: 16 } });
+
+    // The theme it is tried in goes to its frame alone, as the panel's own would.
+    await click(
+      [...(tweaks()?.querySelectorAll('button') ?? [])].find(
+        (item) => item.textContent === 'Light',
+      ),
+    );
+    expect(sent).toHaveBeenCalledWith({ jianArtifactTheme: 'light' }, '*');
+
+    // Drawn anew, it keeps what the owner set for a tweak that still takes it.
+    await say(element.contentWindow, { label: 'Count', size: 'large' });
+    expect(values()).toEqual({ values: { label: 'Clicks', size: 'large' } });
+
+    await click(button('Tweaks'));
+    expect(tweaks()).toBeNull();
   });
 
   it('gives way to the source as written, and comes back', async () => {
@@ -506,11 +591,21 @@ const asked = (sent: ReturnType<typeof vi.fn>): string =>
 const listening = (spy: { mock: { calls: unknown[][] } }) =>
   spy.mock.calls.filter(([type]) => type === 'message').length;
 
+/** What the editing frame says when the owner changes something: a fact, with no content. */
+const changed = (element: HTMLIFrameElement) => answer(element.contentWindow, { changed: true });
+/** How many times the panel asked the frame for its source. */
+const questions = (sent: ReturnType<typeof vi.fn>) =>
+  sent.mock.calls.filter(([said]) => said.jianArtifactEdit?.collect).length;
+/** Time passing, with the promises it wakes settled. */
+const wait = (ms: number) => act(async () => vi.advanceTimersByTimeAsync(ms));
+
 describe('editing one by hand', () => {
-  it('is offered for what the owner keeps working on, never for code', async () => {
+  afterEach(() => vi.useRealTimers());
+
+  it('is offered after Edit for a page and a deck, and open at once for a document', async () => {
     for (const [artifact, offered] of [
       [counter, false],
-      [notes, true],
+      [notes, false],
       [page, true],
       [deck, true],
     ] as const) {
@@ -518,6 +613,12 @@ describe('editing one by hand', () => {
       await settled(() => drawer()?.querySelector('h2')?.textContent === artifact.title);
       expect(Boolean(button('Edit'))).toBe(offered);
     }
+
+    await opened(notes);
+    await settled(() => frame()?.getAttribute('src')?.includes('?edit=1') === true);
+    expect(frame()?.getAttribute('src')).toBe(
+      `${window.location.origin}/v1/artifact-frames/markdown?edit=1&theme=dark`,
+    );
   });
 
   it('opens the page in the frame that edits, as sealed as the one that draws', async () => {
@@ -526,89 +627,246 @@ describe('editing one by hand', () => {
 
     expect(frame()?.getAttribute('sandbox')).toBe('allow-scripts');
     expect(frame()?.getAttribute('src')).toBe(
-      `${window.location.origin}/v1/artifact-frames/html?edit=1`,
+      `${window.location.origin}/v1/artifact-frames/html?edit=1&theme=dark`,
     );
     expect(frame()?.getAttribute('src')).not.toContain(page.id);
     const { sent } = await loaded();
     expect(sent).toHaveBeenCalledTimes(1);
     expect(sent).toHaveBeenCalledWith({ jianArtifact: PAGE, jianArtifactEdit: { scale: 1 } }, '*');
-    // The version is held while it is edited: there is no picking another.
-    expect(button('History')).toBeUndefined();
+    // Done, not Save and Cancel: nothing is kept by hand.
+    expect(named('Save')).toBeUndefined();
+    expect(named('Cancel')).toBeUndefined();
 
-    await click(named('Cancel'));
-    expect(frame()?.getAttribute('src')).toBe(`${window.location.origin}/v1/artifact-frames/html`);
+    await click(named('Done'));
+    expect(frame()?.getAttribute('src')).toBe(
+      `${window.location.origin}/v1/artifact-frames/html?theme=dark`,
+    );
     expect(button('History')).toBeDefined();
   });
 
-  it('saves what that frame answers, and no one else, as a new version', async () => {
+  it('listens to the frame only while it is open for editing, and only to its own window', async () => {
     const heard = vi.spyOn(window, 'addEventListener');
-    const unheard = vi.spyOn(window, 'removeEventListener');
+    const api = await opened(page);
+    expect(listening(heard)).toBe(0);
+
+    await click(button('Edit'));
+    const { sent } = await loaded();
+    expect(listening(heard)).toBe(1);
+    vi.useFakeTimers();
+
+    // Another window, and a frame that is not this one: neither makes the panel ask.
+    await answer(window, { changed: true });
+    await answer({ postMessage: vi.fn() }, { changed: true });
+    await wait(5000);
+    expect(questions(sent)).toBe(0);
+    expect(api.editSessionArtifact).not.toHaveBeenCalled();
+    heard.mockRestore();
+  });
+
+  it('keeps an edit a moment after the owner stops, and the whole stretch as one version', async () => {
     const api = await opened(page);
     await click(button('Edit'));
     const { element, sent } = await loaded();
-    // Open for editing, the panel still listens to nothing: only a save asks.
-    expect(listening(heard)).toBe(0);
+    vi.useFakeTimers();
 
-    await click(named('Save'));
-    expect(listening(heard)).toBe(1);
-    const word = asked(sent);
-    expect(word).toMatch(/^[0-9a-f-]{36}$/);
-    const edited = PAGE.replace('Launch', 'Launched');
+    await changed(element);
+    await wait(1400);
+    // Still typing, as far as it knows: nothing yet.
+    expect(questions(sent)).toBe(0);
+    await changed(element);
+    await wait(1400);
+    expect(questions(sent)).toBe(0);
+    await wait(200);
+    expect(questions(sent)).toBe(1);
 
-    // Another window with the right word, and the frame with a wrong one: neither is heard.
-    await answer(window, { collect: word, html: '<p>From elsewhere</p>' });
-    await answer({ postMessage: vi.fn() }, { collect: word, html: '<p>From another frame</p>' });
-    await answer(element.contentWindow, { collect: 'a-guess', html: '<p>Guessed</p>' });
-    expect(api.editSessionArtifact).not.toHaveBeenCalled();
-
-    await answer(element.contentWindow, { collect: word, html: edited });
-    await settled(() => viewed(api) === 3);
+    const first = PAGE.replace('Launch', 'Launched');
+    await answer(element.contentWindow, { collect: asked(sent), html: first });
     expect(api.editSessionArtifact).toHaveBeenCalledTimes(1);
     expect(api.editSessionArtifact).toHaveBeenCalledWith('profile', 'session', page.id, {
       version: 2,
-      content: edited,
+      content: first,
+      editKey: expect.stringMatching(/^[0-9a-f-]{36}$/),
     });
-    // It stopped listening the moment it had its answer, and shows the new version drawn.
-    expect(listening(unheard)).toBe(1);
+    expect(drawer()?.textContent).toContain('Saved');
+    // The frame is not taken from under the owner's hands, and nothing here is asked to be pressed.
+    expect(frame()).toBe(element);
+    expect(named('Save')).toBeUndefined();
+    expect(named('Try again')).toBeUndefined();
+
+    // The next pause is the same stretch: the same key, from the version it made.
+    await changed(element);
+    await wait(1500);
+    const second = first.replace('Launched', 'Launched again');
+    await answer(element.contentWindow, { collect: asked(sent), html: second });
+    const [, , , one] = api.editSessionArtifact.mock.calls[0] as unknown as [
+      string,
+      string,
+      string,
+      { editKey: string },
+    ];
+    expect(api.editSessionArtifact).toHaveBeenLastCalledWith('profile', 'session', page.id, {
+      version: 3,
+      content: second,
+      editKey: one.editKey,
+    });
+
+    // Done shows what was kept, as the latest.
+    await click(named('Done'));
+    vi.useRealTimers();
+    await settled(() => viewed(api) === 3);
     expect(viewed(api)).toBe(3);
     expect(older()).toBeUndefined();
-    await settled(() => Boolean(frame()));
-    expect(frame()?.getAttribute('src')).toBe(`${window.location.origin}/v1/artifact-frames/html`);
-
-    // Said again, the same answer is nobody's: no second version.
-    await answer(element.contentWindow, { collect: word, html: '<p>Again</p>' });
-    expect(api.editSessionArtifact).toHaveBeenCalledTimes(1);
-    heard.mockRestore();
-    unheard.mockRestore();
   });
 
-  it('keeps nothing when nothing was edited, or when the answer cannot be kept', async () => {
+  it('keeps it when the owner leaves, without waiting for the pause', async () => {
     const api = await opened(page);
-
     await click(button('Edit'));
-    const untouched = await loaded();
-    await click(named('Save'));
-    await answer(untouched.element.contentWindow, {
-      collect: asked(untouched.sent),
-      unchanged: true,
+    const { element, sent } = await loaded();
+    vi.useFakeTimers();
+
+    await changed(element);
+    const hidden = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden');
+    await act(async () => document.dispatchEvent(new Event('visibilitychange')));
+    hidden.mockRestore();
+    expect(questions(sent)).toBe(1);
+
+    await answer(element.contentWindow, {
+      collect: asked(sent),
+      html: PAGE.replace('Launch', 'X'),
     });
-    await settled(() => !named('Save'));
-    expect(named('Save')).toBeUndefined();
+    expect(api.editSessionArtifact).toHaveBeenCalledTimes(1);
+  });
 
+  it('keeps nothing when nothing was edited, and tries again by itself when it cannot keep it', async () => {
+    const api = await opened(page);
     await click(button('Edit'));
-    const huge = await loaded();
-    await click(named('Save'));
-    await answer(huge.element.contentWindow, {
-      collect: asked(huge.sent),
+    const { element, sent } = await loaded();
+    vi.useFakeTimers();
+
+    await changed(element);
+    await wait(1500);
+    await answer(element.contentWindow, { collect: asked(sent), unchanged: true });
+    expect(api.editSessionArtifact).not.toHaveBeenCalled();
+
+    // An answer that cannot be kept: said quietly, no button, and asked again in a few seconds.
+    await changed(element);
+    await wait(1500);
+    await answer(element.contentWindow, {
+      collect: asked(sent),
       html: 'x'.repeat(SESSION_ARTIFACT_MAX + 1),
     });
-    await settled(() => named('Save')?.disabled === false);
-    // The edit stays open, so nothing typed is lost to a save that was refused.
-    expect(named('Save')).toBeDefined();
-    expect(frame()?.getAttribute('src')).toContain('?edit=1');
+    expect(drawer()?.textContent).toContain('Trying again');
+    expect(named('Try again')).toBeUndefined();
+    await wait(4000);
+    expect(questions(sent)).toBe(3);
+    await answer(element.contentWindow, {
+      collect: asked(sent),
+      html: PAGE.replace('Launch', 'Y'),
+    });
+    expect(api.editSessionArtifact).toHaveBeenCalledTimes(1);
+    expect(drawer()?.textContent).toContain('Saved');
+  });
 
-    expect(api.editSessionArtifact).not.toHaveBeenCalled();
-    expect(viewed(api)).toBe(2);
+  it('says so when the agent wrote a version meanwhile, and the edit lands on top', async () => {
+    const api = await opened(page);
+    api.editSessionArtifact.mockImplementationOnce(async (_p, _s, id) => {
+      const index = api.held.findIndex((item) => item.id === id);
+      const next = { ...(api.held[index] as SessionArtifact), version: 4 };
+      api.held[index] = next;
+      return next;
+    });
+    await click(button('Edit'));
+    const { element, sent } = await loaded();
+    vi.useFakeTimers();
+
+    await changed(element);
+    await wait(1500);
+    await answer(element.contentWindow, {
+      collect: asked(sent),
+      html: PAGE.replace('Launch', 'Z'),
+    });
+
+    expect(toast).toHaveBeenCalledWith(expect.stringContaining('as version 4'));
+  });
+});
+
+describe('an Artifact being written', () => {
+  const writing = (content: string, more: object = {}) => ({
+    toolCallId: 'call',
+    title: 'Plan',
+    type: 'markdown' as const,
+    content,
+    ...more,
+  });
+  const told = (draft: ReturnType<typeof writing> | undefined) =>
+    act(async () => hearArtifactDraft('session', draft));
+
+  it('opens the tab on the writing, grows with it, and gives way to the drawn version', async () => {
+    const api = gateway([]);
+    await render(api);
+
+    await told(writing('# Plan'));
+    expect(drawer()?.querySelector('h2')?.textContent).toBe('Plan');
+    expect(drawer()?.textContent).toContain('Writing…');
+    expect(drawer()?.querySelector('article')?.textContent).toContain('Plan');
+    expect(frame()).toBeNull();
+
+    await told(writing('# Plan\n\nThe first step.'));
+    expect(drawer()?.querySelector('article')?.textContent).toContain('The first step.');
+
+    // The tool ran: the version exists, and takes the writing's place once it is read.
+    const made: SessionArtifact = { ...notes, title: 'Plan', version: 1 };
+    api.held.unshift(made);
+    await told(undefined);
+    await act(async () =>
+      focusInspector('session', { sessionId: 'session', kind: 'artifact', artifactId: made.id }),
+    );
+    await settled(() => Boolean(frame()));
+    expect(frame()).not.toBeNull();
+    expect(useArtifactDraft.getState().byConversation.session).toBeUndefined();
+    expect(drawer()?.textContent).not.toContain('Writing…');
+  });
+
+  it('shows the source growing for anything but a document', async () => {
+    await render(gateway([]));
+
+    await told(writing('<h1>Hi', { type: 'html' }));
+    expect(drawer()?.querySelector('pre')?.textContent).toContain('<h1>Hi');
+    expect(drawer()?.querySelector('article')).toBeNull();
+  });
+
+  it('keeps the current version in view until the update has words, then streams them', async () => {
+    const api = gateway();
+    await opened(notes, api);
+    await settled(() => drawer()?.querySelector('h2')?.textContent === notes.title);
+
+    // Named but not yet written: the version stays, with the quiet word beside it.
+    await told(writing('', { artifactId: notes.id }));
+    expect(frame()).not.toBeNull();
+    expect(drawer()?.textContent).toContain('Writing…');
+
+    await told(writing('# New words', { artifactId: notes.id }));
+    expect(frame()).toBeNull();
+    expect(drawer()?.querySelector('article')?.textContent).toContain('New words');
+
+    api.held[api.held.findIndex((item) => item.id === notes.id)] = { ...notes, version: 4 };
+    await told(undefined);
+    await settled(() => Boolean(frame()));
+    expect(viewed(api)).toBe(4);
+    expect(drawer()?.textContent).not.toContain('Writing…');
+  });
+
+  it('moves no focus when it opens the tab by itself', async () => {
+    await listed();
+    const composer = document.createElement('textarea');
+    document.body.append(composer);
+    composer.focus();
+
+    // The tab opens on it by itself, as the agent's own request to show one does.
+    await told(writing('', { artifactId: notes.id }));
+    expect(document.activeElement).toBe(composer);
+    expect(drawer()?.textContent).toContain('Writing…');
+    composer.remove();
   });
 });
 
@@ -673,7 +931,9 @@ describe('a deck of slides', () => {
     ]);
     for (const item of frames()) {
       expect(item.getAttribute('sandbox')).toBe('allow-scripts');
-      expect(item.getAttribute('src')).toBe(`${window.location.origin}/v1/artifact-frames/deck`);
+      expect(item.getAttribute('src')).toBe(
+        `${window.location.origin}/v1/artifact-frames/deck?theme=dark`,
+      );
       expect(item.hasAttribute('srcdoc')).toBe(false);
     }
     expect(large()?.title).toBe('Plan, slide 1');
@@ -725,16 +985,16 @@ describe('a deck of slides', () => {
     expect(large()?.title).toBe('Plan, slide 2');
   });
 
-  it('edits the slide in view, and says which when it saves', async () => {
+  it('edits the slide in view, and keeps which one it was', async () => {
     const api = await opened(deck);
     await click(button('Slide 2'));
     await click(button('Edit'));
 
-    // Only the slide in view opens for editing, and it stays in view until saved or cancelled.
-    expect(frames().filter((item) => item.src.endsWith('?edit=1'))).toEqual([large()]);
+    // Only the slide in view opens for editing, and it stays in view until Done.
+    expect(frames().filter((item) => item.src.includes('?edit=1'))).toEqual([large()]);
     expect(button('Slide 1')?.disabled).toBe(true);
     expect(button('Next slide')?.disabled).toBe(true);
-    // Present is in the toolbar, which Save and Cancel replace while a slide is open.
+    // Present is in the toolbar, which Done replaces while a slide is open.
     expect(button('Present')).toBeUndefined();
     const { element, sent } = await loaded(large());
     expect(sent).toHaveBeenCalledWith(
@@ -742,17 +1002,19 @@ describe('a deck of slides', () => {
       '*',
     );
 
-    await click(named('Save'));
+    vi.useFakeTimers();
+    await answer(element.contentWindow, { changed: true });
+    await act(async () => vi.advanceTimersByTimeAsync(1500));
     const edited = (SLIDES[1] as string).replace('Two', 'Second');
     await answer(element.contentWindow, { collect: asked(sent), html: edited });
-    await settled(() => viewed(api) === 2);
+    vi.useRealTimers();
 
     expect(api.editSessionArtifact).toHaveBeenCalledWith('profile', 'session', deck.id, {
       version: 1,
       content: edited,
       slide: 2,
+      editKey: expect.stringMatching(/^[0-9a-f-]{36}$/),
     });
-    expect(viewed(api)).toBe(2);
   });
 
   it('is presented in the gateway’s own player, and ends when the player says so', async () => {
@@ -764,7 +1026,9 @@ describe('a deck of slides', () => {
     // The player the public link runs, sealed like any Artifact's frame.
     const player = presented()?.querySelector('iframe') as HTMLIFrameElement;
     expect(player.getAttribute('sandbox')).toBe('allow-scripts');
-    expect(player.getAttribute('src')).toMatch(/\/v1\/artifact-frames\/deck\?present=1$/);
+    expect(player.getAttribute('src')).toMatch(
+      /\/v1\/artifact-frames\/deck\?present=1&theme=dark$/,
+    );
     // Nothing of the old panel-only player is drawn.
     expect(presented()?.querySelectorAll('iframe')).toHaveLength(1);
 
@@ -790,14 +1054,6 @@ describe('a deck of slides', () => {
     await settled(() => !presented());
     expect(drawer()).not.toBeNull();
   });
-
-  const entries = () => [...document.querySelectorAll<HTMLElement>('[role=menuitem]')];
-  const menu = async (label: string) => {
-    await settled(() => entries().length === 0);
-    await click(button(label));
-    await settled(() => entries().length > 0);
-    return entries();
-  };
 
   it('is taken away as a file the gateway draws, or as the page of the slide in view', async () => {
     // What the browser was handed to save: each file's name, type and text.
@@ -887,6 +1143,58 @@ describe('a deck of slides', () => {
       'Copy source',
       'Download',
     ]);
+  });
+});
+
+describe('a Document and a spreadsheet as files', () => {
+  it('offers Word, PDF and Markdown, and Excel and CSV, from one Download menu', async () => {
+    const saved: string[] = [];
+    const address = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:file');
+    const taken = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (
+      this: HTMLAnchorElement,
+    ) {
+      saved.push(this.download);
+    });
+    const api = await opened(notes);
+
+    expect((await menu('Download')).map((entry) => entry.textContent)).toEqual([
+      'Word (.docx)',
+      'PDF (.pdf)',
+      'Markdown (.md)',
+    ]);
+    await click(entries()[0]);
+    await settled(() => saved.length === 1);
+    expect(api.exportSessionArtifact.mock.calls[0]?.slice(2)).toEqual([
+      notes.id,
+      3,
+      { format: 'docx' },
+    ]);
+    expect(saved).toEqual(['Launch-notes-v3.docx']);
+    // Only the Document's PDF needs the gateway's browser; the Markdown is the panel's own.
+    await click((await menu('Download'))[2]);
+    await settled(() => saved.length === 2);
+    expect(saved[1]).toBe('Launch-notes-v3.md');
+    expect(api.exportSessionArtifact).toHaveBeenCalledTimes(1);
+    address.mockRestore();
+    taken.mockRestore();
+  });
+
+  it('leaves out the PDF on the gateway a desktop app runs', async () => {
+    await opened(notes, gateway(), 'local');
+    expect((await menu('Download')).map((entry) => entry.textContent)).toEqual([
+      'Word (.docx)',
+      'Markdown (.md)',
+    ]);
+  });
+
+  it('gives a spreadsheet Excel and CSV', async () => {
+    const api = await opened(sheet, gateway([sheet]));
+
+    expect((await menu('Download')).map((entry) => entry.textContent)).toEqual([
+      'Excel (.xlsx)',
+      'CSV, values (.csv)',
+    ]);
+    expect(api.exportSessionArtifact).not.toHaveBeenCalled();
   });
 });
 

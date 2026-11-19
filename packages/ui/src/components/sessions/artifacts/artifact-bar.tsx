@@ -15,6 +15,7 @@ export function ArtifactBar({
   back,
   title,
   old,
+  status,
   options,
 }: {
   page: boolean;
@@ -23,6 +24,8 @@ export function ArtifactBar({
   title: string;
   /** The older version in view, named beside the title; none when it is the latest. */
   old?: number | undefined;
+  /** A quiet word beside the title: that it is being written, or how an edit is being kept. */
+  status?: ReactNode;
   options: ReactNode;
 }) {
   const version =
@@ -41,6 +44,7 @@ export function ArtifactBar({
           <>
             {title}
             {version}
+            {status && <span className="ml-2">{status}</span>}
           </>
         }
       >
@@ -53,6 +57,25 @@ export function ArtifactBar({
       {back}
       <h2 className="min-w-0 truncate text-[13px] font-medium text-ink">{title}</h2>
       {version}
+      {status}
     </InspectorBar>
+  );
+}
+
+const SAYING: Record<string, string> = {
+  saving: 'Saving…',
+  saved: 'Saved',
+  retrying: 'Could not save. Trying again…',
+};
+
+/** How an edit by hand is being kept, said once and quietly; nothing to press. */
+export function SaveStatus({ state }: { state: string }) {
+  const said = SAYING[state];
+  if (!said) return null;
+
+  return (
+    <span role="status" className="shrink-0 text-xs font-normal text-muted">
+      {said}
+    </span>
   );
 }

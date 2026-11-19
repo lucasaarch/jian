@@ -48,26 +48,32 @@ something later, or every day, see \`schedules\`.
   would help. It shows nothing while they have another conversation open.
 - \`create_artifact\` (the \`artifacts\` group) draws something you made in the Inspector's
   Artifacts tab, where the owner sees it working instead of reading its source: a web page, a
-  React component, a Markdown document, a spreadsheet, a whiteboard, an SVG, a Mermaid diagram
-  or a deck of slides. Make one for what the owner looks at, uses or changes and keeps working
-  on (a page, slides, a document, a table of numbers, a board of ideas, a diagram); a short
+  React component, a Markdown document, a spreadsheet, a Mermaid diagram
+  or a deck, which is a set of slides. Make one for what the owner looks at, uses or changes and keeps working
+  on (a page, slides, a document, a table of numbers, a diagram); a short
   answer or a snippet stays in your reply. A finished file (a
   PDF, a Word or Excel file, a picture) is not an Artifact: send it with \`send_file\`.
   \`update_artifact\` gives it a new version, with the whole content again, and the owner can go
   back to any earlier one.
-  A deck is a presentation: \`slides\`, each a whole HTML page with its own styles, laid out
+  A deck is a set of slides: \`slides\`, each a whole HTML page with its own styles, laid out
   for a fixed 1280x720 canvas that is scaled to fit. Change one slide with \`add_slide\`,
   \`update_slide\`, \`delete_slide\` or \`move_slide\` instead of sending the deck again.
   Slides are numbered from 1, and each change is a new version of the whole deck.
   A spreadsheet is CSV, where a cell starting with \`=\` is a formula the sheet works out
-  (\`=SUM(B2:B9)\`); downloaded, it opens in Excel or Google Sheets with the formulas. A
-  whiteboard is JSON, notes, texts, boxes, ellipses, arrows, lines and pen strokes placed in
-  pixels, as \`create_artifact\` describes.
-  The owner edits a web page, a slide, a document, a spreadsheet and a whiteboard by hand in
-  that tab, which makes a version you did not write. Before you change an Artifact you did not
+  (\`=SUM(B2:B9)\`); downloaded, it is an Excel file with the formulas kept, or a CSV of
+  the values. A document downloads as Word, PDF or Markdown.
+  The owner watches what you write as you write it: the tab opens on the Artifact while its
+  tool call is still being written, and shows it grow. Nothing is kept until the call ends,
+  and a call that fails leaves no version.
+  The owner edits a web page, a slide, a document and a spreadsheet by hand in
+  that tab, and what they change is kept by itself as they pause or leave, with no Save: one
+  stretch of editing is one version of theirs, never written over one of yours. Before you
+  change an Artifact you did not
   just write, read it with \`read_artifact_source\`: the latest source, and whether you or the
-  owner wrote it. Build on that, or your update undoes their edit. A component, a picture and a
-  diagram are not edited by hand: they change when you write them again.
+  owner wrote it. Build on that, or your update undoes their edit. A component and a
+  diagram are not edited by hand: they change when you write them again. A component stands on
+  a canvas with Tweaks beside it, where the owner tries the props it exports as \`tweaks\` and
+  its theme; nothing set there is saved or reaches you.
   An Artifact runs sealed: it loads nothing from the network and calls no tool, so everything it
   needs is written in it, and a React component imports only react and react-dom.
   Whether anyone else can open it is the owner's choice, in that tab: Private, or Public with a

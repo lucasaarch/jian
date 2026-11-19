@@ -2,7 +2,6 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import {
   type ArtifactFolder,
   type ArtifactFolders,
-  boardContentSchema,
   type DeckExport,
   deckExportQuerySchema,
   deckSlideAddSchema,
@@ -32,9 +31,11 @@ import type { SessionReader } from '../sessions/port.js';
 import type { Queryable, Store } from '../storage/database.js';
 import { sessionArtifacts, sessionArtifactVersions } from '../storage/schema.js';
 import { changedSlides, deckContent, type SlideChange, slidesOf } from './deck.js';
-import { exportDeck } from './export.js';
+import { documentDocx } from './document-export.js';
+import { exportDeck, exportDocumentPdf, MIME } from './export.js';
 import { createFolder, deleteFolder, listFolders, ownFolder, renameFolder } from './folders.js';
 import { pageProfileArtifacts } from './listing.js';
+import { sheetCsv, sheetXlsx } from './sheet-export.js';
 
 /** What a component's frame can hand it; anything else would have to come from the network. */
 const IMPORTABLE = new Set(['react', 'react-dom', 'react-dom/client']);
@@ -78,27 +79,6 @@ function compiled(content: string): string {
 const drawn = (type: SessionArtifactType, content: string) =>
   type === 'react' ? compiled(content) : content;
 
-/**
- * A whiteboard is data its frame draws, not code: checked against its form, so a mistake is the
- * agent's to fix now rather than a board that will not draw.
- */
-function checkBoard(content: string): void {
-  let given: unknown;
-  try {
-    given = JSON.parse(content);
-  } catch {
-    throw new GatewayError(400, 'A whiteboard is given as JSON: {"items": [ … ]}.');
-  }
-  const checked = boardContentSchema.safeParse(given);
-  const issue = checked.error?.issues[0];
-  if (issue) {
-    throw new GatewayError(
-      400,
-      `The whiteboard does not fit its form at ${issue.path.join('.') || 'its top'}: ${issue.message}`,
-    );
-  }
-}
-
 /** What the agent gives for a version: which of these it takes depends on the type. */
 type Given = {
   content?: string | undefined;
@@ -126,8 +106,6 @@ function kept(type: SessionArtifactType, given: Given): string {
     );
   }
   drawn(type, given.content);
-  if (type === 'board') checkBoard(given.content);
-
   return given.content;
 }
 
@@ -223,6 +201,7 @@ export class SessionArtifacts {
     content: string,
     author: SessionArtifactAuthor,
     title?: string,
+    editKey?: string,
   ): Promise<SessionArtifact> {
     const now = new Date(this.clock());
     const [row] = await tx
@@ -240,10 +219,38 @@ export class SessionArtifacts {
       version: revised.version,
       content,
       author,
+      ...(editKey ? { editKey } : {}),
       createdAt: now,
     });
 
     return recordOf(revised);
+  }
+
+  /**
+   * The same stretch of editing saving again: the latest version's content is replaced. Only the
+   * owner's own version with this key is ever replaced, so an agent's version stays as written.
+   */
+  private async replaced(
+    tx: Queryable,
+    current: typeof sessionArtifacts.$inferSelect,
+    content: string,
+  ): Promise<SessionArtifact> {
+    const [row] = await tx
+      .update(sessionArtifacts)
+      .set({ updatedAt: new Date(this.clock()) })
+      .where(eq(sessionArtifacts.id, current.id))
+      .returning();
+    await tx
+      .update(sessionArtifactVersions)
+      .set({ content })
+      .where(
+        and(
+          eq(sessionArtifactVersions.artifactId, current.id),
+          eq(sessionArtifactVersions.version, current.version),
+        ),
+      );
+
+    return recordOf(assertFound(row, 'Artifact'));
   }
 
   /** Tells the panel showing this conversation to bring the Artifact forward, as it now is. */
@@ -335,8 +342,9 @@ export class SessionArtifacts {
 
   /**
    * What the owner saved after editing one by hand in the panel: a new version of theirs, made
-   * from the version they were editing. A source is checked as the agent's is and kept as it
-   * came; a deck gets that one slide.
+   * from the version they were editing, or, when it carries the key of the stretch whose version
+   * is the latest, that version again with the new content. A source is checked as the agent's
+   * is and kept as it came; a deck gets that one slide.
    * The panel that saved it already shows it, so nothing is told to bring it forward.
    */
   async edit(
@@ -355,10 +363,19 @@ export class SessionArtifacts {
           'This kind of Artifact is not edited by hand. Ask the agent for a new version of it.',
         );
       }
-      const edited = await this.stored(tx, current.id, data.version);
+      const latest = await this.stored(tx, current.id, current.version);
+      const again =
+        data.editKey !== undefined && latest.author === 'owner' && latest.editKey === data.editKey;
+      // A stretch that goes on builds on its own version, which already holds its earlier slides.
+      const edited = again ? latest : await this.stored(tx, current.id, data.version);
+      const save = (content: string) =>
+        again
+          ? this.replaced(tx, current, content)
+          : this.versioned(tx, current, content, 'owner', undefined, data.editKey);
+
       if (current.type !== 'deck') {
         if (data.slide !== undefined) throw new GatewayError(400, 'Only a deck has slides.');
-        return this.versioned(tx, current, kept(current.type, { content: data.content }), 'owner');
+        return save(kept(current.type, { content: data.content }));
       }
       if (data.slide === undefined) {
         throw new GatewayError(400, 'Say which slide of the deck was edited.');
@@ -369,7 +386,7 @@ export class SessionArtifacts {
         html: data.content,
       });
 
-      return this.versioned(tx, current, deckContent(slides), 'owner');
+      return save(deckContent(slides));
     });
   }
 
@@ -479,9 +496,10 @@ export class SessionArtifacts {
   }
 
   /**
-   * A deck's version as a file to keep, drawn by the gateway's browser (export.ts): a PDF or a
-   * PowerPoint file of every slide, or one slide as a picture. It reads and changes nothing.
-   * Whatever can be refused is refused before a browser is started.
+   * A version as a file to keep. A deck is drawn by the gateway's browser (export.ts): a PDF or a
+   * PowerPoint file of every slide, or one slide as a picture. A Document is a Word file, which
+   * needs no browser, or a PDF, which does. A spreadsheet is an Excel file. It reads and changes
+   * nothing. Whatever can be refused is refused before a browser is started.
    */
   async export(
     profileId: string,
@@ -493,16 +511,50 @@ export class SessionArtifacts {
     const wanted = deckExportQuerySchema.parse(input);
     const artifact = await this.find(this.store.db, profileId, sessionId, artifactId);
 
-    if (artifact.type !== 'deck') {
-      throw new GatewayError(400, 'Only a deck is exported as slides.');
+    const { content } = await this.stored(this.store.db, artifact.id, version);
+    const refused = (what: string) =>
+      new GatewayError(
+        400,
+        `${what} cannot be downloaded as ${wanted.format.toUpperCase()}. Pick a format its download menu offers.`,
+      );
+
+    if (artifact.type === 'sheet') {
+      if (wanted.format === 'csv') {
+        return {
+          mimeType: 'text/csv; charset=utf-8',
+          data: Buffer.from(sheetCsv(content)).toString('base64'),
+        };
+      }
+      if (wanted.format !== 'xlsx') throw refused('A spreadsheet');
+      return {
+        mimeType: MIME.xlsx,
+        data: (await sheetXlsx(artifact.title, content)).toString('base64'),
+      };
     }
-    if (this.local) {
+    if (artifact.type === 'markdown') {
+      if (wanted.format === 'docx') {
+        return {
+          mimeType: MIME.docx,
+          data: (await documentDocx(artifact.title, content)).toString('base64'),
+        };
+      }
+      if (wanted.format !== 'pdf') throw refused('A document');
+      this.assertDrawing('A document is drawn for a PDF');
+      const pdf = await exportDocumentPdf(artifact.title, content);
+
+      return { mimeType: pdf.mimeType, data: pdf.data.toString('base64') };
+    }
+    if (artifact.type !== 'deck') {
       throw new GatewayError(
-        409,
-        'A deck is drawn for a PDF, a picture or PowerPoint only on a server gateway. This one runs inside the desktop app, which has no browser of its own to draw with.',
+        400,
+        'Only a deck, a document and a spreadsheet are downloaded as files.',
       );
     }
-    const slides = slidesOf((await this.stored(this.store.db, artifact.id, version)).content);
+    if (wanted.format === 'docx' || wanted.format === 'xlsx' || wanted.format === 'csv') {
+      throw refused('A deck');
+    }
+    this.assertDrawing('A deck is drawn for a PDF, a picture or PowerPoint');
+    const slides = slidesOf(content);
     let drawn: readonly string[] = slides;
 
     if (wanted.format === 'png') {
@@ -517,9 +569,22 @@ export class SessionArtifacts {
       }
       drawn = [slide];
     }
-    const file = await exportDeck(artifact.title, drawn, wanted);
+    const file = await exportDeck(artifact.title, drawn, {
+      format: wanted.format,
+      fonts: wanted.fonts,
+    });
 
     return { mimeType: file.mimeType, data: file.data.toString('base64') };
+  }
+
+  /** The desktop app's own gateway has no browser to draw with. */
+  private assertDrawing(what: string): void {
+    if (this.local) {
+      throw new GatewayError(
+        409,
+        `${what} only on a server gateway. This one runs inside the desktop app, which has no browser of its own to draw with.`,
+      );
+    }
   }
 
   /**
