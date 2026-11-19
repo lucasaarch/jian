@@ -3,8 +3,9 @@ import { pathToFileURL } from 'node:url';
 import { JIAN_CLIENT_HEADER, JIAN_DESKTOP_CLIENT } from '@jian/contracts';
 import { net, protocol } from 'electron';
 import { frameRequest } from './frame-requests';
+import { logConnections, stalled } from './gateways/connections';
 import type { GatewayStore } from './gateways/store';
-import { releasing } from './release-body';
+import { type BodyEnd, releasing } from './release-body';
 
 /**
  * The window loads from jian://app, and reaches each gateway under jian://app/gateway/<id>: one
@@ -25,6 +26,20 @@ const FORWARDED = /^\/(v1\/.*|health|openapi\.json)$/;
 
 /** Headers the gateway decides from its own address, or that would sign the request twice. */
 const DROPPED_REQUEST = ['host', 'origin', 'referer', 'cookie', 'authorization'];
+
+/**
+ * How long a gateway may take to start answering, in ms. Every read of the panel gives up after
+ * 30 seconds, but its giving up never reaches this process before the answer starts: without a
+ * limit of its own, a request on a connection that stopped carrying anything waits here forever.
+ */
+const ANSWER_MS = 60_000;
+/** How long an answer under way may send nothing, in ms. An event stream speaks every 25. */
+const SILENT_MS = 90_000;
+/** How long the window may leave an event stream unread before it is taken as abandoned, in ms. */
+const UNREAD_MS = 90_000;
+
+const seconds = (since: number) => `${Math.round((Date.now() - since) / 1000)}s`;
+const reason = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
 export function handleScheme(store: GatewayStore, renderer: { dir: string; devServer?: string }) {
   protocol.handle('jian', async (request) => {
@@ -68,6 +83,14 @@ async function forward(
 
   const hasBody = request.method !== 'GET' && request.method !== 'HEAD';
   const gone = new AbortController();
+  const host = new URL(gateway.url).host;
+  const asked = `${request.method} ${path}`;
+  const startedAt = Date.now();
+  let late = false;
+  const limit = setTimeout(() => {
+    late = true;
+    gone.abort();
+  }, ANSWER_MS);
   try {
     const response = await net.fetch(`${gateway.url}${path}${url.search}`, {
       method: request.method,
@@ -80,15 +103,41 @@ async function forward(
       ...(hasBody ? { duplex: 'half' } : {}),
       redirect: 'manual',
     } as RequestInit);
+    clearTimeout(limit);
     // The window keeps no cookie of any gateway: the token is the only credential.
     const answered = new Headers(response.headers);
     answered.delete('set-cookie');
-    return new Response(response.body && releasing(response.body, () => gone.abort()), {
+    const stream = answered.get('content-type')?.startsWith('text/event-stream') ?? false;
+    if (stream) logConnections(`${host} ${asked} opened`);
+    const openedAt = Date.now();
+    const ended = (how: BodyEnd, error?: unknown) => {
+      if (how === 'silent') stalled(host, `${asked} went silent, open for ${seconds(openedAt)}`);
+      else if (how === 'unread') logConnections(`${host} ${asked} left unread, let go`);
+      else if (how === 'failed') logConnections(`${host} ${asked} failed: ${reason(error)}`);
+      else if (stream) {
+        const by = how === 'done' ? 'the gateway' : 'the window';
+        logConnections(`${host} ${asked} closed by ${by} after ${seconds(openedAt)}`);
+      }
+    };
+    const body =
+      response.body &&
+      releasing(response.body, () => gone.abort(), {
+        silentMs: SILENT_MS,
+        ...(stream ? { unreadMs: UNREAD_MS } : {}),
+        ended,
+      });
+    return new Response(body, {
       status: response.status,
       statusText: response.statusText,
       headers: answered,
     });
-  } catch {
+  } catch (error) {
+    clearTimeout(limit);
+    if (late) {
+      stalled(host, `${asked} got no answer in ${seconds(startedAt)}`);
+      return Response.json({ error: 'The gateway did not answer in time.' }, { status: 504 });
+    }
+    logConnections(`${host} ${asked} got no answer: ${reason(error)}`);
     return Response.json({ error: 'The gateway did not answer.' }, { status: 502 });
   }
 }

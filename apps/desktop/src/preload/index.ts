@@ -47,7 +47,7 @@ const bridge: DesktopBridge = {
   addGateway: (gateway) => invoke('gateways:add', gateway),
   removeGateway: (id) => invoke('gateways:remove', id),
   replaceToken: (id, token) => invoke('gateways:replaceToken', id, token),
-  reconnectGateway: (id) => ipcRenderer.send('gateways:reconnect', id),
+  reconnectGateway: (id) => invoke('gateways:reconnect', id),
   onGatewaysChanged: (listener) => listen<GatewaySummary[]>('gateways:changed', listener),
   onOpen: (listener) => listen<OpenTarget>('window:open', listener),
   local: {

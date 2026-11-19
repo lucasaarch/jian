@@ -34,17 +34,24 @@ beforeEach(() => {
   monitorClosed.mockClear();
 });
 
-it('closes the window’s connections and the monitor’s before it looks at a gateway away', async () => {
-  const refresh = vi.fn();
-  const monitor = {
-    summaries: () => [{ id: 'harbor', status: 'offline' }],
-    refresh,
-  };
-  serveBridge({ monitor, window: () => undefined } as never);
+const store = { get: () => ({ url: 'https://harbor.example.test' }) };
 
-  electron.listeners.get('gateways:reconnect')?.({}, 'harbor');
-  await vi.waitFor(() => expect(refresh).toHaveBeenCalledWith('harbor'));
+it.each(['offline', 'online'])(
+  'closes the window’s connections and the monitor’s before it looks at a gateway %s',
+  async (status) => {
+    const refresh = vi.fn();
+    const monitor = {
+      summaries: () => [{ id: 'harbor', status }],
+      refresh,
+    };
+    serveBridge({ store, monitor, window: () => undefined } as never);
 
-  expect(electron.windowClosed).toHaveBeenCalledTimes(1);
-  expect(monitorClosed).toHaveBeenCalledTimes(1);
-});
+    // The window's stream can be dead while the monitor still hears the gateway: an online
+    // gateway's connections are closed too, and the window is answered only once they are.
+    await electron.listeners.get('gateways:reconnect')?.({}, 'harbor');
+
+    expect(electron.windowClosed).toHaveBeenCalledTimes(1);
+    expect(monitorClosed).toHaveBeenCalledTimes(1);
+    expect(refresh).toHaveBeenCalledWith('harbor');
+  },
+);

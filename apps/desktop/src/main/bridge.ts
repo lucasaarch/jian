@@ -1,12 +1,4 @@
-import {
-  app,
-  type BrowserWindow,
-  dialog,
-  ipcMain,
-  type OpenDialogOptions,
-  session,
-  shell,
-} from 'electron';
+import { app, type BrowserWindow, dialog, ipcMain, type OpenDialogOptions, shell } from 'electron';
 import type {
   AddGatewayResult,
   MachineUse,
@@ -15,7 +7,7 @@ import type {
   Showing,
 } from '../shared/bridge';
 import { LOCAL_GATEWAY_ID } from '../shared/bridge';
-import { closeMonitorConnections } from './gateways/fetch';
+import { closeConnections } from './gateways/connections';
 import type { GatewayMonitor } from './gateways/monitor';
 import { parseGatewayUrl } from './gateways/rules';
 import { type GatewayStore, VAULT_MISSING, vaultAvailable } from './gateways/store';
@@ -57,25 +49,16 @@ export function serveBridge(deps: {
   });
   ipcMain.handle('gateways:list', () => monitor.summaries());
   ipcMain.on('local:retry', () => deps.retryLocal());
-  ipcMain.on('gateways:reconnect', (_event, id: unknown) => {
+  // Answered once the connections are closed, so the window reads everything again on new ones.
+  ipcMain.handle('gateways:reconnect', async (_event, id: unknown) => {
     if (typeof id !== 'string') return;
     if (id === LOCAL_GATEWAY_ID) deps.retryLocal();
-    const away = monitor.summaries().some((item) => item.id === id && item.status === 'offline');
-    if (!away) {
-      monitor.refresh(id);
-      return;
-    }
     // Every request of the window to a host shares one HTTP/2 connection, and every look of the
-    // monitor shares another, of its own session: a stuck one would answer this look as it
-    // answered the last. Only a restart used to clear it. This closes all of the app's
-    // connections, both sessions' and other gateways' included; their event streams reopen and
-    // resume by themselves, and a look cut off by it is not taken for the gateway's answer.
-    // The monitor's session also carries the machine registry's and a new gateway's checks:
-    // one of those under way is cut too, and fails as a request whose connection dropped.
-    void Promise.allSettled([
-      session.defaultSession.closeAllConnections(),
-      closeMonitorConnections(),
-    ]).finally(() => monitor.refresh(id));
+    // monitor shares another, of its own session. The window's can stop carrying anything while
+    // the monitor's still answers, so the gateway reads as online while the window hears
+    // nothing: Reconnect closes both whatever the monitor says, or only a restart clears it.
+    await closeConnections(`Reconnect asked for ${store.get(id)?.url ?? id}`);
+    monitor.refresh(id);
   });
   ipcMain.handle('local:restart', () => deps.restartLocal());
   ipcMain.handle('dialog:pickFolder', async () => {

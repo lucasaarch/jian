@@ -4,6 +4,7 @@ import { LOCAL_GATEWAY_ID, type MachineUse, type OpenTarget, type Showing } from
 import { setAppMenu } from './app-menu';
 import { serveBridge } from './bridge';
 import { JianBrowser } from './browser';
+import { closeConnections } from './gateways/connections';
 import { timedFetch } from './gateways/fetch';
 import { GatewayMonitor } from './gateways/monitor';
 import { gatewayName } from './gateways/rules';
@@ -260,9 +261,10 @@ void app.whenReady().then(async () => {
   });
   for (const gateway of store.list()) monitor.watch(gateway);
   // After sleep the gateways moved on without us; ask them at once rather than at the next tick.
-  // Releases too: a timer does not run while the computer sleeps.
+  // Releases too: a timer does not run while the computer sleeps. The connections from before the
+  // sleep may carry nothing any more without failing, so they are closed before anything is asked.
   powerMonitor.on('resume', () => {
-    monitor.refresh();
+    void closeConnections('The computer woke from sleep').finally(() => monitor.refresh());
     void updates?.check();
   });
 

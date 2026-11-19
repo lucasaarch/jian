@@ -65,6 +65,11 @@ Other messages you may see:
   Plugins → Connectors.
 - An X call refused — see \`x\`: no credits, or an account to connect again.
 - Web search refused — check the Tavily key under Providers.
+- The desktop app out of step with a gateway (a turn shown working that ended, messages or the
+  chat list behind) — **Reconnect to gateway** in the command palette closes the app's
+  connections and reads everything again. What those connections went through is in
+  \`connections.log\`, in the app's log folder (\`~/Library/Logs/Jian\` on a Mac), for the owner
+  to send.
 
 ## What to say
 
