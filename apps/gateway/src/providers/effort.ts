@@ -127,7 +127,11 @@ export function reasoningProviderOptions(
           ? { anthropic: { thinking: { type: 'disabled' } } }
           : {
               anthropic: {
-                thinking: { type: 'adaptive' },
+                // Summarized, not the newer models' default `omitted`: an omitted thought streams
+                // nothing until it ends, and a long one at a high effort outlasts the runtime's
+                // five silent minutes (STALLED_AFTER_MS), which then ends a turn still thinking.
+                // The display changes what is sent back, not what is thought or billed.
+                thinking: { type: 'adaptive', display: 'summarized' },
                 effort: effort === 'minimal' ? 'low' : effort,
               },
             };
