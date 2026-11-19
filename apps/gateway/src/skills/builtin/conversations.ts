@@ -75,7 +75,9 @@ something later, or every day, see \`schedules\`.
   that tab, and what they change is kept by itself as they pause or leave, with no Save: one
   stretch of editing is one version of theirs, never written over one of yours. In a
   spreadsheet they write in the cells themselves and put in or take out rows and columns from
-  the menu of a cell or a header (a right click), its formulas following. Before you
+  the menu of a cell or a header (a right click), its formulas following. In a deck they also
+  add, copy, move and delete slides, and place text boxes and pictures on one, each a version of
+  theirs too, so the slides you numbered may have moved. Before you
   change an Artifact you did not
   just write, read it with \`read_artifact_source\`: the latest source, and whether you or the
   owner wrote it. Build on that, or your update undoes their edit. A component and a

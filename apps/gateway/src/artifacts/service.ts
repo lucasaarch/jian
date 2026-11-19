@@ -13,6 +13,7 @@ import {
   deckSlideAddSchema,
   deckSlideDeleteSchema,
   deckSlideMoveSchema,
+  deckSlidesEditSchema,
   deckSlideUpdateSchema,
   EDITABLE_ARTIFACT_TYPES,
   type MediaMime,
@@ -39,7 +40,13 @@ import { findProfile } from '../profiles/repository.js';
 import type { SessionReader } from '../sessions/port.js';
 import type { Queryable, Store } from '../storage/database.js';
 import { sessionArtifacts, sessionArtifactVersions } from '../storage/schema.js';
-import { changedSlides, deckContent, type SlideChange, slidesOf } from './deck.js';
+import {
+  changedSlides,
+  deckContent,
+  ownerChangedSlides,
+  type SlideChange,
+  slidesOf,
+} from './deck.js';
 import { documentDocx } from './document-export.js';
 import { editedSource } from './edits.js';
 import { exportDeck, exportDocumentPdf, MIME } from './export.js';
@@ -427,20 +434,20 @@ export class SessionArtifacts {
   }
 
   /**
-   * What the owner saved after editing one by hand in the panel: a new version of theirs, made
-   * from the version they were editing, or, when it carries the key of the stretch whose version
-   * is the latest, that version again with the new content. A source is checked as the agent's
-   * is and kept as it came; a deck gets that one slide.
+   * The owner's change by hand, saved as a version of theirs. `made` is the content after the
+   * change, from the content of the version it is made from: the one the owner was looking at,
+   * or, when the change carries the key of the stretch whose version is the latest, that version,
+   * which then takes the new content in place. The key joins only the owner's own version, so an
+   * agent's stays as written.
    * The panel that saved it already shows it, so nothing is told to bring it forward.
    */
-  async edit(
+  private byHand(
     profileId: string,
     sessionId: string,
     artifactId: string,
-    input: unknown,
+    asked: { version: number; editKey?: string | undefined },
+    made: (type: SessionArtifactType, from: string) => string,
   ): Promise<SessionArtifact> {
-    const data = sessionArtifactEditSchema.parse(input);
-
     return this.store.transaction(profileId, async (tx) => {
       const current = await this.find(tx, profileId, sessionId, artifactId, true);
       if (!EDITABLE_ARTIFACT_TYPES.includes(current.type)) {
@@ -451,28 +458,60 @@ export class SessionArtifacts {
       }
       const latest = await this.stored(tx, current.id, current.version);
       const again =
-        data.editKey !== undefined && latest.author === 'owner' && latest.editKey === data.editKey;
-      // A stretch that goes on builds on its own version, which already holds its earlier slides.
-      const edited = again ? latest : await this.stored(tx, current.id, data.version);
-      const save = (content: string) =>
-        again
-          ? this.replaced(tx, current, content)
-          : this.versioned(tx, current, content, 'owner', undefined, data.editKey);
+        asked.editKey !== undefined &&
+        latest.author === 'owner' &&
+        latest.editKey === asked.editKey;
+      // A stretch that goes on builds on its own version, which already holds its earlier changes.
+      const from = again ? latest : await this.stored(tx, current.id, asked.version);
+      const content = made(current.type, from.content);
 
-      if (current.type !== 'deck') {
+      return again
+        ? this.replaced(tx, current, content)
+        : this.versioned(tx, current, content, 'owner', undefined, asked.editKey);
+    });
+  }
+
+  /**
+   * What the owner saved after editing one by hand in the panel (`byHand`). A source is checked
+   * as the agent's is and kept as it came; a deck gets that one slide.
+   */
+  edit(
+    profileId: string,
+    sessionId: string,
+    artifactId: string,
+    input: unknown,
+  ): Promise<SessionArtifact> {
+    const data = sessionArtifactEditSchema.parse(input);
+
+    return this.byHand(profileId, sessionId, artifactId, data, (type, from) => {
+      if (type !== 'deck') {
         if (data.slide !== undefined) throw new GatewayError(400, 'Only a deck has slides.');
-        return save(kept(current.type, { content: data.content }));
+        return kept(type, { content: data.content });
       }
       if (data.slide === undefined) {
         throw new GatewayError(400, 'Say which slide of the deck was edited.');
       }
-      const slides = changedSlides(slidesOf(edited.content), {
-        op: 'update',
-        slide: data.slide,
-        html: data.content,
-      });
+      return deckContent(
+        changedSlides(slidesOf(from), { op: 'update', slide: data.slide, html: data.content }),
+      );
+    });
+  }
 
-      return save(deckContent(slides));
+  /**
+   * The owner's change to a deck's slides from the panel, made without the agent: one added,
+   * copied, deleted or moved (`byHand`).
+   */
+  editSlides(
+    profileId: string,
+    sessionId: string,
+    artifactId: string,
+    input: unknown,
+  ): Promise<SessionArtifact> {
+    const data = deckSlidesEditSchema.parse(input);
+
+    return this.byHand(profileId, sessionId, artifactId, data, (type, from) => {
+      if (type !== 'deck') throw new GatewayError(400, 'Only a deck has slides.');
+      return deckContent(ownerChangedSlides(slidesOf(from), data));
     });
   }
 

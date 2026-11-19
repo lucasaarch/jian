@@ -4,7 +4,7 @@ import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { toast } from 'sonner';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { DeckExportQuery, SessionArtifact } from '../../../lib/api';
+import type { DeckExportQuery, DeckSlidesEdit, SessionArtifact } from '../../../lib/api';
 import { publish } from '../../../lib/events';
 import { keys } from '../../../lib/query/keys';
 import { useArtifactDraft } from '../../../lib/stores/artifact-draft';
@@ -72,6 +72,8 @@ const sheet: SessionArtifact = {
 function gateway(artifacts: SessionArtifact[] = [counter, notes, page, deck]) {
   const held = [...artifacts];
   const keyed = new Map<string, string>();
+  // The deck's slides by version, as the gateway keeps them.
+  const decks = new Map<number, string[]>([[1, SLIDES]]);
 
   return {
     held,
@@ -87,10 +89,10 @@ function gateway(artifacts: SessionArtifact[] = [counter, notes, page, deck]) {
             : artifactId === page.id
               ? PAGE
               : artifactId === deck.id
-                ? JSON.stringify({ slides: SLIDES })
+                ? JSON.stringify({ slides: decks.get(version) ?? SLIDES })
                 : `# Notes, version ${version}`,
         ...(artifactId === counter.id ? { compiled: COMPILED } : {}),
-        ...(artifactId === deck.id ? { slides: SLIDES } : {}),
+        ...(artifactId === deck.id ? { slides: decks.get(version) ?? SLIDES } : {}),
         createdAt: at,
       }),
     ),
@@ -117,6 +119,21 @@ function gateway(artifacts: SessionArtifact[] = [counter, notes, page, deck]) {
         if (edit.editKey) keyed.set(artifactId, edit.editKey);
         const next: SessionArtifact = { ...current, version: current.version + (again ? 0 : 1) };
         held[index] = next;
+        return next;
+      },
+    ),
+    editDeckSlides: vi.fn(
+      async (_profile: string, _session: string, artifactId: string, change: DeckSlidesEdit) => {
+        const index = held.findIndex((item) => item.id === artifactId);
+        const current = held[index] as SessionArtifact;
+        const slides = [...(decks.get(change.version) ?? SLIDES)];
+        if (change.op === 'add') {
+          slides.splice((change.position ?? slides.length + 1) - 1, 0, change.html);
+        }
+        if (change.op === 'delete') slides.splice(change.slide - 1, 1);
+        const next: SessionArtifact = { ...current, version: current.version + 1 };
+        held[index] = next;
+        decks.set(next.version, slides);
         return next;
       },
     ),
@@ -916,7 +933,7 @@ describe('a deck of slides', () => {
     const rail = drawer()?.querySelector('nav[aria-label=Slides]');
     expect(
       [...(rail?.querySelectorAll('button') ?? [])].map((item) => item.getAttribute('aria-label')),
-    ).toEqual(['Slide 1', 'Slide 2', 'Slide 3']);
+    ).toEqual(['Slide 1', 'Slide 2', 'Slide 3', 'New slide']);
     // The row comes before the slide in view, not beside it.
     expect(
       (rail as Element).compareDocumentPosition(large()) & Node.DOCUMENT_POSITION_FOLLOWING,
@@ -990,10 +1007,10 @@ describe('a deck of slides', () => {
     await click(button('Slide 2'));
     await click(button('Edit'));
 
-    // Only the slide in view opens for editing, and it stays in view until Done.
+    // Only the slide in view opens for editing, with what builds on it beside Done.
     expect(frames().filter((item) => item.src.includes('?edit=1'))).toEqual([large()]);
-    expect(button('Slide 1')?.disabled).toBe(true);
-    expect(button('Next slide')?.disabled).toBe(true);
+    expect(button('Add a text box')).toBeDefined();
+    expect(button('Add a picture')).toBeDefined();
     // Present is in the toolbar, which Done replaces while a slide is open.
     expect(button('Present')).toBeUndefined();
     const { element, sent } = await loaded(large());
@@ -1014,6 +1031,100 @@ describe('a deck of slides', () => {
       content: edited,
       slide: 2,
       editKey: expect.stringMatching(/^[0-9a-f-]{36}$/),
+    });
+  });
+
+  it('keeps what was typed before going to another slide, and opens that one', async () => {
+    const api = await opened(deck);
+    await click(button('Edit'));
+    const { element, sent } = await loaded(large());
+    await changed(element);
+
+    await click(button('Slide 3'));
+    await settled(() => questions(sent) > 0);
+    // Nothing moves until the edit is kept.
+    expect(large()?.title).toBe('Plan, slide 1, editing');
+    const edited = (SLIDES[0] as string).replace('One', 'First');
+    await answer(element.contentWindow, { collect: asked(sent), html: edited });
+    await settled(() => large()?.title === 'Plan, slide 3, editing');
+
+    expect(api.editSessionArtifact).toHaveBeenCalledWith('profile', 'session', deck.id, {
+      version: 1,
+      content: edited,
+      slide: 1,
+      editKey: expect.stringMatching(/^[0-9a-f-]{36}$/),
+    });
+    expect(large()?.src).toContain('?edit=1');
+    expect(button('Slide 3')?.getAttribute('aria-current')).toBe('true');
+  });
+
+  /** The rail's slides, by name, without its other buttons. */
+  const railed = () =>
+    [
+      ...(drawer()?.querySelectorAll('nav[aria-label=Slides] button[aria-label^="Slide "]') ?? []),
+    ].map((item) => item.getAttribute('aria-label'));
+
+  it('adds a slide after the one in view, from a layout in the deck’s look', async () => {
+    const api = await opened(deck);
+    await click(button('Slide 2'));
+
+    const layouts = await menu('New slide');
+    expect(layouts.map((entry) => entry.textContent)).toEqual([
+      'Title',
+      'Title and text',
+      'Two columns',
+      'Section header',
+      'Blank',
+      'Duplicate current',
+    ]);
+    await click(layouts.find((entry) => entry.textContent === 'Title and text'));
+    await settled(() => railed().length === 4);
+
+    expect(api.editDeckSlides).toHaveBeenCalledWith('profile', 'session', deck.id, {
+      op: 'add',
+      version: 1,
+      position: 3,
+      html: expect.stringContaining('Click to add title'),
+    });
+    // A new slide holds the layout's words to type over, none of the slide it was made from.
+    const [, , , change] = api.editDeckSlides.mock.calls[0] as unknown as [
+      string,
+      string,
+      string,
+      { html: string },
+    ];
+    expect(change.html).not.toContain('Two');
+    // The new one is in view, in the version it made.
+    expect(button('Slide 3')?.getAttribute('aria-current')).toBe('true');
+    expect(viewed(api)).toBe(2);
+  });
+
+  it('deletes a focused slide with Delete, and gives it back with Undo', async () => {
+    const api = await opened(deck);
+    const second = button('Slide 2') as HTMLButtonElement;
+    await act(async () => {
+      second.dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete', bubbles: true }));
+    });
+    await settled(() => railed().length === 2);
+    expect(api.editDeckSlides).toHaveBeenCalledWith('profile', 'session', deck.id, {
+      op: 'delete',
+      version: 1,
+      slide: 2,
+    });
+
+    const told = vi.mocked(toast).mock.calls.find(([said]) => said === 'Slide 2 deleted.');
+    const undo = (told?.[1] as { action: { label: string; onClick: () => void } } | undefined)
+      ?.action;
+    if (!undo) throw new Error('The owner was not offered Undo.');
+    expect(undo.label).toBe('Undo');
+    await act(async () => undo.onClick());
+    await settled(() => railed().length === 3);
+    // The slide as the gateway held it, back where it was.
+    expect(api.editDeckSlides).toHaveBeenLastCalledWith('profile', 'session', deck.id, {
+      op: 'add',
+      version: 2,
+      position: 2,
+      html: SLIDES[1],
     });
   });
 

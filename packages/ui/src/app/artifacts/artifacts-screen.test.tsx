@@ -83,6 +83,7 @@ function gateway(artifacts: ProfileArtifact[] = [landing, notes, diagram], made 
     exportSessionArtifact: refused,
     setSessionArtifactVisibility: refused,
     editSessionArtifact: refused,
+    editDeckSlides: refused,
     sessionArtifactVersion: vi.fn(
       async (_profile: string, _session: string, artifactId: string, version: number) => ({
         artifactId,

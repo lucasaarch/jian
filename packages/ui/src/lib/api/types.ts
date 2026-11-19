@@ -38,6 +38,8 @@ export type ArtifactFolders = JsonResponse<'listArtifactFolders', 200>;
 export type ArtifactFolder = ArtifactFolders['folders'][number];
 export type SessionArtifactVersion = JsonResponse<'readSessionArtifactVersion', 200>;
 export type DeckExport = JsonResponse<'exportSessionArtifactVersion', 200>;
+/** The owner's change to a deck's slides by hand: one added, copied, deleted or moved. */
+export type DeckSlidesEdit = RequestBody<'editDeckSlides'>;
 /** The query is generated with every field optional; the format is what is being asked for. */
 export type DeckExportQuery = NonNullable<
   operations['exportSessionArtifactVersion']['parameters']['query']

@@ -163,6 +163,7 @@ import {
   artifactFrameQuerySchema,
   deckExportQuerySchema,
   deckExportSchema,
+  deckSlidesEditSchema,
   profileArtifactPageSchema,
   profileArtifactsQuerySchema,
   publicArtifactParamsSchema,
@@ -1622,6 +1623,17 @@ export const operations: Operation[] = [
     access: 'admin',
     status: 201,
     body: sessionArtifactEditSchema,
+    response: sessionArtifactSchema,
+  },
+  {
+    // The owner's change to a deck's slides from the panel (add, duplicate, delete, move), a new
+    // version as an edit is. A paired phone only reads, and is refused with a 403.
+    method: 'POST',
+    path: `${session}/artifacts/:artifactId/slides`,
+    operationId: 'editDeckSlides',
+    access: 'admin',
+    status: 201,
+    body: deckSlidesEditSchema,
     response: sessionArtifactSchema,
   },
   {

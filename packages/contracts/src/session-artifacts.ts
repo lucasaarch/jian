@@ -237,6 +237,44 @@ export const sessionArtifactEditSchema = z.strictObject({
   editKey: z.string().min(8).max(64).optional(),
 });
 
+/** What every change the owner makes by hand carries, as an edit of a page does. */
+const byHand = {
+  /** The version the owner was looking at, which the change is made from. */
+  version: z.number().int().min(1),
+  /** As an edit's: a change carrying the key of the stretch whose version is the latest joins it. */
+  editKey: z.string().min(8).max(64).optional(),
+};
+
+/**
+ * What the owner does to a deck's slides by hand in the panel, with no agent: a slide added (one
+ * the panel made from a layout, in the deck's own styles), one copied, one deleted or one moved.
+ * Like an edit, it becomes a new version of the owner's, made from the version they were looking
+ * at. A deck keeps at least one slide.
+ */
+export const deckSlidesEditSchema = z.discriminatedUnion('op', [
+  z.strictObject({
+    op: z.literal('add'),
+    ...byHand,
+    html: slideHtmlSchema,
+    /** The number it takes, counting from 1; at the end without one. */
+    position: slideNumberSchema.optional(),
+  }),
+  z.strictObject({
+    op: z.literal('duplicate'),
+    ...byHand,
+    /** The slide copied, counting from 1. The copy comes right after it. */
+    slide: slideNumberSchema,
+  }),
+  z.strictObject({ op: z.literal('delete'), ...byHand, slide: slideNumberSchema }),
+  z.strictObject({
+    op: z.literal('move'),
+    ...byHand,
+    slide: slideNumberSchema,
+    /** The number it has afterwards. */
+    to: slideNumberSchema,
+  }),
+]);
+
 export const sessionArtifactSchema = z.strictObject({
   id: z.uuid(),
   sessionId: z.uuid(),
@@ -421,6 +459,10 @@ export const ARTIFACT_FRAME_MESSAGE = 'jianArtifact';
  *
  * - Beside the source, `{ scale }` from the panel opens the frame for editing instead of running
  *   what it was handed; `{ scale }` again says how far the panel scales the frame since.
+ * - `{ insert: { text: true } }` or `{ insert: { image: <a data: URL of a picture> } }` from the
+ *   panel, to a deck's slide only, places a text box or a picture on it, which the owner then
+ *   moves, sizes and deletes in the frame. The picture is read in the panel, from a file the owner
+ *   picked: the frame loads nothing.
  * - `{ collect: <nonce> }` from the panel asks for the edited source. The frame answers that
  *   and nothing else, with `{ collect: <the same nonce>, html }`, or `{ collect, unchanged: true }`
  *   when nothing was edited. `html` is the source in the type's own form whatever the type: a
@@ -465,6 +507,7 @@ export type ArtifactFolders = z.infer<typeof artifactFoldersSchema>;
 export type SessionArtifactVersion = z.infer<typeof sessionArtifactVersionSchema>;
 export type DeckExportQuery = z.infer<typeof deckExportQuerySchema>;
 export type DeckExport = z.infer<typeof deckExportSchema>;
+export type DeckSlidesEdit = z.infer<typeof deckSlidesEditSchema>;
 
 /**
  * The types the owner edits by hand in the panel: a page, a deck one slide at a time, a

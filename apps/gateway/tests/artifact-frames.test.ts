@@ -110,6 +110,8 @@ window.tweak = (values) =>
   held.contentWindow.postMessage({ ${ARTIFACT_TWEAKS_MESSAGE}: { values } }, '*');
 window.collect = (nonce) =>
   held.contentWindow.postMessage({ ${ARTIFACT_EDIT_MESSAGE}: { collect: nonce } }, '*');
+window.insert = (what) =>
+  held.contentWindow.postMessage({ ${ARTIFACT_EDIT_MESSAGE}: { insert: what } }, '*');
 window.hand = () => {
   held.contentWindow.postMessage({
     ${ARTIFACT_FRAME_MESSAGE}: ${embedded(handed.get(name))},
@@ -334,6 +336,85 @@ exports.default = (props) =>
         collect: 'edited',
         html: 'Item,Cost\nA,7\nB,3\nTotal,=SUM(B2:B3)*21\n',
       });
+      await page.close();
+    });
+
+    it("builds on a deck's slide: boxes placed, moved, sized and deleted, and only they kept", async () => {
+      const source =
+        '<!doctype html><html><head><style>body { margin: 0; }</style></head><body>' +
+        '<h1 data-jian-placeholder="">Click to add title</h1></body></html>';
+      const page = await inPanel('deck-build', 'deck', source, true);
+      const slide = await editing(page);
+      const insert = (what: object) =>
+        page.evaluate(
+          (said) => (window as never as { insert: (w: object) => void }).insert(said),
+          what,
+        );
+      const boxes = slide.locator('[data-jian-box]');
+      const picked = slide.locator('#jian-box-frame');
+
+      // A text box, in the middle of the canvas and picked.
+      await insert({ text: true });
+      await expect.poll(() => boxes.count()).toBe(1);
+      expect(await picked.isVisible()).toBe(true);
+      const before = await boxes.first().boundingBox();
+      if (!before) throw new Error('The text box is not drawn.');
+
+      // Dragged by itself, it moves and is not opened for typing on the way.
+      await page.mouse.move(before.x + 40, before.y + 20);
+      await page.mouse.down();
+      await page.mouse.move(before.x + 140, before.y + 70, { steps: 5 });
+      await page.mouse.up();
+      const after = await boxes.first().boundingBox();
+      expect([
+        Math.round((after?.x ?? 0) - before.x),
+        Math.round((after?.y ?? 0) - before.y),
+      ]).toEqual([100, 50]);
+      expect(await boxes.first().getAttribute('contenteditable')).toBeNull();
+
+      // Clicked, it is typed in, its words replacing the ones that ask for them.
+      await boxes.first().click();
+      await page.keyboard.type('Revenue grew');
+      expect(await boxes.first().textContent()).toBe('Revenue grew');
+
+      // A picture only as written in the page; an address would have to be fetched.
+      await insert({ image: 'https://example.test/cat.png', width: 10, height: 10 });
+      const pixel =
+        'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+      await insert({ image: pixel, width: 400, height: 200 });
+      await expect.poll(() => boxes.count()).toBe(2);
+      const image = slide.locator('img[data-jian-box]');
+      expect(await image.boundingBox()).toMatchObject({ width: 400, height: 200 });
+
+      // Its corner sizes it in proportion.
+      const corner = await slide.locator('[data-corner="se"]').boundingBox();
+      if (!corner) throw new Error('The picture has no corner to size it by.');
+      await page.mouse.move(corner.x + corner.width / 2, corner.y + corner.height / 2);
+      await page.mouse.down();
+      await page.mouse.move(corner.x + 200, corner.y + 4, { steps: 5 });
+      await page.mouse.up();
+      const sized = await image.boundingBox();
+      expect(Math.round((sized?.width ?? 0) / (sized?.height ?? 1))).toBe(2);
+      expect(sized?.width).toBeGreaterThan(400);
+
+      // Picked again and deleted with the key.
+      await image.click();
+      await page.keyboard.press('Delete');
+      await expect.poll(() => boxes.count()).toBe(1);
+
+      // The title placeholder is selected whole when clicked, and typed over.
+      await slide.locator('h1').click();
+      await page.keyboard.type('Quarterly review');
+
+      const answer = (await collect(page, 'built')) as { html: string };
+      expect(answer.html).toContain('Quarterly review</h1>');
+      expect(answer.html).not.toContain('data-jian-placeholder');
+      expect(answer.html).toMatch(
+        /<div data-jian-box="text" style="[^"]*position: absolute;[^"]*">Revenue grew<\/div>/,
+      );
+      expect(answer.html).not.toContain('<img');
+      expect(answer.html).not.toContain('jian-box-frame');
+      expect(answer.html).not.toContain('data-jian-edit');
       await page.close();
     });
 
