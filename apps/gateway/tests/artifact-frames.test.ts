@@ -755,12 +755,10 @@ exports.default = () => React.createElement('section', null, React.createElement
       await page.close();
     });
 
-    it('shows a public page’s toolbar only when it is come for, and saves its files', async () => {
+    it('keeps a public page’s toolbar in a room of its own, with Jian’s links, and saves its files', async () => {
       const page = await browser.newPage({ viewport: { width: 1000, height: 700 } });
       await page.goto(`${origin}/public/table`);
       await expect.poll(() => read(page)).toContain('A table ran');
-      const bar = () =>
-        page.evaluate(() => getComputedStyle(document.getElementById('bar') as Element).opacity);
       // The toolbar is the page's own, not the Artifact's frame's.
       expect(
         await page
@@ -768,28 +766,65 @@ exports.default = () => React.createElement('section', null, React.createElement
           .at(-1)
           ?.evaluate(() => document.getElementById('bar')),
       ).toBeNull();
-      expect(await bar()).toBe('0');
+      // Always there, nothing to find it by, and the Artifact starts where it ends.
+      const [bar, frame] = await page.evaluate(() =>
+        ['bar', 'artifact'].map((id) => {
+          const box = (document.getElementById(id) as Element).getBoundingClientRect();
+          return { top: box.top, bottom: box.bottom, height: box.height };
+        }),
+      );
+      expect(bar).toEqual({ top: 0, bottom: 48, height: 48 });
+      expect(frame?.top).toBe(48);
+      expect(frame?.bottom).toBe(700);
 
-      // At the top edge it comes in, and away from it goes again.
-      await page.mouse.move(500, 300);
-      await page.mouse.move(500, 3);
-      await expect.poll(bar).toBe('1');
-      await page.mouse.move(500, 400);
-      await expect.poll(bar).toBe('0');
+      // Jian's site, its download and its repository, each in a tab of its own.
+      const links = await page.$$eval('#bar a[target=_blank]', (anchors) =>
+        anchors.map((anchor) => [anchor.getAttribute('href'), anchor.getAttribute('rel')]),
+      );
+      expect(links).toEqual([
+        ['https://usejian.app', 'noopener noreferrer'],
+        ['https://github.com/lucasaarch/jian', 'noopener noreferrer'],
+        ['https://usejian.app/download', 'noopener noreferrer'],
+      ]);
 
-      // The keyboard finds it first.
+      // The keyboard reaches the toolbar before the Artifact, and a download is saved by the
+      // page, which the sandbox lets it alone do.
       await page.keyboard.press('Tab');
-      await expect.poll(bar).toBe('1');
-      expect(
-        await page.evaluate(() => document.activeElement?.closest('#downloads') !== null),
-      ).toBe(true);
-
-      // A download is saved by the page, which the sandbox lets it alone do.
+      expect(await page.evaluate(() => document.activeElement?.id)).toBe('brand');
+      await page.focus('#downloads .tool');
       await page.keyboard.press('ArrowDown');
       const saved = page.waitForEvent('download');
       await page.keyboard.press('Enter');
       expect((await saved).suggestedFilename()).toBe('Shared.html');
       expect(asked).toContain(`/public/${LINK}/export`);
+      await page.close();
+    });
+
+    it('lights one prompt at a time: none on a click, then the one the pointer is on', async () => {
+      const page = await browser.newPage({ viewport: { width: 1000, height: 700 } });
+      await page.goto(`${origin}/public/react`);
+      await expect.poll(() => read(page)).toContain('A component');
+      const lit = () =>
+        page.$$eval('#prompts [role=menuitem]', (items) =>
+          items
+            .filter((item) => getComputedStyle(item).backgroundColor !== 'rgba(0, 0, 0, 0)')
+            .map((item) => (item as HTMLElement).dataset.target),
+        );
+
+      await page.click('#prompts .tool');
+      expect(await lit()).toEqual([]);
+      await page.hover('[data-target="svelte"]');
+      await expect.poll(lit).toEqual(['svelte']);
+      await page.hover('[data-target="vue"]');
+      await expect.poll(lit).toEqual(['vue']);
+
+      // From the keyboard the first is lit, and the arrows move the one light.
+      await page.keyboard.press('Escape');
+      await page.mouse.move(10, 400);
+      await page.keyboard.press('ArrowDown');
+      await expect.poll(lit).toEqual(['react']);
+      await page.keyboard.press('ArrowDown');
+      await expect.poll(lit).toEqual(['vue']);
       await page.close();
     });
 
@@ -800,7 +835,6 @@ exports.default = () => React.createElement('section', null, React.createElement
       await page.goto(`${origin}/public/react`);
       await expect.poll(() => read(page)).toContain('A component');
 
-      await page.mouse.move(500, 3);
       await page.click('#prompts .tool');
       await page.click('[data-target="vue"]');
       await expect.poll(() => page.textContent('#prompts .tool')).toBe('Copied');
