@@ -2,17 +2,27 @@ import { ARTIFACT_PRESENT_MESSAGE, SESSION_ARTIFACT_MAX } from '@jian/contracts'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
+import { toast } from 'sonner';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SessionArtifact } from '../../../lib/api';
 import { publish } from '../../../lib/events';
 import { keys } from '../../../lib/query/keys';
+import { useArtifactDraft } from '../../../lib/stores/artifact-draft';
 import { useCrew } from '../../../lib/stores/crew';
 import { draftKey, useDrafts } from '../../../lib/stores/drafts';
 import { focusInspector } from '../inspector-host';
 import type { ArtifactsDrawerApi } from './artifact-cards';
 import { ArtifactsDrawer } from './artifacts-drawer';
 import { collectEdit, editAnswer } from './edit';
+import { hearArtifactDraft } from './live';
 import { fileName } from './source';
+
+// The toast is read, not shown: a test says what the owner is told.
+vi.mock('sonner', async (original) => {
+  const real = await original<typeof import('sonner')>();
+
+  return { ...real, toast: Object.assign(vi.fn(), real.toast) };
+});
 
 const SOURCE = 'export default () => <button>Count</button>;';
 const COMPILED = "exports.default = () => React.createElement('button', null, 'Count');";
@@ -55,6 +65,7 @@ const deck: SessionArtifact = {
 
 function gateway(artifacts: SessionArtifact[] = [counter, notes, page, deck]) {
   const held = [...artifacts];
+  const keyed = new Map<string, string>();
 
   return {
     held,
@@ -91,11 +102,14 @@ function gateway(artifacts: SessionArtifact[] = [counter, notes, page, deck]) {
         _profile: string,
         _session: string,
         artifactId: string,
-        _edit: { version: number; content: string; slide?: number },
+        edit: { version: number; content: string; slide?: number; editKey?: string },
       ) => {
         const index = held.findIndex((item) => item.id === artifactId);
         const current = held[index] as SessionArtifact;
-        const next: SessionArtifact = { ...current, version: current.version + 1 };
+        // As the gateway does: a key already used on the latest version writes over it.
+        const again = edit.editKey !== undefined && keyed.get(artifactId) === edit.editKey;
+        if (edit.editKey) keyed.set(artifactId, edit.editKey);
+        const next: SessionArtifact = { ...current, version: current.version + (again ? 0 : 1) };
         held[index] = next;
         return next;
       },
@@ -172,6 +186,7 @@ afterEach(async () => {
   useCrew.setState({ tabs: [], opened: false, following: undefined });
   useCrew.getState().leave('session');
   useDrafts.getState().forgetAll();
+  useArtifactDraft.setState({ byConversation: {} });
 });
 
 async function settled(done: () => boolean, limit = 100) {
@@ -506,11 +521,21 @@ const asked = (sent: ReturnType<typeof vi.fn>): string =>
 const listening = (spy: { mock: { calls: unknown[][] } }) =>
   spy.mock.calls.filter(([type]) => type === 'message').length;
 
+/** What the editing frame says when the owner changes something: a fact, with no content. */
+const changed = (element: HTMLIFrameElement) => answer(element.contentWindow, { changed: true });
+/** How many times the panel asked the frame for its source. */
+const questions = (sent: ReturnType<typeof vi.fn>) =>
+  sent.mock.calls.filter(([said]) => said.jianArtifactEdit?.collect).length;
+/** Time passing, with the promises it wakes settled. */
+const wait = (ms: number) => act(async () => vi.advanceTimersByTimeAsync(ms));
+
 describe('editing one by hand', () => {
-  it('is offered for what the owner keeps working on, never for code', async () => {
+  afterEach(() => vi.useRealTimers());
+
+  it('is offered after Edit for a page, a deck and a board, and open at once for a document', async () => {
     for (const [artifact, offered] of [
       [counter, false],
-      [notes, true],
+      [notes, false],
       [page, true],
       [deck, true],
     ] as const) {
@@ -518,6 +543,12 @@ describe('editing one by hand', () => {
       await settled(() => drawer()?.querySelector('h2')?.textContent === artifact.title);
       expect(Boolean(button('Edit'))).toBe(offered);
     }
+
+    await opened(notes);
+    await settled(() => frame()?.getAttribute('src')?.endsWith('?edit=1') === true);
+    expect(frame()?.getAttribute('src')).toBe(
+      `${window.location.origin}/v1/artifact-frames/markdown?edit=1`,
+    );
   });
 
   it('opens the page in the frame that edits, as sealed as the one that draws', async () => {
@@ -532,83 +563,238 @@ describe('editing one by hand', () => {
     const { sent } = await loaded();
     expect(sent).toHaveBeenCalledTimes(1);
     expect(sent).toHaveBeenCalledWith({ jianArtifact: PAGE, jianArtifactEdit: { scale: 1 } }, '*');
-    // The version is held while it is edited: there is no picking another.
-    expect(button('History')).toBeUndefined();
+    // Done, not Save and Cancel: nothing is kept by hand.
+    expect(named('Save')).toBeUndefined();
+    expect(named('Cancel')).toBeUndefined();
 
-    await click(named('Cancel'));
+    await click(named('Done'));
     expect(frame()?.getAttribute('src')).toBe(`${window.location.origin}/v1/artifact-frames/html`);
     expect(button('History')).toBeDefined();
   });
 
-  it('saves what that frame answers, and no one else, as a new version', async () => {
+  it('listens to the frame only while it is open for editing, and only to its own window', async () => {
     const heard = vi.spyOn(window, 'addEventListener');
-    const unheard = vi.spyOn(window, 'removeEventListener');
+    const api = await opened(page);
+    expect(listening(heard)).toBe(0);
+
+    await click(button('Edit'));
+    const { sent } = await loaded();
+    expect(listening(heard)).toBe(1);
+    vi.useFakeTimers();
+
+    // Another window, and a frame that is not this one: neither makes the panel ask.
+    await answer(window, { changed: true });
+    await answer({ postMessage: vi.fn() }, { changed: true });
+    await wait(5000);
+    expect(questions(sent)).toBe(0);
+    expect(api.editSessionArtifact).not.toHaveBeenCalled();
+    heard.mockRestore();
+  });
+
+  it('keeps an edit a moment after the owner stops, and the whole stretch as one version', async () => {
     const api = await opened(page);
     await click(button('Edit'));
     const { element, sent } = await loaded();
-    // Open for editing, the panel still listens to nothing: only a save asks.
-    expect(listening(heard)).toBe(0);
+    vi.useFakeTimers();
 
-    await click(named('Save'));
-    expect(listening(heard)).toBe(1);
-    const word = asked(sent);
-    expect(word).toMatch(/^[0-9a-f-]{36}$/);
-    const edited = PAGE.replace('Launch', 'Launched');
+    await changed(element);
+    await wait(1400);
+    // Still typing, as far as it knows: nothing yet.
+    expect(questions(sent)).toBe(0);
+    await changed(element);
+    await wait(1400);
+    expect(questions(sent)).toBe(0);
+    await wait(200);
+    expect(questions(sent)).toBe(1);
 
-    // Another window with the right word, and the frame with a wrong one: neither is heard.
-    await answer(window, { collect: word, html: '<p>From elsewhere</p>' });
-    await answer({ postMessage: vi.fn() }, { collect: word, html: '<p>From another frame</p>' });
-    await answer(element.contentWindow, { collect: 'a-guess', html: '<p>Guessed</p>' });
-    expect(api.editSessionArtifact).not.toHaveBeenCalled();
-
-    await answer(element.contentWindow, { collect: word, html: edited });
-    await settled(() => viewed(api) === 3);
+    const first = PAGE.replace('Launch', 'Launched');
+    await answer(element.contentWindow, { collect: asked(sent), html: first });
     expect(api.editSessionArtifact).toHaveBeenCalledTimes(1);
     expect(api.editSessionArtifact).toHaveBeenCalledWith('profile', 'session', page.id, {
       version: 2,
-      content: edited,
+      content: first,
+      editKey: expect.stringMatching(/^[0-9a-f-]{36}$/),
     });
-    // It stopped listening the moment it had its answer, and shows the new version drawn.
-    expect(listening(unheard)).toBe(1);
+    expect(drawer()?.textContent).toContain('Saved');
+    // The frame is not taken from under the owner's hands, and nothing here is asked to be pressed.
+    expect(frame()).toBe(element);
+    expect(named('Save')).toBeUndefined();
+    expect(named('Try again')).toBeUndefined();
+
+    // The next pause is the same stretch: the same key, from the version it made.
+    await changed(element);
+    await wait(1500);
+    const second = first.replace('Launched', 'Launched again');
+    await answer(element.contentWindow, { collect: asked(sent), html: second });
+    const [, , , one] = api.editSessionArtifact.mock.calls[0] as unknown as [
+      string,
+      string,
+      string,
+      { editKey: string },
+    ];
+    expect(api.editSessionArtifact).toHaveBeenLastCalledWith('profile', 'session', page.id, {
+      version: 3,
+      content: second,
+      editKey: one.editKey,
+    });
+
+    // Done shows what was kept, as the latest.
+    await click(named('Done'));
+    vi.useRealTimers();
+    await settled(() => viewed(api) === 3);
     expect(viewed(api)).toBe(3);
     expect(older()).toBeUndefined();
-    await settled(() => Boolean(frame()));
-    expect(frame()?.getAttribute('src')).toBe(`${window.location.origin}/v1/artifact-frames/html`);
-
-    // Said again, the same answer is nobody's: no second version.
-    await answer(element.contentWindow, { collect: word, html: '<p>Again</p>' });
-    expect(api.editSessionArtifact).toHaveBeenCalledTimes(1);
-    heard.mockRestore();
-    unheard.mockRestore();
   });
 
-  it('keeps nothing when nothing was edited, or when the answer cannot be kept', async () => {
+  it('keeps it when the owner leaves, without waiting for the pause', async () => {
     const api = await opened(page);
-
     await click(button('Edit'));
-    const untouched = await loaded();
-    await click(named('Save'));
-    await answer(untouched.element.contentWindow, {
-      collect: asked(untouched.sent),
-      unchanged: true,
+    const { element, sent } = await loaded();
+    vi.useFakeTimers();
+
+    await changed(element);
+    const hidden = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden');
+    await act(async () => document.dispatchEvent(new Event('visibilitychange')));
+    hidden.mockRestore();
+    expect(questions(sent)).toBe(1);
+
+    await answer(element.contentWindow, {
+      collect: asked(sent),
+      html: PAGE.replace('Launch', 'X'),
     });
-    await settled(() => !named('Save'));
-    expect(named('Save')).toBeUndefined();
+    expect(api.editSessionArtifact).toHaveBeenCalledTimes(1);
+  });
 
+  it('keeps nothing when nothing was edited, and tries again by itself when it cannot keep it', async () => {
+    const api = await opened(page);
     await click(button('Edit'));
-    const huge = await loaded();
-    await click(named('Save'));
-    await answer(huge.element.contentWindow, {
-      collect: asked(huge.sent),
+    const { element, sent } = await loaded();
+    vi.useFakeTimers();
+
+    await changed(element);
+    await wait(1500);
+    await answer(element.contentWindow, { collect: asked(sent), unchanged: true });
+    expect(api.editSessionArtifact).not.toHaveBeenCalled();
+
+    // An answer that cannot be kept: said quietly, no button, and asked again in a few seconds.
+    await changed(element);
+    await wait(1500);
+    await answer(element.contentWindow, {
+      collect: asked(sent),
       html: 'x'.repeat(SESSION_ARTIFACT_MAX + 1),
     });
-    await settled(() => named('Save')?.disabled === false);
-    // The edit stays open, so nothing typed is lost to a save that was refused.
-    expect(named('Save')).toBeDefined();
-    expect(frame()?.getAttribute('src')).toContain('?edit=1');
+    expect(drawer()?.textContent).toContain('Trying again');
+    expect(named('Try again')).toBeUndefined();
+    await wait(4000);
+    expect(questions(sent)).toBe(3);
+    await answer(element.contentWindow, {
+      collect: asked(sent),
+      html: PAGE.replace('Launch', 'Y'),
+    });
+    expect(api.editSessionArtifact).toHaveBeenCalledTimes(1);
+    expect(drawer()?.textContent).toContain('Saved');
+  });
 
-    expect(api.editSessionArtifact).not.toHaveBeenCalled();
-    expect(viewed(api)).toBe(2);
+  it('says so when the agent wrote a version meanwhile, and the edit lands on top', async () => {
+    const api = await opened(page);
+    api.editSessionArtifact.mockImplementationOnce(async (_p, _s, id) => {
+      const index = api.held.findIndex((item) => item.id === id);
+      const next = { ...(api.held[index] as SessionArtifact), version: 4 };
+      api.held[index] = next;
+      return next;
+    });
+    await click(button('Edit'));
+    const { element, sent } = await loaded();
+    vi.useFakeTimers();
+
+    await changed(element);
+    await wait(1500);
+    await answer(element.contentWindow, {
+      collect: asked(sent),
+      html: PAGE.replace('Launch', 'Z'),
+    });
+
+    expect(toast).toHaveBeenCalledWith(expect.stringContaining('as version 4'));
+  });
+});
+
+describe('an Artifact being written', () => {
+  const writing = (content: string, more: object = {}) => ({
+    toolCallId: 'call',
+    title: 'Plan',
+    type: 'markdown' as const,
+    content,
+    ...more,
+  });
+  const told = (draft: ReturnType<typeof writing> | undefined) =>
+    act(async () => hearArtifactDraft('session', draft));
+
+  it('opens the tab on the writing, grows with it, and gives way to the drawn version', async () => {
+    const api = gateway([]);
+    await render(api);
+
+    await told(writing('# Plan'));
+    expect(drawer()?.querySelector('h2')?.textContent).toBe('Plan');
+    expect(drawer()?.textContent).toContain('Writing…');
+    expect(drawer()?.querySelector('article')?.textContent).toContain('Plan');
+    expect(frame()).toBeNull();
+
+    await told(writing('# Plan\n\nThe first step.'));
+    expect(drawer()?.querySelector('article')?.textContent).toContain('The first step.');
+
+    // The tool ran: the version exists, and takes the writing's place once it is read.
+    const made: SessionArtifact = { ...notes, title: 'Plan', version: 1 };
+    api.held.unshift(made);
+    await told(undefined);
+    await act(async () =>
+      focusInspector('session', { sessionId: 'session', kind: 'artifact', artifactId: made.id }),
+    );
+    await settled(() => Boolean(frame()));
+    expect(frame()).not.toBeNull();
+    expect(useArtifactDraft.getState().byConversation.session).toBeUndefined();
+    expect(drawer()?.textContent).not.toContain('Writing…');
+  });
+
+  it('shows the source growing for anything but a document', async () => {
+    await render(gateway([]));
+
+    await told(writing('<h1>Hi', { type: 'html' }));
+    expect(drawer()?.querySelector('pre')?.textContent).toContain('<h1>Hi');
+    expect(drawer()?.querySelector('article')).toBeNull();
+  });
+
+  it('keeps the current version in view until the update has words, then streams them', async () => {
+    const api = gateway();
+    await opened(notes, api);
+    await settled(() => drawer()?.querySelector('h2')?.textContent === notes.title);
+
+    // Named but not yet written: the version stays, with the quiet word beside it.
+    await told(writing('', { artifactId: notes.id }));
+    expect(frame()).not.toBeNull();
+    expect(drawer()?.textContent).toContain('Writing…');
+
+    await told(writing('# New words', { artifactId: notes.id }));
+    expect(frame()).toBeNull();
+    expect(drawer()?.querySelector('article')?.textContent).toContain('New words');
+
+    api.held[api.held.findIndex((item) => item.id === notes.id)] = { ...notes, version: 4 };
+    await told(undefined);
+    await settled(() => Boolean(frame()));
+    expect(viewed(api)).toBe(4);
+    expect(drawer()?.textContent).not.toContain('Writing…');
+  });
+
+  it('moves no focus when it opens the tab by itself', async () => {
+    await listed();
+    const composer = document.createElement('textarea');
+    document.body.append(composer);
+    composer.focus();
+
+    // The tab opens on it by itself, as the agent's own request to show one does.
+    await told(writing('', { artifactId: notes.id }));
+    expect(document.activeElement).toBe(composer);
+    expect(drawer()?.textContent).toContain('Writing…');
+    composer.remove();
   });
 });
 
@@ -725,16 +911,16 @@ describe('a deck of slides', () => {
     expect(large()?.title).toBe('Plan, slide 2');
   });
 
-  it('edits the slide in view, and says which when it saves', async () => {
+  it('edits the slide in view, and keeps which one it was', async () => {
     const api = await opened(deck);
     await click(button('Slide 2'));
     await click(button('Edit'));
 
-    // Only the slide in view opens for editing, and it stays in view until saved or cancelled.
+    // Only the slide in view opens for editing, and it stays in view until Done.
     expect(frames().filter((item) => item.src.endsWith('?edit=1'))).toEqual([large()]);
     expect(button('Slide 1')?.disabled).toBe(true);
     expect(button('Next slide')?.disabled).toBe(true);
-    // Present is in the toolbar, which Save and Cancel replace while a slide is open.
+    // Present is in the toolbar, which Done replaces while a slide is open.
     expect(button('Present')).toBeUndefined();
     const { element, sent } = await loaded(large());
     expect(sent).toHaveBeenCalledWith(
@@ -742,17 +928,19 @@ describe('a deck of slides', () => {
       '*',
     );
 
-    await click(named('Save'));
+    vi.useFakeTimers();
+    await answer(element.contentWindow, { changed: true });
+    await act(async () => vi.advanceTimersByTimeAsync(1500));
     const edited = (SLIDES[1] as string).replace('Two', 'Second');
     await answer(element.contentWindow, { collect: asked(sent), html: edited });
-    await settled(() => viewed(api) === 2);
+    vi.useRealTimers();
 
     expect(api.editSessionArtifact).toHaveBeenCalledWith('profile', 'session', deck.id, {
       version: 1,
       content: edited,
       slide: 2,
+      editKey: expect.stringMatching(/^[0-9a-f-]{36}$/),
     });
-    expect(viewed(api)).toBe(2);
   });
 
   it('is presented in the gateway’s own player, and ends when the player says so', async () => {

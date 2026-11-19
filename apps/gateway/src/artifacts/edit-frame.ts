@@ -54,6 +54,11 @@ const editPage = (source, options, finish) => {
 
   let scale = 1;
   let changed = false;
+  // Tells the panel something changed, never what: it asks for the page when it wants to save.
+  const mark = () => {
+    changed = true;
+    parent.postMessage({ [KEY]: { changed: true } }, '*');
+  };
   let active = null;
   let saved = null;
 
@@ -173,7 +178,7 @@ const editPage = (source, options, finish) => {
   const act = (name, value) => {
     active.focus();
     document.execCommand(name, false, value);
-    changed = true;
+    mark();
     place();
   };
 
@@ -203,7 +208,7 @@ const editPage = (source, options, finish) => {
     if (item && item !== active && active.contains(item)) return;
     event.preventDefault();
     document.execCommand('insertLineBreak');
-    changed = true;
+    mark();
   }, true);
 
   // Pasted as words alone: markup from elsewhere would bring styles and addresses with it.
@@ -211,12 +216,12 @@ const editPage = (source, options, finish) => {
     if (!active || bar.contains(event.target)) return;
     event.preventDefault();
     document.execCommand('insertText', false, event.clipboardData.getData('text/plain'));
-    changed = true;
+    mark();
   }, true);
   addEventListener('drop', (event) => event.preventDefault(), true);
   addEventListener('input', (event) => {
     if (bar.contains(event.target)) return;
-    changed = true;
+    mark();
     place();
   }, true);
   addEventListener('scroll', place, true);
@@ -259,7 +264,7 @@ const editPage = (source, options, finish) => {
       // Set on the block itself. The browser's own command wraps the text in a block of its
       // own, which a paragraph cannot hold and which costs a heading its size.
       active.style.textAlign = tool.slice(5).toLowerCase();
-      changed = true;
+      mark();
     } else {
       act(tool);
     }
@@ -326,6 +331,15 @@ const answering = (options, made) => {
   addEventListener('message', (event) => {
     if (event.source === parent && event.data) told(event.data[KEY]);
   });
+  // These scripts hand back their source and have no event to hear, so a change is noticed by
+  // looking: cheap, since it is a string of what is on screen.
+  let last = made.now();
+  setInterval(() => {
+    const now = made.now();
+    if (now === last) return;
+    last = now;
+    parent.postMessage({ [KEY]: { changed: true } }, '*');
+  }, 400);
 };
 `;
 

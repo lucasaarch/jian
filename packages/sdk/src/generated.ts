@@ -7410,6 +7410,16 @@ export interface operations {
                                 nextAt: string;
                                 reason: string;
                             };
+                            artifact?: {
+                                toolCallId: string;
+                                /** Format: uuid */
+                                artifactId?: string;
+                                title?: string;
+                                /** @enum {string} */
+                                type?: "html" | "react" | "markdown" | "svg" | "mermaid" | "deck" | "sheet" | "board";
+                                /** @default  */
+                                content: string;
+                            };
                             /** Format: date-time */
                             updatedAt: string;
                         };
@@ -10386,6 +10396,16 @@ export interface operations {
                                 nextAt: string;
                                 reason: string;
                             };
+                            artifact?: {
+                                toolCallId: string;
+                                /** Format: uuid */
+                                artifactId?: string;
+                                title?: string;
+                                /** @enum {string} */
+                                type?: "html" | "react" | "markdown" | "svg" | "mermaid" | "deck" | "sheet" | "board";
+                                /** @default  */
+                                content: string;
+                            };
                             /** Format: date-time */
                             updatedAt: string;
                         };
@@ -10665,6 +10685,16 @@ export interface operations {
                                 nextAt: string;
                                 reason: string;
                             };
+                            artifact?: {
+                                toolCallId: string;
+                                /** Format: uuid */
+                                artifactId?: string;
+                                title?: string;
+                                /** @enum {string} */
+                                type?: "html" | "react" | "markdown" | "svg" | "mermaid" | "deck" | "sheet" | "board";
+                                /** @default  */
+                                content: string;
+                            };
                             /** Format: date-time */
                             updatedAt: string;
                         };
@@ -10942,6 +10972,16 @@ export interface operations {
                                 /** Format: date-time */
                                 nextAt: string;
                                 reason: string;
+                            };
+                            artifact?: {
+                                toolCallId: string;
+                                /** Format: uuid */
+                                artifactId?: string;
+                                title?: string;
+                                /** @enum {string} */
+                                type?: "html" | "react" | "markdown" | "svg" | "mermaid" | "deck" | "sheet" | "board";
+                                /** @default  */
+                                content: string;
                             };
                             /** Format: date-time */
                             updatedAt: string;
@@ -21644,6 +21684,16 @@ export interface operations {
                                 nextAt: string;
                                 reason: string;
                             };
+                            artifact?: {
+                                toolCallId: string;
+                                /** Format: uuid */
+                                artifactId?: string;
+                                title?: string;
+                                /** @enum {string} */
+                                type?: "html" | "react" | "markdown" | "svg" | "mermaid" | "deck" | "sheet" | "board";
+                                /** @default  */
+                                content: string;
+                            };
                             /** Format: date-time */
                             updatedAt: string;
                         };
@@ -22031,6 +22081,16 @@ export interface operations {
                                 nextAt: string;
                                 reason: string;
                             };
+                            artifact?: {
+                                toolCallId: string;
+                                /** Format: uuid */
+                                artifactId?: string;
+                                title?: string;
+                                /** @enum {string} */
+                                type?: "html" | "react" | "markdown" | "svg" | "mermaid" | "deck" | "sheet" | "board";
+                                /** @default  */
+                                content: string;
+                            };
                             /** Format: date-time */
                             updatedAt: string;
                         };
@@ -22313,6 +22373,16 @@ export interface operations {
                                 nextAt: string;
                                 reason: string;
                             };
+                            artifact?: {
+                                toolCallId: string;
+                                /** Format: uuid */
+                                artifactId?: string;
+                                title?: string;
+                                /** @enum {string} */
+                                type?: "html" | "react" | "markdown" | "svg" | "mermaid" | "deck" | "sheet" | "board";
+                                /** @default  */
+                                content: string;
+                            };
                             /** Format: date-time */
                             updatedAt: string;
                         };
@@ -22584,6 +22654,16 @@ export interface operations {
                                 /** Format: date-time */
                                 nextAt: string;
                                 reason: string;
+                            };
+                            artifact?: {
+                                toolCallId: string;
+                                /** Format: uuid */
+                                artifactId?: string;
+                                title?: string;
+                                /** @enum {string} */
+                                type?: "html" | "react" | "markdown" | "svg" | "mermaid" | "deck" | "sheet" | "board";
+                                /** @default  */
+                                content: string;
                             };
                             /** Format: date-time */
                             updatedAt: string;
@@ -23405,6 +23485,16 @@ export interface operations {
                                 /** Format: date-time */
                                 nextAt: string;
                                 reason: string;
+                            };
+                            artifact?: {
+                                toolCallId: string;
+                                /** Format: uuid */
+                                artifactId?: string;
+                                title?: string;
+                                /** @enum {string} */
+                                type?: "html" | "react" | "markdown" | "svg" | "mermaid" | "deck" | "sheet" | "board";
+                                /** @default  */
+                                content: string;
                             };
                             /** Format: date-time */
                             updatedAt: string;
@@ -24870,6 +24960,7 @@ export interface operations {
                     version: number;
                     content: string;
                     slide?: number;
+                    editKey?: string;
                 };
             };
         };
@@ -28127,6 +28218,16 @@ export interface operations {
                                 nextAt: string;
                                 reason: string;
                             };
+                            artifact?: {
+                                toolCallId: string;
+                                /** Format: uuid */
+                                artifactId?: string;
+                                title?: string;
+                                /** @enum {string} */
+                                type?: "html" | "react" | "markdown" | "svg" | "mermaid" | "deck" | "sheet" | "board";
+                                /** @default  */
+                                content: string;
+                            };
                             /** Format: date-time */
                             updatedAt: string;
                         };
@@ -29402,6 +29503,16 @@ export interface operations {
                                 nextAt: string;
                                 reason: string;
                             };
+                            artifact?: {
+                                toolCallId: string;
+                                /** Format: uuid */
+                                artifactId?: string;
+                                title?: string;
+                                /** @enum {string} */
+                                type?: "html" | "react" | "markdown" | "svg" | "mermaid" | "deck" | "sheet" | "board";
+                                /** @default  */
+                                content: string;
+                            };
                             /** Format: date-time */
                             updatedAt: string;
                         };
@@ -29673,6 +29784,16 @@ export interface operations {
                                 nextAt: string;
                                 reason: string;
                             };
+                            artifact?: {
+                                toolCallId: string;
+                                /** Format: uuid */
+                                artifactId?: string;
+                                title?: string;
+                                /** @enum {string} */
+                                type?: "html" | "react" | "markdown" | "svg" | "mermaid" | "deck" | "sheet" | "board";
+                                /** @default  */
+                                content: string;
+                            };
                             /** Format: date-time */
                             updatedAt: string;
                         };
@@ -29943,6 +30064,16 @@ export interface operations {
                                 /** Format: date-time */
                                 nextAt: string;
                                 reason: string;
+                            };
+                            artifact?: {
+                                toolCallId: string;
+                                /** Format: uuid */
+                                artifactId?: string;
+                                title?: string;
+                                /** @enum {string} */
+                                type?: "html" | "react" | "markdown" | "svg" | "mermaid" | "deck" | "sheet" | "board";
+                                /** @default  */
+                                content: string;
                             };
                             /** Format: date-time */
                             updatedAt: string;

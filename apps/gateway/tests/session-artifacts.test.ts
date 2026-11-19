@@ -482,7 +482,11 @@ describe('the frame the panel draws one in', () => {
         (_, code) => String.fromCharCode(Number(code)),
       );
       // The page hands the edit to the panel that holds it and to no one else, and reaches nothing.
-      expect(inner.match(/postMessage/g)).toHaveLength(1);
+      // It says to its parent that something changed, and hands the page over when asked: both
+      // to `parent`, and nothing else is ever posted.
+      expect(inner.match(/postMessage/g)?.length).toBe(
+        inner.match(/parent\.postMessage\(/g)?.length,
+      );
       expect(inner).toContain('parent.postMessage(');
       expect(inner).not.toMatch(/fetch\(|XMLHttpRequest|WebSocket|sendBeacon|\.submit\(/);
       // What it is handed is read as a document or as data, never written into the page to run.
@@ -749,6 +753,100 @@ describe('what the owner edits by hand', () => {
       slides: [slide('A'), slide('B, edited')],
     });
     expect((await version(deck.id, 2)).slides).toEqual([slide('A'), slide('B'), slide('C')]);
+  });
+
+  it('keeps one editing stretch as one version, and never writes over the agent’s', async () => {
+    const { services, app, owner, session, at, make } = await setup();
+    const html = await make({ title: 'Page', type: 'html', content: page('Agent') });
+    const save = (artifactId: string, payload: object) =>
+      app.inject({ method: 'POST', url: at(`/${artifactId}/versions`), headers, payload });
+    const content = async (artifactId: string, number: number) =>
+      sessionArtifactVersionSchema.parse(
+        (await app.inject({ url: at(`/${artifactId}/versions/${number}`), headers })).json(),
+      ).content;
+    const stretch = 'stretch-one-key';
+
+    // The first save of a stretch adds the owner's version; the next ones replace its content.
+    expect(
+      (await save(html.id, { version: 1, content: page('a'), editKey: stretch })).json(),
+    ).toMatchObject({ version: 2 });
+    expect(
+      (await save(html.id, { version: 2, content: page('ab'), editKey: stretch })).json(),
+    ).toMatchObject({ version: 2 });
+    expect(
+      (await save(html.id, { version: 2, content: page('abc'), editKey: stretch })).json(),
+    ).toMatchObject({ version: 2 });
+    expect(await content(html.id, 2)).toBe(page('abc'));
+    expect(await content(html.id, 1)).toBe(page('Agent'));
+
+    // Another stretch is another version, even with nothing between.
+    expect(
+      (
+        await save(html.id, { version: 2, content: page('next'), editKey: 'stretch-two-key' })
+      ).json(),
+    ).toMatchObject({ version: 3 });
+    expect(await content(html.id, 2)).toBe(page('abc'));
+
+    // Without a key every save is a version, as before.
+    expect((await save(html.id, { version: 3, content: page('plain') })).json()).toMatchObject({
+      version: 4,
+    });
+    expect((await save(html.id, { version: 4, content: page('plain 2') })).json()).toMatchObject({
+      version: 5,
+    });
+
+    // The agent wrote on top meanwhile: the stretch's next save is a new version above it, and
+    // the agent's is as it wrote it.
+    await services.artifacts.revise(owner.id, session.id, {
+      artifactId: html.id,
+      content: page('Agent again'),
+    });
+    const late = await save(html.id, {
+      version: 5,
+      content: page('late'),
+      editKey: 'stretch-two-key',
+    });
+    expect(late.json()).toMatchObject({ version: 7 });
+    expect(await content(html.id, 6)).toBe(page('Agent again'));
+    expect(await content(html.id, 7)).toBe(page('late'));
+
+    // A key the agent's version never had cannot be replayed to overwrite it either.
+    await services.artifacts.revise(owner.id, session.id, {
+      artifactId: html.id,
+      content: page('Agent 3'),
+    });
+    await save(html.id, { version: 8, content: page('grab'), editKey: 'stretch-two-key' });
+    expect(await content(html.id, 8)).toBe(page('Agent 3'));
+
+    // A deck keeps the slides it already changed in the stretch.
+    const deck = await make({ title: 'Plan', type: 'deck', slides: [slide('A'), slide('B')] });
+    await save(deck.id, { version: 1, slide: 1, content: slide('A1'), editKey: stretch });
+    const again = await save(deck.id, {
+      version: 2,
+      slide: 2,
+      content: slide('B1'),
+      editKey: stretch,
+    });
+    expect(again.json()).toMatchObject({ version: 2 });
+    expect(await content(deck.id, 2)).toContain('B1');
+    expect(await content(deck.id, 2)).toContain('A1');
+
+    // A paired phone still cannot edit, with a key or without.
+    const pairing = await app.inject({ method: 'POST', url: '/v1/devices/pairings', headers });
+    const phone = (
+      await app.inject({
+        method: 'POST',
+        url: '/v1/devices/pair',
+        payload: { code: pairing.json().code, name: 'Pixel', platform: 'android' },
+      })
+    ).json() as { token: string };
+    const refused = await app.inject({
+      method: 'POST',
+      url: at(`/${html.id}/versions`),
+      headers: { authorization: `Bearer ${phone.token}` },
+      payload: { version: 9, content: page('phone'), editKey: stretch },
+    });
+    expect(refused.statusCode).toBe(403);
   });
 
   it('takes an edit only with the owner’s credential, never through a public link', async () => {

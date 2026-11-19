@@ -12,6 +12,7 @@ import {
 import { Action, FilterSelect, SearchField, SkeletonRegion, surfaceCard } from '../../../kit';
 import type { SessionArtifact } from '../../../lib/api';
 import { usePhone } from '../../../lib/phone';
+import { useArtifactDraft } from '../../../lib/stores/artifact-draft';
 import { useCrew } from '../../../lib/stores/crew';
 import { draftKey, useDrafts } from '../../../lib/stores/drafts';
 import { revealViewer } from '../files/use-files';
@@ -48,6 +49,7 @@ export function ArtifactCards({
 }) {
   const listing = useSessionArtifacts(api, profileId, sessionId);
   const phone = usePhone();
+  const draft = useArtifactDraft((state) => state.byConversation[sessionId]);
   const [words, setWords] = useState('');
   const [type, setType] = useState<'' | SessionArtifact['type']>('');
   const keeping = useArtifactKeeping(api, profileId);
@@ -119,6 +121,7 @@ export function ArtifactCards({
                   api={api}
                   profileId={profileId}
                   artifact={artifact}
+                  writing={Boolean(draft && draft.artifactId === artifact.id && !draft.done)}
                   onOpen={() => useCrew.getState().showArtifacts(artifact.id)}
                   tools={{
                     rename: () => name({ kind: 'artifact', artifact }),

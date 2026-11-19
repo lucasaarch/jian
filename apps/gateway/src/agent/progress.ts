@@ -19,6 +19,7 @@ export class ProgressReporter {
   private text = '';
   private steps = 0;
   private waiting: RunProgress['reconnecting'];
+  private artifact: RunProgress['artifact'];
   /** The newest token snapshot not yet written; a slower writer skips the ones in between. */
   private pending?: RunProgress;
   /**
@@ -95,6 +96,17 @@ export class ProgressReporter {
     this.mark(released);
   }
 
+  /**
+   * The Artifact being written, as far as it is. Tokens of it are coalesced like the answer's; its
+   * start and its end are not, so the panel opens on it and lets go of it at once.
+   */
+  artifactDraft(draft: RunProgress['artifact']): void {
+    if (!draft && !this.artifact) return;
+    const first = !this.artifact || this.artifact.toolCallId !== draft?.toolCallId;
+    this.artifact = draft;
+    this.mark(first || !draft);
+  }
+
   /** A new message landed mid-run: the answer being written is not the one that will stand. */
   redirected(): void {
     this.phase = 'thinking';
@@ -151,6 +163,7 @@ export class ProgressReporter {
       text: this.text.length > 8000 ? this.text.slice(-8000) : this.text,
       steps: this.steps,
       ...(this.waiting ? { reconnecting: this.waiting } : {}),
+      ...(this.artifact ? { artifact: this.artifact } : {}),
       updatedAt: new Date(this.stamped).toISOString(),
     };
   }

@@ -5,6 +5,7 @@ import {
 } from '@jian/contracts';
 import { onlineManager } from '@tanstack/react-query';
 import { subscribe } from '../../../lib/events';
+import { hearArtifactDraft } from '../artifacts/live';
 import { focusInspector } from '../inspector-host';
 import { running } from '../status';
 import { pendingCall, type Reader } from './reader';
@@ -98,6 +99,7 @@ export function followConversation(options: {
       if (!told || told.sessionId !== sessionId) return;
       streamAt = Date.now();
       const { runId, progress } = told;
+      hearArtifactDraft(sessionId, progress?.artifact);
       // A gateway older than progress in the stream says only that something changed, and a
       // newer one may say it in a shape this panel does not know: the run is read instead.
       if (!progress) {

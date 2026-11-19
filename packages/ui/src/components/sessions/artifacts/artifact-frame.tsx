@@ -22,8 +22,8 @@ import { gatewayConnection } from '../../../platform/gateway';
  *   anything.
  *
  * `editing` loads the other frame of the type, the one the owner edits by hand in. It is as
- * sealed, and runs nothing of the Artifact. The panel reads one thing from it, and only when
- * the owner saves: the edited markup, asked for and checked in edit.ts.
+ * sealed, and runs nothing of the Artifact. The panel reads two things from it: that something changed, and, when it asks to keep an edit,
+ * the edited markup, asked for and checked in edit.ts.
  *
  * Mount it with a key per Artifact, version and way of showing it: a new source is a new frame.
  */

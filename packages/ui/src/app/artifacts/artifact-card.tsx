@@ -81,12 +81,15 @@ export function ArtifactCard({
   api,
   profileId,
   artifact,
+  writing = false,
   onOpen,
   tools,
 }: {
   api: ArtifactsApi;
   profileId: string;
   artifact: SessionArtifact;
+  /** The agent is revising it now. */
+  writing?: boolean;
   onOpen: () => void;
   tools: CardTools;
 }) {
@@ -110,6 +113,7 @@ export function ArtifactCard({
             {kindName(artifact)} ·{' '}
             <time dateTime={artifact.updatedAt}>{ago(artifact.updatedAt)}</time>
           </span>
+          {writing && <StatusPill>Writing…</StatusPill>}
           {artifact.visibility === 'public' && <StatusPill tone="warn">Public</StatusPill>}
         </span>
       </div>
