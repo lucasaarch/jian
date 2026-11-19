@@ -12,6 +12,8 @@ const USUAL: Record<SessionArtifactType, number> = {
   markdown: 4_000,
   sheet: 3_000,
   mermaid: 1_500,
+  // Its nodes and edges in JSON, a line or two each.
+  diagram: 3_000,
 };
 
 /**

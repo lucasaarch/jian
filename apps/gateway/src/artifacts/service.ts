@@ -672,11 +672,11 @@ export class SessionArtifacts {
     const artifact = await this.find(this.store.db, profileId, sessionId, artifactId);
 
     const { content } = await this.stored(this.store.db, artifact.id, version);
-    return this.file(artifact, content, wanted);
+    return this.drawnFile(artifact, content, wanted);
   }
 
   /** What `export` draws from a version's content, however that version was found. */
-  private async file(
+  private async drawnFile(
     artifact: { type: SessionArtifactType; title: string },
     content: string,
     wanted: DeckExportQuery,
@@ -954,7 +954,7 @@ export class SessionArtifacts {
 
   /**
    * One file of what a link answers, for anyone holding it: the source as written, or a file
-   * drawn from it as the owner's are (`file` above). Only a format its type offers
+   * drawn from it as the owner's are (`drawnFile` above). Only a format its type offers
    * (PUBLIC_ARTIFACT_FORMATS); a drawing one waits for its turn at the browser (public-files.ts).
    */
   async publicFile(
@@ -971,7 +971,7 @@ export class SessionArtifacts {
       return { title: found.title, format, mimeType: asWritten, data: Buffer.from(found.content) };
     }
     const file = await drawnInTurn(token, format, () =>
-      this.file(found, found.content, { format: format as DeckExportQuery['format'] }),
+      this.drawnFile(found, found.content, { format: format as DeckExportQuery['format'] }),
     );
 
     return {

@@ -25176,7 +25176,7 @@ export interface operations {
                         sessionId: string;
                         title: string;
                         /** @enum {string} */
-                        type: "html" | "react" | "markdown" | "mermaid" | "deck" | "sheet";
+                        type: "html" | "react" | "markdown" | "mermaid" | "deck" | "sheet" | "diagram";
                         /** @enum {string} */
                         visibility: "private" | "public";
                         version: number;
@@ -26297,7 +26297,7 @@ export interface operations {
     exportPublicArtifact: {
         parameters: {
             query?: {
-                format?: "html" | "tsx" | "md" | "mmd" | "csv" | "xlsx" | "pdf" | "docx" | "pptx";
+                format?: "html" | "tsx" | "md" | "mmd" | "json" | "csv" | "xlsx" | "pdf" | "docx" | "pptx";
             };
             header?: never;
             path: {

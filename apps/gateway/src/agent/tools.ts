@@ -498,7 +498,7 @@ export function profileTools(
           }),
           read_artifact_source: tool({
             description:
-              'Read an Artifact of this conversation back: its source as it now stands, or as a version of it was, and whether you or the owner wrote that version. The owner edits a web page, a deck’s slides, a document and a spreadsheet by hand in the panel, which is kept by itself as a version of theirs you have never seen, so read before you edit or update one you did not just write; copy edit_artifact’s `find` from what it answers. A deck answers its slides, numbered from 1, or with `slide` that one alone.',
+              'Read an Artifact of this conversation back: its source as it now stands, or as a version of it was, and whether you or the owner wrote that version. The owner edits a web page, a deck’s slides, a document, a spreadsheet and a diagram of nodes and edges by hand in the panel, which is kept by itself as a version of theirs you have never seen, so read before you edit or update one you did not just write; copy edit_artifact’s `find` from what it answers. A deck answers its slides, numbered from 1, or with `slide` that one alone.',
             inputSchema: sessionArtifactReadSchema,
             execute: async (input) => services.artifacts?.read(run.profileId, run.sessionId, input),
           }),

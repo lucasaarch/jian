@@ -137,8 +137,11 @@ export const artifactShareSchema = z.strictObject({
 export const ARTIFACT_FILE_FORMATS = {
   html: { source: 'html', made: [] },
   react: { source: 'tsx', made: [] },
-  markdown: { source: 'md', made: ['docx', 'pdf'] },
+  // Drawn files first, in the order a Download menu lists them.
+  markdown: { source: 'md', made: ['pdf', 'docx'] },
   mermaid: { source: 'mmd', made: [] },
+  // Nodes, edges and where the owner put them, which another diagram tool can read.
+  diagram: { source: 'json', made: [] },
   // A deck's source is its slides in JSON, which nothing opens: only the drawn files leave.
   deck: { made: ['pdf', 'pptx', 'png'] },
   // Its CSV is the values alone, as the panel downloads it; the formulas go in the Excel file.
@@ -459,6 +462,7 @@ export const publicArtifactFormatSchema = z.enum([
   'tsx',
   'md',
   'mmd',
+  'json',
   'csv',
   'xlsx',
   'pdf',
@@ -469,18 +473,27 @@ export const publicArtifactFormatSchema = z.enum([
 export type PublicArtifactFormat = z.infer<typeof publicArtifactFormatSchema>;
 
 /**
- * The files each type offers through its public link, in the order its Download menu lists them.
- * A new type adds its line here, and the compiler asks for it. It should converge with the
- * formats the agent sends an Artifact as, once both exist.
+ * The files each type offers through its public link, in the order its Download menu lists them:
+ * what the agent sends it as (`ARTIFACT_FILE_FORMATS`), drawn files first, less a picture of one
+ * slide, which a reader has no way to pick.
  */
+const publicFormatsOf = (type: SessionArtifactType): readonly PublicArtifactFormat[] => {
+  const { source, made }: { source?: string; made: readonly string[] } =
+    ARTIFACT_FILE_FORMATS[type];
+  return [...made.filter((format) => format !== 'png'), ...(source ? [source] : [])].map((format) =>
+    publicArtifactFormatSchema.parse(format),
+  );
+};
+
 export const PUBLIC_ARTIFACT_FORMATS: Record<SessionArtifactType, readonly PublicArtifactFormat[]> =
   {
-    html: ['html'],
-    react: ['tsx'],
-    markdown: ['pdf', 'docx', 'md'],
-    mermaid: ['mmd'],
-    deck: ['pdf', 'pptx'],
-    sheet: ['xlsx', 'csv'],
+    html: publicFormatsOf('html'),
+    react: publicFormatsOf('react'),
+    markdown: publicFormatsOf('markdown'),
+    mermaid: publicFormatsOf('mermaid'),
+    diagram: publicFormatsOf('diagram'),
+    deck: publicFormatsOf('deck'),
+    sheet: publicFormatsOf('sheet'),
   };
 
 /** How a reader is told each file apart in the Download menu. */
@@ -489,6 +502,7 @@ export const PUBLIC_ARTIFACT_FORMAT_LABEL: Record<PublicArtifactFormat, string> 
   tsx: 'Component source (.tsx)',
   md: 'Markdown (.md)',
   mmd: 'Mermaid source (.mmd)',
+  json: 'Diagram (.json)',
   csv: 'CSV',
   xlsx: 'Excel (.xlsx)',
   pdf: 'PDF',

@@ -44218,7 +44218,8 @@
                         "markdown",
                         "mermaid",
                         "deck",
-                        "sheet"
+                        "sheet",
+                        "diagram"
                       ]
                     },
                     "visibility": {
@@ -45951,6 +45952,7 @@
                 "tsx",
                 "md",
                 "mmd",
+                "json",
                 "csv",
                 "xlsx",
                 "pdf",

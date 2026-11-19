@@ -164,6 +164,7 @@ const SHAPES: Record<SessionArtifactType, { shape: () => ReactNode; blocks: numb
   react: { shape: ComponentShape, blocks: 5 },
   markdown: { shape: DocumentShape, blocks: 6 },
   mermaid: { shape: DiagramShape, blocks: 4 },
+  diagram: { shape: DiagramShape, blocks: 4 },
   deck: { shape: SlideShape, blocks: 3 },
   sheet: { shape: SheetShape, blocks: 5 },
 };

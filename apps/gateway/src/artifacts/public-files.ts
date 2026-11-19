@@ -11,6 +11,7 @@ export const SOURCE_FILES: Partial<Record<PublicArtifactFormat, string>> = {
   tsx: 'text/plain; charset=utf-8',
   md: 'text/markdown; charset=utf-8',
   mmd: 'text/plain; charset=utf-8',
+  json: 'application/json; charset=utf-8',
 };
 
 /** What starts the gateway's browser to be made (export.ts). */

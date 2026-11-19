@@ -589,7 +589,7 @@ describe('who can read an Artifact', () => {
   });
 
   it('copies a component as a prompt for another framework, with its source as written', async () => {
-    const copied = vi.fn(async () => undefined);
+    const copied = vi.fn(async (_text: string) => undefined);
     Object.defineProperty(navigator, 'clipboard', {
       value: { writeText: copied },
       configurable: true,
