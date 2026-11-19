@@ -267,8 +267,8 @@ const REPORTS = new Set<SessionArtifactType>(['react', 'mermaid', 'diagram', 'ma
  * parent posts to it, and only its parent's. With one it draws that, and listens to no one.
  * `editing` is the empty frame the owner edits in: it opens what it is handed for editing
  * (edit-frame.ts) and never runs it, so nothing the agent wrote runs in it. `reports` tells its
- * parent what went wrong as it ran (ARTIFACT_ERROR_MESSAGE), which only the panel's frame of a
- * type in `REPORTS` does; every other page says it only on itself.
+ * parent what went wrong as it ran (ARTIFACT_ERROR_MESSAGE) in place of saying it on itself,
+ * which only the panel's frame of a type in `REPORTS` does; every other page says it on itself.
  */
 function page(
   type: SessionArtifactType,
@@ -309,7 +309,7 @@ function page(
   const failure = document.getElementById('failure');
   // What went wrong, said in full above what was drawn: the error, then which part of a component
   // it broke in and where it was thrown. Only the first: what follows from it repeats it, and
-  // goes to the console. The panel's frame tells the panel too, as data (\`reports\`).
+  // goes to the console. The panel's frame tells the panel instead, as data (\`reports\`).
   let failed = false;
   const fail = (error, componentStack) => {
     console.error(error);
@@ -326,7 +326,15 @@ function page(
     if (typeof componentStack === 'string' && componentStack.trim()) {
       said.componentStack = componentStack.trim().slice(0, ${ARTIFACT_ERROR_MAX.stack});
     }
-    const head = document.createElement('strong');
+${
+  // The panel says it, small, beside its own controls, and opens it whole on a click: drawn here
+  // too, the same error would stand twice, once over half the Artifact. A frame with no panel
+  // around it, as a public link's, still says it on itself.
+  reports
+    ? `    if (parent !== window) return parent.postMessage({ ${ARTIFACT_ERROR_MESSAGE}: said }, '*');
+`
+    : ''
+}    const head = document.createElement('strong');
     head.textContent = message;
     failure.replaceChildren(head);
     for (const [name, text] of [['In', said.componentStack], ['Stack', said.stack]]) {
@@ -336,12 +344,7 @@ function page(
       part.textContent = '\\n\\n' + name + '\\n' + text;
       failure.append(part);
     }
-${
-  reports
-    ? `    if (parent !== window) parent.postMessage({ ${ARTIFACT_ERROR_MESSAGE}: said }, '*');
-`
-    : ''
-}  };
+  };
   // A script element's own error arrives here while it runs (\`run\` below), and is thrown from
   // there instead.
   let running = null;

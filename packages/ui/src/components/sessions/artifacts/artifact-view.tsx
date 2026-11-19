@@ -59,8 +59,9 @@ const EDIT_TIP: Partial<Record<SessionArtifact['type'], string>> = {
  * A React component is tried out beside its canvas, in Tweaks (tweaks/tweaks-panel.tsx): the
  * props it declares and the theme it is drawn in. It opens by itself on one that declares props.
  *
- * A component, a diagram or a document that fails as it runs says why, over it
- * (failure/artifact-failure.tsx), with Fix to ask the agent to mend that version (`onFix`).
+ * A component, a diagram or a document that fails as it runs says so with a badge in its corner,
+ * which opens the error whole (failure/artifact-failure.tsx), with Fix to ask the agent to mend
+ * that version (`onFix`).
  */
 export function ArtifactView({
   api,
@@ -119,7 +120,10 @@ export function ArtifactView({
   const editing = editable && !code && !streaming && (direct || toggled);
   // Only what can fail as it is drawn says so; a frame open for editing runs nothing.
   const fails =
-    (artifact.type === 'react' || artifact.type === 'mermaid' || artifact.type === 'markdown') &&
+    (artifact.type === 'react' ||
+      artifact.type === 'mermaid' ||
+      artifact.type === 'diagram' ||
+      artifact.type === 'markdown') &&
     !editing;
   const onFailure = fails
     ? (error: ArtifactFrameError) => setFailure({ version, error })
@@ -334,15 +338,6 @@ export function ArtifactView({
       />
 
       {writing && !streaming && <UpdatingLine />}
-      {failure?.version === version && !code && !streaming && (
-        <ArtifactFailure
-          key={version}
-          type={artifact.type}
-          error={failure.error}
-          busy={writing}
-          onFix={onFix && (() => onFix(fixRequest(artifact, version, failure.error)))}
-        />
-      )}
       {streaming && draft ? (
         <LiveSheet content={draft.content} done={draft.done} />
       ) : read.isError ? (
@@ -393,6 +388,15 @@ export function ArtifactView({
           editing={editing}
           frame={frame}
           onFailure={onFailure}
+        />
+      )}
+      {failure?.version === version && !code && !streaming && (
+        <ArtifactFailure
+          key={version}
+          type={artifact.type}
+          error={failure.error}
+          busy={writing}
+          onFix={onFix && (() => onFix(fixRequest(artifact, version, failure.error)))}
         />
       )}
       {presenting && slides && read.data && (
