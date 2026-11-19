@@ -288,15 +288,16 @@ function AgentSidebar({ profileId }: { profileId: string }) {
     session.remoteMachineId !== machine?.machineId;
 
   const parents = new Map(activities.map((run) => [run.id, run]));
+  // A subagent's turn is told in the chat that handed it the work: its own session is hidden.
+  const chatOf = (run: (typeof activities)[number]) =>
+    run.subagent
+      ? (parents.get(run.subagent.parentRunId)?.sessionId ?? run.sessionId)
+      : run.sessionId;
   const working = new Set(
-    activities
-      .filter((run) => run.status === 'queued' || run.status === 'running')
-      .map((run) =>
-        run.subagent
-          ? (parents.get(run.subagent.parentRunId)?.sessionId ?? run.sessionId)
-          : run.sessionId,
-      ),
+    activities.filter((run) => run.status === 'queued' || run.status === 'running').map(chatOf),
   );
+  // Stopped for an approval or an answer, until the owner gives it.
+  const waiting = new Set(activities.filter((run) => run.status === 'waiting').map(chatOf));
   const open = (id: string) =>
     router.push(agentPath(profileId, `sessions/${encodeURIComponent(id)}`));
 
@@ -317,6 +318,7 @@ function AgentSidebar({ profileId }: { profileId: string }) {
       selected={session.id === selected}
       unread={unread(session)}
       working={working.has(session.id)}
+      waiting={waiting.has(session.id)}
       open={() => open(session.id)}
       renaming={actions.renaming(session, contacts)}
       remove={() => actions.remove(session)}

@@ -74,6 +74,15 @@ const geometry = (view: HTMLElement, height: number) => {
         total += below + above;
         top += above;
       }),
+    /**
+     * Content grows by `below` px and a scroll that happened before it is heard only now, ahead
+     * of the observers: a browser tells of a scroll a frame late, and of sizes after that.
+     */
+    late: (below: number) =>
+      act(async () => {
+        total += below;
+        scrolled();
+      }),
     /** The view itself gets shorter or taller, as the composer grows or the window changes. */
     view: (height: number) =>
       resize(() => {
@@ -265,6 +274,24 @@ it('marks news a little above the end, where the history no longer follows', asy
 
   expect(dotted()).toBe(true);
   expect(view.top).toBe(1400);
+});
+
+it('stays at the end when tools land between a scroll and its event', async () => {
+  const view = await mount();
+  // The messages are on screen and the history is at their end; its own scroll there is not
+  // heard yet when the tools of the conversation arrive and push the end far below the view.
+  await view.late(600);
+  await view.grow(0);
+
+  expect(view.top).toBe(2100);
+  expect(shown()).toBe(false);
+
+  // A reader who then goes up is left where they went, whatever arrives.
+  await view.scroll(1700);
+  await view.late(300);
+  await view.grow(200);
+
+  expect(view.top).toBe(1700);
 });
 
 it('marks the last row growing while away, as an answer being written does', async () => {

@@ -325,7 +325,9 @@ export function Composer({
                     role="status"
                     aria-label={`Uploading ${item.name}`}
                   >
-                    <LoaderCircle size={16} className="spin" />
+                    <span className="spin">
+                      <LoaderCircle size={16} />
+                    </span>
                   </span>
                 )}
                 <button
