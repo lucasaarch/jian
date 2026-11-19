@@ -48,9 +48,9 @@ const EDIT_TIP: Partial<Record<SessionArtifact['type'], string>> = {
  * A deck is read as slides, never as code: a slide's markup is still copied from the options,
  * and the deck is taken away as a file from a menu of its own (deck/deck-download.tsx).
  *
- * A page, a deck's slide, a document and a spreadsheet can be edited by hand, in the frame
- * that edits (artifact-frame.tsx). A document and a sheet are open for it as they are shown; a
- * page and a deck open on Edit and close on Done. Nothing is saved by hand: use-autosave.ts asks
+ * A page, a deck's slide, a document, a spreadsheet and a diagram can be edited by hand, in the
+ * frame that edits (artifact-frame.tsx). A document, a sheet and a diagram are open for it as
+ * they are shown; a page and a deck open on Edit and close on Done. Nothing is saved by hand: use-autosave.ts asks
  * the frame for the source as the owner pauses or leaves, and the gateway keeps one stretch of
  * editing as one version of the owner's. The frame saves nothing itself.
  *
@@ -82,7 +82,7 @@ export function ArtifactView({
   const [code, setCode] = useState(false);
   // The slide of a deck in view, counted from 0.
   const [at, setAt] = useState(0);
-  // A page and a deck are edited after Edit; a document and a sheet are always open.
+  // A page and a deck are edited after Edit; a document, a sheet and a diagram are always open.
   const [toggled, setToggled] = useState(false);
   // The version the owner's stretch of editing started on. It is held from the first change: an
   // update of the agent's meanwhile must not take the page from under the owner's hands.
@@ -99,7 +99,8 @@ export function ArtifactView({
   // What is read as code, copied and downloaded: the source as written, or the slide in view.
   const source = slide === undefined ? read.data?.content : slides?.[slide];
   const editable = EDITABLE_ARTIFACT_TYPES.includes(artifact.type);
-  const direct = artifact.type === 'markdown' || artifact.type === 'sheet';
+  const direct =
+    artifact.type === 'markdown' || artifact.type === 'sheet' || artifact.type === 'diagram';
   const writing = Boolean(draft && !draft.done);
   // What the agent writes shows in place of the version until the owner has begun to edit it.
   const streaming = Boolean(draft?.content) && held === undefined;

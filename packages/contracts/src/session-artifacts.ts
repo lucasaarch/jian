@@ -20,9 +20,10 @@ export const SLIDE_HEIGHT = 720;
 
 /**
  * What it is drawn as: a whole page, one React component, a Markdown document, a Mermaid
- * diagram, a deck (a set of slides, each a page of its own; the panel names it Slide), or a
- * spreadsheet (CSV, whose cells may hold formulas). Always a source the agent
- * wrote, never a file as it was: a file it made is sent as a file.
+ * diagram, a deck (a set of slides, each a page of its own; the panel names it Slide), a
+ * spreadsheet (CSV, whose cells may hold formulas), or a diagram of nodes and edges
+ * (`diagramContentSchema`, in JSON). The panel shows both kinds of diagram as one, Diagram.
+ * Always a source the agent wrote, never a file as it was: a file it made is sent as a file.
  */
 export const sessionArtifactTypeSchema = z.enum([
   'html',
@@ -31,6 +32,7 @@ export const sessionArtifactTypeSchema = z.enum([
   'mermaid',
   'deck',
   'sheet',
+  'diagram',
 ]);
 
 /** `private` is read by the owner alone; `public` by anyone holding its link. */
@@ -304,6 +306,7 @@ export const profileArtifactsQuerySchema = z.strictObject({
   limit: z.coerce.number().int().min(1).max(100).default(30),
   /** Words of its title, in any case. */
   q: z.string().trim().min(1).max(120).optional(),
+  /** `diagram` takes in Mermaid ones too: to the owner both are one kind, Diagram. */
   type: sessionArtifactTypeSchema.optional(),
   /** Only those the owner moved to this folder of theirs. */
   folder: z.uuid().optional(),
@@ -466,7 +469,7 @@ export const ARTIFACT_FRAME_MESSAGE = 'jianArtifact';
  * - `{ collect: <nonce> }` from the panel asks for the edited source. The frame answers that
  *   and nothing else, with `{ collect: <the same nonce>, html }`, or `{ collect, unchanged: true }`
  *   when nothing was edited. `html` is the source in the type's own form whatever the type: a
- *   page's markup, a document's Markdown, a spreadsheet's CSV.
+ *   page's markup, a document's Markdown, a spreadsheet's CSV, a diagram's JSON.
  *
  * The frame says nothing it was not asked, and the panel reads nothing else from it.
  */
@@ -511,7 +514,7 @@ export type DeckSlidesEdit = z.infer<typeof deckSlidesEditSchema>;
 
 /**
  * The types the owner edits by hand in the panel: a page, a deck one slide at a time, a
- * document and a spreadsheet. What the agent wrote as code (a component, a
+ * document, a spreadsheet and a diagram. What the agent wrote as code (a component, a Mermaid
  * diagram) is changed by asking the agent.
  */
 export const EDITABLE_ARTIFACT_TYPES: readonly SessionArtifactType[] = [
@@ -519,4 +522,5 @@ export const EDITABLE_ARTIFACT_TYPES: readonly SessionArtifactType[] = [
   'deck',
   'markdown',
   'sheet',
+  'diagram',
 ];

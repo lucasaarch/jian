@@ -1,4 +1,8 @@
 import { ARTIFACT_EDIT_MESSAGE, type SessionArtifactType } from '@jian/contracts';
+import { CANVAS } from './canvas-frame.js';
+import { DIAGRAM_EDIT } from './diagram-edit.js';
+import { DIAGRAM } from './diagram-frame.js';
+import { DIAGRAM_LAYOUT } from './diagram-layout.js';
 import { DOCUMENT_EDITOR } from './document-editor.js';
 import { SHEET } from './sheet-frame.js';
 import { SLIDE_BUILDER } from './slide-builder.js';
@@ -319,7 +323,7 @@ const editPage = (source, options, finish, build) => {
 `;
 
 /**
- * How a type drawn by a script of ours (sheet-frame.ts) answers: `made` is what
+ * How a type drawn by a script of ours (sheet-frame.ts, diagram-frame.ts) answers: `made` is what
  * that script returned editable, `{ now, changed }`. As for a page, only when asked, and only
  * the source; a scale is nothing to it, being drawn at the frame's own size.
  */
@@ -357,4 +361,5 @@ export const EDITORS: Partial<Record<SessionArtifactType, string>> = {
   // A document is one surface to write on, not a page of blocks opened one at a time.
   markdown: DOCUMENT_EDITOR,
   sheet: `${SHEET}${ANSWERING}const editing = (source, options) => answering(options, sheet(source, root, true));\n`,
+  diagram: `${CANVAS}${DIAGRAM_LAYOUT}${DIAGRAM}${DIAGRAM_EDIT}${ANSWERING}const editing = (source, options) => answering(options, diagram(source, root, diagramEditor));\n`,
 };

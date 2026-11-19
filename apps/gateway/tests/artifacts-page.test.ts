@@ -99,6 +99,22 @@ describe('every Artifact of an agent', () => {
     expect((await page('?type=deck&q=memo')).items).toEqual([]);
     expect((await all('?type=spreadsheet')).statusCode).toBe(400);
 
+    // A diagram and a Mermaid one are one kind to the owner: asking for diagrams finds both.
+    const flow = await services.artifacts.create(owner.id, notes.id, {
+      title: 'Flow',
+      type: 'mermaid',
+      content: 'graph TD; A-->B',
+    });
+    const map = await services.artifacts.create(owner.id, notes.id, {
+      title: 'Map',
+      type: 'diagram',
+      content: '{"nodes": [{"id": "a", "label": "A"}]}',
+    });
+    expect((await page('?type=diagram')).items.map(({ id }) => id)).toEqual([map.id, flow.id]);
+    expect((await page('?type=mermaid')).items.map(({ id }) => id)).toEqual([flow.id]);
+    await services.artifacts.delete(owner.id, notes.id, flow.id);
+    await services.artifacts.delete(owner.id, notes.id, map.id);
+
     // A new version brings one to the top.
     await services.artifacts.revise(owner.id, plans.id, {
       artifactId: roadmap.id,

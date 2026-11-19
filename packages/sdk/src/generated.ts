@@ -7434,7 +7434,7 @@ export interface operations {
                                 artifactId?: string;
                                 title?: string;
                                 /** @enum {string} */
-                                type?: "html" | "react" | "markdown" | "mermaid" | "deck" | "sheet";
+                                type?: "html" | "react" | "markdown" | "mermaid" | "deck" | "sheet" | "diagram";
                                 /** @default  */
                                 content: string;
                             };
@@ -10422,7 +10422,7 @@ export interface operations {
                                 artifactId?: string;
                                 title?: string;
                                 /** @enum {string} */
-                                type?: "html" | "react" | "markdown" | "mermaid" | "deck" | "sheet";
+                                type?: "html" | "react" | "markdown" | "mermaid" | "deck" | "sheet" | "diagram";
                                 /** @default  */
                                 content: string;
                             };
@@ -10711,7 +10711,7 @@ export interface operations {
                                 artifactId?: string;
                                 title?: string;
                                 /** @enum {string} */
-                                type?: "html" | "react" | "markdown" | "mermaid" | "deck" | "sheet";
+                                type?: "html" | "react" | "markdown" | "mermaid" | "deck" | "sheet" | "diagram";
                                 /** @default  */
                                 content: string;
                             };
@@ -10999,7 +10999,7 @@ export interface operations {
                                 artifactId?: string;
                                 title?: string;
                                 /** @enum {string} */
-                                type?: "html" | "react" | "markdown" | "mermaid" | "deck" | "sheet";
+                                type?: "html" | "react" | "markdown" | "mermaid" | "deck" | "sheet" | "diagram";
                                 /** @default  */
                                 content: string;
                             };
@@ -21710,7 +21710,7 @@ export interface operations {
                                 artifactId?: string;
                                 title?: string;
                                 /** @enum {string} */
-                                type?: "html" | "react" | "markdown" | "mermaid" | "deck" | "sheet";
+                                type?: "html" | "react" | "markdown" | "mermaid" | "deck" | "sheet" | "diagram";
                                 /** @default  */
                                 content: string;
                             };
@@ -22107,7 +22107,7 @@ export interface operations {
                                 artifactId?: string;
                                 title?: string;
                                 /** @enum {string} */
-                                type?: "html" | "react" | "markdown" | "mermaid" | "deck" | "sheet";
+                                type?: "html" | "react" | "markdown" | "mermaid" | "deck" | "sheet" | "diagram";
                                 /** @default  */
                                 content: string;
                             };
@@ -22399,7 +22399,7 @@ export interface operations {
                                 artifactId?: string;
                                 title?: string;
                                 /** @enum {string} */
-                                type?: "html" | "react" | "markdown" | "mermaid" | "deck" | "sheet";
+                                type?: "html" | "react" | "markdown" | "mermaid" | "deck" | "sheet" | "diagram";
                                 /** @default  */
                                 content: string;
                             };
@@ -22681,7 +22681,7 @@ export interface operations {
                                 artifactId?: string;
                                 title?: string;
                                 /** @enum {string} */
-                                type?: "html" | "react" | "markdown" | "mermaid" | "deck" | "sheet";
+                                type?: "html" | "react" | "markdown" | "mermaid" | "deck" | "sheet" | "diagram";
                                 /** @default  */
                                 content: string;
                             };
@@ -23512,7 +23512,7 @@ export interface operations {
                                 artifactId?: string;
                                 title?: string;
                                 /** @enum {string} */
-                                type?: "html" | "react" | "markdown" | "mermaid" | "deck" | "sheet";
+                                type?: "html" | "react" | "markdown" | "mermaid" | "deck" | "sheet" | "diagram";
                                 /** @default  */
                                 content: string;
                             };
@@ -24483,7 +24483,7 @@ export interface operations {
                 before?: string;
                 limit?: number;
                 q?: string;
-                type?: "html" | "react" | "markdown" | "mermaid" | "deck" | "sheet";
+                type?: "html" | "react" | "markdown" | "mermaid" | "deck" | "sheet" | "diagram";
                 folder?: string;
                 project?: string | "none";
                 pinned?: "true" | "false";
@@ -24510,7 +24510,7 @@ export interface operations {
                             sessionId: string;
                             title: string;
                             /** @enum {string} */
-                            type: "html" | "react" | "markdown" | "mermaid" | "deck" | "sheet";
+                            type: "html" | "react" | "markdown" | "mermaid" | "deck" | "sheet" | "diagram";
                             /** @enum {string} */
                             visibility: "private" | "public";
                             version: number;
@@ -24638,7 +24638,7 @@ export interface operations {
                         sessionId: string;
                         title: string;
                         /** @enum {string} */
-                        type: "html" | "react" | "markdown" | "mermaid" | "deck" | "sheet";
+                        type: "html" | "react" | "markdown" | "mermaid" | "deck" | "sheet" | "diagram";
                         /** @enum {string} */
                         visibility: "private" | "public";
                         version: number;
@@ -24998,7 +24998,7 @@ export interface operations {
                         sessionId: string;
                         title: string;
                         /** @enum {string} */
-                        type: "html" | "react" | "markdown" | "mermaid" | "deck" | "sheet";
+                        type: "html" | "react" | "markdown" | "mermaid" | "deck" | "sheet" | "diagram";
                         /** @enum {string} */
                         visibility: "private" | "public";
                         version: number;
@@ -25387,7 +25387,7 @@ export interface operations {
                         sessionId: string;
                         title: string;
                         /** @enum {string} */
-                        type: "html" | "react" | "markdown" | "mermaid" | "deck" | "sheet";
+                        type: "html" | "react" | "markdown" | "mermaid" | "deck" | "sheet" | "diagram";
                         /** @enum {string} */
                         visibility: "private" | "public";
                         version: number;
@@ -25508,7 +25508,7 @@ export interface operations {
                         sessionId: string;
                         title: string;
                         /** @enum {string} */
-                        type: "html" | "react" | "markdown" | "mermaid" | "deck" | "sheet";
+                        type: "html" | "react" | "markdown" | "mermaid" | "deck" | "sheet" | "diagram";
                         /** @enum {string} */
                         visibility: "private" | "public";
                         version: number;
@@ -26067,7 +26067,7 @@ export interface operations {
             };
             header?: never;
             path: {
-                type: "html" | "react" | "markdown" | "mermaid" | "deck" | "sheet";
+                type: "html" | "react" | "markdown" | "mermaid" | "deck" | "sheet" | "diagram";
             };
             cookie?: never;
         };
@@ -28397,7 +28397,7 @@ export interface operations {
                                 artifactId?: string;
                                 title?: string;
                                 /** @enum {string} */
-                                type?: "html" | "react" | "markdown" | "mermaid" | "deck" | "sheet";
+                                type?: "html" | "react" | "markdown" | "mermaid" | "deck" | "sheet" | "diagram";
                                 /** @default  */
                                 content: string;
                             };
@@ -29694,7 +29694,7 @@ export interface operations {
                                 artifactId?: string;
                                 title?: string;
                                 /** @enum {string} */
-                                type?: "html" | "react" | "markdown" | "mermaid" | "deck" | "sheet";
+                                type?: "html" | "react" | "markdown" | "mermaid" | "deck" | "sheet" | "diagram";
                                 /** @default  */
                                 content: string;
                             };
@@ -29975,7 +29975,7 @@ export interface operations {
                                 artifactId?: string;
                                 title?: string;
                                 /** @enum {string} */
-                                type?: "html" | "react" | "markdown" | "mermaid" | "deck" | "sheet";
+                                type?: "html" | "react" | "markdown" | "mermaid" | "deck" | "sheet" | "diagram";
                                 /** @default  */
                                 content: string;
                             };
@@ -30256,7 +30256,7 @@ export interface operations {
                                 artifactId?: string;
                                 title?: string;
                                 /** @enum {string} */
-                                type?: "html" | "react" | "markdown" | "mermaid" | "deck" | "sheet";
+                                type?: "html" | "react" | "markdown" | "mermaid" | "deck" | "sheet" | "diagram";
                                 /** @default  */
                                 content: string;
                             };

@@ -1,5 +1,5 @@
 import { NO_PROJECT, type SessionArtifactType } from '@jian/contracts';
-import { and, desc, eq, ilike, isNull, sql } from 'drizzle-orm';
+import { and, desc, eq, ilike, inArray, isNull, sql } from 'drizzle-orm';
 import { assertFound } from '../core/errors.js';
 import type { Queryable } from '../storage/database.js';
 import { sessionArtifacts, sessions } from '../storage/schema.js';
@@ -30,7 +30,12 @@ export async function pageProfileArtifacts(
 ) {
   const conditions = [eq(sessionArtifacts.profileId, where.profileId)];
 
-  if (where.type) conditions.push(eq(sessionArtifacts.type, where.type));
+  // To the owner a Mermaid diagram and a diagram are one kind, so asking for one finds both.
+  if (where.type === 'diagram') {
+    conditions.push(inArray(sessionArtifacts.type, ['diagram', 'mermaid']));
+  } else if (where.type) {
+    conditions.push(eq(sessionArtifacts.type, where.type));
+  }
   if (where.pinned) conditions.push(eq(sessionArtifacts.pinned, where.pinned === 'true'));
   if (where.folder) conditions.push(eq(sessionArtifacts.folderId, where.folder));
   if (where.project) {

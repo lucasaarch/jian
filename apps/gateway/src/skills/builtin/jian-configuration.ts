@@ -135,11 +135,12 @@ takes the whole window: its pages are listed where the sidebar was, under Back.
   slide a picture, its text in the notes) in its own fonts or basic ones, or the slide in view as a
   web page or a picture. A document downloads as Word, PDF or Markdown; a spreadsheet as Excel or
   CSV. Only a gateway on a server draws PDFs, PowerPoint files and pictures: on the desktop app's
-  own, a deck downloads as the slide's web page alone. A document and a spreadsheet open ready to
-  edit: type anywhere in a document, \`/\` for its blocks, or in a spreadsheet's cells. A web page
-  and a deck's slide have Edit, and Done to stop. A deck is built by hand too: New slide adds one
-  from a layout in the deck's look, or a copy; a slide's right-click menu, a drag or Delete (with
-  Undo) copies, moves or deletes it; a slide being edited takes text boxes and pictures. No Save:
+  own, a deck downloads as the slide's web page alone. A document, a spreadsheet and a diagram open
+  ready to edit: type anywhere in a document, \`/\` for its blocks, in a spreadsheet's cells, or
+  move a diagram's nodes. A web page and a deck's slide have Edit, and Done to stop. A deck is built
+  by hand too: New slide adds one from a layout in the deck's look, or a copy; a slide's right-click
+  menu, a drag or Delete (with Undo) copies, moves or deletes it; a slide being edited takes text
+  boxes and pictures. No Save:
   what the owner changes keeps itself a moment after they stop, or as they leave, and the bar says
   Saving… or Saved; a version you wrote is never written over. Public gives a link anyone opens
   without signing in, to the latest version only, and making it private again ends that link for
