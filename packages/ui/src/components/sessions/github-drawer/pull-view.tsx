@@ -306,7 +306,10 @@ export function PullView({
             </div>
           )}
         </div>
-        <div className="overflow-x-auto border-b border-glass-edge px-(--inspector-inset) pb-1.5">
+        <div
+          data-inspector-head="header"
+          className="overflow-x-auto border-b border-glass-edge px-(--inspector-inset) pb-1.5"
+        >
           <Segmented
             flat
             label="Pull request"

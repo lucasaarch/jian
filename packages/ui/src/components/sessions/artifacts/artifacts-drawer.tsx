@@ -20,9 +20,15 @@ import { useDraftHandoff } from './use-draft-handoff';
 export function ArtifactsDrawer({
   api,
   profileId,
+  ask,
 }: {
   api: ArtifactsDrawerApi;
   profileId: string;
+  /**
+   * Sends the owner's message in this conversation, as its composer does, for Fix on an Artifact
+   * that failed. None where the panel cannot write to the conversation, as on a channel.
+   */
+  ask?: ((text: string) => void) | undefined;
 }) {
   const tabs = useCrew((state) => state.tabs);
   const following = useCrew((state) => state.following);
@@ -60,6 +66,7 @@ export function ArtifactsDrawer({
             artifact={artifact}
             closer={closer}
             draft={draft?.artifactId === artifact.id ? draft : undefined}
+            onFix={ask}
             onBack={() => useCrew.getState().showArtifacts()}
           />
         ) : (

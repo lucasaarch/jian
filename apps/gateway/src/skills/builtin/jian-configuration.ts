@@ -126,15 +126,15 @@ takes the whole window: its pages are listed where the sidebar was, under Back.
   one printed.
   Its Artifacts tab shows this conversation's Artifacts as cards, as the Artifacts page does, with
   no pins or folders; Create something new begins the request, unsent, in this conversation's own
-  field. It opens on one while you write it, with Writing… beside its title. It draws one sealed, in
-  the panel's theme: History opens an earlier version, a button switches to its code, and it is
-  copied, downloaded, and set Private or Public. A React component stands on a dotted canvas, with
-  Tweaks beside it: the props it declares and its theme, never saved. A deck, which the panel names
-  Slide, shows its slides small in a row on top and one large under it, with Present to fill the
-  screen; it has no code view. Its Download saves a PDF, a page a slide, a PowerPoint file (each
-  slide a picture, its text in the notes) in its own fonts or basic ones, or the slide in view as a
-  web page or a picture. A document downloads as Word, PDF or Markdown; a spreadsheet as Excel or
-  CSV. Only a gateway on a server draws PDFs, PowerPoint files and pictures: on the desktop app's
+  field. It opens on one while you write it, with Writing…, or Updating… as you change it. It draws
+  one sealed, in the panel's theme: History opens an earlier version, a button switches to its code,
+  and it is copied, downloaded, and set Private or Public. A React component stands on a dotted
+  canvas, with Tweaks beside it: the props it declares and its theme, never saved. A deck, which the
+  panel names Slide, shows its slides small in a row on top and one large under it, with Present to
+  fill the screen; it has no code view. Its Download saves a PDF, a page a slide, a PowerPoint file
+  (each slide a picture, its text in the notes) in its own fonts or basic ones, or the slide in view
+  as a web page or a picture. A document downloads as Word, PDF or Markdown; a spreadsheet as Excel
+  or CSV. Only a gateway on a server draws PDFs, PowerPoint files and pictures: on the desktop app's
   own, a deck downloads as the slide's web page alone. A document, a spreadsheet and a diagram open
   ready to edit: type anywhere in a document, \`/\` for its blocks, in a spreadsheet's cells, or
   move a diagram's nodes. A web page and a deck's slide have Edit, and Done to stop. A deck is built

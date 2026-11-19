@@ -8277,6 +8277,14 @@
                                 "default": "",
                                 "type": "string",
                                 "maxLength": 400000
+                              },
+                              "slides": {
+                                "maxItems": 100,
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "maxLength": 400000
+                                }
                               }
                             },
                             "required": [
@@ -14073,6 +14081,14 @@
                               "default": "",
                               "type": "string",
                               "maxLength": 400000
+                            },
+                            "slides": {
+                              "maxItems": 100,
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "maxLength": 400000
+                              }
                             }
                           },
                           "required": [
@@ -14958,6 +14974,14 @@
                               "default": "",
                               "type": "string",
                               "maxLength": 400000
+                            },
+                            "slides": {
+                              "maxItems": 100,
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "maxLength": 400000
+                              }
                             }
                           },
                           "required": [
@@ -15841,6 +15865,14 @@
                               "default": "",
                               "type": "string",
                               "maxLength": 400000
+                            },
+                            "slides": {
+                              "maxItems": 100,
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "maxLength": 400000
+                              }
                             }
                           },
                           "required": [
@@ -35799,6 +35831,14 @@
                               "default": "",
                               "type": "string",
                               "maxLength": 400000
+                            },
+                            "slides": {
+                              "maxItems": 100,
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "maxLength": 400000
+                              }
                             }
                           },
                           "required": [
@@ -36876,6 +36916,14 @@
                               "default": "",
                               "type": "string",
                               "maxLength": 400000
+                            },
+                            "slides": {
+                              "maxItems": 100,
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "maxLength": 400000
+                              }
                             }
                           },
                           "required": [
@@ -37764,6 +37812,14 @@
                               "default": "",
                               "type": "string",
                               "maxLength": 400000
+                            },
+                            "slides": {
+                              "maxItems": 100,
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "maxLength": 400000
+                              }
                             }
                           },
                           "required": [
@@ -38631,6 +38687,14 @@
                               "default": "",
                               "type": "string",
                               "maxLength": 400000
+                            },
+                            "slides": {
+                              "maxItems": 100,
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "maxLength": 400000
+                              }
                             }
                           },
                           "required": [
@@ -40575,6 +40639,14 @@
                               "default": "",
                               "type": "string",
                               "maxLength": 400000
+                            },
+                            "slides": {
+                              "maxItems": 100,
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "maxLength": 400000
+                              }
                             }
                           },
                           "required": [
@@ -49922,6 +49994,14 @@
                               "default": "",
                               "type": "string",
                               "maxLength": 400000
+                            },
+                            "slides": {
+                              "maxItems": 100,
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "maxLength": 400000
+                              }
                             }
                           },
                           "required": [
@@ -52673,6 +52753,14 @@
                                 "default": "",
                                 "type": "string",
                                 "maxLength": 400000
+                              },
+                              "slides": {
+                                "maxItems": 100,
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "maxLength": 400000
+                                }
                               }
                             },
                             "required": [
@@ -53531,6 +53619,14 @@
                               "default": "",
                               "type": "string",
                               "maxLength": 400000
+                            },
+                            "slides": {
+                              "maxItems": 100,
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "maxLength": 400000
+                              }
                             }
                           },
                           "required": [
@@ -54388,6 +54484,14 @@
                               "default": "",
                               "type": "string",
                               "maxLength": 400000
+                            },
+                            "slides": {
+                              "maxItems": 100,
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "maxLength": 400000
+                              }
                             }
                           },
                           "required": [

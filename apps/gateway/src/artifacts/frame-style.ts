@@ -20,6 +20,8 @@ ${canvasStyle()}
   font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; color: #b42318;
   background: color-mix(in srgb, #b42318 12%, transparent); }
 #failure:empty { display: none; }
+#failure strong { font-weight: 600; }
+#failure .trace { opacity: .72; }
 img, svg { max-width: 100%; height: auto; }
 pre { overflow-x: auto; padding: 12px; border-radius: 8px;
   background: color-mix(in srgb, CanvasText 8%, transparent); }

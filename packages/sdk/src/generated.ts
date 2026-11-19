@@ -7454,6 +7454,7 @@ export interface operations {
                                 type?: "html" | "react" | "markdown" | "mermaid" | "deck" | "sheet" | "diagram";
                                 /** @default  */
                                 content: string;
+                                slides?: string[];
                             };
                             /** Format: date-time */
                             updatedAt: string;
@@ -10442,6 +10443,7 @@ export interface operations {
                                 type?: "html" | "react" | "markdown" | "mermaid" | "deck" | "sheet" | "diagram";
                                 /** @default  */
                                 content: string;
+                                slides?: string[];
                             };
                             /** Format: date-time */
                             updatedAt: string;
@@ -10731,6 +10733,7 @@ export interface operations {
                                 type?: "html" | "react" | "markdown" | "mermaid" | "deck" | "sheet" | "diagram";
                                 /** @default  */
                                 content: string;
+                                slides?: string[];
                             };
                             /** Format: date-time */
                             updatedAt: string;
@@ -11019,6 +11022,7 @@ export interface operations {
                                 type?: "html" | "react" | "markdown" | "mermaid" | "deck" | "sheet" | "diagram";
                                 /** @default  */
                                 content: string;
+                                slides?: string[];
                             };
                             /** Format: date-time */
                             updatedAt: string;
@@ -21730,6 +21734,7 @@ export interface operations {
                                 type?: "html" | "react" | "markdown" | "mermaid" | "deck" | "sheet" | "diagram";
                                 /** @default  */
                                 content: string;
+                                slides?: string[];
                             };
                             /** Format: date-time */
                             updatedAt: string;
@@ -22127,6 +22132,7 @@ export interface operations {
                                 type?: "html" | "react" | "markdown" | "mermaid" | "deck" | "sheet" | "diagram";
                                 /** @default  */
                                 content: string;
+                                slides?: string[];
                             };
                             /** Format: date-time */
                             updatedAt: string;
@@ -22419,6 +22425,7 @@ export interface operations {
                                 type?: "html" | "react" | "markdown" | "mermaid" | "deck" | "sheet" | "diagram";
                                 /** @default  */
                                 content: string;
+                                slides?: string[];
                             };
                             /** Format: date-time */
                             updatedAt: string;
@@ -22701,6 +22708,7 @@ export interface operations {
                                 type?: "html" | "react" | "markdown" | "mermaid" | "deck" | "sheet" | "diagram";
                                 /** @default  */
                                 content: string;
+                                slides?: string[];
                             };
                             /** Format: date-time */
                             updatedAt: string;
@@ -23532,6 +23540,7 @@ export interface operations {
                                 type?: "html" | "react" | "markdown" | "mermaid" | "deck" | "sheet" | "diagram";
                                 /** @default  */
                                 content: string;
+                                slides?: string[];
                             };
                             /** Format: date-time */
                             updatedAt: string;
@@ -28522,6 +28531,7 @@ export interface operations {
                                 type?: "html" | "react" | "markdown" | "mermaid" | "deck" | "sheet" | "diagram";
                                 /** @default  */
                                 content: string;
+                                slides?: string[];
                             };
                             /** Format: date-time */
                             updatedAt: string;
@@ -29819,6 +29829,7 @@ export interface operations {
                                 type?: "html" | "react" | "markdown" | "mermaid" | "deck" | "sheet" | "diagram";
                                 /** @default  */
                                 content: string;
+                                slides?: string[];
                             };
                             /** Format: date-time */
                             updatedAt: string;
@@ -30100,6 +30111,7 @@ export interface operations {
                                 type?: "html" | "react" | "markdown" | "mermaid" | "deck" | "sheet" | "diagram";
                                 /** @default  */
                                 content: string;
+                                slides?: string[];
                             };
                             /** Format: date-time */
                             updatedAt: string;
@@ -30381,6 +30393,7 @@ export interface operations {
                                 type?: "html" | "react" | "markdown" | "mermaid" | "deck" | "sheet" | "diagram";
                                 /** @default  */
                                 content: string;
+                                slides?: string[];
                             };
                             /** Format: date-time */
                             updatedAt: string;

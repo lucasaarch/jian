@@ -1,13 +1,4 @@
-import {
-  iconButton,
-  openInspector,
-  SidebarBar,
-  useInspectorAway,
-  useInspectorShowing,
-  useStageShowing,
-  WindowControls,
-} from '@jian/ui';
-import { PanelRight } from 'lucide-react';
+import { InspectorOpener, SidebarBar, useStageShowing, WindowControls } from '@jian/ui';
 import { useEffect, useSyncExternalStore } from 'react';
 import type { GatewaySummary } from '../../shared/bridge';
 import { desktop } from '../desktop';
@@ -27,9 +18,6 @@ const idle = () => () => {};
 export function TitleBar({ gateway }: { gateway?: GatewaySummary }) {
   const mac = desktop().platform === 'darwin';
   const staged = useStageShowing();
-  const inspecting = useInspectorShowing();
-  // A screen in the conversation's place, as the pull requests or settings, has no Inspector.
-  const away = useInspectorAway();
   const memory = gateway ? navigationFor(gateway.id) : undefined;
   // Read to follow the navigation, so back and forward come alive as it moves.
   useSyncExternalStore(memory?.subscribe ?? idle, memory?.current ?? (() => ''));
@@ -84,19 +72,8 @@ export function TitleBar({ gateway }: { gateway?: GatewaySummary }) {
           />
         </header>
       )}
-      {/* Where the open Inspector keeps its close button, in its size and hover: the same button
-          whether the Inspector is open or not. Centred in the title bar, which is 2.5rem. */}
-      {!staged && !inspecting && !away && (
-        <button
-          type="button"
-          aria-label="Open inspector"
-          title="Open inspector"
-          onClick={openInspector}
-          className={`absolute top-1.5 right-[calc(var(--window-controls)+var(--inspector-inset))] z-30 ${iconButton}`}
-        >
-          <PanelRight size={15} />
-        </button>
-      )}
+      {/* The same as the web's, in the same place (packages/ui, inspector-opener.tsx). */}
+      <InspectorOpener />
       {!mac && (
         <WindowControls
           actions={desktop().windowControls}

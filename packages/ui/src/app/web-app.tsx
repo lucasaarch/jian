@@ -3,6 +3,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { LogOut, Settings } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
+import { InspectorOpener } from '../components/sessions/inspector-opener';
 import { Mark } from '../components/ui';
 import { iconButton } from '../kit/icon-button';
 import { useGatewayMode } from '../lib/gateway-mode';
@@ -115,8 +116,10 @@ function SignedIn() {
   );
 
   return (
-    // The bar over the sidebar's top keeps this much clear; a phone adds its status bar.
-    <div className="[--chrome-top:2.75rem] phone:[--chrome-top:calc(2.75rem+env(safe-area-inset-top))]">
+    // The bar over the sidebar's top keeps this much clear; a phone adds its status bar. A screen
+    // whose header runs at the window's top keeps its end clear of the Inspector's button there
+    // (--chrome-end, as the desktop sets it).
+    <div className="[--chrome-end:1.5rem] [--chrome-top:2.75rem] phone:[--chrome-top:calc(2.75rem+env(safe-area-inset-top))]">
       <NavigationAt href={overlay ? behind : href}>
         <ChatsApp
           header={
@@ -138,6 +141,8 @@ function SignedIn() {
               />
             </header>
           }
+          // The desktop draws the same in its title bar (apps/desktop, title-bar.tsx).
+          corner={<InspectorOpener />}
         />
       </NavigationAt>
       <AppSettings

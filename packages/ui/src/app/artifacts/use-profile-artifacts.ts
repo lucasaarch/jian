@@ -26,7 +26,9 @@ export type ArtifactKeepingApi = Pick<
 /** What the page asks of the gateway: what one open Artifact does, the lists, and their keeping. */
 export type ArtifactsPageApi = ArtifactsApi &
   ArtifactKeepingApi &
-  Pick<GatewayApi, 'profileArtifacts' | 'artifactFolders'>;
+  Pick<GatewayApi, 'profileArtifacts' | 'artifactFolders'> &
+  // Fix on one that failed asks in its conversation; without it, there is no Fix.
+  Partial<Pick<GatewayApi, 'send'>>;
 
 /** What narrows the page: words of the title, and one type, either of them empty for all. */
 export type ArtifactsFilter = { q: string; type: '' | SessionArtifact['type'] };
