@@ -25,4 +25,9 @@ describe('the app a saved server is', () => {
     expect(mcpAppOf('https://connect.composio.dev/mcp/')).toBe('composio');
     expect(mcpAppOf('https://backend.composio.dev/v3/mcp/abc')).toBeUndefined();
   });
+
+  it('is Reactive Resume at its hosted server, and no app at a self-hosted one', () => {
+    expect(mcpAppOf('https://rxresu.me/mcp')).toBe('reactive-resume');
+    expect(mcpAppOf('https://resume.example.com/mcp')).toBeUndefined();
+  });
 });

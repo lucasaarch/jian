@@ -27,6 +27,7 @@ import {
   siPostman,
   siPrisma,
   siRailway,
+  siReactiveresume,
   siResend,
   siSanity,
   siSentry,
@@ -238,6 +239,13 @@ const CATALOG: Array<Omit<McpApp, 'url' | 'formerUrls' | 'by'> & { by?: string }
     description: 'Files and folders in your Dropbox.',
     category: 'productivity',
     icon: siDropbox,
+  },
+  {
+    id: 'reactive-resume',
+    name: 'Reactive Resume',
+    description: 'Your resumes, cover letters and job applications: write, tailor and export them.',
+    category: 'productivity',
+    icon: siReactiveresume,
   },
   {
     id: 'canva',
