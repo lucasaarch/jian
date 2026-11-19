@@ -22,6 +22,43 @@ export const REPORT_EVERY_MS = 24 * 60 * 60 * 1000;
 const SETTING = 'telemetry';
 const INSTALLATION = 'telemetryInstallation';
 const REPORTED_AT = 'telemetryReportedAt';
+/** The day of the first report, kept for the installation's age. */
+const FIRST_REPORTED = 'telemetryFirstReportedAt';
+/** The release the last report was sent from, to say what an upgrade came from. */
+const REPORTED_VERSION = 'telemetryVersion';
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+type Facts = Awaited<ReturnType<typeof installationFacts>>;
+
+/**
+ * What the installation's profile in PostHog holds, for cohorts and retention: the same counts
+ * and fixed words as the report, totalled, and never anything the owner typed.
+ */
+function profileOf(
+  facts: Facts,
+  system: Record<string, string>,
+  age: number,
+): Record<string, string | number | boolean> {
+  const sum = (counts: Record<string, number>) =>
+    Object.values(counts).reduce((total, n) => total + n, 0);
+  return {
+    ...system,
+    agents: facts.agents,
+    machines: facts.machines,
+    schedules: facts.schedules,
+    github_accounts: facts.github_accounts,
+    x_accounts: facts.x_accounts,
+    mcp_custom_servers: facts.mcp_custom_servers,
+    providers_count: sum(facts.providers),
+    mcp_apps_count: sum(facts.mcp_apps),
+    channels_count: sum(facts.channels),
+    has_whatsapp: Boolean(facts.channels.whatsapp),
+    has_telegram: Boolean(facts.channels.telegram),
+    has_email: Boolean(facts.channels.email),
+    installation_age_days: age,
+  };
+}
 
 export type TelemetryState = {
   enabled: boolean;
@@ -87,7 +124,8 @@ export class Telemetry {
    */
   async reportIfDue(): Promise<boolean> {
     const destination = this.options.destination ?? TELEMETRY_DESTINATION;
-    if (!destination.key || !this.options.version) return false;
+    const version = this.options.version;
+    if (!destination.key || !version) return false;
     if (!(await this.state()).enabled) return false;
 
     const now = new Date((this.options.clock ?? Date.now)());
@@ -100,8 +138,18 @@ export class Telemetry {
         installation = randomUUID();
         await write(tx, INSTALLATION, installation);
       }
+      const kept = await read(tx, FIRST_REPORTED);
+      const first = typeof kept === 'string' ? kept : now.toISOString();
+      if (typeof kept !== 'string') await write(tx, FIRST_REPORTED, first);
       await write(tx, REPORTED_AT, now.toISOString());
-      return { installation, since, last };
+      const reported = await read(tx, REPORTED_VERSION);
+      return {
+        installation,
+        since,
+        last,
+        first: new Date(first),
+        reported: typeof reported === 'string' ? reported : undefined,
+      };
     });
     if (!claim) return false;
 
@@ -109,18 +157,26 @@ export class Telemetry {
       const from = claim.since ?? new Date(now.getTime() - REPORT_EVERY_MS);
       const facts = await installationFacts(this.store.db);
       const usage = await usageBetween(this.store.db, from, now);
-      const common = {
-        version: this.options.version,
+      const system = {
+        version,
         mode: this.options.mode,
         role: this.options.role,
         os: platform(),
         arch: arch(),
-        node: process.versions.node.split('.')[0],
-        // An installation is no person: no profile is made for it, and no place is looked up.
-        $process_person_profile: false,
+        node: process.versions.node.split('.')[0] ?? '',
+      };
+      const common = {
+        ...system,
+        // A profile per installation, under its random id, so installations can be grouped and
+        // followed over time in cohorts and retention. It is still no person: nothing identifies
+        // or aliases it, it holds only the report's counts, and no place is looked up.
+        $process_person_profile: true,
         $geoip_disable: true,
         $lib: 'jian-gateway',
       };
+      const age = Math.max(0, Math.floor((now.getTime() - claim.first.getTime()) / DAY_MS));
+      const upgradedFrom =
+        claim.reported && claim.reported !== version ? { upgraded_from: claim.reported } : {};
       const response = await this.options.fetcher(`${destination.host}/batch/`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
@@ -131,7 +187,17 @@ export class Telemetry {
               event: 'gateway_active',
               distinct_id: claim.installation,
               timestamp: now.toISOString(),
-              properties: { ...common, ...facts },
+              properties: {
+                ...common,
+                ...facts,
+                installation_age_days: age,
+                ...upgradedFrom,
+                $set: profileOf(facts, system, age),
+                $set_once: {
+                  first_seen: claim.first.toISOString().slice(0, 10),
+                  first_version: version,
+                },
+              },
             },
             {
               event: 'gateway_usage',
@@ -144,6 +210,8 @@ export class Telemetry {
         signal: AbortSignal.timeout(15_000),
       });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      // Only once delivered: an upgrade is said until a report carrying it has gone out.
+      await write(this.store.db, REPORTED_VERSION, version).catch(() => {});
       return true;
     } catch {
       const giveBack =
