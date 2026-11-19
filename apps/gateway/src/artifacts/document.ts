@@ -218,6 +218,9 @@ ${editing ? '' : body}
 `;
 }
 
+/** One Artifact's page on its own, with no shell, for a file drawn from it (export.ts). */
+export { page as artifactPage };
+
 /**
  * What an HTML page is given ahead of its own markup in the panel, so it opens in the panel's
  * theme and never on the browser's white: its scheme, the dark class that Tailwind-style dark:

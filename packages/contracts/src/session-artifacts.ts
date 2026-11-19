@@ -301,12 +301,14 @@ export const artifactFoldersSchema = z.strictObject({
 });
 
 /**
- * A deck taken away as a file, its slides drawn by the gateway's own browser: `pdf` is every
+ * An Artifact taken away as a file. A deck is drawn by the gateway's own browser: `pdf` is every
  * slide, a page each, `png` one slide as a picture, and `pptx` every slide as a picture that
- * fills its page, with the slide's text in its notes.
+ * fills its page, with the slide's text in its notes. A Document (`markdown`) is `docx`, made
+ * with no browser, or `pdf`, drawn on A4. A spreadsheet is `xlsx`, its formulas kept and their
+ * values cached, or `csv`, the values alone. A format another type has is refused.
  */
 export const deckExportQuerySchema = z.strictObject({
-  format: z.enum(['pdf', 'png', 'pptx']),
+  format: z.enum(['pdf', 'png', 'pptx', 'docx', 'xlsx', 'csv']),
   /** `png` only, and required for it: the slide, counting from 1. */
   slide: z.coerce.number().int().min(1).max(DECK_SLIDES_MAX).optional(),
   /**

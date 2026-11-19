@@ -2,7 +2,7 @@ import { type DeckExportQuery, SLIDE_HEIGHT, SLIDE_WIDTH } from '@jian/contracts
 import type { Page } from 'playwright';
 import { GatewayError } from '../core/errors.js';
 import { launchChromium } from '../web/browser.js';
-import { artifactPolicy, escaped } from './document.js';
+import { artifactPage, artifactPolicy, escaped } from './document.js';
 
 /**
  * A deck as a file to keep: its slides drawn by the gateway's own browser, since a picture of a
@@ -53,10 +53,12 @@ const STILL =
 const BASIC = `*, *::before, *::after { font-family: Arial, Helvetica, "Liberation Sans", sans-serif !important; }
 code, pre, kbd, samp, code *, pre * { font-family: "Courier New", Courier, "Liberation Mono", monospace !important; }`;
 
-const MIME = {
+export const MIME = {
   pdf: 'application/pdf',
   png: 'image/png',
   pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
 } as const;
 
 /**
@@ -218,7 +220,7 @@ let line: Promise<unknown> = Promise.resolve();
 export function exportDeck(
   title: string,
   slides: readonly string[],
-  wanted: Pick<DeckExportQuery, 'format' | 'fonts'>,
+  wanted: { format: 'pdf' | 'png' | 'pptx'; fonts?: DeckExportQuery['fonts'] },
 ): Promise<{ mimeType: string; data: Buffer }> {
   const made = line.then(async () => {
     try {
@@ -243,6 +245,85 @@ export function exportDeck(
         503,
         `The deck could not be drawn for this file: ${(error instanceof Error ? error.message : String(error)).split('\n')[0]}`,
       );
+    }
+  });
+
+  line = made.catch(() => {});
+  return made;
+}
+
+/** Where the Document's page is served from, once. Never resolves, as the deck's sheet. */
+const DOCUMENT = 'https://document.invalid/';
+
+/**
+ * What a printed page changes of the panel's own document: a line is not cut by a page, a heading
+ * stays with what follows it, and a long line of code wraps, since paper has no scrollbar. The
+ * look itself is the frame's.
+ */
+const PRINT = `<style>
+pre { overflow: visible; white-space: pre-wrap; }
+pre, blockquote, table, img, svg, tr, li { break-inside: avoid; }
+h1, h2, h3, h4, h5, h6 { break-after: avoid; }
+</style>`;
+
+/**
+ * A Document as a PDF: the page the panel draws it in (document.ts), in its light theme, on A4
+ * with margins. What an agent wrote runs here too, so the browser is as shut as a deck's: offline,
+ * one address answered from memory under the Artifact's own policy, closed after the file.
+ */
+export function exportDocumentPdf(
+  title: string,
+  source: string,
+): Promise<{ mimeType: string; data: Buffer }> {
+  const made = line.then(async () => {
+    const browser = await launchChromium();
+    const deadline = setTimeout(() => void browser.close().catch(() => {}), DEADLINE_MS);
+
+    try {
+      const context = await browser.newContext({
+        colorScheme: 'light',
+        serviceWorkers: 'block',
+        acceptDownloads: false,
+        offline: true,
+      });
+      await context.routeWebSocket('**/*', (socket) => socket.close());
+      let served = false;
+      await context.route('**/*', (route) => {
+        if (served || route.request().url() !== DOCUMENT) return route.abort();
+        served = true;
+        return route.fulfill({
+          status: 200,
+          contentType: 'text/html; charset=utf-8',
+          headers: { 'content-security-policy': artifactPolicy("'none'") },
+          body: artifactPage('markdown', { title, source }).replace('</head>', `${PRINT}</head>`),
+        });
+      });
+      const page = await context.newPage();
+      await page.emulateMedia({ media: 'screen', colorScheme: 'light' });
+      await page.goto(DOCUMENT, { waitUntil: 'load', timeout: LOAD_MS });
+      // Pictures written into the document and fonts are drawn before the page is printed.
+      await page.evaluate(() =>
+        Promise.all([
+          document.fonts.ready,
+          ...[...document.images].map((image) => image.decode().catch(() => {})),
+        ]),
+      );
+      const data = await page.pdf({
+        format: 'A4',
+        margin: { top: '20mm', right: '18mm', bottom: '20mm', left: '18mm' },
+        printBackground: true,
+      });
+
+      return { mimeType: MIME.pdf, data };
+    } catch (error) {
+      if (error instanceof GatewayError) throw error;
+      throw new GatewayError(
+        503,
+        `The document could not be drawn for this file: ${(error instanceof Error ? error.message : String(error)).split('\n')[0]}`,
+      );
+    } finally {
+      clearTimeout(deadline);
+      await browser.close().catch(() => {});
     }
   });
 
