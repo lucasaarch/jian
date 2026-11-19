@@ -2,6 +2,7 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { JIAN_CLIENT_HEADER, JIAN_DESKTOP_CLIENT } from '@jian/contracts';
 import { net, protocol } from 'electron';
+import { answerHeaders } from './answer-headers';
 import { frameRequest } from './frame-requests';
 import { logConnections, stalled } from './gateways/connections';
 import type { GatewayStore } from './gateways/store';
@@ -104,9 +105,7 @@ async function forward(
       redirect: 'manual',
     } as RequestInit);
     clearTimeout(limit);
-    // The window keeps no cookie of any gateway: the token is the only credential.
-    const answered = new Headers(response.headers);
-    answered.delete('set-cookie');
+    const answered = answerHeaders(response.headers);
     const stream = answered.get('content-type')?.startsWith('text/event-stream') ?? false;
     if (stream) logConnections(`${host} ${asked} opened`);
     const openedAt = Date.now();

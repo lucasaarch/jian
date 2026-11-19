@@ -462,6 +462,8 @@ describe('the frame the panel draws one in', () => {
           'sandbox allow-scripts',
         ]),
       );
+      // The desktop app's Electron dies when a sandboxed frame commits with it.
+      expect(frame.headers['origin-agent-cluster']).toBeUndefined();
       expect(frame.body).not.toContain('Only for the owner');
       expect(frame.body).not.toContain('Secret plan');
       // It draws only what its parent hands it.
