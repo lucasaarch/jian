@@ -53,6 +53,10 @@ export default function configuration() {
     poweredByHeader: false,
     images: { unoptimized: true },
     devIndicators: false,
+    // Said here, though it is Next's default, so a later default cannot widen it: `next dev`,
+    // `next build` and `next upgrade --agent` recommend only releases that fix a published
+    // advisory. It upgrades nothing by itself.
+    experimental: { agentUpgrade: 'security' },
     async headers() {
       return [{ source: '/:path*', headers: SECURITY_HEADERS }];
     },
