@@ -1,7 +1,7 @@
 'use client';
 
 import { ArrowRight, GitPullRequest, GitPullRequestDraft, MessageSquare, Zap } from 'lucide-react';
-import { Action, HoverTip, iconButton, StatusPill } from '../../kit';
+import { Action, HoverTip, iconButton, Skeleton, SkeletonLine, StatusPill } from '../../kit';
 import type { GitHubPullRow } from '../../lib/api';
 import { ago } from '../../lib/format';
 import { checksPill, decisionPill, mergePill, pullKey } from './cells';
@@ -45,20 +45,8 @@ export function PullTable({
   openChat: (review: NonNullable<GitHubPullRow['review']>) => void;
 }) {
   return (
-    <table className="w-full table-fixed border-collapse text-[13px]">
-      <thead className="border-b border-line">
-        <tr>
-          <th className={`${head} w-24 phone:w-20`}>ID</th>
-          <th className={head}>Title</th>
-          <th className={`${head} w-28 ${reviewersCol}`}>Reviewers</th>
-          <th className={`${head} w-32 ${checksCol}`}>Checks</th>
-          <th className={`${head} w-28 ${mergeCol}`}>Merge</th>
-          <th className={`${head} w-24 ${updatedCol}`}>Updated</th>
-          <th className={`${head} w-40 text-right`}>
-            <span className="sr-only">Agent review</span>
-          </th>
-        </tr>
-      </thead>
+    <table className={tableClass}>
+      <PullHead />
       <tbody>
         {pulls.map((pull) => (
           <PullRow
@@ -68,6 +56,76 @@ export function PullTable({
             review={() => review(pull)}
             openChat={openChat}
           />
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
+const tableClass = 'w-full table-fixed border-collapse text-[13px]';
+
+function PullHead() {
+  return (
+    <thead className="border-b border-line">
+      <tr>
+        <th className={`${head} w-24 phone:w-20`}>ID</th>
+        <th className={head}>Title</th>
+        <th className={`${head} w-28 ${reviewersCol}`}>Reviewers</th>
+        <th className={`${head} w-32 ${checksCol}`}>Checks</th>
+        <th className={`${head} w-28 ${mergeCol}`}>Merge</th>
+        <th className={`${head} w-24 ${updatedCol}`}>Updated</th>
+        <th className={`${head} w-40 text-right`}>
+          <span className="sr-only">Agent review</span>
+        </th>
+      </tr>
+    </thead>
+  );
+}
+
+/** Widths of the titles still on their way, so the rows do not read as one block. */
+const TITLE_WIDTHS = ['w-3/5', 'w-4/5', 'w-1/2', 'w-2/3', 'w-3/4', 'w-2/5'];
+
+/**
+ * The table while its first list is read: the real headings over rows of skeletons in the
+ * shape of a pull request's, so the page says at once what is coming and nothing moves when it
+ * lands. Each bar is given a width: a bare one in a flex line shrinks to nothing.
+ */
+export function PullTableSkeleton() {
+  return (
+    <table className={tableClass}>
+      <PullHead />
+      <tbody>
+        {TITLE_WIDTHS.map((width) => (
+          <tr key={width} className="border-b border-line/60 last:border-b-0">
+            <td className={cell}>
+              <SkeletonLine className="w-12" />
+            </td>
+            <td className={cell}>
+              <SkeletonLine className={width} />
+              <span className="mt-1 flex gap-2 text-xs">
+                <SkeletonLine className="w-16" />
+                <SkeletonLine className="w-24" />
+              </span>
+            </td>
+            <td className={`${cell} ${reviewersCol}`}>
+              <span className="flex gap-1">
+                <Skeleton className="size-6 rounded-full" />
+                <Skeleton className="size-6 rounded-full" />
+              </span>
+            </td>
+            <td className={`${cell} ${checksCol}`}>
+              <Skeleton className="h-5 w-20 rounded-full" />
+            </td>
+            <td className={`${cell} ${mergeCol}`}>
+              <Skeleton className="h-5 w-16 rounded-full" />
+            </td>
+            <td className={`${cell} text-xs ${updatedCol}`}>
+              <SkeletonLine className="w-8" />
+            </td>
+            <td className={cell}>
+              <Skeleton className="ml-auto h-7 w-20 rounded-lg" />
+            </td>
+          </tr>
         ))}
       </tbody>
     </table>
