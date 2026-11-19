@@ -400,3 +400,27 @@ describe('send_artifact', () => {
     ).rejects.toMatchObject({ statusCode: 409, message: /only on a server gateway/ });
   });
 });
+
+describe('an Artifact made on a channel', () => {
+  it('tells the agent that nobody there sees it until it is sent', async () => {
+    const { services, owner } = await setup();
+    const reach = async (channel: string) => {
+      const session = await services.sessions.createSession(owner.id, { channel });
+      const run = await services.runs.submit(owner.id, session.id, {
+        text: 'Make me a page.',
+        requestKey: `page-${channel}`,
+      });
+      return use(profileTools(services, run).create_artifact, {
+        title: 'Page',
+        type: 'html',
+        content: page('Hello'),
+      });
+    };
+
+    expect(await reach('whatsapp')).toMatchObject({
+      version: 1,
+      note: expect.stringMatching(/whatsapp.*send_artifact.*share_artifact/),
+    });
+    expect(await reach('api')).not.toHaveProperty('note');
+  });
+});

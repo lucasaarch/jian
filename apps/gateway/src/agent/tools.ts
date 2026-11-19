@@ -258,6 +258,18 @@ export function profileTools(
 ): ToolSet {
   const coordination = new Coordination(services);
   const rechecked = new Set<string>();
+  // On WhatsApp, Telegram or email nobody sees the Inspector: what was made reaches the person
+  // only when it is sent. Told with the result, as only then is the conversation's channel read.
+  const shown = async (artifact: Parameters<typeof madeArtifact>[0]) => {
+    const made = madeArtifact(artifact);
+    if (!made) return made;
+    const { channel } = await services.sessions.session(run.profileId, run.sessionId);
+    if (!isChatChannel(channel) && channel !== 'email') return made;
+    return {
+      ...made,
+      note: `This conversation is on ${channel}, where nobody sees the Inspector: the owner finds it in the panel, under Artifacts. To show it here, send it with send_artifact in a format that suits, or give its link with share_artifact when they asked for one.`,
+    };
+  };
 
   const tools: ToolSet = {
     react_to_message: tool({
@@ -468,23 +480,21 @@ export function profileTools(
               'Make an Artifact: something the owner sees drawn in the Inspector beside this conversation, under its Artifacts tab, instead of reading its source in your reply. Worth it for what the owner looks at, uses or changes and keeps working on — a page, an interactive component, a document, a spreadsheet, a diagram, a set of slides — not for a short answer or a snippet, and not for a finished file (a PDF, a Word or Excel file), which send_file sends. `type` says how `content` is drawn: html is a whole page with its own styles and scripts; react is one component, the default export, importing only react and react-dom and styled with its own CSS or inline styles; it stands centred on a dotted canvas at its own size, unless its outer element paints a background, which then fills the view. A component also exports `tweaks`, the props the owner tries it with beside it, never saved: `export const tweaks = { title: "Hello", rounded: true, accent: "#7c3aed", size: { type: "number", min: 8, max: 64, default: 16 }, tone: { options: ["calm", "loud"] } }` (a default alone gives its type: text, number, boolean or a #hex color; options make a choice); each reaches the default export as a prop, its default first. Both open in the theme of the panel, light or dark (the page has color-scheme set and a dark class on <html> in dark), so do not force a white page or a fixed text colour: leave the background unset, use currentColor, or give both themes colours with light-dark() or the .dark class (not prefers-color-scheme, which follows the system, not the panel); markdown is a document; sheet is a spreadsheet as CSV, one row a line, where a cell starting with = is a formula (=SUM(B2:B9), =B2*C2, =IF(A2>0,"yes","no"); SUM, AVERAGE, MIN, MAX, COUNT, COUNTA, ROUND, ABS, IF, AND, OR, NOT, CONCAT); mermaid is a diagram’s source. deck is a set of slides (a presentation) and takes `slides` instead of `content`: each slide a whole HTML page of its own, styles included, laid out for a fixed 1280x720 canvas that is scaled to fit. It runs sealed: nothing loads from the network (no CDN script, stylesheet, font or remote image, and no fetch — embed a picture as a data: address), and it cannot call your tools or Jian. Returns the artifactId the other Artifact tools take.',
             inputSchema: sessionArtifactCreateSchema,
             execute: async (input) =>
-              madeArtifact(await services.artifacts?.create(run.profileId, run.sessionId, input)),
+              shown(await services.artifacts?.create(run.profileId, run.sessionId, input)),
           }),
           edit_artifact: tool({
             description:
               'Change part of an Artifact of this conversation, as you edit a file: each `find` is text copied exactly from its current source, and is replaced by its `replace`, in order. Use it for every change to an Artifact that already exists, a word or a whole section, in one place or many: only what you name changes, and the rest stays exactly as it is. It edits the latest version, whoever wrote it; the owner may have edited it by hand, so read_artifact_source first unless you just wrote it, and copy `find` from that. A `find` that matches nothing, or more than one place, refuses the whole call and says which edit; nothing is changed then. A deck is edited one slide at a time: name it with `slide`. Each call is a new version the owner can go back from.',
             inputSchema: artifactSourceEditSchema,
             execute: async (input) =>
-              madeArtifact(
-                await services.artifacts?.editSource(run.profileId, run.sessionId, input),
-              ),
+              shown(await services.artifacts?.editSource(run.profileId, run.sessionId, input)),
           }),
           update_artifact: tool({
             description:
               'Give an Artifact of this conversation a new version with the whole content written again (for a deck every slide again, as `slides`). Only to rewrite most of it: for a change to part of it, use edit_artifact, which keeps the rest exactly as it is and costs a fraction of this. The owner sees the new one and can go back to any earlier version. The owner may have edited it by hand since you wrote it, and your version goes on top of their edit, so read_artifact_source first when that is possible and build on it. The owner watches the content as you write it. Its type stays; make another Artifact for another type.',
             inputSchema: sessionArtifactRevisionSchema,
             execute: async (input) =>
-              madeArtifact(await services.artifacts?.revise(run.profileId, run.sessionId, input)),
+              shown(await services.artifacts?.revise(run.profileId, run.sessionId, input)),
           }),
           read_artifact_source: tool({
             description:
@@ -497,7 +507,7 @@ export function profileTools(
               'Add one slide to a deck, at the end or at `position`, without writing the others again. Like every change to a deck it makes a new version of the whole deck, which the owner can go back from. Returns how many slides the deck then has.',
             inputSchema: deckSlideAddSchema,
             execute: async (input) =>
-              madeArtifact(
+              shown(
                 await services.artifacts?.changeSlide(run.profileId, run.sessionId, 'add', input),
               ),
           }),
@@ -506,7 +516,7 @@ export function profileTools(
               'Write one slide of a deck again, leaving the others as they are. `html` replaces that slide whole, so start from what read_artifact_source answers for it when the owner may have edited it. For a change to part of a slide, use edit_artifact with `slide`.',
             inputSchema: deckSlideUpdateSchema,
             execute: async (input) =>
-              madeArtifact(
+              shown(
                 await services.artifacts?.changeSlide(
                   run.profileId,
                   run.sessionId,
@@ -520,7 +530,7 @@ export function profileTools(
               'Take one slide out of a deck; those after it move one up. The version before still holds it. A deck keeps at least one slide.',
             inputSchema: deckSlideDeleteSchema,
             execute: async (input) =>
-              madeArtifact(
+              shown(
                 await services.artifacts?.changeSlide(
                   run.profileId,
                   run.sessionId,
@@ -534,7 +544,7 @@ export function profileTools(
               'Move one slide of a deck to another place in its order: `slide` is its number now and `to` the number it has afterwards.',
             inputSchema: deckSlideMoveSchema,
             execute: async (input) =>
-              madeArtifact(
+              shown(
                 await services.artifacts?.changeSlide(run.profileId, run.sessionId, 'move', input),
               ),
           }),

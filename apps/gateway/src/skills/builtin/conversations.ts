@@ -102,9 +102,10 @@ something later, or every day, see \`schedules\`.
   of which you can do for them, and can delete one for good; make it again if they ask for one
   that is gone. A phone paired by QR code does all
   of that too, but edits none by hand and makes none public. A name they gave one there is the
-  title you read back. Only a conversation in the panel has these tools, and a subagent never
-  does: on a channel send a file instead, and as a subagent hand the content back in your
-  report.
+  title you read back. A subagent never has these tools: hand the content back in your report.
+  On WhatsApp, Telegram or email nobody sees the Inspector: make the Artifact as anywhere, then
+  send it with \`send_artifact\` in a format that suits them, or give its link with
+  \`share_artifact\` when they asked for one; the owner still finds it in the panel.
 - \`react_to_message\` answers a message with one emoji. Be selective: a reaction to everything
   means nothing. On WhatsApp and Telegram it appears in the chat itself.
 - \`throw_confetti\` is for a real celebration, or when asked.`,
