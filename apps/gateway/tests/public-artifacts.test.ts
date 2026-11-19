@@ -194,6 +194,127 @@ describe('a public link’s files', () => {
   });
 });
 
+describe('a public link with a password', () => {
+  const form = (app: FastifyInstance, path: string, password: string) =>
+    app.inject({
+      method: 'POST',
+      url: path,
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      payload: new URLSearchParams({ password }).toString(),
+    });
+  /** The pass a right password answered, as the browser sends its cookie back. */
+  const cookieOf = (answer: { headers: Record<string, unknown> }) =>
+    String(answer.headers['set-cookie']).split(';')[0] as string;
+
+  async function guarded(password = 'open sesame') {
+    const context = await setup();
+    const page = await context.make({ title: 'Secret plan', type: 'html', content: '<p>Plan</p>' });
+    const path = await context.share(page.id);
+    const set = await context.app.inject({
+      method: 'PATCH',
+      url: `/v1/profiles/${context.owner.id}/sessions/${context.session.id}/artifacts/${page.id}`,
+      headers,
+      payload: { password },
+    });
+    expect(set.json()).toMatchObject({ passwordProtected: true });
+
+    return { ...context, page, path, secret: path.split('/').at(-1) as string };
+  }
+
+  it('asks for it first, and tells nothing of the Artifact until it is given', async () => {
+    const { app, path, secret } = await guarded();
+    const locked = await app.inject({ url: path });
+
+    expect(locked.statusCode).toBe(401);
+    expect(locked.headers['cache-control']).toBe('no-store');
+    expect(String(locked.headers['content-security-policy'])).toContain("form-action 'self'");
+    expect(locked.body).toContain('<form class="glass-strong" method="post">');
+    expect(locked.body).toContain('type="password"');
+    expect(locked.body).not.toMatch(/Secret plan|<p>Plan<\/p>|<script|<iframe/);
+    // Nor are its files given without it.
+    expect((await app.inject({ url: `${path}/export?format=html` })).statusCode).toBe(401);
+    expect(
+      (await app.inject({ url: `${path}/export?format=html&pass=9999999999.forged` })).statusCode,
+    ).toBe(401);
+
+    const wrong = await form(app, path, 'not it');
+    expect(wrong.statusCode).toBe(401);
+    expect(wrong.headers['set-cookie']).toBeUndefined();
+    expect(wrong.body).toContain('That password is not right.');
+
+    const right = await form(app, path, 'open sesame');
+    expect(right.statusCode).toBe(303);
+    expect(right.headers.location).toBe(secret);
+    expect(String(right.headers['set-cookie'])).toMatch(
+      /^jian_artifact_[0-9a-f]{16}=\d+\.[\w-]+; Max-Age=86400; HttpOnly; SameSite=Lax$/,
+    );
+
+    // With the pass, the page and its files as for any public link; the page's downloads carry
+    // the pass, since its sandboxed page sends no cookie.
+    const cookie = cookieOf(right);
+    const open = await app.inject({ url: path, headers: { cookie } });
+    expect(open.statusCode).toBe(200);
+    expect(open.body).toContain('Secret plan');
+    const pass = cookie.split('=')[1] as string;
+    expect(open.body).toContain(`href="${secret}/export?format=html&#38;pass=${pass}"`);
+    expect((await app.inject({ url: `${path}/export?format=html&pass=${pass}` })).body).toBe(
+      '<p>Plan</p>',
+    );
+    expect(
+      (await app.inject({ url: `${path}/export?format=html`, headers: { cookie } })).statusCode,
+    ).toBe(200);
+  });
+
+  it('ends every pass when the owner changes it or takes it away', async () => {
+    const { app, owner, session, page, path } = await guarded();
+    const cookie = cookieOf(await form(app, path, 'open sesame'));
+    const change = (password: string | null) =>
+      app.inject({
+        method: 'PATCH',
+        url: `/v1/profiles/${owner.id}/sessions/${session.id}/artifacts/${page.id}`,
+        headers,
+        payload: { password },
+      });
+
+    // Too short to be kept.
+    expect((await change('abc')).statusCode).toBe(400);
+    await change('another one');
+    expect((await app.inject({ url: path, headers: { cookie } })).statusCode).toBe(401);
+    expect((await form(app, path, 'open sesame')).statusCode).toBe(401);
+    expect((await form(app, path, 'another one')).statusCode).toBe(303);
+
+    // None: the link opens for anyone again, and the form has nothing to ask.
+    expect((await change(null)).json()).toMatchObject({ passwordProtected: false });
+    expect((await app.inject({ url: path })).statusCode).toBe(200);
+    const unasked = await form(app, path, 'anything');
+    expect(unasked.statusCode).toBe(303);
+    expect(unasked.headers['set-cookie']).toBeUndefined();
+  });
+
+  it('stays with the Artifact across a new link, and never goes with a copy', async () => {
+    const { app, owner, session, page, share } = await guarded();
+    await share(page.id, 'private');
+    const again = await share(page.id);
+    expect((await app.inject({ url: again })).statusCode).toBe(401);
+
+    const copied = await app.inject({
+      method: 'POST',
+      url: `/v1/profiles/${owner.id}/sessions/${session.id}/artifacts/${page.id}/duplicate`,
+      headers,
+    });
+    expect(copied.json()).toMatchObject({ passwordProtected: false });
+  });
+
+  it('takes ten tries a minute from one reader', async () => {
+    const { app, path } = await guarded();
+    const tries = [];
+    for (let at = 0; at < 11; at += 1) tries.push((await form(app, path, 'guess')).statusCode);
+
+    expect(tries.slice(0, 10)).toEqual(Array(10).fill(401));
+    expect(tries[10]).toBe(429);
+  });
+});
+
 describe('a public file drawn by the browser', () => {
   /** A drawing that ends when the test says. */
   const held = () => {

@@ -2473,7 +2473,8 @@ export interface paths {
         /** @description Required permission: public. */
         get: operations["readPublicArtifact"];
         put?: never;
-        post?: never;
+        /** @description Required permission: public. */
+        post: operations["unlockPublicArtifact"];
         delete?: never;
         options?: never;
         head?: never;
@@ -25669,6 +25670,7 @@ export interface operations {
                             visibility: "private" | "public";
                             version: number;
                             publicPath: string | null;
+                            passwordProtected: boolean;
                             /** Format: date-time */
                             createdAt: string;
                             /** Format: date-time */
@@ -25797,6 +25799,7 @@ export interface operations {
                         visibility: "private" | "public";
                         version: number;
                         publicPath: string | null;
+                        passwordProtected: boolean;
                         /** Format: date-time */
                         createdAt: string;
                         /** Format: date-time */
@@ -26157,6 +26160,7 @@ export interface operations {
                         visibility: "private" | "public";
                         version: number;
                         publicPath: string | null;
+                        passwordProtected: boolean;
                         /** Format: date-time */
                         createdAt: string;
                         /** Format: date-time */
@@ -26309,6 +26313,7 @@ export interface operations {
                         visibility: "private" | "public";
                         version: number;
                         publicPath: string | null;
+                        passwordProtected: boolean;
                         /** Format: date-time */
                         createdAt: string;
                         /** Format: date-time */
@@ -26520,6 +26525,7 @@ export interface operations {
                 "application/json": {
                     /** @enum {string} */
                     visibility?: "private" | "public";
+                    password?: string | null;
                     title?: string;
                     pinned?: boolean;
                     /** Format: uuid */
@@ -26546,6 +26552,7 @@ export interface operations {
                         visibility: "private" | "public";
                         version: number;
                         publicPath: string | null;
+                        passwordProtected: boolean;
                         /** Format: date-time */
                         createdAt: string;
                         /** Format: date-time */
@@ -26667,6 +26674,7 @@ export interface operations {
                         visibility: "private" | "public";
                         version: number;
                         publicPath: string | null;
+                        passwordProtected: boolean;
                         /** Format: date-time */
                         createdAt: string;
                         /** Format: date-time */
@@ -27422,10 +27430,120 @@ export interface operations {
             };
         };
     };
+    unlockPublicArtifact: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/x-www-form-urlencoded": {
+                    password: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Success */
+            303: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": null;
+                };
+            };
+            /** @description Error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
     exportPublicArtifact: {
         parameters: {
             query?: {
                 format?: "html" | "tsx" | "md" | "mmd" | "json" | "csv" | "xlsx" | "pdf" | "docx" | "pptx";
+                pass?: string;
             };
             header?: never;
             path: {

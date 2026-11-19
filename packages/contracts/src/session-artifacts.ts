@@ -293,6 +293,8 @@ export const sessionArtifactSchema = z.strictObject({
    * null while it is private. The link changes each time it is made public again.
    */
   publicPath: z.string().nullable(),
+  /** Its link asks for a password the owner set before it opens. */
+  passwordProtected: z.boolean(),
   createdAt: z.iso.datetime(),
   updatedAt: z.iso.datetime(),
 });
@@ -360,14 +362,25 @@ export const sessionArtifactVersionSchema = z.strictObject({
   createdAt: z.iso.datetime(),
 });
 
+/** The shortest password the owner may give a public link, and the longest it takes from anyone. */
+export const ARTIFACT_PASSWORD_MIN = 4;
+export const ARTIFACT_PASSWORD_MAX = 128;
+
 /**
- * What the owner changes of one without making a version: who reads it, its name, whether it is
- * pinned on their page of them, and the folder of theirs it is kept in (`null` puts it back
- * where it started, under its conversation's project). At least one of them.
+ * What the owner changes of one without making a version: who reads it, the password its link
+ * asks for (`null` takes it away), its name, whether it is pinned on their page of them, and the
+ * folder of theirs it is kept in (`null` puts it back where it started, under its conversation's
+ * project). At least one of them.
  */
 export const sessionArtifactUpdateSchema = z
   .strictObject({
     visibility: sessionArtifactVisibilitySchema.optional(),
+    password: z
+      .string()
+      .min(ARTIFACT_PASSWORD_MIN)
+      .max(ARTIFACT_PASSWORD_MAX)
+      .nullable()
+      .optional(),
     title: z.string().trim().min(1).max(120).optional(),
     pinned: z.boolean().optional(),
     folderId: z.uuid().nullable().optional(),
@@ -510,9 +523,18 @@ export const PUBLIC_ARTIFACT_FORMAT_LABEL: Record<PublicArtifactFormat, string> 
   pptx: 'PowerPoint (.pptx)',
 };
 
-/** One file of a public Artifact's latest version: a format its type offers. */
+/**
+ * One file of a public Artifact's latest version: a format its type offers. `pass` is what the
+ * page of one with a password was opened with, which its Download menu carries.
+ */
 export const publicArtifactExportQuerySchema = z.strictObject({
   format: publicArtifactFormatSchema,
+  pass: z.string().max(200).optional(),
+});
+
+/** What a reader types on the page a link with a password answers first. */
+export const publicArtifactUnlockSchema = z.strictObject({
+  password: z.string().min(1).max(ARTIFACT_PASSWORD_MAX),
 });
 
 /**

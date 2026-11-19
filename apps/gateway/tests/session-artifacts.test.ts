@@ -926,9 +926,15 @@ describe('what the owner edits by hand', () => {
       (await app.inject({ method: 'POST', url: `${url}?token=${secret}`, payload })).statusCode,
     ).toBe(401);
     // And the link itself takes nothing: only reading it is open, and even the owner finds no
-    // route there to write to.
+    // route there to write to. Its one post is a password typed in a form, and an edit sent
+    // there is not read at all.
     for (const method of ['POST', 'PUT', 'PATCH'] as const) {
       for (const url of [publicPath, `${publicPath}/versions`]) {
+        if (method === 'POST' && url === publicPath) {
+          expect((await app.inject({ method, url, payload })).statusCode).toBe(415);
+          expect((await app.inject({ method, url, headers, payload })).statusCode).toBe(415);
+          continue;
+        }
         expect((await app.inject({ method, url, payload })).statusCode).toBe(401);
         expect((await app.inject({ method, url, headers, payload })).statusCode).toBe(404);
       }
@@ -948,18 +954,24 @@ describe('what the owner edits by hand', () => {
     expect((await app.inject({ method: 'POST', url, headers: device, payload })).statusCode).toBe(
       403,
     );
-    // Nor publishes one: a public link is the owner's call, from the panel.
-    const share = { visibility: 'public' };
-    expect(
-      (
-        await app.inject({
-          method: 'PATCH',
-          url: at(`/${html.id}`),
-          headers: device,
-          payload: share,
-        })
-      ).statusCode,
-    ).toBe(403);
+    // Nor publishes one, nor says who of the link's readers may open it: a public link and its
+    // password are the owner's call, from the panel.
+    for (const share of [
+      { visibility: 'public' },
+      { password: 'from the phone' },
+      { password: null },
+    ]) {
+      expect(
+        (
+          await app.inject({
+            method: 'PATCH',
+            url: at(`/${html.id}`),
+            headers: device,
+            payload: share,
+          })
+        ).statusCode,
+      ).toBe(403);
+    }
 
     // Nor through another conversation or another profile, with the credential.
     const elsewhere = await services.sessions.createSession(owner.id, { channel: 'api' });

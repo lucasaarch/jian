@@ -714,18 +714,20 @@ export function artifactFrame(
  * whole screen, to be presented: that frame runs the gateway's own player, and each slide, which
  * is what the agent wrote, sits one frame further in with no such leave.
  *
- * `token` addresses its downloads; `written` is a component's source as written, for its prompts.
+ * `token` addresses its downloads, and `pass` opens them on a link with a password; `written` is a
+ * component's source as written, for its prompts.
  */
 export const publishedArtifact = (
   type: SessionArtifactType,
   title: string,
   source: string,
-  link: { token?: string; written?: string } = {},
+  link: { token?: string; pass?: string | undefined; written?: string } = {},
 ): string =>
   publicPage(type === 'html' ? publicWebPage(source) : page(type, { title, source }), {
     type,
     title,
     token: link.token,
+    pass: link.pass,
     written: link.written,
     fullscreen: type === 'deck',
   });

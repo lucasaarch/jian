@@ -178,6 +178,7 @@ import {
   profileArtifactsQuerySchema,
   publicArtifactExportQuerySchema,
   publicArtifactParamsSchema,
+  publicArtifactUnlockSchema,
   sessionArtifactEditSchema,
   sessionArtifactSchema,
   sessionArtifactUpdateSchema,
@@ -234,6 +235,8 @@ export type Operation = {
   status?: number;
   stream?: boolean;
   responseContentType?: 'text/plain' | 'application/octet-stream';
+  /** A body a browser's own form posts; absent, it is JSON. */
+  bodyContentType?: 'application/x-www-form-urlencoded';
   /**
    * The body of every refusal, for an operation that speaks another API's dialect. Absent,
    * refusals share the gateway's own error body.
@@ -1805,6 +1808,20 @@ export const operations: Operation[] = [
     response: z.string(),
   },
   {
+    // The form of the page a link with a password answers first, posted by the reader's browser.
+    // The right password answers a pass for that link, as a cookie, and sends the reader back to
+    // the link; a wrong one answers the same page again with a 401. Ten tries a minute.
+    method: 'POST',
+    path: '/v1/public-artifacts/:token',
+    operationId: 'unlockPublicArtifact',
+    access: 'public',
+    params: publicArtifactParamsSchema,
+    body: publicArtifactUnlockSchema,
+    bodyContentType: 'application/x-www-form-urlencoded',
+    status: 303,
+    response: z.null(),
+  },
+  {
     // The same proof, for one file of that Artifact's latest version, as an attachment: a format
     // its type offers (PUBLIC_ARTIFACT_FORMATS). Nothing else of it, nor any other version. A
     // desktop app's own gateway serves nothing public and answers 404. Drawing a PDF or a
@@ -2248,7 +2265,7 @@ function openAPIOperation(operation: Operation) {
       ? {
           requestBody: {
             required: true,
-            content: { 'application/json': { schema: schema.body } },
+            content: { [operation.bodyContentType ?? 'application/json']: { schema: schema.body } },
           },
         }
       : {}),

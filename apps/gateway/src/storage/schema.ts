@@ -561,6 +561,9 @@ export const sessionArtifacts = pgTable(
     // The whole proof of whoever reads a public one; null while private, and new each time it
     // is made public, so an old link stops working.
     publicToken: text('public_token').unique(),
+    // The password its link asks for, as a salted hash (artifacts/password.ts); null for none.
+    // It outlives the link, so a link made anew asks for it too (migration 0117).
+    publicPassword: text('public_password'),
     // Kept first on the owner's page of them. Nothing the agent does changes it.
     pinned: boolean('pinned').notNull().default(false),
     // The owner's folder it was moved to, of the same profile (the service checks; the key

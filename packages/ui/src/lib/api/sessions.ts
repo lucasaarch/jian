@@ -452,6 +452,19 @@ export const sessionCalls = (client: Client, origin = '') => ({
         body: { visibility },
       }),
     ),
+  /** The password its public link asks for; `null` lets anyone with the link open it again. */
+  setSessionArtifactPassword: (
+    profileId: string,
+    sessionId: string,
+    artifactId: string,
+    password: string | null,
+  ): Promise<SessionArtifact> =>
+    result(
+      client.PATCH('/v1/profiles/{profileId}/sessions/{sessionId}/artifacts/{artifactId}', {
+        params: { path: { profileId, sessionId, artifactId } },
+        body: { password },
+      }),
+    ),
   /**
    * What the owner edited by hand, kept as a new version of theirs made from the version they
    * were editing: a page whole, or the one slide of a deck that `slide` numbers from 1. Saves

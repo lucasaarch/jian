@@ -2,13 +2,16 @@ import {
   artifactFrameParamsSchema,
   artifactFrameQuerySchema,
   publicArtifactParamsSchema,
+  publicArtifactUnlockSchema,
   sessionArtifactVersionParamsSchema,
 } from '@jian/contracts';
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import { GatewayError } from '../core/errors.js';
 import type { ProfileParams, SessionParams } from '../http/params.js';
 import { artifactFrame, artifactPolicy, publishedArtifact } from './document.js';
+import { passCookie, passOf } from './password.js';
 import { attachment } from './public-files.js';
+import { lockedPage } from './public-page.js';
 import type { SessionArtifacts } from './service.js';
 
 type ArtifactParams = SessionParams & { artifactId: string };
@@ -25,6 +28,21 @@ const html = (reply: FastifyReply, ancestors: "'self'" | "'none'", publicPage = 
     .type('text/html; charset=utf-8')
     // Over the policy the gateway gives every answer, which would let the page reach its origin.
     .header('Content-Security-Policy', artifactPolicy(ancestors, publicPage));
+
+/**
+ * What a link with a password answers until it is given: a page that runs nothing and posts its
+ * form back to the link alone, never kept, and never inside another site's page.
+ */
+const locked = (reply: FastifyReply, wrong = false) =>
+  reply
+    .code(401)
+    .type('text/html; charset=utf-8')
+    .header(
+      'Content-Security-Policy',
+      "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'",
+    )
+    .header('Cache-Control', 'no-store')
+    .send(lockedPage({ wrong }));
 
 export function registerArtifactRoutes(
   app: FastifyInstance,
@@ -120,13 +138,13 @@ export function registerArtifactRoutes(
   );
 
   // Its name, its pin and its folder are how the owner keeps their page of them, which a paired
-  // phone may do too. Making one public publishes it to anyone with the link: that is the
-  // owner's alone, from the panel, in the same request or any other.
+  // phone may do too. Making one public publishes it to anyone with the link, and its password
+  // says which of them read it: both are the owner's alone, from the panel.
   app.patch<{ Params: ArtifactParams }>(
     '/v1/profiles/:profileId/sessions/:sessionId/artifacts/:artifactId',
     async (request) => {
-      const asked = (request.body ?? {}) as { visibility?: unknown };
-      if (request.device && asked.visibility !== undefined) {
+      const asked = (request.body ?? {}) as { visibility?: unknown; password?: unknown };
+      if (request.device && (asked.visibility !== undefined || asked.password !== undefined)) {
         throw new GatewayError(403, 'A paired device cannot change who sees an Artifact.');
       }
 
@@ -211,19 +229,48 @@ export function registerArtifactRoutes(
   });
 
   // Never kept, so a link stops answering the moment its Artifact is private again; and never
-  // inside another site's page.
+  // inside another site's page. One with a password answers its form until the reader's cookie
+  // holds a pass to it.
   app.get('/v1/public-artifacts/:token', async (request, reply) => {
     const { token } = publicArtifactParamsSchema.parse(request.params);
-    const found = await deps.artifacts.published(token);
+    const found = await deps.artifacts.published(token, passOf(request.headers.cookie, token));
+    if (found.locked) return locked(reply);
 
     return html(reply, "'none'", true)
       .header('Cache-Control', 'no-store')
       .send(
         publishedArtifact(found.type, found.title, found.source, {
           token,
+          pass: found.pass,
           written: found.written,
         }),
       );
+  });
+
+  // The password, as the locked page's form posts it, and nothing else: encapsulated, so a form's
+  // encoding is read on this route alone and no other is read here. The right one keeps a pass in
+  // a cookie and sends the reader back to the link, by its own name so a gateway behind a path
+  // still finds it; a wrong one, the form again.
+  void app.register(async (form) => {
+    form.removeAllContentTypeParsers();
+    form.addContentTypeParser(
+      'application/x-www-form-urlencoded',
+      { parseAs: 'string', bodyLimit: 4096 },
+      (_request, body, done) => done(null, Object.fromEntries(new URLSearchParams(String(body)))),
+    );
+    form.post(
+      '/v1/public-artifacts/:token',
+      { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } },
+      async (request, reply) => {
+        const { token } = publicArtifactParamsSchema.parse(request.params);
+        const { password } = publicArtifactUnlockSchema.parse(request.body);
+        const pass = await deps.artifacts.unlock(token, password);
+        if (pass === false) return locked(reply, true);
+        if (pass) reply.header('Set-Cookie', passCookie(token, pass, request.protocol === 'https'));
+
+        return reply.code(303).header('Location', token).send();
+      },
+    );
   });
 
   // A file of the same latest version, for the page's Download menu, by the same proof and kept
@@ -231,7 +278,11 @@ export function registerArtifactRoutes(
   // source that is itself a page (HTML) is saved, never drawn at the gateway's address.
   app.get('/v1/public-artifacts/:token/export', async (request, reply) => {
     const { token } = publicArtifactParamsSchema.parse(request.params);
-    const file = await deps.artifacts.publicFile(token, request.query);
+    const file = await deps.artifacts.publicFile(
+      token,
+      request.query,
+      passOf(request.headers.cookie, token),
+    );
 
     return reply
       .type(file.mimeType)

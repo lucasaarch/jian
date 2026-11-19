@@ -17,6 +17,7 @@ export type ArtifactsApi = Pick<
   | 'sessionArtifactVersion'
   | 'exportSessionArtifact'
   | 'setSessionArtifactVisibility'
+  | 'setSessionArtifactPassword'
   | 'editSessionArtifact'
   | 'editDeckSlides'
 >;
