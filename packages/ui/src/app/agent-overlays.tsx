@@ -12,8 +12,8 @@ import { useUsage } from '../lib/usage';
 import { usePathname, useRouter } from '../platform/navigation';
 import { AgentSettingsContent } from './agent-settings';
 import { ChannelsPage, ChannelsWaiting } from './customize/channels-page';
-import { CommandSecretsPage } from './customize/command-secrets-page';
 import { MemoriesPage, MemoriesWaiting } from './customize/memories-page';
+import { SecretsPage } from './customize/secrets-page';
 
 /**
  * What an address from before these were overlays asks to open. Links and bookmarks keep working:
@@ -64,9 +64,19 @@ function AgentSettingsOverlay({ profileId }: { profileId: string }) {
     },
     {
       id: 'secrets',
-      label: 'Command secrets',
+      label: 'Secrets',
       icon: <KeyRound size={15} />,
-      keywords: ['secret', 'key', 'api key', 'token', 'environment', 'variable', 'credential'],
+      keywords: [
+        'secret',
+        'key',
+        'api key',
+        'token',
+        'password',
+        'login',
+        'environment',
+        'variable',
+        'credential',
+      ],
     },
     ...(server
       ? [
@@ -100,7 +110,7 @@ function AgentSettingsOverlay({ profileId }: { profileId: string }) {
             <MemoriesPage />
           </Suspense>
         ) : page === 'secrets' ? (
-          <CommandSecretsPage key={page} />
+          <SecretsPage key={page} />
         ) : (
           <Suspense key={page} fallback={<ChannelsWaiting />}>
             <ChannelsPage />
