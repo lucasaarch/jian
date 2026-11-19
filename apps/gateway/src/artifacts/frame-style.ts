@@ -53,7 +53,8 @@ body.react.filled #root { display: block; padding: 0; }`;
  * A Markdown document as a page to read: one centred column of about 44rem with room around it,
  * and a rhythm that gives headings more space above than below. It is also what is printed to
  * PDF, so print is always the light scheme with no column limit, and nothing that should stay
- * whole is split across a page.
+ * whole is split across a page. A callout is the one block of HTML the editor writes
+ * (`<div class="callout">`, kept as it is in the Markdown), and is drawn here so it reads as one.
  */
 function documentStyle() {
   const edge = 'color-mix(in srgb, CanvasText 14%, transparent)';
@@ -90,6 +91,9 @@ body.markdown table { display: block; max-width: 100%; overflow-x: auto; font-si
 body.markdown :is(th, td) { padding: 7px 12px; border-color: ${edge}; }
 body.markdown th { text-align: start; font-weight: 600; background: ${soft}; }
 body.markdown img { border-radius: 8px; }
+body.markdown .callout { margin: 0 0 1.1em; padding: 14px 18px; border-radius: 10px;
+  border: 1px solid ${edge}; background: ${soft}; }
+body.markdown .callout > :last-child { margin-bottom: 0; }
 @media print {
   :root { color-scheme: light !important; }
   body.markdown #root { max-width: none; padding: 0; min-height: 0; }
