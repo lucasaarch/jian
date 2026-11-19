@@ -29,6 +29,51 @@
   }
 }
 
+/* A page's scroller (`PageBody`), which runs up under the host's title bar: its scrollbar starts
+   below the bar, as `scroll-inset` keeps it off the corners, and `100cqw` inside it is its width
+   within its padding. A phone keeps the bar out of it instead. */
+@utility page-scroller {
+  container-type: inline-size;
+  &::-webkit-scrollbar-track {
+    margin-block: calc(var(--chrome-top, 0px) + 0.5rem) 1.125rem;
+  }
+  @media (max-width: 760px) {
+    &::-webkit-scrollbar-track {
+      margin-block: 1.125rem;
+    }
+  }
+}
+
+/* A page's toolbar (`PageToolbar`). Until it docks at the top it is the page's own row, with no
+   ground: nothing has gone under it yet, and what passes above it stays in sight. Docked
+   (`data-docked`, set by `PageBody`), it takes a ground and a line along its lower edge across
+   the page's whole width, from the sidebar to the window's or the Inspector's edge, past the
+   60rem column: an outset border image does that without making the page scroll sideways, being
+   ink overflow where a wider box would be scrollable. */
+@utility page-toolbar {
+  &[data-docked] {
+    border-image:
+      linear-gradient(to top, var(--line) 1px, var(--canvas) 1px) fill 0 / 0 / 0 100vmax;
+  }
+}
+
+/* Docked in the title bar's strip, a toolbar keeps clear of what the host draws over it: the
+   sidebar's buttons at its start while the sidebar is away (13rem, as `ScreenHeader` keeps), the
+   window's own buttons at its end on Windows and Linux. That matters only where the centred
+   column comes near the page's edges, inside the page's 2.5rem padding. */
+@media not (max-width: 760px) {
+  [data-page-toolbar][data-docked] {
+    --page-edge: max(0px, (100cqw - 60rem) / 2);
+    padding-inline-end: max(
+      0px,
+      calc(var(--window-controls, 0px) + 0.5rem - 2.5rem - var(--page-edge))
+    );
+    &[data-sidebar-away] {
+      padding-inline-start: max(0px, calc(13rem - 2.5rem - var(--page-edge)));
+    }
+  }
+}
+
 /* A row that scrolls sideways with no scrollbar, as tabs do (`ScrollStrip`, which sets the edge
    marks): a bar is too low to hold one, and it reads as broken. An edge with more past it fades
    out over `--strip-fade`, which `ScrollStrip` sets with the room it keeps a revealed item clear
