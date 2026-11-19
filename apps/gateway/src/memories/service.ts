@@ -1,4 +1,5 @@
 import {
+  FLASH_MEMORY_HOURS,
   MEMORY_LINK_LIMIT,
   MEMORY_PROJECT_LIMIT,
   type Memory,
@@ -17,10 +18,12 @@ import {
   addLink,
   countProjects,
   deleteMemory,
+  expiresIn,
   findMemory,
   linksOf,
   listMemories,
   memoryId,
+  purgeExpired,
   removeLink,
   searchMemories,
   setProjects,
@@ -38,6 +41,8 @@ export class Memories {
 
   async memories(profileId: string) {
     await this.profiles.profile(profileId);
+    // The list shows what each is linked to: an expired flash memory would be a link to nothing.
+    await purgeExpired(this.store.db, profileId);
 
     return withLinks(this.store.db, profileId, await listMemories(this.store.db, profileId));
   }
@@ -145,8 +150,20 @@ export class Memories {
     });
   }
 
+  /**
+   * Writes a memory, permanent or flash. A flash one is read like any other until its end, then
+   * deleted; writing it with `flash` again counts its hours afresh, and `flash: false` keeps it
+   * for good. A permanent memory never turns flash: an agent saving a passing detail under its
+   * key would otherwise lose what was kept for good a day later.
+   */
   async remember(profileId: string, input: unknown, sourceSessionId?: string) {
-    const { expectedVersion, ...data } = memorySchema.parse(input);
+    const { expectedVersion, flash, expiresInHours, ...data } = memorySchema.parse(input);
+
+    if (flash === false && expiresInHours !== undefined) {
+      throw new GatewayError(400, 'expiresInHours is only for a flash memory');
+    }
+
+    const asFlash = flash === true || expiresInHours !== undefined;
 
     return this.store.transaction(profileId, async (tx) => {
       await this.profiles.profile(profileId, tx);
@@ -155,12 +172,26 @@ export class Memories {
         await this.sessions.session(profileId, sourceSessionId, tx);
       }
 
+      // An expired key is free again, so its row goes before the version is checked against it.
+      await purgeExpired(tx, profileId);
       const old = await findMemory(tx, profileId, data.key);
 
       if ((old?.version ?? 0) !== expectedVersion) {
         throw new GatewayError(409, 'Memory version changed; reload before editing');
       }
 
+      if (asFlash && old && !old.expiresAt) {
+        throw new GatewayError(
+          409,
+          `${data.key} is a permanent memory and stays one; save what is temporary under another key`,
+        );
+      }
+
+      const ends = asFlash
+        ? expiresIn(expiresInHours ?? FLASH_MEMORY_HOURS.default)
+        : flash === false || !old?.expiresAt
+          ? null
+          : new Date(old.expiresAt);
       const memory: Memory = {
         ...data,
         id: memoryId(profileId, data.key),
@@ -172,7 +203,9 @@ export class Memories {
 
       // The row can only have moved on under a writer outside this profile's lock; the guard
       // is the table's, so the answer is the conflict either way.
-      if (!(await writeMemory(tx, memory, expectedVersion))) {
+      const written = await writeMemory(tx, memory, expectedVersion, ends);
+
+      if (!written) {
         throw new GatewayError(409, 'Memory version changed; reload before editing');
       }
 
@@ -180,9 +213,10 @@ export class Memories {
         key: memory.key,
         version: memory.version,
         sourceSessionId,
+        ...(written.expiresAt ? { expiresAt: written.expiresAt.toISOString() } : {}),
       });
 
-      return memory;
+      return written.expiresAt ? { ...memory, expiresAt: written.expiresAt.toISOString() } : memory;
     });
   }
 

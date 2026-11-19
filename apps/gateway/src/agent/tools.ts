@@ -598,7 +598,7 @@ export function profileTools(
 
     remember: tool({
       description:
-        'Save a fact or decision shared by all sessions of this profile. Use expectedVersion=0 for a new key, or the current version for an update.',
+        'Save a fact or decision shared by all sessions of this profile. Use expectedVersion=0 for a new key, or the current version for an update. flash: true keeps it only expiresInHours (1-24, default 24): for work in flight, never for what lasts.',
       inputSchema: memorySchema,
       execute: async (input) => {
         // Checked once per key and turn: an agent told of a near-duplicate that saves again
@@ -610,7 +610,7 @@ export function profileTools(
             services.decisions.judge,
             services.memories,
             run.profileId,
-            input,
+            { ...input, flash: input.flash === true || input.expiresInHours !== undefined },
           );
 
           if (existing) {

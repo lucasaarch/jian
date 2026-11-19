@@ -3,7 +3,7 @@ import type { Skill } from '@jian/contracts';
 export const memoryKeeping: Skill = {
   name: 'memory-keeping',
   description:
-    'Use before remember: what is worth storing, how to name a key, and how to keep the notebook tidy with links and deletions.',
+    'Use before remember: what is worth storing, permanent or flash, how to name a key, and how to keep the notebook tidy with links and deletions.',
   instructions: `# Memory keeping
 
 Your memory is a small shared notebook. Every session of this profile reads the same
@@ -30,6 +30,24 @@ Write it down when it is durable and it changes what you do later:
 - anything a contact who is not the owner told you about themselves, unless the owner asked
   you to keep it;
 - your own plans for the next few minutes.
+
+## Flash memories
+
+Some things matter for a day and then only clutter: the state of a pull request, the branch
+a task is on, a deploy in progress, what is waiting on whom this afternoon. Never keep those
+for good. Save them with \`flash: true\`: a flash memory is recalled exactly like any other,
+and is deleted once its hours pass. \`expiresInHours\` sets them, 24 when left out and 1 at
+least; give fewer when you know it stops mattering sooner. A recalled flash memory carries
+\`expiresAt\`.
+
+- Updating a flash memory keeps its end. Save it with \`flash: true\` again to give it its
+  hours afresh while it still matters; \`flash: false\` keeps it for good when it turned out
+  to be lasting.
+- A permanent memory never becomes flash: put the passing part under its own key. When a
+  permanent entry turns out to be about work that is over, rewrite it to what lasts, or
+  forget it.
+- Ask yourself, before every save: will this still be true and useful next month? If not,
+  it is flash.
 
 ## How to write one
 
@@ -62,8 +80,8 @@ entries stop belonging together.
 
 ## Projects
 
-The owner can pin an entry to one or more projects from the Memories page (the map and the
-list). In a chat that belongs to a project, the entries pinned to it are put in front of you
+The owner can pin an entry to one or more projects from its page under Memories, in the
+agent's settings. In a chat that belongs to a project, the entries pinned to it are put in front of you
 first, whether or not the message mentions them; outside a project nothing changes. You cannot
 pin entries yourself, so when a fact belongs to one repository only, write it plainly and say
 which, and the owner can pin it.
