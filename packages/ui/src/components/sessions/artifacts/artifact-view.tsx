@@ -14,6 +14,7 @@ import { Action, HoverTip, iconButton } from '../../../kit';
 import type { SessionArtifact } from '../../../lib/api';
 import { useGatewayMode } from '../../../lib/gateway-mode';
 import type { ArtifactDraft } from '../../../lib/stores/artifact-draft';
+import { countUsage, useUsage } from '../../../lib/usage';
 import { CodeBlock } from '../../ui/code-block';
 import { InspectorBody } from '../inspector';
 import { ArtifactBar, SaveStatus } from './artifact-bar';
@@ -59,8 +60,9 @@ const EDIT_TIP: Partial<Record<SessionArtifact['type'], string>> = {
  * A React component is tried out beside its canvas, in Tweaks (tweaks/tweaks-panel.tsx): the
  * props it declares and the theme it is drawn in. It opens by itself on one that declares props.
  *
- * A component, a diagram or a document that fails as it runs says why, over it
- * (failure/artifact-failure.tsx), with Fix to ask the agent to mend that version (`onFix`).
+ * A component, a diagram or a document that fails as it runs says so with a badge in its corner,
+ * which opens the error whole (failure/artifact-failure.tsx), with Fix to ask the agent to mend
+ * that version (`onFix`).
  */
 export function ArtifactView({
   api,
@@ -86,6 +88,7 @@ export function ArtifactView({
   /** Asks the agent, in the Artifact's conversation, for what is given; none where it cannot. */
   onFix?: ((request: string) => void) | undefined;
 }) {
+  useUsage(`artifact_opened_${artifact.type}`);
   const [picked, setPicked] = useState<number>();
   const [code, setCode] = useState(false);
   // The slide of a deck in view, counted from 0.
@@ -119,7 +122,10 @@ export function ArtifactView({
   const editing = editable && !code && !streaming && (direct || toggled);
   // Only what can fail as it is drawn says so; a frame open for editing runs nothing.
   const fails =
-    (artifact.type === 'react' || artifact.type === 'mermaid' || artifact.type === 'markdown') &&
+    (artifact.type === 'react' ||
+      artifact.type === 'mermaid' ||
+      artifact.type === 'diagram' ||
+      artifact.type === 'markdown') &&
     !editing;
   const onFailure = fails
     ? (error: ArtifactFrameError) => setFailure({ version, error })
@@ -140,7 +146,10 @@ export function ArtifactView({
     base: version,
     slide,
     active: editing,
-    touched: () => setHeld(version),
+    touched: () => {
+      countUsage(`artifact_hand_edit_${artifact.type}`);
+      setHeld(version);
+    },
   });
 
   /** Keeps what is being edited and closes the stretch; false when it could not be kept. */
@@ -217,9 +226,10 @@ export function ArtifactView({
                     aria-label="View code"
                     aria-pressed={code}
                     className={iconButton}
-                    onClick={() =>
-                      void (code ? setCode(false) : settle().then((kept) => kept && setCode(true)))
-                    }
+                    onClick={() => {
+                      if (!code) countUsage('artifact_view_code');
+                      void (code ? setCode(false) : settle().then((kept) => kept && setCode(true)));
+                    }}
                   >
                     {code ? (
                       <Eye size={15} aria-hidden="true" />
@@ -251,7 +261,10 @@ export function ArtifactView({
                     type="button"
                     aria-label="Present"
                     className={iconButton}
-                    onClick={() => setPresenting(true)}
+                    onClick={() => {
+                      countUsage('artifact_presented');
+                      setPresenting(true);
+                    }}
                   >
                     <PresentIcon size={15} aria-hidden="true" />
                   </button>
@@ -334,15 +347,6 @@ export function ArtifactView({
       />
 
       {writing && !streaming && <UpdatingLine />}
-      {failure?.version === version && !code && !streaming && (
-        <ArtifactFailure
-          key={version}
-          type={artifact.type}
-          error={failure.error}
-          busy={writing}
-          onFix={onFix && (() => onFix(fixRequest(artifact, version, failure.error)))}
-        />
-      )}
       {streaming && draft ? (
         <LiveSheet content={draft.content} done={draft.done} />
       ) : read.isError ? (
@@ -393,6 +397,15 @@ export function ArtifactView({
           editing={editing}
           frame={frame}
           onFailure={onFailure}
+        />
+      )}
+      {failure?.version === version && !code && !streaming && (
+        <ArtifactFailure
+          key={version}
+          type={artifact.type}
+          error={failure.error}
+          busy={writing}
+          onFix={onFix && (() => onFix(fixRequest(artifact, version, failure.error)))}
         />
       )}
       {presenting && slides && read.data && (

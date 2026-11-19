@@ -7,6 +7,7 @@ import { useState } from 'react';
 import { toast } from 'sonner';
 import { iconButton, MenuDivider, MenuEntry, MenuSwitch, menuPopup } from '../../../kit';
 import type { SessionArtifact } from '../../../lib/api';
+import { countUsage } from '../../../lib/usage';
 import { gatewayOrigin } from '../../../platform/gateway';
 import { copy } from './source';
 import { type ArtifactsApi, artifactChanged } from './use-artifacts';
@@ -41,6 +42,7 @@ export function ArtifactSharing({
         visibility,
       );
       artifactChanged(client, profileId, next);
+      if (visibility === 'public') countUsage('artifact_made_public');
     } catch (error) {
       // The gateway's own sentence, as when it runs inside a desktop app after all.
       toast.error(error instanceof Error ? error.message : 'The Artifact could not be changed.');

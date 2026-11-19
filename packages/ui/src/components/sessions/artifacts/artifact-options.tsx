@@ -1,9 +1,10 @@
 'use client';
 
 import { Menu } from '@base-ui/react/menu';
-import { COMPONENT_PROMPT_TARGETS, componentPrompt } from '@jian/contracts';
+import { COMPONENT_PROMPT_TARGETS, componentPrompt, panelFeatureOf } from '@jian/contracts';
 import { Copy, Download, Ellipsis, Sparkles } from 'lucide-react';
 import { iconButton, MenuEntry, MenuSubmenu, menuPopup } from '../../../kit';
+import { countUsage } from '../../../lib/usage';
 import { copy, download } from './source';
 
 /**
@@ -48,9 +49,10 @@ export function ArtifactOptions({
                 {COMPONENT_PROMPT_TARGETS.map((target) => (
                   <MenuEntry
                     key={target.id}
-                    onClick={() =>
-                      void copy(componentPrompt(target.id, { title: component, source }), 'Prompt')
-                    }
+                    onClick={() => {
+                      countUsage(panelFeatureOf(`artifact_prompt_copied_${target.id}`));
+                      void copy(componentPrompt(target.id, { title: component, source }), 'Prompt');
+                    }}
                   >
                     {target.label}
                   </MenuEntry>
@@ -61,7 +63,11 @@ export function ArtifactOptions({
               <MenuEntry
                 icon={<Download size={14} />}
                 disabled={source === undefined}
-                onClick={() => source !== undefined && download(file, source)}
+                onClick={() => {
+                  if (source === undefined) return;
+                  countUsage('artifact_downloaded_source');
+                  download(file, source);
+                }}
               >
                 Download
               </MenuEntry>

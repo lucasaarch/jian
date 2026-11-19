@@ -41,6 +41,7 @@ import { Onboarding } from './onboarding';
 import { Farewell } from './onboarding/farewell';
 import { StageHandoff } from './onboarding/handoff';
 import { rememberWelcome, Welcome, welcomed } from './onboarding/welcome';
+import { usePanelUsage } from './panel-usage';
 import { PhoneBar } from './phone-bar';
 import { ConnectorPage } from './plugins/connector-page';
 import { PluginsScreen } from './plugins/plugins-screen';
@@ -152,6 +153,7 @@ export function ChatsApp({
   const setShowing = onboarding.setShowing;
   const createAgent = onboarding.create;
   const covered = usePageCovering();
+  usePanelUsage();
   useAgentCommands({
     profiles: staged ? undefined : profiles,
     current: profiles?.find((profile) => profile.id === profileId),

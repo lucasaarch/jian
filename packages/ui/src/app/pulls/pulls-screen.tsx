@@ -20,6 +20,7 @@ import type { GitHubPullFilter, GitHubPullRow } from '../../lib/api';
 import { agentPath } from '../../lib/navigation';
 import { queries } from '../../lib/query/profile';
 import { useNoInspector } from '../../lib/stores/screen';
+import { useUsage } from '../../lib/usage';
 import { useRouter } from '../../platform/navigation';
 import { pullKey } from './cells';
 import { PullTable, PullTableSkeleton } from './pull-table';
@@ -39,6 +40,7 @@ export function PullsScreen({ profileId }: { profileId: string }) {
   const router = useRouter();
   // A list of every pull request has no conversation for an Inspector to go with.
   useNoInspector();
+  useUsage('pull_requests');
   const accounts = useQuery(queries.githubIntegration()).data?.accounts ?? [];
   const repositories = useQuery(queries.githubRepositories()).data ?? [];
   const [filter, setFilter] = useState<GitHubPullFilter>('open');

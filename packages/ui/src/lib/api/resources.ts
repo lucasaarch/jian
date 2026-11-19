@@ -1,3 +1,4 @@
+import type { PanelUsage } from '@jian/contracts';
 import { type Client, profile } from './params';
 import { result } from './result';
 import type { ScheduleInput, SchedulePatch } from './types';
@@ -114,6 +115,13 @@ export const resourceCalls = (client: Client) => ({
     newChatProtection?: 'ask' | 'auto' | 'full';
     telemetry?: boolean;
   }) => result(client.PUT('/v1/settings', { body })),
+  /**
+   * The panel's counts of its own use, through this client like any other call, so with the
+   * owner's credential. `leaving` asks for `keepalive`, so a report sent as the page closes still
+   * goes; only then, since a host that forwards requests by a scheme of its own may refuse it.
+   */
+  reportPanelUsage: (body: PanelUsage, leaving = false) =>
+    result(client.POST('/v1/telemetry/panel-usage', { body, keepalive: leaving })),
   runSchedule: (profileId: string, scheduleId: string) =>
     result(
       client.POST('/v1/profiles/{profileId}/schedules/{scheduleId}/run', {

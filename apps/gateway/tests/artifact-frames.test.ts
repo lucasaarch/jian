@@ -55,7 +55,14 @@ const WRITTEN = `export default function Counter() {\n  return <p>A component</p
  */
 const TABLE = `<!doctype html><html class="own" style="--own: 1"><head><title>T</title></head><body><table><tr><td id="cell">A table ran</td></tr></table></body></html>`;
 /** Public pages by a name of their own: the type each is drawn as, and its source. */
-const PUBLIC: Record<string, [SessionArtifactType, string]> = { table: ['html', TABLE] };
+/** A component that breaks as it draws, as a component compiles. */
+const BROKEN = `const List = (props) => React.createElement('ul', null, props.items.map((item) => item));
+exports.default = () => React.createElement('section', null, React.createElement(List, null));`;
+
+const PUBLIC: Record<string, [SessionArtifactType, string]> = {
+  table: ['html', TABLE],
+  broken: ['react', BROKEN],
+};
 
 const embedded = (value: unknown) => JSON.stringify(value).replaceAll('<', '\\u003c');
 
@@ -318,23 +325,23 @@ exports.default = (props) =>
       await full.close();
     });
 
-    it('says what broke a component, where, and in which part, to the page and the panel', async () => {
-      const page = await inPanel(
-        'broken',
-        'react',
-        `const List = (props) => React.createElement('ul', null, props.items.map((item) => item));
-exports.default = () => React.createElement('section', null, React.createElement(List, null));`,
-      );
+    it('says what broke a component, where, and in which part, to the panel or on the page', async () => {
+      const page = await inPanel('broken', 'react', BROKEN);
       const errors = () => page.evaluate('window.errors') as Promise<Record<string, string>[]>;
       await expect.poll(async () => (await errors()).length).toBe(1);
       const [said] = await errors();
       expect(said?.message).toMatch(/^TypeError: .*map/);
       expect(said?.componentStack).toContain('List');
       expect(said?.stack).toBeTruthy();
-      // The frame says it too, in full, above what it drew.
-      await expect.poll(() => read(page)).toContain('TypeError');
-      expect(await read(page)).toContain('List');
+      // The panel says it, in a badge of its own: the frame does not say it a second time.
+      expect(await read(page)).not.toContain('TypeError');
       await page.close();
+
+      // A public link has no panel around it: the page says it in full, above what it drew.
+      const shared = await open('/public/broken');
+      await expect.poll(() => read(shared)).toContain('TypeError');
+      expect(await read(shared)).toContain('List');
+      await shared.close();
 
       // Thrown later, from a timer the component set, it is still told in full, once.
       const later = await inPanel(
@@ -607,10 +614,14 @@ exports.default = () => React.createElement('section', null, React.createElement
         const page = await inPanel(`canvas-${type}`, type, SOURCE[type] ?? '');
         await expect.poll(() => read(page), { message: type }).toContain(text);
         const drawing = innermost(page);
-        const [x, y] = await middleOf(drawing, selector);
+        // The text shows before the drawing is placed: Mermaid measures it in a node of its own
+        // first, and the canvas fits the drawing only once it has landed. On a slow machine a
+        // drawing read at once is not there yet, so it is read until it stands where it should.
         // The frame is 900 by 600, with a little more room kept at the bottom for the zoom.
-        expect(Math.abs(x - 450), type).toBeLessThanOrEqual(2);
-        expect(Math.abs(y - 292), type).toBeLessThanOrEqual(2);
+        await expect
+          .poll(() => middleOf(drawing, selector), { message: type })
+          .toSatisfy(([x, y]) => Math.abs(x - 450) <= 2 && Math.abs(y - 292) <= 2);
+        const [x, y] = await middleOf(drawing, selector);
         expect(
           await drawing.evaluate(
             () => getComputedStyle(document.getElementById('root') as Element).backgroundImage,
@@ -755,12 +766,10 @@ exports.default = () => React.createElement('section', null, React.createElement
       await page.close();
     });
 
-    it('shows a public page’s toolbar only when it is come for, and saves its files', async () => {
+    it('keeps a public page’s toolbar in a room of its own, with Jian’s links, and saves its files', async () => {
       const page = await browser.newPage({ viewport: { width: 1000, height: 700 } });
       await page.goto(`${origin}/public/table`);
       await expect.poll(() => read(page)).toContain('A table ran');
-      const bar = () =>
-        page.evaluate(() => getComputedStyle(document.getElementById('bar') as Element).opacity);
       // The toolbar is the page's own, not the Artifact's frame's.
       expect(
         await page
@@ -768,28 +777,65 @@ exports.default = () => React.createElement('section', null, React.createElement
           .at(-1)
           ?.evaluate(() => document.getElementById('bar')),
       ).toBeNull();
-      expect(await bar()).toBe('0');
+      // Always there, nothing to find it by, and the Artifact starts where it ends.
+      const [bar, frame] = await page.evaluate(() =>
+        ['bar', 'artifact'].map((id) => {
+          const box = (document.getElementById(id) as Element).getBoundingClientRect();
+          return { top: box.top, bottom: box.bottom, height: box.height };
+        }),
+      );
+      expect(bar).toEqual({ top: 0, bottom: 48, height: 48 });
+      expect(frame?.top).toBe(48);
+      expect(frame?.bottom).toBe(700);
 
-      // At the top edge it comes in, and away from it goes again.
-      await page.mouse.move(500, 300);
-      await page.mouse.move(500, 3);
-      await expect.poll(bar).toBe('1');
-      await page.mouse.move(500, 400);
-      await expect.poll(bar).toBe('0');
+      // Jian's site, its download and its repository, each in a tab of its own.
+      const links = await page.$$eval('#bar a[target=_blank]', (anchors) =>
+        anchors.map((anchor) => [anchor.getAttribute('href'), anchor.getAttribute('rel')]),
+      );
+      expect(links).toEqual([
+        ['https://usejian.app', 'noopener noreferrer'],
+        ['https://github.com/lucasaarch/jian', 'noopener noreferrer'],
+        ['https://usejian.app/download', 'noopener noreferrer'],
+      ]);
 
-      // The keyboard finds it first.
+      // The keyboard reaches the toolbar before the Artifact, and a download is saved by the
+      // page, which the sandbox lets it alone do.
       await page.keyboard.press('Tab');
-      await expect.poll(bar).toBe('1');
-      expect(
-        await page.evaluate(() => document.activeElement?.closest('#downloads') !== null),
-      ).toBe(true);
-
-      // A download is saved by the page, which the sandbox lets it alone do.
+      expect(await page.evaluate(() => document.activeElement?.id)).toBe('brand');
+      await page.focus('#downloads .tool');
       await page.keyboard.press('ArrowDown');
       const saved = page.waitForEvent('download');
       await page.keyboard.press('Enter');
       expect((await saved).suggestedFilename()).toBe('Shared.html');
       expect(asked).toContain(`/public/${LINK}/export`);
+      await page.close();
+    });
+
+    it('lights one prompt at a time: none on a click, then the one the pointer is on', async () => {
+      const page = await browser.newPage({ viewport: { width: 1000, height: 700 } });
+      await page.goto(`${origin}/public/react`);
+      await expect.poll(() => read(page)).toContain('A component');
+      const lit = () =>
+        page.$$eval('#prompts [role=menuitem]', (items) =>
+          items
+            .filter((item) => getComputedStyle(item).backgroundColor !== 'rgba(0, 0, 0, 0)')
+            .map((item) => (item as HTMLElement).dataset.target),
+        );
+
+      await page.click('#prompts .tool');
+      expect(await lit()).toEqual([]);
+      await page.hover('[data-target="svelte"]');
+      await expect.poll(lit).toEqual(['svelte']);
+      await page.hover('[data-target="vue"]');
+      await expect.poll(lit).toEqual(['vue']);
+
+      // From the keyboard the first is lit, and the arrows move the one light.
+      await page.keyboard.press('Escape');
+      await page.mouse.move(10, 400);
+      await page.keyboard.press('ArrowDown');
+      await expect.poll(lit).toEqual(['react']);
+      await page.keyboard.press('ArrowDown');
+      await expect.poll(lit).toEqual(['vue']);
       await page.close();
     });
 
@@ -800,7 +846,6 @@ exports.default = () => React.createElement('section', null, React.createElement
       await page.goto(`${origin}/public/react`);
       await expect.poll(() => read(page)).toContain('A component');
 
-      await page.mouse.move(500, 3);
       await page.click('#prompts .tool');
       await page.click('[data-target="vue"]');
       await expect.poll(() => page.textContent('#prompts .tool')).toBe('Copied');

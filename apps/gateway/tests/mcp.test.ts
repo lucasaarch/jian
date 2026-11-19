@@ -8,7 +8,7 @@ import { join } from 'node:path';
 import type { MCPClient } from '@ai-sdk/mcp';
 import { mcpSchema } from '@jian/contracts';
 import type { ToolSet } from 'ai';
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { mcpActionKind } from '../src/agent/guard.js';
 import { connectMcpTools, omitEmptyOptionalArguments } from '../src/agent/mcp.js';
@@ -1134,5 +1134,53 @@ it('fits one step’s plain-text MCP results together, each keeping its end and 
     await new Promise<void>((resolve, reject) =>
       server.close((err) => (err ? reject(err) : resolve())),
     );
+  }
+});
+
+it('keeps on the run which servers it could not reach, without their reasons', async () => {
+  const services = await testServices();
+  // Nothing listens there: the server is down for the whole turn.
+  const closed = createServer();
+  closed.listen(0, '127.0.0.1');
+  await once(closed, 'listening');
+  const origin = `http://127.0.0.1:${(closed.address() as AddressInfo).port}`;
+  await new Promise<void>((resolve) => closed.close(() => resolve()));
+  const outbound = createSafeFetch({ allowPrivateOrigins: [origin] });
+  const model = mockModel({
+    doGenerate: async () => ({
+      content: [{ type: 'text', text: 'Done.' }],
+      finishReason: { unified: 'stop', raw: 'stop' },
+      usage: {
+        inputTokens: { total: 10, noCache: 10, cacheRead: 0, cacheWrite: 0 },
+        outputTokens: { total: 10, text: 10, reasoning: 0 },
+      },
+      warnings: [],
+    }),
+  });
+  const spy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+  try {
+    const profile = await services.profiles.createProfile({
+      name: 'MCP test',
+      instructions: 'Help.',
+      model: { provider: 'openai', modelId: 'gpt-4o-mini', apiKeyEnv: 'JIAN_PROVIDER_TEST' },
+    });
+    await services.mcp.replace({ servers: [{ name: 'wiki_down', url: `${origin}/mcp` }] });
+    const session = await services.sessions.createSession(profile.id, { title: 'MCP' });
+    const run = await services.runs.submit(profile.id, session.id, {
+      text: 'Look it up',
+      requestKey: 'down',
+    });
+
+    await new AgentRuntime(services, () => model, { outbound }).execute(profile.id, run.id);
+
+    expect((await services.runs.run(profile.id, run.id)).status).toBe('completed');
+    const down = (await services.lifecycle.checkpoints(profile.id, run.id))
+      .map((checkpoint) => checkpoint.data as { phase?: string })
+      .filter((data) => data.phase === 'mcp-unavailable');
+    expect(down).toEqual([{ phase: 'mcp-unavailable', servers: [{ name: 'wiki_down' }] }]);
+  } finally {
+    spy.mockRestore();
+    await outbound.close();
   }
 });
