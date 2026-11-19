@@ -2,7 +2,7 @@ import { timeZoneSchema } from '@jian/contracts';
 import { PgBoss } from 'pg-boss';
 import { z } from 'zod';
 import { createGateway } from './gateway.js';
-import { BossExecutor } from './runs/executors.js';
+import { BossExecutor, runConcurrencySchema } from './runs/executors.js';
 import { SecretBox } from './security/crypto.js';
 import { startupFailure } from './startup.js';
 import { PostgresStore } from './storage/postgres.js';
@@ -45,6 +45,8 @@ const config = z
     // container above all. Comma-separated addresses, CIDR ranges, or `loopback`, `linklocal`
     // and `uniquelocal`. Empty, the socket peer is the client, as when nothing sits in front.
     JIAN_TRUSTED_PROXIES: z.string().default(''),
+    // How many runs this worker executes at once; see `RUN_CONCURRENCY` for what each costs.
+    JIAN_RUN_CONCURRENCY: runConcurrencySchema,
   })
   .safeParse(process.env);
 
@@ -82,7 +84,13 @@ const gateway = await createGateway({
   token: config.data.JIAN_API_TOKEN,
   role: config.data.JIAN_ROLE,
   ...(config.data.JIAN_ROLE !== 'api'
-    ? { executor: new BossExecutor(new PgBoss(config.data.DATABASE_URL)) }
+    ? {
+        executor: new BossExecutor(
+          new PgBoss(config.data.DATABASE_URL),
+          undefined,
+          config.data.JIAN_RUN_CONCURRENCY,
+        ),
+      }
     : {}),
   channels: 'all',
   mode: 'server',

@@ -1,4 +1,5 @@
 import type { Skill } from '@jian/contracts';
+import { TIER_AT_ONCE } from '../../tasks/tier.js';
 
 /** One sentence a run that can make worktrees is told about its workers; the others are told none. */
 const PARALLEL_WORKTREES = `When workers edit one repository in parallel, tell each in its brief to call \`create_worktree\`
@@ -88,9 +89,21 @@ and no X tools. Keep anything the owner should approve for yourself.
 Set \`tier\` to the model the work needs: \`light\` for small, well-defined work (one file, a
 lookup, a rename, a short text), \`standard\` for a bounded change with tests to run, \`deep\`
 for work across several files or systems, risky work, or work that needs a plan. Leave it out
-and Decisions reads the brief and picks; without Decisions it is \`standard\`. Each tier runs on
-a model the installation offers, the owner's subscriptions first. The spawn result names the
+and Decisions reads the brief and picks one of those three; without Decisions it is
+\`standard\`. Each tier runs on a model the installation offers, the owner's subscriptions
+first, and \`deep\` on the newest deep model that is not premium. The spawn result names the
 model the worker got.
+
+Pieces that run side by side go to \`light\` or \`standard\`. \`deep\` is for the hard piece, not
+for each of many: at most ${TIER_AT_ONCE.deep} deep subagents of one conversation work at once, and
+another is refused until one reports.
+
+\`premium\` is a provider's top-priced model, at least one and a half times its other deep
+models (Claude Fable beside Opus): it spends the owner's subscription limits or credit fastest.
+Nothing picks it for you. Ask for it only when the owner asked for it, or when a deep subagent
+already failed at the same work, never for parallel pieces. ${TIER_AT_ONCE.premium} runs at a
+time in a conversation; a second is refused until the first reports. Where no provider has a
+premium model, it gets the deep one.
 
 Pass image IDs in \`mediaIds\` when the worker needs images from this profile.
 

@@ -7,7 +7,8 @@
    conversation to follow one. Colors are the runtime tokens. */
 @layer components {
   /* A tier's colour, on its chip and on its card's bar: green for light work, the ink for the
-     usual, amber for the heavy. */
+     usual, amber for the heavy, red for the top-priced model, which spends the owner's limits
+     fastest. */
   [data-tier="light"] {
     --tier: var(--good);
   }
@@ -16,6 +17,9 @@
   }
   [data-tier="deep"] {
     --tier: var(--warn);
+  }
+  [data-tier="premium"] {
+    --tier: var(--bad);
   }
 
   .crew {

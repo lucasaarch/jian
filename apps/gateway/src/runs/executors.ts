@@ -1,4 +1,5 @@
 import type { PgBoss } from 'pg-boss';
+import { z } from 'zod';
 
 /** Runs one queued run to its end. */
 export type Execute = (profileId: string, runId: string) => Promise<void>;
@@ -11,17 +12,38 @@ export interface RunExecutor {
   start(execute: Execute): Promise<void>;
   send(profileId: string, runId: string): Promise<void>;
   stop(): Promise<void>;
+  /** The runs this worker is executing now, and how many it executes at once. */
+  load(): RunLoad;
 }
+
+export type RunLoad = { working: number; slots: number };
 
 const queueName = 'jian-agent-runs';
 
 /**
- * How many runs one worker executes at once. A turn spends its time waiting on a model or a
- * tool, not on this process, and a parent waiting for its subagents holds its place while they
- * need theirs: at four, one conversation with a few subagents at work left every other turn,
- * the owner's next one included, queued and shown as starting for minutes.
+ * How many runs one worker executes at once, unless `JIAN_RUN_CONCURRENCY` says otherwise. A
+ * turn spends its time waiting on a model or a tool, not on this process, and a parent waiting
+ * for its subagents holds its place while they need theirs: at four, one conversation with a few
+ * subagents left every other turn queued for minutes, and at sixteen six subagents stuck on a
+ * spent usage limit, their parents and a few schedules did the same.
+ *
+ * What a slot costs while it is held: the turn's history and tool results in memory, a few
+ * megabytes for most and tens for one with a million-token context, and one process for each
+ * command-line MCP server the agent connects, for the turn's whole life. A browser or a shell
+ * lives only as long as the tool call that opened it, so it does not count. 48 leaves room for
+ * three times the morning above; a small machine whose agents use several command-line MCP
+ * servers may want fewer. Idle, pg-boss polls once a second for each slot, one indexed query.
  */
-export const RUN_CONCURRENCY = 16;
+export const RUN_CONCURRENCY = 48;
+
+/**
+ * `JIAN_RUN_CONCURRENCY` as the gateway reads it: empty is the default, as compose passes an
+ * unset variable. 256 at most, past which the idle polling alone is a steady load on PostgreSQL.
+ */
+export const runConcurrencySchema = z.preprocess(
+  (value) => (value === '' ? undefined : value),
+  z.coerce.number().int().min(1).max(256).default(RUN_CONCURRENCY),
+);
 
 /**
  * How a run's job is held in pg-boss. A turn has no clock of its own (a waiting
@@ -50,10 +72,18 @@ export const RUN_QUEUE_OPTIONS = {
 
 /** Across every worker of a server installation, through pg-boss in its PostgreSQL. */
 export class BossExecutor implements RunExecutor {
+  /** Handlers running now; pg-boss hands out no more than `concurrency` of them. */
+  private working = 0;
+
   constructor(
     private readonly boss: PgBoss,
     private readonly report: (message: string) => void = console.error,
+    private readonly concurrency = RUN_CONCURRENCY,
   ) {}
+
+  load(): RunLoad {
+    return { working: this.working, slots: this.concurrency };
+  }
 
   async start(execute: Execute): Promise<void> {
     this.boss.on('error', () => this.report('jian: queue connection failed'));
@@ -67,10 +97,15 @@ export class BossExecutor implements RunExecutor {
 
     await this.boss.work<{ profileId: string; runId: string }>(
       queueName,
-      { localConcurrency: RUN_CONCURRENCY, batchSize: 1, pollingIntervalSeconds: 1 },
+      { localConcurrency: this.concurrency, batchSize: 1, pollingIntervalSeconds: 1 },
       async (jobs) => {
         for (const job of jobs) {
-          await execute(job.data.profileId, job.data.runId);
+          this.working += 1;
+          try {
+            await execute(job.data.profileId, job.data.runId);
+          } finally {
+            this.working -= 1;
+          }
         }
       },
     );
@@ -101,6 +136,10 @@ export class LocalExecutor implements RunExecutor {
   async start(execute: Execute): Promise<void> {
     this.execute = execute;
     this.stopped = false;
+  }
+
+  load(): RunLoad {
+    return { working: this.running.size, slots: this.concurrency };
   }
 
   async send(profileId: string, runId: string): Promise<void> {

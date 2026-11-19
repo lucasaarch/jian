@@ -69,6 +69,7 @@ import type { Stats } from '../stats/service.js';
 import type { Store } from '../storage/database.js';
 import { artifacts, checkpoints } from '../storage/schema.js';
 import type { Work } from '../tasks/service.js';
+import { TIER_AT_ONCE } from '../tasks/tier.js';
 import { AskUserPause } from './ask-user.js';
 import { type FileBackend, fileTools } from './files.js';
 import { remoteTools } from './remote-tools.js';
@@ -627,7 +628,7 @@ export function profileTools(
               remoteTarget
                 ? "It works on the gateway, not on this conversation's machine: its file tools and run_command are the gateway's, and it reaches the machine only through run_remote_command, so name the machine, the paths and the cwd in the brief."
                 : 'It works on the same files as you.'
-            } The call waits and returns its report, for up to 15 minutes, after which the report arrives here later; wait false returns at once. Leave tier out to let Decisions pick light, standard or deep.`,
+            } The call waits and returns its report, for up to 15 minutes, after which the report arrives here later; wait false returns at once. Tier: light or standard for parallel pieces; deep for the one hard piece, not for each of many, at most ${TIER_AT_ONCE.deep} at once in this conversation. Left out, Decisions picks light, standard or deep. premium is the provider's top-priced model, far above deep: only when the owner asked for it or a deep subagent already failed at the same work, never for parallel pieces, and ${TIER_AT_ONCE.premium} at a time.`,
             inputSchema: conversationSubagentInputSchema,
             execute: async (input, options) => {
               const work = services.work;

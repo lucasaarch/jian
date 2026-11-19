@@ -7,12 +7,12 @@ import { chooseTier } from '../src/tasks/tier.js';
 import { testServices } from './helpers/services.js';
 
 const now = 1_700_000_000_000;
-const chat = (release: string, effort = false, output?: number) => ({
+const chat = (release: string, effort = false, output?: number, input = (output ?? 0) / 5) => ({
   modalities: { input: ['text'], output: ['text'] },
   limit: { context: 200_000, output: 32_000 },
   release_date: release,
   ...(effort ? { reasoning_options: [{ type: 'effort', values: ['low', 'medium', 'high'] }] } : {}),
-  ...(output !== undefined ? { cost: { input: output / 5, output } } : {}),
+  ...(output !== undefined ? { cost: { input, output } } : {}),
 });
 
 /** One public catalog for every vendor the tests list models from. */
@@ -21,9 +21,15 @@ const catalog = new ModelCatalog(
     Response.json({
       anthropic: {
         models: {
-          'claude-opus-5-5': chat('2026-08-01', true),
+          'claude-opus-5-5': chat('2026-08-01', true, 25),
           'claude-sonnet-5-5': chat('2026-08-01', true),
           'claude-haiku-5-5': chat('2026-08-01'),
+          // Newer than Opus and twice its price, input and output alike.
+          'claude-fable-5-2': chat('2026-10-01', true, 50),
+          // Newer still, with no price in the catalog.
+          'claude-fable-5-3': chat('2026-11-01', true),
+          // Above Opus on output only.
+          'claude-opus-5-5-long': chat('2026-10-15', true, 50, 5),
         },
       },
       openai: {
@@ -70,6 +76,9 @@ const listed: Record<string, string[]> = {
   'anthropic-key': ['claude-opus-5-5', 'claude-sonnet-5-5', 'claude-haiku-5-5'],
   grok: ['grok-5', 'grok-5-fast', 'grok-5-heavy'],
   'openai-priced': ['gpt-6-astra', 'gpt-6', 'gpt-6-mini', 'gpt-6-sage'],
+  'claude-fable': ['claude-opus-5-5', 'claude-fable-5-2', 'claude-sonnet-5-5', 'claude-haiku-5-5'],
+  'claude-unpriced': ['claude-opus-5-5', 'claude-fable-5-2', 'claude-fable-5-3'],
+  'claude-long': ['claude-opus-5-5', 'claude-opus-5-5-long'],
 };
 
 function tiers(records: ProviderRecord[]) {
@@ -172,13 +181,49 @@ describe('the model a tier gets', () => {
     });
   });
 
-  it('puts an unknown family priced like a deep model in deep, not in standard', async () => {
+  it('puts an unknown family priced above the deep models in premium, not in standard', async () => {
     const picker = tiers([provider('openai-priced', 'openai', { authMode: 'api' })]);
 
     // `gpt-6-sage` is the newest model and its name says no tier; by name alone it would take
-    // every standard subagent at eight times the price of the standard model.
+    // every standard subagent at eight times the price of the standard model. At twice the
+    // deep `astra`, it is premium.
     expect(await picker.pick('standard')).toMatchObject({ modelId: 'gpt-6' });
-    expect(await picker.pick('deep')).toMatchObject({ modelId: 'gpt-6-sage' });
+    expect(await picker.pick('deep')).toMatchObject({ modelId: 'gpt-6-astra' });
+    expect(await picker.pick('premium')).toMatchObject({ modelId: 'gpt-6-sage' });
+  });
+
+  it('keeps deep on the newest deep model that is not priced well above the others', async () => {
+    const picker = tiers([provider('claude-fable', 'anthropic', { credential: 'subscription' })]);
+
+    // Fable is the newest deep-named model, at twice Opus: deep stays on Opus, and Fable is
+    // only ever had by asking for premium.
+    expect(await picker.pick('deep')).toEqual({
+      providerId: 'claude-fable',
+      modelId: 'claude-opus-5-5',
+      reasoningEffort: 'high',
+    });
+    expect(await picker.pick('premium')).toEqual({
+      providerId: 'claude-fable',
+      modelId: 'claude-fable-5-2',
+      reasoningEffort: 'high',
+    });
+  });
+
+  it('never makes a model premium without the prices to say so', async () => {
+    // Fable 5.3 has no price: its name puts it in deep, and as the newest it takes deep there.
+    const unpriced = tiers([provider('claude-unpriced', 'anthropic', { credential: 'key' })]);
+    expect(await unpriced.pick('deep')).toMatchObject({ modelId: 'claude-fable-5-3' });
+    expect(await unpriced.pick('premium')).toMatchObject({ modelId: 'claude-fable-5-2' });
+
+    // Dearer on output alone is not premium.
+    const long = tiers([provider('claude-long', 'anthropic', { credential: 'key' })]);
+    expect(await long.pick('deep')).toMatchObject({ modelId: 'claude-opus-5-5-long' });
+  });
+
+  it('gives premium the deep model where no provider has a premium one', async () => {
+    const picker = tiers([provider('claude', 'anthropic', { credential: 'subscription' })]);
+
+    expect(await picker.pick('premium')).toMatchObject({ modelId: 'claude-opus-5-5' });
   });
 
   it('skips a revoked credential and answers nothing when no provider has the tier', async () => {
@@ -234,6 +279,17 @@ describe('the tier a subagent gets', () => {
       tierBy: 'default',
     });
     expect(await chooseTier(undefined, work)).toEqual({ tier: 'standard', tierBy: 'default' });
+  });
+
+  it('is never premium unless the agent asked for it', async () => {
+    expect(await chooseTier(answering('premium', 0.99), work)).toEqual({
+      tier: 'standard',
+      tierBy: 'default',
+    });
+    expect(await chooseTier(answering('light', 0.9), { ...work, tier: 'premium' })).toEqual({
+      tier: 'premium',
+      tierBy: 'agent',
+    });
   });
 });
 
@@ -309,6 +365,77 @@ describe('spawning a subagent', () => {
     await expect(
       services.work.spawnInConversation(parent, { ...assignment, brief: 'Other work.' }, 'same'),
     ).rejects.toMatchObject({ statusCode: 409 });
+  });
+
+  it('starts one premium subagent per conversation at a time, the next once it ends', async () => {
+    const { services, parent } = await setup();
+
+    const first = await services.work.spawnInConversation(
+      parent,
+      { ...assignment, tier: 'premium' },
+      'premium-one',
+    );
+    await expect(
+      services.work.spawnInConversation(
+        parent,
+        { ...assignment, name: 'Second look', tier: 'premium' },
+        'premium-two',
+      ),
+    ).rejects.toMatchObject({
+      statusCode: 409,
+      message: expect.stringContaining('give this work tier "deep"'),
+    });
+    // The same call retried is the run it started, not a second premium one.
+    expect(
+      (
+        await services.work.spawnInConversation(
+          parent,
+          { ...assignment, tier: 'premium' },
+          'premium-one',
+        )
+      ).runId,
+    ).toBe(first.runId);
+
+    await services.work.cancelInConversation(parent, first.runId);
+    const next = await services.work.spawnInConversation(
+      parent,
+      { ...assignment, name: 'Second look', tier: 'premium' },
+      'premium-two',
+    );
+    expect(next).toMatchObject({ tier: 'premium', status: 'queued' });
+  });
+
+  it('starts no more deep subagents at once than the cap, however many are asked for together', async () => {
+    const { services, profile, session, parent } = await setup();
+
+    // Calls made in one step run at the same time.
+    const results = await Promise.allSettled(
+      ['a', 'b', 'c', 'd', 'e'].map((key) =>
+        services.work.spawnInConversation(
+          parent,
+          { ...assignment, name: `Piece ${key}`, tier: 'deep' },
+          `deep-${key}`,
+        ),
+      ),
+    );
+    const refused = results.filter((result) => result.status === 'rejected');
+
+    expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(3);
+    expect(refused).toHaveLength(2);
+    expect(refused[0]).toMatchObject({
+      reason: { statusCode: 409, message: expect.stringContaining('tier "standard"') },
+    });
+    // Light and standard are the tiers for parallel pieces, and are not counted.
+    await services.work.spawnInConversation(
+      parent,
+      { ...assignment, name: 'Piece f', tier: 'standard' },
+      'standard-f',
+    );
+    expect(
+      (await services.work.conversationSubagents(profile.id, session.id)).map(
+        (child) => child.tier,
+      ),
+    ).toEqual(['deep', 'deep', 'deep', 'standard']);
   });
 
   it('runs on the parent’s model when the tier’s model cannot be used', async () => {
