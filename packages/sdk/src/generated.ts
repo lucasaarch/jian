@@ -4208,6 +4208,7 @@ export interface operations {
                         changedFiles: number;
                         /** @enum {string} */
                         mergeable: "clean" | "conflicts" | "blocked" | "behind" | "unknown";
+                        canBypassRules?: boolean;
                         mergeMethods: ("merge" | "squash" | "rebase")[];
                         reviews: {
                             approved: number;

@@ -106,6 +106,11 @@ export const githubPullSchema = z.strictObject({
   deletions: z.number().int().nonnegative(),
   changedFiles: z.number().int().nonnegative(),
   mergeable: githubMergeableSchema,
+  /**
+   * Blocked, but every ruleset on the base branch lets the connected App past it: merging now
+   * bypasses them, as GitHub's "bypass rules" does.
+   */
+  canBypassRules: z.boolean().optional(),
   mergeMethods: z.array(githubMergeMethodSchema).max(3),
   reviews: z.strictObject({
     approved: z.number().int().nonnegative(),

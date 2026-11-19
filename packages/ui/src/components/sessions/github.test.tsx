@@ -218,6 +218,11 @@ async function openCard() {
 
 const button = (name: string) =>
   [...element.querySelectorAll('button')].find((item) => item.textContent?.trim() === name);
+/** The drawer's lines of text, where a pull request's standing no longer goes. */
+const lines = () =>
+  [...(drawer()?.querySelectorAll('p') ?? [])].map((line) => line.textContent).join('\n');
+/** The words on where it stands, held by the action they are about, read under the pointer. */
+const tipOf = (name: string) => button(name)?.closest('span.inline-flex')?.textContent ?? '';
 
 it('shows a pull request link as a reference, and one the App cannot see as the plain link', async () => {
   const api = fakeApi();
@@ -364,12 +369,45 @@ it('marks a draft ready for review, then offers the merge button in the place of
   expect(drawer()?.textContent).not.toContain('Ready to merge');
 });
 
-it('keeps the line saying why a blocked branch may not merge above its merge button', async () => {
+it('disables merging a blocked branch and says why on its button, not in a line', async () => {
   await render(<Markdown text={pullUrl} />, fakeApi({ mergeable: 'blocked' }));
   await openCard();
 
-  expect(drawer()?.textContent).toContain('Merging is blocked');
-  expect(button('Squash and merge')).toBeDefined();
+  expect(button('Squash and merge')?.disabled).toBe(true);
+  expect(lines()).not.toContain('Merging is blocked');
+  expect(tipOf('Squash and merge')).toContain('Merging is blocked');
+  expect(tipOf('Squash and merge')).toContain('bypass list');
+  // A disabled button takes no pointer and no focus: its wrapper takes them, for the tip.
+  expect(button('Squash and merge')?.closest('span[tabindex="0"]')).not.toBeNull();
+});
+
+it('disables merging a branch in conflict when no agent can settle it', async () => {
+  await render(<Markdown text={pullUrl} />, fakeApi({ mergeable: 'conflicts' }));
+  await openCard();
+
+  expect(button('Squash and merge')?.disabled).toBe(true);
+  expect(tipOf('Squash and merge')).toContain('This branch has conflicts');
+  expect(lines()).not.toContain('This branch has conflicts');
+});
+
+it('merges a blocked branch past its rules when the App may bypass them, saying so first', async () => {
+  const api = fakeApi({ mergeable: 'blocked', canBypassRules: true });
+  await render(<Markdown text={pullUrl} />, api);
+  await openCard();
+
+  expect(button('Squash and merge')?.disabled).toBe(false);
+  expect(tipOf('Squash and merge')).toContain('may bypass them');
+  await act(async () => button('Squash and merge')?.click());
+  expect(dialog()?.textContent).toContain('merging now bypasses them');
+  const confirm = [...(dialog()?.querySelectorAll('button') ?? [])].find(
+    (item) => item.textContent === 'Bypass rules and merge',
+  );
+  await act(async () => confirm?.click());
+  expect(api.mergeGithubPull).toHaveBeenCalledWith('octo-example', 'site', 7, {
+    method: 'squash',
+    expectedHeadSha: head,
+    profileId: 'profile',
+  });
 });
 
 it.each([
@@ -430,7 +468,7 @@ it('keeps the drawer’s shape while GitHub answers', async () => {
   expect(drawer()?.querySelector('[role="status"]')).toBeNull();
 });
 
-it('offers to fix conflicts in the place of merging and of the line about them', async () => {
+it('offers to fix conflicts in the place of merging, saying why on its button', async () => {
   const fixConflicts = vi.fn(async () => ({}));
 
   await render(<Markdown text={pullUrl} />, fakeApi({ mergeable: 'conflicts' }), {
@@ -438,7 +476,8 @@ it('offers to fix conflicts in the place of merging and of the line about them',
   });
   await openCard();
 
-  expect(element.textContent).not.toContain('This branch has conflicts');
+  expect(lines()).not.toContain('This branch has conflicts');
+  expect(tipOf('Fix merge conflicts')).toContain('This branch has conflicts');
   expect(button('Squash and merge')).toBeUndefined();
   await act(async () => button('Fix merge conflicts')?.click());
   expect(fixConflicts).toHaveBeenCalledWith(
@@ -454,8 +493,8 @@ it('offers to update a branch that is behind its base and refreshes its status',
   await render(<Markdown text={pullUrl} />, api);
   await openCard();
 
-  expect(element.textContent).not.toContain('This branch is behind the base branch.');
-  expect(button('Update branch')).toBeDefined();
+  expect(lines()).not.toContain('This branch is behind the base branch.');
+  expect(tipOf('Update branch')).toContain('This branch is behind the base branch.');
   await act(async () => button('Update branch')?.click());
   expect(api.updateGithubPullBranch).toHaveBeenCalledWith('octo-example', 'site', 7, head);
   expect(api.mergeGithubPull).not.toHaveBeenCalled();
