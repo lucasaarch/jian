@@ -1,5 +1,6 @@
 'use client';
 
+import { panelFeatureOf } from '@jian/contracts';
 import { Brain, MessagesSquare, UserRound } from 'lucide-react';
 import { Suspense, useEffect } from 'react';
 import { Page, SettingsLayout, type SettingsPage } from '../kit';
@@ -7,6 +8,7 @@ import { useGatewayMode } from '../lib/gateway-mode';
 import { activityPath, agentPath, pluginsPath } from '../lib/navigation';
 import { useContacts } from '../lib/query/agent';
 import { type AgentSettingsPage, useAgentOverlay } from '../lib/stores/agent-overlay';
+import { useUsage } from '../lib/usage';
 import { usePathname, useRouter } from '../platform/navigation';
 import { AgentSettingsContent } from './agent-settings';
 import { ChannelsPage, ChannelsWaiting } from './customize/channels-page';
@@ -45,6 +47,7 @@ function AgentSettingsOverlay({ profileId }: { profileId: string }) {
   const server = useGatewayMode() === 'server';
   const pending = contacts.filter((contact) => contact.status === 'pending').length;
   const page = asked === 'channels' && !server ? 'identity' : (asked ?? 'identity');
+  useUsage(asked && (page === 'memories' ? 'memories' : panelFeatureOf(`agent_${page}`)));
   const pages: SettingsPage[] = [
     {
       id: 'identity',

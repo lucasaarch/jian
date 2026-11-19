@@ -46,6 +46,7 @@ import { registerSshRoutes } from './ssh/routes.js';
 import { registerStatsRoutes } from './stats/routes.js';
 import type { Store } from './storage/database.js';
 import { registerWorkRoutes } from './tasks/routes.js';
+import { registerTelemetryRoutes } from './telemetry/routes.js';
 import type { SpawnPty } from './terminals/pty.js';
 import { registerTerminalRoutes } from './terminals/routes.js';
 import { Terminals } from './terminals/service.js';
@@ -205,6 +206,7 @@ export function createApp(
     registerScheduleRoutes(routes, options);
     registerWorkRoutes(routes, options);
     registerSettingsRoutes(routes, options);
+    registerTelemetryRoutes(routes, options);
     registerMediaRoutes(routes, options);
     registerRunRoutes(routes, options);
     registerCoordinationRoutes(routes, { coordination });

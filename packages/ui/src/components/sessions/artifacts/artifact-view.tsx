@@ -14,6 +14,7 @@ import { Action, HoverTip, iconButton } from '../../../kit';
 import type { SessionArtifact } from '../../../lib/api';
 import { useGatewayMode } from '../../../lib/gateway-mode';
 import type { ArtifactDraft } from '../../../lib/stores/artifact-draft';
+import { countUsage, useUsage } from '../../../lib/usage';
 import { CodeBlock } from '../../ui/code-block';
 import { InspectorBody } from '../inspector';
 import { ArtifactBar, SaveStatus } from './artifact-bar';
@@ -87,6 +88,7 @@ export function ArtifactView({
   /** Asks the agent, in the Artifact's conversation, for what is given; none where it cannot. */
   onFix?: ((request: string) => void) | undefined;
 }) {
+  useUsage(`artifact_opened_${artifact.type}`);
   const [picked, setPicked] = useState<number>();
   const [code, setCode] = useState(false);
   // The slide of a deck in view, counted from 0.
@@ -144,7 +146,10 @@ export function ArtifactView({
     base: version,
     slide,
     active: editing,
-    touched: () => setHeld(version),
+    touched: () => {
+      countUsage(`artifact_hand_edit_${artifact.type}`);
+      setHeld(version);
+    },
   });
 
   /** Keeps what is being edited and closes the stretch; false when it could not be kept. */
@@ -221,9 +226,10 @@ export function ArtifactView({
                     aria-label="View code"
                     aria-pressed={code}
                     className={iconButton}
-                    onClick={() =>
-                      void (code ? setCode(false) : settle().then((kept) => kept && setCode(true)))
-                    }
+                    onClick={() => {
+                      if (!code) countUsage('artifact_view_code');
+                      void (code ? setCode(false) : settle().then((kept) => kept && setCode(true)));
+                    }}
                   >
                     {code ? (
                       <Eye size={15} aria-hidden="true" />
@@ -255,7 +261,10 @@ export function ArtifactView({
                     type="button"
                     aria-label="Present"
                     className={iconButton}
-                    onClick={() => setPresenting(true)}
+                    onClick={() => {
+                      countUsage('artifact_presented');
+                      setPresenting(true);
+                    }}
                   >
                     <PresentIcon size={15} aria-hidden="true" />
                   </button>

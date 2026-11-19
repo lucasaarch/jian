@@ -3,6 +3,7 @@
 import { Suspense } from 'react';
 import { PageBody, PageHeading } from '../../kit';
 import { useNoInspector } from '../../lib/stores/screen';
+import { useUsage } from '../../lib/usage';
 import { ActivityContent, ActivityWaiting } from './activity-content';
 
 /**
@@ -12,6 +13,7 @@ import { ActivityContent, ActivityWaiting } from './activity-content';
  */
 export function ActivityScreen() {
   useNoInspector();
+  useUsage('activity');
   return (
     <div className="flex h-full min-h-0">
       <PageBody labelledBy="activity-title">

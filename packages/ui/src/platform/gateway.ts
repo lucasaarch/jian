@@ -25,6 +25,8 @@ export type GatewayConnection = {
    * offers no sign-out of its own.
    */
   credential?: 'panel' | 'host';
+  /** Which app draws the panel, as its anonymous counts of use name it; the web when unsaid. */
+  host?: 'web' | 'desktop';
 };
 
 let connection: GatewayConnection | undefined;

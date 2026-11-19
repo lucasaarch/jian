@@ -5,6 +5,7 @@ import type { Clock } from '../core/clock.js';
 import { GATEWAY_SCOPE } from '../security/gateway-vault.js';
 import type { Queryable, Store } from '../storage/database.js';
 import { gatewaySettings } from '../storage/schema.js';
+import { panelUsageEvents } from './panel-usage.js';
 import { installationFacts, usageBetween } from './report.js';
 
 /**
@@ -177,6 +178,11 @@ export class Telemetry {
       const age = Math.max(0, Math.floor((now.getTime() - claim.first.getTime()) / DAY_MS));
       const upgradedFrom =
         claim.reported && claim.reported !== version ? { upgraded_from: claim.reported } : {};
+      const panel = await panelUsageEvents(this.store, {
+        distinct_id: claim.installation,
+        timestamp: now.toISOString(),
+        properties: { ...common, since: from.toISOString() },
+      });
       const response = await this.options.fetcher(`${destination.host}/batch/`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
@@ -205,6 +211,7 @@ export class Telemetry {
               timestamp: now.toISOString(),
               properties: { ...common, ...usage, since: from.toISOString() },
             },
+            ...panel.events,
           ],
         }),
         signal: AbortSignal.timeout(15_000),
@@ -212,6 +219,7 @@ export class Telemetry {
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       // Only once delivered: an upgrade is said until a report carrying it has gone out.
       await write(this.store.db, REPORTED_VERSION, version).catch(() => {});
+      await panel.delivered();
       return true;
     } catch {
       const giveBack =

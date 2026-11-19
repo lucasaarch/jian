@@ -20,6 +20,7 @@ import type { Schedule } from '../../lib/api';
 import { agentPath, schedulesPath } from '../../lib/navigation';
 import { useAgents, useContacts, useSessions } from '../../lib/query/agent';
 import { useNoInspector } from '../../lib/stores/screen';
+import { useUsage } from '../../lib/usage';
 import { useActions } from '../../lib/workspace';
 import { useRouter, useSearchParams } from '../../platform/navigation';
 import { ScheduleForm } from './schedule-form';
@@ -81,6 +82,7 @@ function ScheduleRows({
  */
 export function SchedulesScreen({ profileId }: { profileId: string }) {
   useNoInspector();
+  useUsage('schedules');
   const { api, mutate, busy } = useActions();
   const sessions = useSessions();
   const contacts = useContacts();

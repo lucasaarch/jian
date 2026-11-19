@@ -23,6 +23,7 @@ import { useCrew } from '../../lib/stores/crew';
 import { draftKey, useDrafts } from '../../lib/stores/drafts';
 import { sendNow } from '../../lib/stores/outbox';
 import { useNoInspector } from '../../lib/stores/screen';
+import { useUsage } from '../../lib/usage';
 import { useRouter, useSearchParams } from '../../platform/navigation';
 import type { CardActions } from './artifact-card';
 import { attempt, useArtifactDialogs } from './artifact-dialogs';
@@ -60,6 +61,7 @@ export function ArtifactsScreen({
   api?: ArtifactsPageApi;
 }) {
   useNoInspector();
+  useUsage('artifacts_page');
   useArtifactsPageFollow(profileId);
   const router = useRouter();
   const projects = useProjects();

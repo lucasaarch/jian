@@ -6,6 +6,7 @@ import { useState } from 'react';
 import { toast } from 'sonner';
 import { iconButton, MenuDivider, MenuEntry, menuPopup } from '../../../../kit';
 import type { DeckExportQuery, SessionArtifact } from '../../../../lib/api';
+import { countUsage } from '../../../../lib/usage';
 import { Spinner } from '../../../ui/spinner';
 import { download, fileName, fileOf } from '../source';
 import type { ArtifactsApi } from '../use-artifacts';
@@ -46,6 +47,7 @@ export function DeckDownload({
   const take = async (wanted: DeckExportQuery, name: string) => {
     if (drawing) return;
     setDrawing(true);
+    countUsage(`artifact_downloaded_${wanted.format}`);
     try {
       download(
         name,
@@ -92,9 +94,11 @@ export function DeckDownload({
             )}
             <MenuEntry
               disabled={source === undefined}
-              onClick={() =>
-                source !== undefined && download(fileName(artifact, version, at), source)
-              }
+              onClick={() => {
+                if (source === undefined) return;
+                countUsage('artifact_downloaded_source');
+                download(fileName(artifact, version, at), source);
+              }}
             >
               Web page (.html)
             </MenuEntry>

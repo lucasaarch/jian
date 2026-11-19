@@ -22,6 +22,7 @@ import {
 import { connectorPath } from '../../lib/navigation';
 import { queries } from '../../lib/query/profile';
 import { useNoInspector } from '../../lib/stores/screen';
+import { useUsage } from '../../lib/usage';
 import { useProfileId } from '../../lib/workspace';
 import { usePathname, useRouter, useSearchParams } from '../../platform/navigation';
 import { returnedConnector } from '../web-addresses';
@@ -81,6 +82,7 @@ function ShowAll({ onClick }: { onClick: () => void }) {
  */
 export function PluginsScreen() {
   useNoInspector();
+  useUsage('plugins');
   const github = useQuery(queries.githubIntegration());
   const x = useQuery(queries.xIntegration());
   const servers = useQuery(queries.mcpServers());

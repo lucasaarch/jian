@@ -144,7 +144,7 @@ function Telemetry() {
       ) : (
         <Toggle
           label="Share anonymous usage data"
-          detail="Once a day this gateway sends counts, under a random id: its version and system, how many agents, runs, messages and Artifacts, which models, tools and apps were used, and why runs failed. Never a message, a name, an address, a file or a credential."
+          detail="Once a day this gateway sends counts, under a random id: its version and system, how many agents, runs, messages and Artifacts, which models, tools and apps were used, why runs failed, and which screens and features of the panel were used. Never a message, a name, an address, a file or a credential."
           checked={telemetry.enabled}
           onCheckedChange={(enabled) => {
             client.setQueryData<GatewaySettings>(keys.settings, (known) =>

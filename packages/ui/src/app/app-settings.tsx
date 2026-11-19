@@ -1,5 +1,6 @@
 'use client';
 
+import { panelFeatureOf } from '@jian/contracts';
 import {
   Cpu,
   Keyboard,
@@ -14,6 +15,7 @@ import {
 import { Suspense, useState } from 'react';
 import { Page as Screen, SettingsLayout, type SettingsPage } from '../kit';
 import { useOnboarding } from '../lib/stores/onboarding';
+import { useUsage } from '../lib/usage';
 import { Appearance } from './appearance';
 import { type GatewayActions, GatewayConnection, type GatewayInfo } from './gateway-connection';
 import { GatewayPage, type GatewayPageId, GatewayPageWaiting } from './gateway-pages';
@@ -71,6 +73,7 @@ export function AppSettings({
   const pages = grouped ? listed : listed.map(({ group: _group, ...item }) => item);
   // A page of a gateway that is no longer in use, or that this one does not have, is not shown.
   const current = (pages.some((item) => item.id === page) ? page : 'general') as Page;
+  useUsage(open ? panelFeatureOf(`settings_${current}`) : undefined);
 
   return (
     <Screen open={open} onClose={() => onOpenChange(false)} title="Settings">

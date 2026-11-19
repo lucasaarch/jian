@@ -5,6 +5,7 @@ import { CircleAlert, Copy, Wrench } from 'lucide-react';
 import { useState } from 'react';
 import { Action, HoverTip, Overlay, OverlayActions } from '../../../../kit';
 import { useAppearance } from '../../../../lib/appearance';
+import { countUsage } from '../../../../lib/usage';
 import { copy } from '../source';
 import { errorText } from './fix-request';
 
@@ -110,6 +111,7 @@ export function ArtifactFailure({
                 onClick={() => {
                   setAsked(true);
                   setOpen(false);
+                  countUsage('artifact_fix_pressed');
                   onFix();
                 }}
               >

@@ -10,6 +10,7 @@ import {
   useState,
 } from 'react';
 import { type Command, CommandPalette } from '../../kit';
+import { countUsage, useUsage } from '../../lib/usage';
 import {
   type Binding,
   type Bindings,
@@ -69,6 +70,7 @@ export function CommandsProvider({
 }) {
   const [sources, setSources] = useState<Record<string, AppCommand[]>>({});
   const [open, setOpen] = useState(false);
+  useUsage(open ? 'command_palette_opened' : undefined);
   const [overrides, setOverrides] = useState<Bindings>({});
   useEffect(() => {
     try {
@@ -169,6 +171,7 @@ export function CommandsProvider({
       if (!command) return;
       event.preventDefault();
       setOpen(false);
+      if (command.id !== PALETTE) countUsage('command_run');
       command.run();
     };
     window.addEventListener('keydown', keys);
@@ -180,7 +183,14 @@ export function CommandsProvider({
       commands
         // Already open: its key can be changed in Keymaps, but it has nothing to offer here.
         .filter((command) => command.id !== PALETTE)
-        .map(({ keys, ...command }) => {
+        .map(({ keys, ...item }) => {
+          const command = {
+            ...item,
+            run: () => {
+              countUsage('command_run');
+              item.run();
+            },
+          };
           const shortcut = shortcutOf(keys);
           return shortcut ? { ...command, shortcut } : command;
         }),

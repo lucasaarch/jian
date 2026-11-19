@@ -16,6 +16,7 @@ import {
 import { connectorPath, pluginsPath } from '../../lib/navigation';
 import { queries } from '../../lib/query/profile';
 import { useNoInspector } from '../../lib/stores/screen';
+import { useUsage } from '../../lib/usage';
 import { useProfileId } from '../../lib/workspace';
 import { useRouter, useSearchParams } from '../../platform/navigation';
 import { AppConnector } from './connector-app';
@@ -64,6 +65,7 @@ function ConnectorBody({
  */
 export function ConnectorPage({ id }: { id: string }) {
   useNoInspector();
+  useUsage('connector_page');
   useGithubOutcome();
   useXOutcome();
   const github = useQuery(queries.githubIntegration());

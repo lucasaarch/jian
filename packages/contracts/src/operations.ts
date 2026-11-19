@@ -188,6 +188,7 @@ import {
   skillUpstreamSchema,
 } from './skills.js';
 import { sshKeyCreateSchema, sshKeySchema } from './ssh.js';
+import { panelUsageSchema } from './telemetry.js';
 import {
   terminalInputSchema,
   terminalParamsSchema,
@@ -1879,6 +1880,17 @@ export const operations: Operation[] = [
     access: 'admin',
     body: gatewaySettingsPatchSchema,
     response: gatewaySettingsSchema,
+  },
+  {
+    // The panel's counts of its own use, for the anonymous daily report. Kept only while the
+    // report is on; answered alike either way, so the panel learns nothing it did not ask.
+    method: 'POST',
+    path: '/v1/telemetry/panel-usage',
+    operationId: 'reportPanelUsage',
+    access: 'admin',
+    body: panelUsageSchema,
+    response: z.null(),
+    status: 204,
   },
   {
     // Now, once, without moving when it runs next: to see what it does before waiting for it.

@@ -1,4 +1,4 @@
-import { ARTIFACT_PRESENT_MESSAGE, SESSION_ARTIFACT_MAX } from '@jian/contracts';
+import { ARTIFACT_PRESENT_MESSAGE, type PanelUsage, SESSION_ARTIFACT_MAX } from '@jian/contracts';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -10,6 +10,7 @@ import { keys } from '../../../lib/query/keys';
 import { useArtifactDraft } from '../../../lib/stores/artifact-draft';
 import { useCrew } from '../../../lib/stores/crew';
 import { draftKey, useDrafts } from '../../../lib/stores/drafts';
+import { flushUsage, setUsageReporting } from '../../../lib/usage';
 import { focusInspector } from '../inspector-host';
 import type { ArtifactsDrawerApi } from './artifact-cards';
 import { ArtifactsDrawer } from './artifacts-drawer';
@@ -1076,6 +1077,25 @@ describe('an Artifact that fails as it runs', () => {
     expect(dialog()?.textContent).toContain('The agent is changing it now.');
     expect(action('Fix')?.hasAttribute('disabled')).toBe(true);
     expect(ask).not.toHaveBeenCalled();
+  });
+
+  it('counts Fix pressed, and nothing of what failed, for the anonymous report', async () => {
+    setUsageReporting(false);
+    setUsageReporting(true);
+    const { element, say } = await failing();
+    await say(element.contentWindow, { message: 'Error: the Acme total is broken' });
+    await click(badge());
+    await click(action('Fix'));
+
+    const send = vi.fn(async (_usage: PanelUsage) => undefined);
+    await flushUsage(send);
+    setUsageReporting(undefined);
+
+    expect(send).toHaveBeenCalledWith({
+      host: 'web',
+      phone: false,
+      counts: { artifact_opened_react: 1, artifact_fix_pressed: 1 },
+    });
   });
 });
 

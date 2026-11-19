@@ -13,6 +13,7 @@ import {
 } from '../../kit';
 import { pluginsPath } from '../../lib/navigation';
 import { useNoInspector } from '../../lib/stores/screen';
+import { useUsage } from '../../lib/usage';
 import { useProfileId } from '../../lib/workspace';
 import { useRouter } from '../../platform/navigation';
 import { PluginEditActions, PluginHeader, pluginColumns } from './plugin-page';
@@ -39,6 +40,7 @@ const TABS: { value: Tab; label: string }[] = [
  */
 export function SkillPage({ name }: { name: string }) {
   useNoInspector();
+  useUsage('skill_page');
   const { api, busy, library, items, flip, loading, error } = useSkills();
   const profileId = useProfileId();
   const router = useRouter();
