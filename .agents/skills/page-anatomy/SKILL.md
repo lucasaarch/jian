@@ -62,6 +62,11 @@ for the pieces; this one is about how a screen goes together.
   at its right end, as the same outline `Action`s: they stay in reach however far the list
   scrolls. Anything that narrows the list goes here too, a settings page's search included
   (Keymaps), never above the heading or inside a section.
+- **Scroll to top.** `PageBody` draws a round "Scroll to top" button at the bottom right of the
+  page once it is scrolled about a heading's height (96px), and hides it again at the top. It is
+  the kit's `FloatButton`, the same piece as the chat's way back to the latest message, so a
+  screen adds nothing for it. Keep the bottom room (`pb-14`) on `PageBody`'s inner column, not on
+  the scroller: the button's sticky box stops at the scroller's padding.
 - **Sections**: a `SectionHeading` over a `surfaceCard`, or a `SettingsGroup`. A list is a card
   with `divide-y divide-glass-edge overflow-hidden`, each row a full-width button `px-4 py-3`
   that hovers `bg-glass-press`. A table lies in a card too (`@container overflow-hidden`), its

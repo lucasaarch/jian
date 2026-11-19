@@ -2,7 +2,7 @@
 
 import { ArrowDown } from 'lucide-react';
 import { memo, type RefObject, useEffect, useState } from 'react';
-import { Action } from '../../../kit';
+import { FloatButton } from '../../../kit/float-button';
 import { useAppearance } from '../../../lib/appearance';
 import { watchSize } from '../../../lib/watch-size';
 import { FOLLOW_WITHIN_PX } from '../follow-bottom';
@@ -72,29 +72,21 @@ export const ToLatest = memo(function ToLatest({
     };
   }, [scroller]);
 
-  // Kept on the page while hidden, so it can fade out; out of reach of the keyboard and the
-  // screen reader meanwhile.
   return (
-    <div className="to-latest" data-shown={away || undefined}>
-      <Action
-        tone="glass"
-        size="icon"
-        aria-label={
-          fresh ? 'Go to the latest message, new messages below' : 'Go to the latest message'
-        }
-        aria-hidden={away ? undefined : true}
-        inert={!away}
-        onClick={(event) => {
-          // The button goes inert as the reader arrives: the keyboard's place moves to the
-          // history it brought them to, instead of falling to the page.
-          const focused = document.activeElement === event.currentTarget;
-          toEnd(!still);
-          if (focused) scroller.current?.focus({ preventScroll: true });
-        }}
-      >
-        <ArrowDown size={16} aria-hidden="true" />
-        {fresh && <span className="to-latest-dot" aria-hidden="true" />}
-      </Action>
-    </div>
+    <FloatButton
+      className="to-latest"
+      shown={away}
+      label={fresh ? 'Go to the latest message, new messages below' : 'Go to the latest message'}
+      onClick={(event) => {
+        // The button goes inert as the reader arrives: the keyboard's place moves to the
+        // history it brought them to, instead of falling to the page.
+        const focused = document.activeElement === event.currentTarget;
+        toEnd(!still);
+        if (focused) scroller.current?.focus({ preventScroll: true });
+      }}
+    >
+      <ArrowDown size={16} aria-hidden="true" />
+      {fresh && <span className="to-latest-dot" aria-hidden="true" />}
+    </FloatButton>
   );
 });

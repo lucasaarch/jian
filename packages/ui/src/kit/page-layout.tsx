@@ -1,8 +1,10 @@
 'use client';
 
-import { ArrowLeft } from 'lucide-react';
-import { type ReactNode, useEffect, useRef } from 'react';
+import { ArrowLeft, ArrowUp } from 'lucide-react';
+import { type ReactNode, useEffect, useRef, useState } from 'react';
+import { useAppearance } from '../lib/appearance';
 import { useLayout } from '../lib/stores/layout';
+import { FloatButton } from './float-button';
 import { iconButton } from './icon-button';
 
 /*
@@ -17,6 +19,12 @@ import { iconButton } from './icon-button';
 
 /** A card's ground: flat and bordered, as a settings card is. Its insides keep `p-4`. */
 export const surfaceCard = 'rounded-xl border border-glass-edge bg-glass-hover';
+
+/**
+ * How far a page is scrolled, in px, before its way back to the top shows: about
+ * a heading's height, so it never offers a trip of a few lines.
+ */
+const TO_TOP_AFTER_PX = 96;
 
 /**
  * The scrolling column of such a screen, 60rem at most on every one of them: a screen of rows
@@ -39,6 +47,9 @@ export function PageBody({
   children: ReactNode;
 }) {
   const scroller = useRef<HTMLElement>(null);
+  const { still } = useAppearance();
+  // A boolean, so scrolling draws only when it flips.
+  const [scrolled, setScrolled] = useState(false);
   useEffect(() => {
     const page = scroller.current;
     if (!page) return;
@@ -52,6 +63,7 @@ export function PageBody({
         const docked = page.scrollTop > 0 && bar.getBoundingClientRect().top - top < 1;
         bar.toggleAttribute('data-docked', docked);
       }
+      setScrolled(page.scrollTop > TO_TOP_AFTER_PX);
     };
     mark();
     page.addEventListener('scroll', mark, { passive: true });
@@ -62,10 +74,25 @@ export function PageBody({
       ref={scroller}
       aria-label={label}
       aria-labelledby={labelledBy}
-      className={`page-scroller min-h-0 min-w-0 flex-1 overflow-y-auto px-10 pb-14 phone:mt-(--chrome-top,0px) phone:px-4 ${className}`}
+      className={`page-scroller min-h-0 min-w-0 flex-1 overflow-y-auto px-10 phone:mt-(--chrome-top,0px) phone:px-4 ${className}`}
     >
-      <div className="mx-auto grid max-w-[60rem] grid-cols-1 gap-7 pt-[calc(var(--chrome-top,0px)+2.25rem)] phone:gap-5 phone:pt-3">
+      <div className="mx-auto grid max-w-[60rem] grid-cols-1 gap-7 pb-14 pt-[calc(var(--chrome-top,0px)+2.25rem)] phone:gap-5 phone:pt-3">
         {children}
+      </div>
+      {/* A sticky box with no height of its own rides the scroller's bottom edge, so the button
+          stays inside the page (not over the sidebar), clear of the scrollbar and, on a phone,
+          of the home bar. */}
+      <div className="sticky bottom-[calc(env(safe-area-inset-bottom,0px)+1rem)] z-[2] h-0">
+        <FloatButton
+          className="absolute right-0 bottom-0"
+          shown={scrolled}
+          label="Scroll to top"
+          onClick={() =>
+            scroller.current?.scrollTo({ top: 0, behavior: still ? 'auto' : 'smooth' })
+          }
+        >
+          <ArrowUp size={16} aria-hidden="true" />
+        </FloatButton>
       </div>
     </section>
   );
