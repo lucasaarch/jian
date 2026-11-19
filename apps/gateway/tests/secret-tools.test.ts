@@ -61,6 +61,12 @@ const call = (toolCallId: string, toolName: string, input: unknown) => ({
   warnings: [],
 });
 
+/** A call whose input is the text given, which need not be JSON at all. */
+const written = (toolCallId: string, toolName: string, input: string) => ({
+  ...call(toolCallId, toolName, {}),
+  content: [{ type: 'tool-call' as const, toolCallId, toolName, input }],
+});
+
 type Results = Map<string, unknown>;
 type Step = (results: Results) => ReturnType<typeof call>;
 
@@ -178,6 +184,61 @@ describe('the agent keeping Secrets', () => {
       'That value was masked before you saw it; it cannot be saved',
     );
     expect(await services.secrets.list(atlas.id)).toEqual([]);
+  });
+
+  it('masks a value in a save of the wrong shape, in all it stores and looks back on', async () => {
+    const { services, atlas } = await installation();
+    const chat = await session(services, atlas.id, 'full');
+    const flagged = 'sk_synthetic_flagged_0123456789';
+    const misnamed = 'sk_synthetic_misnamed_0123456789';
+    const broken = 'sk_synthetic_broken_0123456789';
+    const looked: unknown[] = [];
+    // A failed call is what makes a look back happen: its brief quotes the failure.
+    const watched = {
+      ...services,
+      learning: {
+        consider: async (_run: unknown, turn: unknown) => {
+          looked.push(turn);
+        },
+      },
+    } as Services;
+
+    const { results, run } = await turn(watched, atlas.id, chat.id, [
+      loading('secrets'),
+      () =>
+        call('flagged', 'save_secret', {
+          title: 'Acme',
+          fields: [{ label: 'Key', envName: 'ACME_KEY', sensitive: 'true', value: flagged }],
+        }),
+      () =>
+        call('misnamed', 'save_secret', {
+          secretId: 'not-a-uuid',
+          title: 'Acme',
+          fields: [{ label: 'Key', envName: 'ACME_KEY', sensitive: true, value: misnamed }],
+        }),
+      () =>
+        written(
+          'broken',
+          'save_secret',
+          `{"title":"Acme","fields":[{"label":"Key","envName":"ACME_KEY","sensitive":true,"value":"${broken}"}`,
+        ),
+    ]);
+
+    expect(run.status).toBe('completed');
+    expect(JSON.stringify(results.get('flagged'))).toContain('fields.0.sensitive');
+    expect(JSON.stringify(results.get('misnamed'))).toContain('secretId');
+    // The model is answered with what it wrote, in memory; what is kept is masked.
+    expect(JSON.stringify(results.get('broken'))).toContain('Invalid input for tool save_secret');
+    expect(await services.secrets.list(atlas.id)).toEqual([]);
+    expect(looked).not.toEqual([]);
+    const stored = [
+      JSON.stringify(looked),
+      JSON.stringify(await services.sessions.timeline(atlas.id, chat.id)),
+      await everythingStored(services),
+    ].join('\n');
+    for (const value of [flagged, misnamed, broken]) {
+      expect(leaksOf(value)(stored)).toEqual([]);
+    }
   });
 
   it("lets an agent delete its own Secret but not the owner's", async () => {

@@ -1,4 +1,4 @@
-import { type ToolSet, tool } from 'ai';
+import { jsonSchema, type ToolSet, tool } from 'ai';
 import { ZodError, z } from 'zod';
 import { GatewayError } from '../core/errors.js';
 import type { SecretActor, Secrets } from '../secrets/service.js';
@@ -18,11 +18,7 @@ import type { SecretActor, Secrets } from '../secrets/service.js';
 
 type SecretService = Pick<Secrets, 'usable' | 'create' | 'update' | 'remove' | 'share'>;
 
-/**
- * Only the shape: the rules for a value are the service's, which says what is wrong in words
- * and without the value. A call the SDK refuses is answered with the whole input quoted, and is
- * stored that way, before anything here could have it masked.
- */
+/** The shape the model is shown; checked in `execute`, after the values are masked. */
 const fieldInput = z.object({
   label: z.string().describe('What the value is, such as "API key" or "Username".'),
   envName: z
@@ -56,15 +52,48 @@ const saveInput = z.object({
     .array(fieldInput)
     .describe('Every variable of the Secret. On a change, they replace the ones it has.'),
 });
-type SaveInput = z.infer<typeof saveInput>;
 
-/** The sensitive values a save carries, which the run masks before the call is recorded. */
+/**
+ * What the SDK checks a call against: anything. A call it refuses is answered, and stored, with
+ * its whole input quoted in the error, before `execute` or the runtime could mask a value in it.
+ * So every call reaches `execute`, which masks first and checks the shape after.
+ */
+const anySaveInput = jsonSchema<unknown>(
+  // As the SDK would convert it, so the model is shown the same shape.
+  z.toJSONSchema(saveInput, { target: 'draft-7', io: 'input' }) as Parameters<typeof jsonSchema>[0],
+  {
+    validate: (value) => ({ success: true, value }),
+  },
+);
+
+/** A `"value": "…"` of a call's input that is not even JSON, as it was written. */
+const WRITTEN_VALUE = /"value"\s*:\s*"((?:[^"\\]|\\.)*)"/g;
+
+/**
+ * Every value a save carries that may be sensitive, which the run masks before the call is
+ * recorded. Fail-safe: a value is kept out unless its field says `sensitive: false` in so many
+ * words, so a call of the wrong shape (`"true"`, no flag at all) is masked too. Input the SDK
+ * could not parse arrives as its text, and its values are read from that.
+ */
 const sensitiveValues = (input: unknown): string[] => {
+  if (typeof input === 'string') {
+    try {
+      return sensitiveValues(JSON.parse(input));
+    } catch {
+      return [...input.matchAll(WRITTEN_VALUE)].flatMap(([, written]) => {
+        try {
+          return [JSON.parse(`"${written}"`) as string];
+        } catch {
+          return written ? [written] : [];
+        }
+      });
+    }
+  }
   const fields = (input as { fields?: unknown } | null)?.fields;
   if (!Array.isArray(fields)) return [];
   return fields.flatMap((field) => {
     const { sensitive, value } = (field ?? {}) as { sensitive?: unknown; value?: unknown };
-    return sensitive === true && typeof value === 'string' && value ? [value] : [];
+    return sensitive !== false && typeof value === 'string' && value ? [value] : [];
   });
 };
 
@@ -73,7 +102,9 @@ const sensitiveValues = (input: unknown): string[] => {
  * protection, its card and its start on the timeline all come after this is read.
  */
 export const secretsIn = (definition: unknown, input: unknown): string[] =>
-  (definition as { secretsIn?: (input: unknown) => string[] }).secretsIn?.(input) ?? [];
+  // No definition at all for a call to a tool the run does not have.
+  (definition as { secretsIn?: (input: unknown) => string[] } | undefined)?.secretsIn?.(input) ??
+  [];
 
 /** The service's refusal, in its words: the value's rules never quote the value. */
 function said(error: unknown): unknown {
@@ -117,11 +148,13 @@ export function secretTools({
     save_secret: tool({
       description:
         'Save a password, API key or login the owner gave you as a Secret, so your commands get it through run_command’s `secrets` instead of its text. Mark every password, key and token sensitive: it is masked in everything you see and is never shown again. Never save a value that came back as [REDACTED]. With `secretId`, change a Secret you made; one the owner or another agent made is theirs. Only you may use what you save, until you share it.',
-      inputSchema: saveInput,
-      execute: async (input: SaveInput) => {
-        // Before the service sees it: a refusal may still carry the value back up.
+      inputSchema: anySaveInput,
+      execute: async (input: unknown) => {
+        // Before anything checks it: a refusal may still carry the value back up.
         for (const value of sensitiveValues(input)) lend(value);
-        const { secretId, ...asked } = input;
+        const checked = saveInput.safeParse(input);
+        if (!checked.success) throw said(checked.error);
+        const { secretId, ...asked } = checked.data;
         return told(() =>
           secretId
             ? secrets.update(profileId, secretId, asked, actor)
