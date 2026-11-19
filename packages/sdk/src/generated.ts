@@ -28385,6 +28385,8 @@ export interface operations {
                         links?: string[];
                         projectIds?: string[];
                         /** Format: date-time */
+                        expiresAt?: string;
+                        /** Format: date-time */
                         updatedAt: string;
                     }[];
                 };
@@ -28509,6 +28511,8 @@ export interface operations {
                         links?: string[];
                         projectIds?: string[];
                         /** Format: date-time */
+                        expiresAt?: string;
+                        /** Format: date-time */
                         updatedAt: string;
                     };
                 };
@@ -28625,6 +28629,8 @@ export interface operations {
                         sourceSessionId?: string;
                         links?: string[];
                         projectIds?: string[];
+                        /** Format: date-time */
+                        expiresAt?: string;
                         /** Format: date-time */
                         updatedAt: string;
                     };
@@ -28744,6 +28750,8 @@ export interface operations {
                         links?: string[];
                         projectIds?: string[];
                         /** Format: date-time */
+                        expiresAt?: string;
+                        /** Format: date-time */
                         updatedAt: string;
                     };
                 };
@@ -28861,6 +28869,8 @@ export interface operations {
                         sourceSessionId?: string;
                         links?: string[];
                         projectIds?: string[];
+                        /** Format: date-time */
+                        expiresAt?: string;
                         /** Format: date-time */
                         updatedAt: string;
                     };
@@ -28984,6 +28994,8 @@ export interface operations {
                         sourceSessionId?: string;
                         links?: string[];
                         projectIds?: string[];
+                        /** Format: date-time */
+                        expiresAt?: string;
                         /** Format: date-time */
                         updatedAt: string;
                     };

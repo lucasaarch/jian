@@ -120,7 +120,9 @@ it('keeps a loaded skill in the instructions, and never sends it twice', async (
 });
 
 it('keeps a loaded group of tools from one turn to the next', async () => {
-  const { turn } = await conversation();
+  // Room for two turns, at one token a byte: in the default window the built-in tools alone
+  // bring a compaction, which lets go of the group before the next turn can show it is kept.
+  const { turn } = await conversation(undefined, undefined, { inputTokens: 64000 });
 
   await turn('Look at the picture', [
     calls({ id: 'tools-1', name: 'load_tools', input: { groups: ['media'] } }),

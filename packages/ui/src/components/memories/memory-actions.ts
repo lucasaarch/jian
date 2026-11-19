@@ -8,16 +8,22 @@ export const MEMORY_CONTENT_LIMIT = 4000;
 export const MEMORY_LINK_LIMIT = 12;
 
 /**
- * The memories whose key or text holds what was typed and, when a project is chosen, that are
- * pinned to it; all of them when neither was.
+ * The memories whose key, text or pinned projects' names hold what was typed; all of them when
+ * nothing was. The search is the page's only filter, so a project is found by its name in it.
  */
-export function matchingMemories(memories: Memory[], query: string, projectId = ''): Memory[] {
+export function matchingMemories(
+  memories: Memory[],
+  query: string,
+  projectNames: ReadonlyMap<string, string> = new Map(),
+): Memory[] {
   const terms = query.trim().toLowerCase();
+  if (!terms) return memories;
 
-  return memories.filter(
-    (item) =>
-      (terms ? `${item.key} ${item.content}`.toLowerCase().includes(terms) : true) &&
-      (projectId ? (item.projectIds ?? []).includes(projectId) : true),
+  return memories.filter((item) =>
+    [item.key, item.content, ...(item.projectIds ?? []).map((id) => projectNames.get(id) ?? '')]
+      .join(' ')
+      .toLowerCase()
+      .includes(terms),
   );
 }
 

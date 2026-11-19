@@ -1,8 +1,6 @@
 'use client';
 
-import { List, Network } from 'lucide-react';
-import { useMemo, useState } from 'react';
-import { layoutGraph } from '../../components/memories/graph-layout';
+import { useState } from 'react';
 import {
   forgetNote,
   matchingMemories,
@@ -10,7 +8,6 @@ import {
 } from '../../components/memories/memory-actions';
 import {
   ConfirmDialog,
-  FilterSelect,
   PageHeading,
   PageToolbar,
   SearchField,
@@ -21,31 +18,71 @@ import {
   SkeletonRegion,
 } from '../../kit';
 import type { Memory } from '../../lib/api';
+import { ago, until } from '../../lib/format';
 import { useAgent, useMemories, useProjects } from '../../lib/query/agent';
 import { useActions } from '../../lib/workspace';
-import { MemoryDetail, MemoryDetailEmpty } from './memory-detail';
-import { MemoryList } from './memory-list';
-import { MemoryMap } from './memory-map';
+import { type PluginItem, PluginList, PluginSection } from '../plugins/plugin-list';
+import { MemoryIcon, MemoryPage } from './memory-page';
+
+const TITLE = 'Memories';
+const DESCRIPTION =
+  'What the agent keeps across its conversations. Flash memories delete themselves when they expire.';
 
 /** The memories while they are read: a few lines of text, as the list is. */
 export function MemoriesWaiting() {
   return (
     <SkeletonRegion label="Loading memories…" className="grid grid-cols-1 gap-4">
-      <PageHeading title="Memories" />
-      <SettingsGroup title="Kept by the agent">
+      <PageHeading title={TITLE} description={DESCRIPTION} />
+      <SettingsGroup>
         <SettingsRowsSkeleton count={4} />
       </SettingsGroup>
     </SkeletonRegion>
   );
 }
 
-const ALL_PROJECTS = '';
+type Tab = 'all' | 'permanent' | 'flash';
+
+const TABS: { value: Tab; label: string }[] = [
+  { value: 'all', label: 'All' },
+  { value: 'permanent', label: 'Permanent' },
+  { value: 'flash', label: 'Flash' },
+];
+
+/** `ago` as a row says it: "Updated 5m ago", or the day once it is weeks old. */
+function updated(value: string) {
+  const since = ago(value);
+  if (since === 'now') return 'Updated just now';
+  return /^\d+[mhdw]$/.test(since) ? `Updated ${since} ago` : `Updated ${since}`;
+}
 
 /**
- * What the agent kept across its conversations, as a map — a node for each memory, a line for
- * each link — or as a list, with the open one beside it to rewrite, link, pin to a project or
- * forget. The agent writes its memories; the owner reads, corrects, connects and removes them,
- * so there is nothing here to add one.
+ * A memory as a row: its key, the start of its text, then when it ends or was last written,
+ * how many it is recalled with and the projects it is pinned to.
+ */
+function memoryRow(memory: Memory, names: ReadonlyMap<string, string>): PluginItem {
+  const links = memory.links?.length ?? 0;
+  const pinned = (memory.projectIds ?? []).flatMap((id) => names.get(id) ?? []);
+
+  return {
+    id: memory.key,
+    icon: <MemoryIcon memory={memory} size={16} />,
+    name: memory.key,
+    verified: false,
+    description: memory.content,
+    meta: [
+      memory.expiresAt ? `Expires in ${until(memory.expiresAt)}` : updated(memory.updatedAt),
+      ...(links ? [`${links} ${links === 1 ? 'link' : 'links'}`] : []),
+      ...pinned,
+    ].join(' · '),
+  };
+}
+
+/**
+ * What the agent kept across its conversations, as Plugins lists skills: a search and the tabs
+ * are the only ways to narrow it, and a row opens the memory's page in the list's place, with
+ * the way back. Permanent memories stay until forgotten; flash ones, which the agent keeps for
+ * work in flight, delete themselves when they expire. The agent writes its memories; the owner
+ * reads, corrects, connects and removes them, so there is nothing here to add one.
  */
 export function MemoriesPage() {
   const actions = useActions();
@@ -53,40 +90,72 @@ export function MemoriesPage() {
   const memories = useMemories();
   const projects = useProjects();
   const act = memoryActions(actions, profile.id);
-  const [view, setView] = useState<'map' | 'list'>('map');
+  const [tab, setTab] = useState<Tab>('all');
   const [query, setQuery] = useState('');
-  const [projectId, setProjectId] = useState(ALL_PROJECTS);
-  const [key, setKey] = useState('');
+  const [open, setOpen] = useState('');
   const [forgetting, setForgetting] = useState<Memory>();
   const [asking, setAsking] = useState(false);
-  const found = matchingMemories(memories, query, projectId);
-  const memory = memories.find((item) => item.key === key);
-  // Laid out again only when the memories or their links change, never on a keystroke.
-  const shape = memories.map((item) => `${item.key}>${(item.links ?? []).join(',')}`).join('|');
-  // biome-ignore lint/correctness/useExhaustiveDependencies: `shape` is what the layout reads
-  const graph = useMemo(() => layoutGraph(memories), [shape]);
-  const narrowed = Boolean(query.trim() || projectId);
-  const lit = narrowed ? new Set(found.map((item) => item.key)) : null;
-  const tinted = new Set(
-    projectId
-      ? memories.filter((item) => item.projectIds?.includes(projectId)).map((item) => item.key)
-      : [],
+  const names = new Map(projects.map((project) => [project.id, project.name]));
+  const found = matchingMemories(memories, query, names);
+  const permanent = tab === 'flash' ? [] : found.filter((memory) => !memory.expiresAt);
+  const flash = tab === 'permanent' ? [] : found.filter((memory) => memory.expiresAt);
+  const section = (title: string, items: Memory[]) =>
+    items.length > 0 && (
+      <PluginSection title={title}>
+        <PluginList
+          label={title}
+          items={items.map((memory) => memoryRow(memory, names))}
+          onOpen={setOpen}
+        />
+      </PluginSection>
+    );
+
+  const forget = (
+    <ConfirmDialog
+      open={asking}
+      onOpenChange={setAsking}
+      title={`Forget ${forgetting?.key ?? ''}?`}
+      phrase="forget"
+      action="Forget memory"
+      busy={actions.busy}
+      run={async () => {
+        if (!forgetting || !(await act.forget(forgetting))) return;
+        setAsking(false);
+        setOpen('');
+      }}
+    >
+      {forgetting ? forgetNote(forgetting) : ''}
+    </ConfirmDialog>
   );
 
-  /** A shift-click on a node links the open memory to it, or unlinks it when it already is. */
-  const pick = (next: string, link = false) => {
-    if (link && memory && next !== memory.key) {
-      void (memory.links?.includes(next) ? act.unlink(memory, next) : act.link(memory, next));
-      return;
-    }
-    setKey(next);
-  };
+  if (open) {
+    return (
+      <>
+        <MemoryPage
+          key={open}
+          name={open}
+          memory={memories.find((item) => item.key === open)}
+          all={memories}
+          projects={projects}
+          busy={actions.busy}
+          actions={act}
+          onBack={() => setOpen('')}
+          follow={setOpen}
+          onForget={(item) => {
+            setForgetting(item);
+            setAsking(true);
+          }}
+        />
+        {forget}
+      </>
+    );
+  }
 
   if (memories.length === 0) {
     return (
       <div className="grid grid-cols-1 gap-4">
-        <PageHeading title="Memories" />
-        <SettingsGroup title="Kept by the agent">
+        <PageHeading title={TITLE} description={DESCRIPTION} />
+        <SettingsGroup>
           <SettingsRow
             title="Nothing kept yet"
             description="What the agent records in conversations shows up here."
@@ -98,84 +167,31 @@ export function MemoriesPage() {
 
   return (
     <div className="grid grid-cols-1 gap-4">
-      <PageHeading title="Memories" />
+      <PageHeading title={TITLE} description={DESCRIPTION} />
       <PageToolbar>
-        <Segmented
-          label="View"
-          value={view}
-          onChange={setView}
-          options={[
-            { value: 'map', label: 'Map', icon: <Network size={13} aria-hidden="true" /> },
-            { value: 'list', label: 'List', icon: <List size={13} aria-hidden="true" /> },
-          ]}
-        />
         <SearchField
           label="Search memories"
           className="min-w-44 flex-1"
           value={query}
           onValueChange={setQuery}
           onKeyDown={(event) => {
-            const first = found[0];
-            if (event.key === 'Enter' && first) setKey(first.key);
+            const first = [...permanent, ...flash][0];
+            if (event.key === 'Enter' && first) setOpen(first.key);
           }}
         />
-        {projects.length > 0 && (
-          <FilterSelect
-            label="Project"
-            value={projectId}
-            onValueChange={setProjectId}
-            options={[
-              { value: ALL_PROJECTS, label: 'All projects' },
-              ...projects.map((project) => ({ value: project.id, label: project.name })),
-            ]}
-          />
-        )}
+        <Segmented label="Show" value={tab} options={TABS} onChange={setTab} />
       </PageToolbar>
-      <div className="grid grid-cols-1 items-stretch gap-4 xl:grid-cols-[minmax(0,1fr)_22rem]">
-        {view === 'map' ? (
-          <MemoryMap graph={graph} selected={key} lit={lit} tinted={tinted} onSelect={pick} />
-        ) : (
-          <MemoryList
-            memories={found}
-            projects={projects}
-            selected={key}
-            empty="No memory matches."
-            onSelect={setKey}
-          />
-        )}
-        {memory ? (
-          <MemoryDetail
-            key={`${memory.key}:${memory.version}`}
-            memory={memory}
-            all={memories}
-            projects={projects}
-            busy={actions.busy}
-            actions={act}
-            follow={setKey}
-            onForget={(item) => {
-              setForgetting(item);
-              setAsking(true);
-            }}
-          />
-        ) : (
-          <MemoryDetailEmpty count={memories.length} />
-        )}
-      </div>
-      <ConfirmDialog
-        open={asking}
-        onOpenChange={setAsking}
-        title={`Forget ${forgetting?.key ?? ''}?`}
-        phrase="forget"
-        action="Forget memory"
-        busy={actions.busy}
-        run={async () => {
-          if (!forgetting || !(await act.forget(forgetting))) return;
-          setAsking(false);
-          setKey('');
-        }}
-      >
-        {forgetting ? forgetNote(forgetting) : ''}
-      </ConfirmDialog>
+      {section('Permanent', permanent)}
+      {section('Flash', flash)}
+      {permanent.length + flash.length === 0 && (
+        <p className="text-sm text-muted">
+          {query.trim()
+            ? 'No memory matches.'
+            : tab === 'flash'
+              ? 'No flash memories right now.'
+              : 'No permanent memories yet.'}
+        </p>
+      )}
     </div>
   );
 }

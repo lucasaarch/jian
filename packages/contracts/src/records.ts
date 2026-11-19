@@ -130,6 +130,8 @@ export const memoryRecordSchema = z.strictObject({
   links: z.array(z.string()).optional(),
   // The projects the owner pinned this memory to; conversations in them recall it first.
   projectIds: z.array(z.uuid()).optional(),
+  // Only on a flash memory: when it stops being recalled and is deleted.
+  expiresAt: timestamp.optional(),
   updatedAt: timestamp,
 });
 

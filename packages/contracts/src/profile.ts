@@ -426,10 +426,25 @@ export const submitSchema = z
 
 export const memoryKeySchema = z.string().regex(/^[a-z0-9_-]{1,100}$/);
 
+/** How long a flash memory lasts, in hours: a day unless the agent asks for less. */
+export const FLASH_MEMORY_HOURS = { min: 1, max: 24, default: 24 } as const;
+
+/**
+ * A memory as the agent writes it. `flash` makes it temporary: recalled like any other until
+ * `expiresInHours` pass, then gone. Left out on an update, the memory keeps what it is and,
+ * when flash, when it expires; `flash: false` makes a flash memory permanent.
+ */
 export const memorySchema = z.strictObject({
   key: memoryKeySchema,
   content: z.string().trim().min(1).max(4_000),
   expectedVersion: z.number().int().nonnegative(),
+  flash: z.boolean().optional(),
+  expiresInHours: z
+    .number()
+    .int()
+    .min(FLASH_MEMORY_HOURS.min)
+    .max(FLASH_MEMORY_HOURS.max)
+    .optional(),
 });
 
 /** How many memories one can be linked to: enough for a topic, few enough to stay a topic. */

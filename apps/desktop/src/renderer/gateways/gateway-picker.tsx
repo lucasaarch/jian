@@ -30,8 +30,12 @@ function Reconnect({ gateway, open }: { gateway: GatewaySummary; open: boolean }
         aria-label={label}
         disabled={trying}
         onClick={() => {
-          desktop().reconnectGateway(gateway.id);
-          if (open) reconnectGateway();
+          // The panel reads again once the old connections are closed, or it reads on them.
+          void desktop()
+            .reconnectGateway(gateway.id)
+            .finally(() => {
+              if (open) reconnectGateway();
+            });
           setTrying(true);
           timer.current = setTimeout(() => setTrying(false), TRYING_MS);
         }}

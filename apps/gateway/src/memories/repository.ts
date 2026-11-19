@@ -1,5 +1,5 @@
 import type { Memory } from '@jian/contracts';
-import { and, desc, eq, inArray, or, sql } from 'drizzle-orm';
+import { and, desc, eq, gt, inArray, isNull, lte, or, type SQL, sql } from 'drizzle-orm';
 import type { Queryable } from '../storage/database.js';
 import { memories, memoryLinks, memoryProjects, projects } from '../storage/schema.js';
 
@@ -16,8 +16,28 @@ function toMemory(row: Row): Memory {
     content: row.content,
     version: row.version,
     ...(row.sourceSessionId ? { sourceSessionId: row.sourceSessionId } : {}),
+    ...(row.expiresAt ? { expiresAt: row.expiresAt.toISOString() } : {}),
     updatedAt: row.updatedAt.toISOString(),
   };
+}
+
+/**
+ * A memory that can still be read: permanent, or flash and not yet past its end. The database's
+ * clock decides, the one that counted the end, so every reader agrees on when one is gone.
+ */
+const live = or(isNull(memories.expiresAt), gt(memories.expiresAt, sql`now()`));
+
+/** A flash memory's end, counted by the database from now. */
+export const expiresIn = (hours: number): SQL => sql`now() + make_interval(hours => ${hours})`;
+
+/**
+ * Deletes the profile's flash memories past their end, with their links and pins. Reads never
+ * see them anyway; this frees their keys and keeps the table to what can still be read.
+ */
+export async function purgeExpired(db: Queryable, profileId: string): Promise<void> {
+  await db
+    .delete(memories)
+    .where(and(eq(memories.profileId, profileId), lte(memories.expiresAt, sql`now()`)));
 }
 
 export async function listMemories(
@@ -28,7 +48,7 @@ export async function listMemories(
   const rows = await db
     .select()
     .from(memories)
-    .where(eq(memories.profileId, profileId))
+    .where(and(eq(memories.profileId, profileId), live))
     .orderBy(desc(memories.updatedAt))
     .limit(limit);
 
@@ -43,7 +63,7 @@ export async function findMemory(
   const [row] = await db
     .select()
     .from(memories)
-    .where(and(eq(memories.profileId, profileId), eq(memories.key, key)))
+    .where(and(eq(memories.profileId, profileId), eq(memories.key, key), live))
     .limit(1);
 
   return row ? toMemory(row) : null;
@@ -76,6 +96,7 @@ export async function searchMemories(
     .where(
       and(
         eq(memories.profileId, profileId),
+        live,
         sql`to_tsvector('simple', ${memories.key} || ' ' || ${memories.content}) @@ (${query})`,
       ),
     )
@@ -88,14 +109,16 @@ export async function searchMemories(
 /**
  * The write behind the version check. An absent key is an insert, which the primary key lets
  * happen once; a present one is updated only while it still carries the version that was read.
- * A race lost between the read and the write touches nothing and returns false, so the caller
- * reports the same conflict it would have reported from the read.
+ * A race lost between the read and the write touches nothing and returns undefined, so the
+ * caller reports the same conflict it would have reported from the read. `expiresAt` is null
+ * for a permanent memory; the end written comes back, since the database may have counted it.
  */
 export async function writeMemory(
   db: Queryable,
   memory: Memory,
   expectedVersion: number,
-): Promise<boolean> {
+  expiresAt: Date | SQL | null,
+): Promise<{ expiresAt: Date | null } | undefined> {
   const values = {
     profileId: memory.profileId,
     key: memory.key,
@@ -103,6 +126,7 @@ export async function writeMemory(
     version: memory.version,
     sourceSessionId: memory.sourceSessionId ?? null,
     updatedAt: new Date(memory.updatedAt),
+    expiresAt,
   };
 
   const written = await db
@@ -115,12 +139,13 @@ export async function writeMemory(
         version: values.version,
         sourceSessionId: values.sourceSessionId,
         updatedAt: values.updatedAt,
+        expiresAt: values.expiresAt,
       },
       setWhere: eq(memories.version, expectedVersion),
     })
-    .returning({ key: memories.key });
+    .returning({ expiresAt: memories.expiresAt });
 
-  return written.length > 0;
+  return written[0];
 }
 
 export async function deleteMemory(db: Queryable, profileId: string, key: string): Promise<void> {
@@ -248,7 +273,9 @@ export async function memoriesOfProject(
         eq(memories.key, memoryProjects.memoryKey),
       ),
     )
-    .where(and(eq(memoryProjects.profileId, profileId), eq(memoryProjects.projectId, projectId)))
+    .where(
+      and(eq(memoryProjects.profileId, profileId), eq(memoryProjects.projectId, projectId), live),
+    )
     .orderBy(desc(memories.updatedAt))
     .limit(limit);
 
@@ -265,7 +292,7 @@ export async function findMemories(
   const rows = await db
     .select()
     .from(memories)
-    .where(and(eq(memories.profileId, profileId), inArray(memories.key, keys)));
+    .where(and(eq(memories.profileId, profileId), inArray(memories.key, keys), live));
 
   return rows.map(toMemory);
 }

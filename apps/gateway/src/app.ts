@@ -71,6 +71,8 @@ export function createApp(
     maxStreams?: number;
     /** How long a quiet event stream waits before a heartbeat, in ms; tests shorten it. */
     heartbeatMs?: number;
+    /** How long one event stream lasts before the client opens the next, in ms; tests shorten it. */
+    streamLifetimeMs?: number;
     /** What starts a terminal's shell; tests pass one that starts no process. */
     spawnTerminal?: SpawnPty;
     /**
