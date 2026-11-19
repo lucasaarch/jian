@@ -1015,9 +1015,14 @@ describe('an Artifact that fails as it runs', () => {
       });
     return { ask, element, say };
   };
-  const alert = () => drawer()?.querySelector('[role=alert]');
+  // The badge in the Artifact's corner, and the dialog it opens.
+  const badge = () =>
+    [...(drawer()?.querySelectorAll<HTMLButtonElement>('button[aria-haspopup=dialog]') ?? [])].find(
+      (item) => /error|Fix asked/.test(item.textContent ?? ''),
+    );
+  const dialog = () => document.querySelector<HTMLElement>('[role=dialog]');
   const action = (name: string) =>
-    [...(alert()?.querySelectorAll('button') ?? [])].find((item) => item.textContent === name);
+    [...(dialog()?.querySelectorAll('button') ?? [])].find((item) => item.textContent === name);
 
   it('says what its frame reported, as text, and Fix asks the agent with all of it', async () => {
     const { ask, element, say } = await failing();
@@ -1025,20 +1030,25 @@ describe('an Artifact that fails as it runs', () => {
     // Another window saying it is heard as nothing at all, and so is a shape it does not have.
     await say({ postMessage: vi.fn() }, { message: 'Not mine' });
     await say(element.contentWindow, { message: 42 });
-    expect(alert()).toBeFalsy();
+    expect(badge()).toBeFalsy();
 
     await say(element.contentWindow, {
       message: 'TypeError: <b>items</b>.map is not a function',
       componentStack: 'at List\nat App',
       stack: 'at List (about:srcdoc:3:9)',
     });
-    expect(alert()?.textContent).toContain('The component failed');
-    expect(alert()?.textContent).toContain('<b>items</b>.map is not a function');
-    expect(alert()?.querySelector('b')).toBeNull();
+    // Small in the corner: the error itself waits in the dialog it opens.
+    expect(badge()?.textContent).toBe('Component error');
+    expect(dialog()).toBeNull();
+    await click(badge());
+    expect(dialog()?.textContent).toContain('The component failed');
+    expect(dialog()?.textContent).toContain('<b>items</b>.map is not a function');
+    expect(dialog()?.textContent).toContain('at List\nat App');
+    expect(dialog()?.querySelector('b')).toBeNull();
 
     // Only the first is said: what follows from it repeats it.
     await say(element.contentWindow, { message: 'Error: later' });
-    expect(alert()?.textContent).not.toContain('later');
+    expect(dialog()?.textContent).not.toContain('later');
 
     await click(action('Fix'));
     expect(ask).toHaveBeenCalledTimes(1);
@@ -1048,7 +1058,10 @@ describe('an Artifact that fails as it runs', () => {
     expect(text).toContain('<b>items</b>.map is not a function');
     expect(text).toContain('at List\nat App');
     expect(text).toContain('about:srcdoc:3:9');
-    // Asked once: the button holds until the fixed version arrives.
+    // Asked once: the dialog closes, the badge says so, and Fix holds until the fixed version.
+    await settled(() => !dialog());
+    expect(badge()?.textContent).toBe('Fix asked');
+    await click(badge());
     expect(action('Asked to fix')?.hasAttribute('disabled')).toBe(true);
   });
 
@@ -1059,6 +1072,8 @@ describe('an Artifact that fails as it runs', () => {
       hearArtifactDraft('session', { toolCallId: 'call', artifactId: counter.id, content: '' }),
     );
 
+    await click(badge());
+    expect(dialog()?.textContent).toContain('The agent is changing it now.');
     expect(action('Fix')?.hasAttribute('disabled')).toBe(true);
     expect(ask).not.toHaveBeenCalled();
   });

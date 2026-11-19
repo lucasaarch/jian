@@ -55,7 +55,14 @@ const WRITTEN = `export default function Counter() {\n  return <p>A component</p
  */
 const TABLE = `<!doctype html><html class="own" style="--own: 1"><head><title>T</title></head><body><table><tr><td id="cell">A table ran</td></tr></table></body></html>`;
 /** Public pages by a name of their own: the type each is drawn as, and its source. */
-const PUBLIC: Record<string, [SessionArtifactType, string]> = { table: ['html', TABLE] };
+/** A component that breaks as it draws, as a component compiles. */
+const BROKEN = `const List = (props) => React.createElement('ul', null, props.items.map((item) => item));
+exports.default = () => React.createElement('section', null, React.createElement(List, null));`;
+
+const PUBLIC: Record<string, [SessionArtifactType, string]> = {
+  table: ['html', TABLE],
+  broken: ['react', BROKEN],
+};
 
 const embedded = (value: unknown) => JSON.stringify(value).replaceAll('<', '\\u003c');
 
@@ -318,23 +325,23 @@ exports.default = (props) =>
       await full.close();
     });
 
-    it('says what broke a component, where, and in which part, to the page and the panel', async () => {
-      const page = await inPanel(
-        'broken',
-        'react',
-        `const List = (props) => React.createElement('ul', null, props.items.map((item) => item));
-exports.default = () => React.createElement('section', null, React.createElement(List, null));`,
-      );
+    it('says what broke a component, where, and in which part, to the panel or on the page', async () => {
+      const page = await inPanel('broken', 'react', BROKEN);
       const errors = () => page.evaluate('window.errors') as Promise<Record<string, string>[]>;
       await expect.poll(async () => (await errors()).length).toBe(1);
       const [said] = await errors();
       expect(said?.message).toMatch(/^TypeError: .*map/);
       expect(said?.componentStack).toContain('List');
       expect(said?.stack).toBeTruthy();
-      // The frame says it too, in full, above what it drew.
-      await expect.poll(() => read(page)).toContain('TypeError');
-      expect(await read(page)).toContain('List');
+      // The panel says it, in a badge of its own: the frame does not say it a second time.
+      expect(await read(page)).not.toContain('TypeError');
       await page.close();
+
+      // A public link has no panel around it: the page says it in full, above what it drew.
+      const shared = await open('/public/broken');
+      await expect.poll(() => read(shared)).toContain('TypeError');
+      expect(await read(shared)).toContain('List');
+      await shared.close();
 
       // Thrown later, from a timer the component set, it is still told in full, once.
       const later = await inPanel(
