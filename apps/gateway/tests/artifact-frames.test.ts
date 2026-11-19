@@ -305,6 +305,8 @@ ${wait ? '' : "held.addEventListener('load', window.hand, { once: true });"}
       const document = await editing(page);
 
       await document.click('h1');
+      // What the browser leaves on a block typed into in the panel, which says nothing.
+      await document.evaluate("document.querySelector('h1').setAttribute('style', '')");
       await page.keyboard.press('End');
       await page.keyboard.type(' again');
 
