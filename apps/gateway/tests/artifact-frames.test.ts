@@ -87,7 +87,8 @@ describe.runIf(existsSync(process.env.PLAYWRIGHT_EXECUTABLE_PATH ?? chromium.exe
           return send(publishedArtifact(type, 'Shared', source), artifactPolicy("'none'"));
         }
         // The panel's part, as artifact-frame.tsx plays it: the frame, and its source once it loads.
-        // Editing, it also asks for the edit (`collect`) and keeps what the frame answers. `wait`
+        // Editing, it also asks for the edit (`collect`) and keeps what the frame answers, not the
+        // notice that something changed, which comes unasked. `wait`
         // hands the source only when the test calls `hand`.
         if (kind === 'panel') {
           const edit = url.searchParams.has('edit');
@@ -98,7 +99,8 @@ describe.runIf(existsSync(process.env.PLAYWRIGHT_EXECUTABLE_PATH ?? chromium.exe
 const held = document.getElementById('held');
 window.answers = [];
 addEventListener('message', (event) => {
-  if (event.source === held.contentWindow) window.answers.push(event.data.${ARTIFACT_EDIT_MESSAGE});
+  const said = event.source === held.contentWindow && event.data.${ARTIFACT_EDIT_MESSAGE};
+  if (said && 'collect' in said) window.answers.push(said);
 });
 window.collect = (nonce) =>
   held.contentWindow.postMessage({ ${ARTIFACT_EDIT_MESSAGE}: { collect: nonce } }, '*');

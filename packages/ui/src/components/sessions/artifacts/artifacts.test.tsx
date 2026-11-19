@@ -558,9 +558,9 @@ describe('editing one by hand', () => {
     }
 
     await opened(notes);
-    await settled(() => frame()?.getAttribute('src')?.endsWith('?edit=1') === true);
+    await settled(() => frame()?.getAttribute('src')?.includes('?edit=1') === true);
     expect(frame()?.getAttribute('src')).toBe(
-      `${window.location.origin}/v1/artifact-frames/markdown?edit=1`,
+      `${window.location.origin}/v1/artifact-frames/markdown?edit=1&theme=dark`,
     );
   });
 

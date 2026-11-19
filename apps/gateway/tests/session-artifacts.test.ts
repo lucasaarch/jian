@@ -308,7 +308,7 @@ describe('who reads an Artifact', () => {
       type: 'deck',
       slides: ['A', 'B'].map((text) => `<!doctype html><html><body>${text}</body></html>`),
     });
-    const notes = await make();
+    const page = await make({ title: 'Page', type: 'html', content: '<p>Hello</p>' });
     const file = (id: string, query: string, version = 1) =>
       at(`/${id}/versions/${version}/export?${query}`);
     const answered = async (url: string, authorization = headers.authorization) => {
@@ -331,14 +331,14 @@ describe('who reads an Artifact', () => {
     );
     expect(await answered(file(deck.id, 'format=pdf', 2))).toMatch(/^404 /);
 
-    expect(await answered(file(notes.id, 'format=pdf'))).toMatch(/^400 Only a deck/);
+    expect(await answered(file(page.id, 'format=pdf'))).toMatch(/^400 Only a deck/);
     expect(await answered(file(deck.id, 'format=png'))).toMatch(/^400 .*say which/);
     expect(await answered(file(deck.id, 'format=png&slide=3'))).toMatch(
       /^400 The deck has 2 slides, so there is no slide 3/,
     );
     for (const query of [
       '',
-      'format=docx',
+      'format=gif',
       'format=pdf&fonts=comic',
       'format=png&slide=0',
       'format=png&slide=first',
