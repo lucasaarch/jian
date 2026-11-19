@@ -1,5 +1,4 @@
 import {
-  type ModelCapabilities,
   type ProviderModel,
   type ProviderModelList,
   type ProviderRecord,
@@ -11,7 +10,7 @@ import { GatewayError } from '../core/errors.js';
 import type { GatewayVault } from '../security/gateway-vault.js';
 import { bareModelId, modelCapabilities } from './capabilities.js';
 import { GROQ_BASE_URL, type ProviderKind, XAI_BASE_URL } from './catalog.js';
-import type { ModelCatalog } from './catalog-source.js';
+import { type ModelCatalog, routedEntry, routedModel } from './catalog-source.js';
 import {
   anthropicCredential,
   subscriptionFetch,
@@ -26,7 +25,8 @@ const endpoints: Record<Exclude<ProviderKind, 'openai-compatible' | 'ollama'>, s
   openai: 'https://api.openai.com/v1/models',
   anthropic: 'https://api.anthropic.com/v1/models?limit=1000',
   google: 'https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000',
-  openrouter: 'https://openrouter.ai/api/v1/models',
+  // Every output kind: by default the router lists only the models that answer in text.
+  openrouter: 'https://openrouter.ai/api/v1/models?output_modalities=all',
   groq: `${GROQ_BASE_URL}/models`,
   xai: `${XAI_BASE_URL}/models`,
 };
@@ -40,60 +40,37 @@ const endpointOf = (provider: ProviderRecord) =>
       : endpoints[provider.kind as Exclude<ProviderKind, 'openai-compatible' | 'ollama'>];
 
 /** What the router publishes per model; everything the capability table exists to supply. */
-const routed = z.object({
-  data: z.array(
-    z.object({
-      id: z.string().min(1),
-      name: z.string().optional(),
-      context_length: z.number().optional(),
-      top_provider: z.object({ max_completion_tokens: z.number().nullish() }).optional(),
-      architecture: z.object({ input_modalities: z.array(z.string()).optional() }).optional(),
-      supported_parameters: z.array(z.string()).optional(),
-    }),
-  ),
-});
+const routed = z.object({ data: z.array(routedModel) });
 
-const modalities = new Set(['text', 'image', 'audio', 'video', 'pdf']);
-
-/** The router names a document modality `file`; the contract calls the same thing `pdf`. */
-function toModalities(reported: string[] | undefined): ModelCapabilities['inputModalities'] {
-  const mapped = (reported ?? [])
-    .map((value) => (value === 'file' ? 'pdf' : value))
-    .filter((value) => modalities.has(value)) as ModelCapabilities['inputModalities'];
-
-  return mapped.length ? [...new Set(mapped)] : ['text'];
-}
-
-/**
- * The router says whether a model takes an effort, not which levels it accepts, so the set is
- * the contract's own — a level the model rejects comes back as the provider's error, which is
- * the truth, rather than being hidden behind a guess made here.
- */
-function toEfforts(parameters: string[] | undefined): ModelCapabilities['reasoningEfforts'] {
-  return parameters?.includes('reasoning_effort') ? ['low', 'medium', 'high'] : [];
-}
-
+/** The account's own listing speaks first; the catalog fills in what it leaves out. */
 function parseRouted(body: unknown, catalog: ModelCatalog | undefined): ProviderModel[] {
   return routed
     .parse(body)
-    .data.slice(0, 1000)
-    .map((model) => ({
-      id: model.id,
-      ...(model.name ? { displayName: model.name.slice(0, 200) } : {}),
-      ...modelCapabilities(
-        'openrouter',
-        model.id,
+    .data.slice(0, 2000)
+    .flatMap((model) => {
+      const listed = routedEntry(model);
+      if (!listed) return [];
+      const catalogued = catalog?.lookup('openrouter', model.id);
+      return [
         {
-          contextWindow: model.context_length,
-          maxOutputTokens: model.top_provider?.max_completion_tokens ?? undefined,
-          reasoningEfforts: toEfforts(model.supported_parameters),
-          inputModalities: toModalities(model.architecture?.input_modalities),
+          id: model.id,
+          ...(model.name ? { displayName: model.name.slice(0, 200) } : {}),
+          ...modelCapabilities(
+            'openrouter',
+            model.id,
+            {
+              contextWindow: listed.contextWindow,
+              maxOutputTokens: listed.maxOutputTokens,
+              reasoningEfforts: listed.reasoningEfforts,
+              inputModalities: listed.inputModalities.length ? listed.inputModalities : ['text'],
+            },
+            { ...catalogued, ...listed },
+          ),
         },
-        catalog?.lookup('openrouter', model.id),
-      ),
-    }))
+      ];
+    })
     .sort((a, b) => a.id.localeCompare(b.id))
-    .slice(0, 500);
+    .slice(0, 1000);
 }
 
 const listed = z.object({

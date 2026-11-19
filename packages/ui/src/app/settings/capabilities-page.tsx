@@ -101,7 +101,7 @@ function ActivityRow({
   /** What the owner should know about the current choice. */
   note: ReactNode;
 }) {
-  const { provider, list } = describeRole(value, catalog, configured);
+  const { provider, list, selected } = describeRole(value, catalog, configured);
   const selection =
     value.providerId && value.modelId
       ? {
@@ -176,7 +176,7 @@ function ActivityRow({
           disabled={busy}
           aria-label={`${role.label} voice`}
           onValueChange={(voiceName) => change(role.key, { voiceName: voiceName || undefined })}
-          options={voiceOptions(provider.kind)}
+          options={voiceOptions(provider.kind, selected?.voices)}
         />
       )}
     </SettingsRow>

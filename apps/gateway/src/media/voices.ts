@@ -97,7 +97,21 @@ const legacyVoices = new Set([
   'shimmer',
 ]);
 
-export function speechVoices(config: ModelConfig) {
+/**
+ * `voices` is what the model's listing names, for a router whose voices differ per model
+ * (OpenRouter); the vendors here have one fixed set each.
+ */
+export function speechVoices(config: ModelConfig, voices: string[] = []) {
+  if (config.provider === 'openrouter') {
+    return {
+      provider: 'OpenRouter',
+      model: config.modelId,
+      // Empty leaves the voice to the model's own default.
+      defaultVoice: voices[0] ?? '',
+      supportsInstructions: false,
+      voices: voices.map((name) => ({ name })),
+    };
+  }
   if (config.provider === 'google') {
     return {
       provider: 'Gemini',
@@ -132,9 +146,11 @@ export function speechVoices(config: ModelConfig) {
   throw new Error('Speech requires a Gemini, OpenAI or xAI API model, not a subscription login');
 }
 
-export function speechVoice(config: ModelConfig, requested?: string): string {
-  const options = speechVoices(config);
+export function speechVoice(config: ModelConfig, requested?: string, voices?: string[]): string {
+  const options = speechVoices(config, voices);
   if (!requested) return options.defaultVoice;
+  // A model whose voices are not known here takes the name as given; it answers if wrong.
+  if (!options.voices.length) return requested.trim();
   const voice = options.voices.find((v) => v.name.toLowerCase() === requested.trim().toLowerCase());
   if (voice) return voice.name;
   throw new Error(

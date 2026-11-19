@@ -13,6 +13,12 @@ import type { ProviderKind } from './catalog.js';
  */
 const CATALOG_URL = 'https://models.dev/api.json';
 
+/**
+ * OpenRouter's own public listing, every output kind: the only source that says which of its
+ * models draw, speak, transcribe or take tools. Read with the catalog, so a run knows it too.
+ */
+export const OPENROUTER_MODELS_URL = 'https://openrouter.ai/api/v1/models?output_modalities=all';
+
 /** Long enough that the panel never waits on it, short enough to pick up a new model same-day. */
 const TTL_MS = 4 * 60 * 60 * 1000;
 
@@ -77,7 +83,76 @@ export type CatalogEntry = {
   releaseDate?: string;
   /** List prices in US dollars per million tokens, when the catalog carries them. */
   price?: { input: number; output: number; cacheRead?: number };
+  /** False when the source says the model takes no tools. */
+  tools?: boolean;
+  voices?: string[];
 };
+
+/** One model of OpenRouter's listing, read leniently like the catalog. */
+export const routedModel = z.looseObject({
+  id: z.string().min(1).max(160),
+  name: z.string().optional().catch(undefined),
+  context_length: z.number().nullish().catch(undefined),
+  top_provider: z
+    .looseObject({ max_completion_tokens: z.number().nullish().catch(undefined) })
+    .optional()
+    .catch(undefined),
+  architecture: z
+    .looseObject({
+      input_modalities: z.array(z.string()).optional().catch(undefined),
+      output_modalities: z.array(z.string()).optional().catch(undefined),
+    })
+    .optional()
+    .catch(undefined),
+  supported_parameters: z.array(z.string()).optional().catch(undefined),
+  supported_voices: z.array(z.string().min(1).max(80)).nullish().catch(undefined),
+  endpoints: z.array(z.string()).optional().catch(undefined),
+});
+
+export type RoutedModel = z.infer<typeof routedModel>;
+
+/** The endpoints Jian calls; a model served only elsewhere (embeddings, video) is not offered. */
+const routedOutputs: Record<string, ModelCapabilities['inputModalities'][number]> = {
+  '/api/v1/chat/completions': 'text',
+  '/api/v1/audio/transcriptions': 'text',
+  '/api/v1/images': 'image',
+  '/api/v1/audio/speech': 'audio',
+};
+
+/**
+ * What one OpenRouter model can do. Its output is read from the endpoints that serve it, not its
+ * modalities: `openrouter/auto` lists image output but cannot be called on the Image API, and a
+ * chat model that also speaks is still reached through chat. Undefined when Jian can call none.
+ */
+export function routedEntry(model: RoutedModel): CatalogEntry | undefined {
+  const outputs = model.endpoints
+    ? [...new Set(model.endpoints.flatMap((path) => routedOutputs[path] ?? []))]
+    : modalities(model.architecture?.output_modalities);
+  if (model.endpoints && !outputs.length) return undefined;
+  const chat = model.endpoints?.includes('/api/v1/chat/completions') ?? true;
+  const parameters = model.supported_parameters;
+
+  return {
+    ...(model.name ? { displayName: model.name.slice(0, 200) } : {}),
+    ...(model.context_length ? { contextWindow: model.context_length } : {}),
+    ...(model.top_provider?.max_completion_tokens
+      ? { maxOutputTokens: model.top_provider.max_completion_tokens }
+      : {}),
+    // The router says whether a model takes an effort, not which levels: the contract's own.
+    reasoningEfforts: parameters?.includes('reasoning_effort') ? ['low', 'medium', 'high'] : [],
+    // The router names a document `file`; the contract calls it `pdf`.
+    inputModalities: [
+      ...new Set(
+        modalities(
+          model.architecture?.input_modalities?.map((value) => (value === 'file' ? 'pdf' : value)),
+        ),
+      ),
+    ],
+    outputModalities: outputs,
+    ...(chat && parameters && !parameters.includes('tools') ? { tools: false } : {}),
+    ...(model.supported_voices?.length ? { voices: model.supported_voices.slice(0, 200) } : {}),
+  };
+}
 
 const modalities = (values: string[] | undefined): ModelCapabilities['inputModalities'] =>
   (values ?? []).flatMap((value) => {
@@ -115,7 +190,12 @@ function toEntry(model: z.infer<typeof entry>): CatalogEntry {
   };
 }
 
-type Loaded = { byProvider: Map<string, Map<string, CatalogEntry>>; fetchedAt: number };
+type Loaded = {
+  byProvider: Map<string, Map<string, CatalogEntry>>;
+  /** OpenRouter's listing by full id, which speaks for its models before the catalog does. */
+  routed: Map<string, CatalogEntry>;
+  fetchedAt: number;
+};
 
 /**
  * Reads the catalog once every few hours and keeps the last good copy forever. A catalog that
@@ -132,6 +212,8 @@ export class ModelCatalog {
     private readonly url = CATALOG_URL,
     private readonly report: (reason: string) => void = (reason) =>
       console.error(`jian: could not read the model catalog (${reason})`),
+    /** Undefined skips OpenRouter's listing. */
+    private readonly routerUrl: string | undefined = OPENROUTER_MODELS_URL,
   ) {}
 
   /** Never throws: a missing catalog is a gap to fall through, not a failure to report. */
@@ -152,6 +234,23 @@ export class ModelCatalog {
   }
 
   lookup(kind: ProviderKind, modelId: string): CatalogEntry | undefined {
+    const catalogued = this.catalogued(kind, modelId);
+    const routed =
+      kind === 'openrouter' ? this.loaded?.routed.get(modelId.toLowerCase()) : undefined;
+
+    if (!routed) return catalogued;
+
+    // The router's own word on what it serves wins; the catalog still adds prices and dates.
+    return {
+      ...catalogued,
+      ...routed,
+      inputModalities: routed.inputModalities.length
+        ? routed.inputModalities
+        : (catalogued?.inputModalities ?? []),
+    };
+  }
+
+  private catalogued(kind: ProviderKind, modelId: string): CatalogEntry | undefined {
     const models = this.loaded?.byProvider.get(kind);
 
     if (!models) {
@@ -172,7 +271,33 @@ export class ModelCatalog {
     );
   }
 
+  /** Never throws: without it OpenRouter's models fall back to the catalog. */
+  private async loadRouted(): Promise<Map<string, CatalogEntry>> {
+    const routed = new Map<string, CatalogEntry>();
+    if (!this.routerUrl) return routed;
+    try {
+      const response = await this.fetcher(this.routerUrl, {
+        headers: { accept: 'application/json' },
+        signal: AbortSignal.timeout(15_000),
+      });
+      if (!response.ok) {
+        this.report(`the OpenRouter listing answered ${response.status}`);
+        return routed;
+      }
+      const body = z.looseObject({ data: z.array(z.unknown()) }).safeParse(await response.json());
+      for (const item of body.success ? body.data.data : []) {
+        const model = routedModel.safeParse(item);
+        const described = model.success ? routedEntry(model.data) : undefined;
+        if (model.success && described) routed.set(model.data.id.toLowerCase(), described);
+      }
+    } catch (error) {
+      this.report(error instanceof Error ? error.message : 'unknown error');
+    }
+    return routed;
+  }
+
   private async load(): Promise<Loaded | undefined> {
+    const routing = this.loadRouted();
     try {
       const response = await this.fetcher(this.url, {
         headers: { accept: 'application/json' },
@@ -181,6 +306,7 @@ export class ModelCatalog {
 
       if (!response.ok) {
         this.report(`the model catalog answered ${response.status}`);
+        await routing;
 
         return undefined;
       }
@@ -202,9 +328,10 @@ export class ModelCatalog {
         byProvider.set(provider, models);
       }
 
-      return { byProvider, fetchedAt: this.clock() };
+      return { byProvider, routed: await routing, fetchedAt: this.clock() };
     } catch (error) {
       this.report(error instanceof Error ? error.message : 'unknown error');
+      await routing;
 
       return undefined;
     }
