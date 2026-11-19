@@ -17,8 +17,11 @@ const LIGHT = /haiku|\b(?:mini|nano|lite|flash|fast)\b/i;
 /** Model families named for the hardest work. `pro` and `max` alone, not inside a word. */
 const DEEP = /opus|fable|mythos|\bpro\b|astra|heavy|\bmax\b/i;
 
-/** The tier a model's own name places it in. A family named for neither is the middle one. */
-export function modelTier(model: { id: string; displayName?: string }): SubagentTier {
+/**
+ * The tier a model's own name places it in. A family named for neither is the middle one. A name
+ * never says `premium`: only a price does.
+ */
+export function modelTier(model: { id: string; displayName?: string }): NamedTier {
   const name = `${model.id} ${model.displayName ?? ''}`;
 
   if (LIGHT.test(name)) return 'light';
@@ -26,26 +29,53 @@ export function modelTier(model: { id: string; displayName?: string }): Subagent
   return 'standard';
 }
 
+type NamedTier = Exclude<SubagentTier, 'premium'>;
+
+/**
+ * How far above the provider's cheapest deep-named model a deep model's list price has to be,
+ * input and output both, to be `premium`. Claude Fable 5.2 is twice Opus 5.5 and is the case
+ * this exists for; an older generation at three times a newer one's price (Opus 4.1 beside
+ * Opus 4.5) lands there too, and a few percent between two current deep models does not.
+ */
+const PREMIUM_FACTOR = 1.5;
+
 /**
  * A family the names above do not know is placed by its list price too: priced at least like
  * one of the same provider's deep-named models, it is deep. By name alone a new top family —
  * Claude Fable 5.2, twice Opus 5.5's price — landed in the middle tier and, as its newest
  * model, took every `standard` subagent there.
+ *
+ * Deep, and priced `PREMIUM_FACTOR` above the cheapest deep-named model of the provider, it is
+ * premium, which nothing picks on its own: as the newest deep model, Fable 5.2 took every deep
+ * subagent, and six of them spent an owner's whole allowance in one morning. Without a price,
+ * its own or that of a deep-named sibling, a model keeps the tier of its name: premium is never
+ * a guess.
  */
 function tierAmong(model: Candidate, siblings: Candidate[]): SubagentTier {
   const named = modelTier(model);
-  const price = model.entry.price?.output;
+  const price = model.entry.price;
 
-  if (named !== 'standard' || price === undefined) return named;
+  if (!price) return named;
 
-  return siblings.some(
-    (sibling) =>
-      modelTier(sibling) === 'deep' &&
-      sibling.entry.price !== undefined &&
-      price >= sibling.entry.price.output,
-  )
-    ? 'deep'
-    : 'standard';
+  const deepNamed = siblings.flatMap((sibling) =>
+    modelTier(sibling) === 'deep' && sibling.entry.price ? [sibling.entry.price] : [],
+  );
+  const deep =
+    named === 'deep' ||
+    (named === 'standard' && deepNamed.some((sibling) => price.output >= sibling.output));
+
+  if (!deep) return named;
+
+  const floor = deepNamed.reduce<(typeof deepNamed)[number] | undefined>(
+    (cheapest, sibling) => (!cheapest || sibling.output < cheapest.output ? sibling : cheapest),
+    undefined,
+  );
+
+  return floor &&
+    price.output >= floor.output * PREMIUM_FACTOR &&
+    price.input >= floor.input * PREMIUM_FACTOR
+    ? 'premium'
+    : 'deep';
 }
 
 /**
@@ -65,12 +95,18 @@ const EFFORT: Record<SubagentTier, ReasoningEffort> = {
   light: 'low',
   standard: 'medium',
   deep: 'high',
+  premium: 'high',
 };
 
 /**
  * The model a subagent gets for its tier: from the first provider, in `providerRank` order,
  * that offers a model of that tier, the newest of them. Within a rank the provider the parent
  * runs on goes first, so a conversation stays on its own credential when that one has the tier.
+ *
+ * Deep never borrows upwards: a premium model is not among its candidates, so where a provider
+ * has no other deep model deep goes on to the next one, and with none anywhere the subagent keeps
+ * its parent's model. Premium, asked for where no provider has one, is the deep model instead:
+ * the agent wanted the most capable model, and deep is the nearest.
  */
 export class TierModels {
   constructor(
@@ -101,7 +137,7 @@ export class TierModels {
       if (best) return selection(provider, best, tier);
     }
 
-    return null;
+    return tier === 'premium' ? this.pick('deep', parentProviderId) : null;
   }
 }
 

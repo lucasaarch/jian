@@ -1,5 +1,5 @@
 import { createCipheriv, createHash, pbkdf2Sync } from 'node:crypto';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { chmodSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -95,6 +95,23 @@ describe('reading a Chromium cookie store', () => {
     expect(names).not.toContain('old');
     expect(names).not.toContain('bound');
   });
+
+  // A file no one may read stands for what macOS answers a reader it does not allow. Windows
+  // has no such mode bits, and root reads past them, so neither can play it.
+  it.skipIf(process.platform === 'win32' || process.getuid?.() === 0)(
+    'says to give Jian Full Disk Access when macOS keeps the store from it',
+    async () => {
+      const file = chromium(24);
+      chmodSync(file, 0o000);
+      try {
+        await expect(readChromiumCookies(file, PASSWORD, NOW, 'Chrome')).rejects.toThrow(
+          "macOS did not let Jian read Chrome's cookies. Give Jian Full Disk Access",
+        );
+      } finally {
+        chmodSync(file, 0o600);
+      }
+    },
+  );
 
   it('brings no value under a wrong password', async () => {
     const cookies = await readChromiumCookies(chromium(24), 'not-the-password', NOW);

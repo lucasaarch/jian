@@ -91,6 +91,9 @@ export type ModelDefaultsInput = RequestBody<'setModelDefaults'>;
 export type DecisionsStatus = JsonResponse<'getDecisions', 200>;
 export type DecisionsSettingsPatch = RequestBody<'updateDecisionsSettings'>;
 export type SshKey = JsonResponse<'listSshKeys', 200>[number];
+export type CommandSecret = JsonResponse<'listCommandSecrets', 200>[number];
+export type NewCommandSecret = RequestBody<'createCommandSecret'>;
+export type CommandSecretPatch = RequestBody<'updateCommandSecret'>;
 
 /** What a model is chosen from: the providers, the models each offers, the installation's defaults. */
 export type ModelCatalog = {

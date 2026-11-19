@@ -47,7 +47,9 @@ conversations, and they exchange only the messages they choose to send each othe
 installation holds is shared by every agent: provider credentials, the models for each capability,
 the MCP servers, the GitHub and X integrations, the skill library, SSH keys, connected machines
 and the files on the gateway's machine, which all agents work on together. Secrets are kept in an
-encrypted vault no agent can read.
+encrypted vault no agent can read. The owner can let an agent's commands use some of them, each by
+name as an environment variable, with their approval where a conversation asks first; the agent
+still never sees a value, and what a command prints of one is masked.
 
 Messages from the panel, channels, API clients, other agents and schedules each start a run. Jian
 assembles the profile's instructions, relevant memories, the conversation and the tools that run

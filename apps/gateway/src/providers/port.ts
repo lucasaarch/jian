@@ -9,6 +9,8 @@ import type { ContextPolicy } from './service.js';
 
 export interface ProviderAdmin {
   providers(): Promise<ProviderRecord[]>;
+  /** Every live account, inactive ones included. */
+  accounts(): Promise<ProviderRecord[]>;
   configureCodexProvider(secret: string): Promise<ProviderRecord>;
 }
 

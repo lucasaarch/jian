@@ -7,6 +7,16 @@ const TIMEOUT_MS = 1500;
 const THRESHOLD = 0.5;
 const BRIEF_CHARS = 3000;
 
+/**
+ * How many subagents of a tier one conversation may have at work at once; the rest are refused.
+ * Premium is one: it is a provider's top-priced model, used when the owner asked for it or a deep
+ * worker already failed, and two of it at once is the fan-out that spent an owner's allowance in a
+ * morning. Deep is three: a hard piece split further is rarely more than a plan, its build and a
+ * review side by side, and every deep worker spends the same subscription window as the parent,
+ * at the top of its price. Light and standard are not counted: parallel pieces belong there.
+ */
+export const TIER_AT_ONCE = { premium: 1, deep: 3 } as const;
+
 /** What decides a tier, and who decided it. */
 export type TierChoice = { tier: SubagentTier; tierBy: 'agent' | 'jev' | 'default' };
 
@@ -14,6 +24,7 @@ export type TierChoice = { tier: SubagentTier; tierBy: 'agent' | 'jev' | 'defaul
  * How much model a subagent's work needs. The agent's own pick wins; left open, Jev reads the
  * brief. Without a confident answer — Jev off, unreachable or unsure — it is `standard`: too
  * little model for hard work costs a wrong result, too much for easy work only costs time.
+ * `premium` is never among Jev's choices: it costs the owner too much to be anyone's guess.
  */
 export async function chooseTier(
   judge: Judge | undefined,

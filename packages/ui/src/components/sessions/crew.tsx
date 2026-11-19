@@ -7,7 +7,12 @@ import { statusOf } from './progress';
 import { statusLabels } from './status';
 import { WorkMark } from './thought-line';
 
-const tierNames = { light: 'Light', standard: 'Standard', deep: 'Deep' } as const;
+const tierNames = {
+  light: 'Light',
+  standard: 'Standard',
+  deep: 'Deep',
+  premium: 'Premium',
+} as const;
 
 export const active = (agent: Subagent) => agent.status === 'queued' || agent.status === 'running';
 
@@ -75,7 +80,8 @@ export function Elapsed({
  * badge of agents at work says the same, so both read alike.
  */
 export function nowOf(agent: Subagent) {
-  if (agent.status === 'queued') return 'Waiting to start';
+  if (agent.status === 'queued')
+    return agent.progress?.queued ? 'Waiting for a free slot' : 'Waiting to start';
   if (agent.status === 'running') return statusOf(agent).label;
   if (agent.status === 'completed') return 'Completed';
   return agent.error ?? statusLabels[agent.status];

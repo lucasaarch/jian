@@ -26,7 +26,7 @@ from the rest is a bug.
 | On and off, or one of a few | `SwitchControl`, `Toggle`, `Segmented` |
 | List that opens | `Picker`, `MenuEntry`, `MenuChoices` (one of a few, ticked), `MenuDivider`, `menuPopup` |
 | Row of tabs or thumbnails that can outgrow its bar | `ScrollStrip`: no scrollbar, wheel and fades |
-| Anything over the page | `Overlay`, `OverlayActions`, `ConfirmDialog` |
+| Anything over the page | `Overlay`, `OverlayActions`, `ConfirmDialog`, `RenameDialog` (a name typed over) |
 | Room of pages with a list | `Page` with `SettingsLayout`, `SettingsGroup`, `SettingsRow` |
 | A screen's column, heading and cards | `PageBody`, `PageHeading`, `BackLink`, `PageToolbar`, `SectionHeading`, `surfaceCard` |
 | Waiting | `Skeleton`, `SkeletonRegion`, `SettingsPageSkeleton`, `Progress` |

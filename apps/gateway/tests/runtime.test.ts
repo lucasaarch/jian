@@ -985,7 +985,7 @@ it.each([false, true])(
       {
         // Room for every built-in tool and the system prompt, at one token a byte; it grows
         // with them, or the run fails on its budget before it ever compacts.
-        inputTokens: 33000,
+        inputTokens: 36000,
         historyTokens: 1000,
         toolResultTokens: 8000,
         maxSteps: 10,
@@ -1058,7 +1058,7 @@ it.each([false])(
       {
         // Room for every built-in tool and the system prompt, at one token a byte; it grows
         // with them, or the run fails on its budget before it ever compacts.
-        inputTokens: 33000,
+        inputTokens: 36000,
         historyTokens: 1000,
         toolResultTokens: 8000,
         maxSteps: 10,

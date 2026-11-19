@@ -239,9 +239,11 @@ export class ProviderModels {
   }
 
   async list(providerId: string): Promise<ProviderModelList> {
-    const provider = (await this.services.providers.providers()).find(
-      (item) => item.id === providerId && !item.revokedAt,
-    );
+    // Any account lists its own models, the inactive ones too: the panel shows each one's.
+    const provider = [
+      ...(await this.services.providers.accounts()),
+      ...(await this.services.providers.providers()),
+    ].find((item) => item.id === providerId && !item.revokedAt);
 
     if (!provider) {
       throw new GatewayError(404, 'Provider not found');

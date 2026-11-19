@@ -6,6 +6,7 @@ import {
   modelDefaultsInputSchema,
   modelDefaultsRecordSchema,
   type ProviderRecord,
+  providerAccountPatchSchema,
   providerInputSchema,
   providerRecordSchema,
   type Run,
@@ -15,6 +16,20 @@ import { type Clock, nowIso } from '../core/clock.js';
 import { GatewayError } from '../core/errors.js';
 import { GATEWAY_SCOPE, type GatewayVault } from '../security/gateway-vault.js';
 import type { Queryable, Store } from '../storage/database.js';
+import {
+  activeAccountOf,
+  chatgptIdentity,
+  deactivate,
+  freeLabel,
+  listAccounts,
+  lockAccounts,
+  MAX_ACCOUNTS,
+  makeActive,
+  renameAccount,
+  repointChoices,
+  successorOf,
+  vendorOf,
+} from './accounts.js';
 import { modelCapabilities } from './capabilities.js';
 import { environmentProvider, GROQ_BASE_URL, providerKinds, XAI_BASE_URL } from './catalog.js';
 import type { ModelCatalog } from './catalog-source.js';
@@ -27,7 +42,6 @@ import {
   markProviderRevoked,
   migrateLocalOllamaProvider,
   readModelDefaults,
-  revokeLiveProviders,
   writeModelDefaults,
 } from './repository.js';
 import { takesFast } from './speed.js';
@@ -82,6 +96,7 @@ export class Providers {
     return migrateLocalOllamaProvider(this.store.db);
   }
 
+  /** Each vendor's active account, and a key from the host for a vendor with none stored. */
   async providers() {
     const stored = await listProviders(this.store.db);
     // A configured provider hides the host environment's key for the same vendor.
@@ -96,6 +111,11 @@ export class Providers {
       );
 
     return [...stored, ...environment];
+  }
+
+  /** Every live account of every vendor, the ones runs do not use included; never a key. */
+  accounts() {
+    return listAccounts(this.store.db);
   }
 
   async createProvider(input: unknown) {
@@ -115,88 +135,163 @@ export class Providers {
       throw new GatewayError(400, 'Paste the API key for this provider');
     }
 
-    return this.register(
-      {
-        ...data,
-        // Only Anthropic has two kinds of credential; for the others the question has one answer.
-        ...(data.kind === 'anthropic'
-          ? { credential: anthropicCredential(credential, undefined, secret) }
-          : {}),
-        // An address is the server's alone; every vendor has its own, fixed.
-        ...(server && baseURL ? { baseURL: baseURL.replace(/\/+$/, '') } : {}),
-        id: randomUUID(),
-        createdAt: nowIso(this.clock),
-      },
-      secret,
-    );
-  }
-
-  configureCodexProvider(secret: string) {
-    return this.register(
-      providerRecordSchema.parse({
-        id: randomUUID(),
-        name: 'OpenAI',
-        kind: 'openai',
-        authMode: 'codex',
-        createdAt: nowIso(this.clock),
-      }),
-      secret,
+    return this.store.transaction(GATEWAY_SCOPE, (tx) =>
+      this.addAccount(
+        tx,
+        {
+          ...data,
+          // Only Anthropic has two kinds of credential; for the others the question has one answer.
+          ...(data.kind === 'anthropic'
+            ? { credential: anthropicCredential(credential, undefined, secret) }
+            : {}),
+          // An address is the server's alone; every vendor has its own, fixed.
+          ...(server && baseURL ? { baseURL: baseURL.replace(/\/+$/, '') } : {}),
+          id: randomUUID(),
+          createdAt: nowIso(this.clock),
+        },
+        secret,
+      ),
     );
   }
 
   /**
-   * One live credential per vendor and authentication mode. An OpenAI API key and a
-   * ChatGPT login coexist; replacing either revokes only its own previous credential.
-   * Nothing is announced — an installation credential belongs to no profile's event stream,
-   * and the row's own timestamps are what says when it arrived and when it went.
+   * A ChatGPT sign-in. Signing in again as an account already here refreshes its tokens and makes
+   * it the active one; another account is added beside it, named by its email.
    */
-  private async register(provider: ProviderRecord, secret?: string) {
+  configureCodexProvider(secret: string) {
+    const identity = chatgptIdentity(secret);
+
     return this.store.transaction(GATEWAY_SCOPE, async (tx) => {
-      const now = new Date(this.clock());
-
-      for (const revoked of await revokeLiveProviders(
-        tx,
-        provider.kind,
-        now,
-        provider.authMode ?? 'api',
-      )) {
-        await this.vault.discard(providerSecret(revoked), tx);
-      }
-
-      if (secret) await this.vault.put(providerSecret(provider.id), secret, tx);
-
-      try {
-        await insertProvider(tx, provider);
-      } catch (error) {
-        // The partial unique index has the last word on one live credential per vendor and mode. Reaching
-        // it means another request configured this vendor first, which the owner has to see as
-        // a conflict rather than as a gateway fault.
-        if (isUniqueViolation(error)) {
-          throw new GatewayError(
-            409,
-            'Another provider for this vendor was configured; reload before retrying',
-          );
+      const vendor = { kind: 'openai', authMode: 'codex' } as const;
+      if (identity.account) {
+        for (const account of await lockAccounts(tx, vendor)) {
+          const held = chatgptIdentity(await this.vault.read(providerSecret(account.id), tx));
+          if (held.account !== identity.account) continue;
+          await this.vault.put(providerSecret(account.id), secret, tx);
+          await makeActive(tx, account);
+          await repointChoices(tx, account);
+          return { ...account, active: true };
         }
-
-        throw error;
       }
 
-      return provider;
+      return this.addAccount(
+        tx,
+        providerRecordSchema.parse({
+          id: randomUUID(),
+          name: 'OpenAI',
+          kind: 'openai',
+          authMode: 'codex',
+          ...(identity.email ? { label: identity.email } : {}),
+          createdAt: nowIso(this.clock),
+        }),
+        secret,
+      );
     });
   }
 
+  /**
+   * Adds an account and makes it the one runs use, as connecting a vendor always did: who adds
+   * an account means to use it, and switching back is one action. The account before it stays,
+   * inactive, with its key. Nothing is announced: an installation credential belongs to no
+   * profile's event stream, and the row's own timestamps say when it arrived and when it went.
+   */
+  private async addAccount(tx: Queryable, provider: ProviderRecord, secret?: string) {
+    const vendor = vendorOf(provider);
+    const live = await lockAccounts(tx, vendor);
+    if (live.length >= MAX_ACCOUNTS) {
+      throw new GatewayError(409, `Remove an account first: one provider keeps ${MAX_ACCOUNTS}`);
+    }
+    // Anthropic's key and Claude Code token are listed apart, so each numbers its own.
+    const sameCredential = live.filter(
+      (account) => (account.credential ?? 'key') === (provider.credential ?? 'key'),
+    );
+    const account: ProviderRecord = {
+      ...provider,
+      label: provider.label ?? freeLabel(sameCredential.map((item) => item.label)),
+      active: true,
+    };
+
+    if (secret) await this.vault.put(providerSecret(account.id), secret, tx);
+
+    try {
+      await deactivate(tx, vendor);
+      await insertProvider(tx, account);
+    } catch (error) {
+      // The index has the last word on one active account per vendor and mode. Reaching it
+      // means another request added the vendor's first account meanwhile, with nothing yet to
+      // lock, which the owner has to see as a conflict rather than as a gateway fault.
+      if (isUniqueViolation(error)) {
+        throw new GatewayError(409, 'Another account was added meanwhile; reload before retrying');
+      }
+
+      throw error;
+    }
+    await repointChoices(tx, account);
+
+    return account;
+  }
+
+  /** Makes a live account the one runs use, in one step: the vendor is never left with none. */
+  async activateAccount(providerId: string) {
+    return this.store.transaction(GATEWAY_SCOPE, async (tx) => {
+      const named = await findProvider(tx, providerId);
+      if (!named || named.revokedAt) throw new GatewayError(404, 'Provider account not found');
+      // Read again under the lock, so a removal that committed meanwhile is seen.
+      const account = (await lockAccounts(tx, vendorOf(named))).find(
+        (item) => item.id === providerId,
+      );
+      if (!account) throw new GatewayError(404, 'Provider account not found');
+
+      await makeActive(tx, account);
+      await repointChoices(tx, account);
+
+      return { ...account, active: true };
+    });
+  }
+
+  async renameAccount(providerId: string, input: unknown) {
+    const { label } = providerAccountPatchSchema.parse(input);
+
+    return this.store.transaction(GATEWAY_SCOPE, async (tx) => {
+      const account = await findProvider(tx, providerId);
+      if (!account || account.revokedAt) throw new GatewayError(404, 'Provider account not found');
+      await renameAccount(tx, providerId, label);
+
+      return { ...account, label };
+    });
+  }
+
+  /**
+   * Removes an account with its key. When it was the active one, the newest account left takes
+   * over in the same transaction; when it was the last, the vendor is disconnected.
+   */
   async revokeProvider(providerId: string) {
     return this.store.transaction(GATEWAY_SCOPE, async (tx) => {
-      const provider = await findProvider(tx, providerId);
+      const named = await findProvider(tx, providerId);
 
-      if (!provider) {
+      if (!named) {
         throw new GatewayError(404, 'Provider not found');
       }
 
-      const revoked = { ...provider, revokedAt: provider.revokedAt ?? nowIso(this.clock) };
+      // Read again under the lock: a switch that committed meanwhile decides who takes over.
+      const provider = named.revokedAt
+        ? named
+        : ((await lockAccounts(tx, vendorOf(named))).find((item) => item.id === providerId) ??
+          named);
+      const revoked = {
+        ...provider,
+        revokedAt: provider.revokedAt ?? nowIso(this.clock),
+        active: false,
+      };
 
       await markProviderRevoked(tx, providerId, new Date(revoked.revokedAt));
       await this.vault.discard(providerSecret(providerId), tx);
+
+      const successor = provider.active ? await successorOf(tx, provider) : null;
+      if (successor) {
+        await makeActive(tx, successor);
+        await repointChoices(tx, successor);
+      }
 
       return revoked;
     });
@@ -281,8 +376,9 @@ export class Providers {
     selection: ModelSelection,
     reader: Queryable,
   ): Promise<{ config: ModelConfig; policy: ContextPolicy }> {
+    // Whichever account the choice was made with, the vendor's active one is what runs use.
     const provider =
-      (await findProvider(reader, selection.providerId)) ??
+      (await activeAccountOf(reader, selection.providerId)) ??
       providerKinds
         .map((kind) => environmentProvider(kind))
         .find((item) => item?.id === selection.providerId);
@@ -315,31 +411,11 @@ export class Providers {
     // Ceilings, not targets: a large context window must not inflate routine memory/history.
     return {
       config: {
-        // Groq, xAI and a server the owner runs all speak the OpenAI API at their own address.
-        ...(provider.kind === 'groq' ||
-        provider.kind === 'xai' ||
-        provider.kind === 'openai-compatible'
-          ? {
-              provider: 'openai-compatible' as const,
-              baseURL:
-                provider.kind === 'groq'
-                  ? GROQ_BASE_URL
-                  : provider.kind === 'xai'
-                    ? XAI_BASE_URL
-                    : (provider.baseURL ?? ''),
-            }
-          : {
-              provider: provider.authMode === 'codex' ? ('openai-codex' as const) : provider.kind,
-            }),
+        ...accountConfig(provider),
         modelId: selection.modelId,
-        ...(provider.kind === 'anthropic'
-          ? { credential: anthropicCredential(provider.credential, provider.apiKeyEnv, undefined) }
-          : {}),
         ...(selection.reasoningEffort ? { reasoningEffort: selection.reasoningEffort } : {}),
         // Only where the model takes it: a stale choice must not cost a refused request.
         ...(selection.fast && takesFast(provider.kind, selection.modelId) ? { fast: true } : {}),
-        ...(provider.kind === 'ollama' ? { baseURL: provider.baseURL } : {}),
-        ...(provider.apiKeyEnv ? { apiKeyEnv: provider.apiKeyEnv } : { providerId: provider.id }),
       },
       // Reserve output inside the model's actual window. Session compaction, not a fixed
       // history share, decides when older turns leave the request. The reserve stops at 64k:
@@ -368,4 +444,43 @@ export class Providers {
       },
     };
   }
+
+  /**
+   * A frozen model config with the account its vendor has active now. A run freezes its config
+   * when it is queued and resolves the account once, as it starts, keeping that key to the end:
+   * a switch meanwhile reaches the run, a switch during it waits for the next one, and an
+   * account removed while a run waited does not strand it. A config of the host's environment,
+   * or of a vendor with no account left, is returned as it was and fails as it always did.
+   */
+  async activeConfig(config: ModelConfig): Promise<ModelConfig> {
+    if (!config.providerId) return config;
+    const account = await activeAccountOf(this.store.db, config.providerId);
+
+    return account ? { ...config, ...accountConfig(account) } : config;
+  }
+}
+
+/** What a model config takes from the account it runs on: where to call, and with what. */
+function accountConfig(provider: ProviderRecord) {
+  return {
+    // Groq, xAI and a server the owner runs all speak the OpenAI API at their own address.
+    ...(provider.kind === 'groq' || provider.kind === 'xai' || provider.kind === 'openai-compatible'
+      ? {
+          provider: 'openai-compatible' as const,
+          baseURL:
+            provider.kind === 'groq'
+              ? GROQ_BASE_URL
+              : provider.kind === 'xai'
+                ? XAI_BASE_URL
+                : (provider.baseURL ?? ''),
+        }
+      : {
+          provider: provider.authMode === 'codex' ? ('openai-codex' as const) : provider.kind,
+        }),
+    ...(provider.kind === 'anthropic'
+      ? { credential: anthropicCredential(provider.credential, provider.apiKeyEnv, undefined) }
+      : {}),
+    ...(provider.kind === 'ollama' ? { baseURL: provider.baseURL } : {}),
+    ...(provider.apiKeyEnv ? { apiKeyEnv: provider.apiKeyEnv } : { providerId: provider.id }),
+  };
 }

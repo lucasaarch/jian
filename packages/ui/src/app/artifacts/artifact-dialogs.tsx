@@ -2,9 +2,8 @@
 
 import { useState } from 'react';
 import { toast } from 'sonner';
-import { ConfirmDialog } from '../../kit';
+import { ConfirmDialog, RenameDialog, type Renaming } from '../../kit';
 import type { ArtifactFolder, ProfileArtifact, SessionArtifact } from '../../lib/api';
-import { RenameDialog, type Renaming } from '../chat-row';
 import type { ArtifactKeeping } from './use-profile-artifacts';
 
 /** The longest names the gateway keeps, in characters: an Artifact's, and a folder's. */

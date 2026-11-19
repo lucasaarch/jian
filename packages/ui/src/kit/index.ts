@@ -29,6 +29,7 @@ export {
 } from './page-layout';
 export { Picker, PickerAction, PickerRow } from './picker';
 export { Progress } from './progress';
+export { RenameDialog, type Renaming } from './rename-dialog';
 export { RowInput, RowTextArea } from './row-field';
 export { ScrollStrip } from './scroll-strip';
 export { SearchField } from './search-field';

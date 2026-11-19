@@ -2,11 +2,13 @@ import { localPlace, remotePlace } from './agent/github-git-place.js';
 import { prepareGitAccess } from './agent/worker-workspace.js';
 import { SessionArtifacts } from './artifacts/service.js';
 import { Contacts } from './channels/contacts.js';
+import { CommandSecrets } from './command-secrets/service.js';
 import { Contexts } from './context/service.js';
 import type { Clock } from './core/clock.js';
 import { Decisions } from './decisions/service.js';
 import { Devices } from './devices/service.js';
 import { Errands } from './errands/service.js';
+import { FileLinks } from './file-links/service.js';
 import type { GitHubIntegrations } from './integrations/github.js';
 import { Learning } from './learning/service.js';
 import { McpServers } from './mcp/service.js';
@@ -75,11 +77,14 @@ export type Services = {
   vault: Vault;
   gatewayVault: GatewayVault;
   sshKeys: SshKeys;
+  commandSecrets: CommandSecrets;
   mcp: McpServers;
   skillLibrary: SkillLibrary;
   remote: Remote;
   push: PushNotifications;
   mobilePush: MobilePush;
+  /** Absent unless this is a server gateway the internet reaches at an https:// address. */
+  fileLinks?: FileLinks;
 };
 
 /**
@@ -180,6 +185,8 @@ export function buildServices({
     decisions.judge,
   );
   const sshKeys = new SshKeys(store, gatewayVault);
+  const commandSecrets = new CommandSecrets(store, gatewayVault, clock);
+  profiles.useBeforeDelete((profileId, tx) => commandSecrets.forgetAgent(profileId, tx));
   const worktrees = new Worktrees(
     store,
     clock,
@@ -250,10 +257,16 @@ export function buildServices({
     vault,
     gatewayVault,
     sshKeys,
+    commandSecrets,
     mcp: new McpServers(store, gatewayVault, clock),
     skillLibrary: new SkillLibrary(store, clock),
     remote,
     push,
+    // A link is only worth making where its reader can reach it: a server, over https. The
+    // desktop app's own gateway listens on loopback, and its agents send files instead.
+    ...(mode !== 'local' && publicUrl?.startsWith('https://')
+      ? { fileLinks: new FileLinks(store, publicUrl, clock) }
+      : {}),
   };
 
   return services;

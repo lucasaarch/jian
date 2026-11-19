@@ -7,6 +7,8 @@
 export const keys = {
   profiles: ['profiles'] as const,
   providers: ['providers'] as const,
+  // Under providers, so whatever reads the providers again reads the accounts with them.
+  providerAccounts: ['providers', 'accounts'] as const,
   providerModels: (providerId: string) => ['provider-models', providerId] as const,
   modelDefaults: ['model-defaults'] as const,
   subscriptionUsage: ['subscription-usage'] as const,
@@ -37,6 +39,7 @@ export const keys = {
   channels: (profileId: string) => ['profile', profileId, 'channels'] as const,
   contacts: (profileId: string) => ['profile', profileId, 'contacts'] as const,
   memories: (profileId: string) => ['profile', profileId, 'memories'] as const,
+  commandSecrets: (profileId: string) => ['profile', profileId, 'command-secrets'] as const,
   activities: (profileId: string) => ['profile', profileId, 'activities'] as const,
   /** Every conversation's context at once, which a turn anywhere in the profile makes stale. */
   contexts: (profileId: string) => ['profile', profileId, 'context'] as const,

@@ -40,6 +40,7 @@ import {
   MAX_EMAIL_FILES,
 } from '../errands/email-parts.js';
 import type { Outreach } from '../errands/port.js';
+import type { FileLinks } from '../file-links/service.js';
 import { X_TOOL_GROUPS } from '../integrations/x/catalog/index.js';
 import type { Media } from '../media/service.js';
 import { sameSubject } from '../memories/duplicates.js';
@@ -56,8 +57,10 @@ import type { Sessions } from '../sessions/service.js';
 import { findSkill, NO_LIBRARY, type SkillLibraryState } from '../skills/builtin/index.js';
 import { longRunningWork, longRunningWorkFor } from '../skills/builtin/long-running-work.js';
 import { managingContext, managingContextFor } from '../skills/builtin/managing-context.js';
+import { media, mediaFor } from '../skills/builtin/media.js';
 import { ownerAndContacts, ownerAndContactsFor } from '../skills/builtin/owner-and-contacts.js';
 import { remoteControl, remoteControlFor } from '../skills/builtin/remote-control.js';
+import { videoProduction, videoProductionFor } from '../skills/builtin/video-production.js';
 import { type WebAccess, webResearch, webResearchFor } from '../skills/builtin/web-research.js';
 import { worktreesFor, worktrees as worktreesSkill } from '../skills/builtin/worktrees.js';
 import { x, xFor } from '../skills/builtin/x.js';
@@ -68,11 +71,13 @@ import type { Stats } from '../stats/service.js';
 import type { Store } from '../storage/database.js';
 import { artifacts, checkpoints } from '../storage/schema.js';
 import type { Work } from '../tasks/service.js';
+import { TIER_AT_ONCE } from '../tasks/tier.js';
 import { AskUserPause } from './ask-user.js';
+import { fileLinkTools } from './file-link-tools.js';
 import { type FileBackend, fileTools } from './files.js';
 import { remoteTools } from './remote-tools.js';
 import { artifactPage } from './results.js';
-import { shellTools } from './shell.js';
+import { type CommandSecretAccess, shellTools } from './shell.js';
 
 /** What the tool set reaches for on the profile's behalf during a run. */
 const jevQuestionSchema = z.discriminatedUnion('type', [
@@ -148,6 +153,8 @@ export type ToolServices = {
     Remote,
     'list' | 'execute' | 'executeComputer' | 'update' | 'executeFiles' | 'offersFiles'
   >;
+  /** Absent on a gateway no link from outside reaches: see `fileLinkTools`. */
+  fileLinks?: Pick<FileLinks, 'create' | 'revoke'>;
 };
 
 /**
@@ -172,7 +179,7 @@ export const cardInput = (definition: unknown, input: unknown): Promise<unknown>
   Promise.resolve(input);
 
 /**
- * A skill as this run may load it: the owner's own of that name as they wrote it, and the two
+ * A skill as this run may load it: the owner's own of that name as they wrote it, and the
  * built-in ones that say only what the run can do, written for this run.
  */
 export function skillFor(
@@ -188,6 +195,8 @@ export function skillFor(
     machine?: { files: boolean };
     /** The run has `send_email`. */
     email?: boolean;
+    /** The run has `share_file_link`. */
+    links?: boolean;
   },
   /** The skills of the conversation's workspaces, named apart from the library's already. */
   projectSkills: readonly Skill[] = [],
@@ -211,7 +220,9 @@ export function skillFor(
     });
   }
   if (skill === remoteControl) return remoteControlFor(can.machine);
+  if (skill === videoProduction) return videoProductionFor(can.machine);
   if (skill === ownerAndContacts) return ownerAndContactsFor(Boolean(can.email));
+  if (skill === media) return mediaFor(Boolean(can.links));
   return skill;
 }
 
@@ -255,6 +266,8 @@ export function profileTools(
   email = false,
   /** In an email conversation, the correspondent `reply_email` answers. */
   replyTo?: string,
+  /** The owner's command secrets this run's `run_command` may hand a command. */
+  commandSecrets?: CommandSecretAccess,
 ): ToolSet {
   const coordination = new Coordination(services);
   const rechecked = new Set<string>();
@@ -625,7 +638,7 @@ export function profileTools(
               remoteTarget
                 ? "It works on the gateway, not on this conversation's machine: its file tools and run_command are the gateway's, and it reaches the machine only through run_remote_command, so name the machine, the paths and the cwd in the brief."
                 : 'It works on the same files as you.'
-            } The call waits and returns its report, for up to 15 minutes, after which the report arrives here later; wait false returns at once. Leave tier out to let Decisions pick light, standard or deep.`,
+            } The call waits and returns its report, for up to 15 minutes, after which the report arrives here later; wait false returns at once. Tier: light or standard for parallel pieces; deep for the one hard piece, not for each of many, at most ${TIER_AT_ONCE.deep} at once in this conversation. Left out, Decisions picks light, standard or deep. premium is the provider's top-priced model, far above deep: only when the owner asked for it or a deep subagent already failed at the same work, never for parallel pieces, and ${TIER_AT_ONCE.premium} at a time.`,
             inputSchema: conversationSubagentInputSchema,
             execute: async (input, options) => {
               const work = services.work;
@@ -765,6 +778,7 @@ export function profileTools(
             xConnected,
             worktrees,
             email,
+            links: !remoteTarget && Boolean(services.fileLinks),
             ...(remoteTarget ? { machine: { files: Boolean(machineFiles) } } : {}),
           },
           projectSkills,
@@ -1196,8 +1210,12 @@ export function profileTools(
   // The shell and the file tools are always available, and so is every connected
   // machine; a conversation aimed at one machine works there instead of locally: its commands
   // through run_remote_command, its files through the same file tools when its worker has them.
-  if (!remoteTarget) Object.assign(tools, shellTools(gitAccess));
+  if (!remoteTarget) Object.assign(tools, shellTools(gitAccess, commandSecrets));
   else if (machineFiles) Object.assign(tools, fileTools(machineFiles));
+  // A link reads the gateway's own files, so only a run whose files are here gets one.
+  if (!remoteTarget && services.fileLinks) {
+    Object.assign(tools, fileLinkTools(services.fileLinks, run));
+  }
   if (services.remote) {
     Object.assign(tools, remoteTools(run, services.remote, services.store, remoteTarget));
   }
@@ -1306,7 +1324,16 @@ export const TOOL_GROUPS = {
   files: {
     summary:
       'read, edit, write, find and search files on the machine this gateway runs on — for code too',
-    tools: ['read_file', 'edit_file', 'write_file', 'find_files', 'search_files', 'list_directory'],
+    tools: [
+      'read_file',
+      'edit_file',
+      'write_file',
+      'find_files',
+      'search_files',
+      'list_directory',
+      'share_file_link',
+      'revoke_file_link',
+    ],
   },
   shell: {
     summary: 'run commands on the machine this gateway runs on',
@@ -1392,6 +1419,10 @@ export type ToolGroup = keyof typeof TOOL_GROUPS;
 /** The `contacts` group for a run that has `send_email`. */
 export const CONTACTS_WITH_EMAIL_SUMMARY =
   'list the people the owner approved on your channels, rename one on WhatsApp or Telegram, and write to one, optionally bringing their answer back here, or email any address once the owner approves that email; expect a service’s mail when you sign up, and search the mail you received and sent';
+
+/** The `files` group for a run that can also share a file by a temporary link. */
+export const FILES_WITH_LINKS_SUMMARY =
+  'read, edit, write, find and search files on the machine this gateway runs on — for code too — and share one by a temporary link, for a file too large to send or a service that takes a URL';
 
 /** The `files` group for a run whose file tools reach its machine, not the gateway's. */
 export const MACHINE_FILES_SUMMARY =

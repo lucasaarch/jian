@@ -161,14 +161,19 @@ export const providers = pgTable(
     apiKeyEnv: text('api_key_env'),
     // Where an OpenAI-compatible server's API is; null for every vendor with a fixed address.
     baseUrl: text('base_url'),
+    // A row is one account of its vendor; the owner may name it ("Work"). Null only on a row
+    // revoked before accounts existed.
+    label: text('label'),
+    // The account runs use. Several may be live for one vendor and mode; one of them is active.
+    active: boolean('active').notNull().default(true),
     createdAt,
     revokedAt: timestamp('revoked_at', { withTimezone: true }),
   },
   (table) => [
-    // One live provider per vendor: the rule the service enforced by scanning.
-    uniqueIndex('providers_live_per_kind_auth')
+    // One active account per vendor and mode: what runs use is never a choice between two.
+    uniqueIndex('providers_active_per_kind_auth')
       .on(table.kind, sql`coalesce(${table.authMode}, 'api')`)
-      .where(sql`${table.revokedAt} is null`),
+      .where(sql`${table.revokedAt} is null and ${table.active}`),
   ],
 );
 
@@ -182,6 +187,40 @@ export const gatewaySecrets = pgTable('gateway_secrets', {
   createdAt,
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
+
+/**
+ * Secrets the owner keeps for agents' commands, by the environment variable a command reads them
+ * as. The value is in `gateway_secrets` under `command:<name>`, never here: a secret is the
+ * installation's, as a provider key is, so one key several agents use is typed and replaced once.
+ * Which agents may use it is `command_secret_agents`.
+ */
+export const commandSecrets = pgTable('command_secrets', {
+  name: text('name').primaryKey(),
+  description: text('description'),
+  createdAt,
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  lastUsedAt: timestamp('last_used_at', { withTimezone: true }),
+});
+
+/**
+ * The agents whose commands may receive a command secret. A deleted agent loses its rows; a
+ * secret no agent may use any more goes with it (`CommandSecrets.forgetAgent`).
+ */
+export const commandSecretAgents = pgTable(
+  'command_secret_agents',
+  {
+    name: text('name')
+      .notNull()
+      .references(() => commandSecrets.name, { onDelete: 'cascade' }),
+    profileId: uuid('profile_id')
+      .notNull()
+      .references(() => profiles.id, { onDelete: 'cascade' }),
+  },
+  (table) => [
+    primaryKey({ columns: [table.name, table.profileId] }),
+    index('command_secret_agents_profile').on(table.profileId),
+  ],
+);
 
 /**
  * The installation's MCP servers, reached by every agent. The document keeps no typed value:
@@ -1460,3 +1499,33 @@ export const devicePairings = pgTable('device_pairings', {
   expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
   usedAt: timestamp('used_at', { withTimezone: true }),
 });
+
+/**
+ * A file of the agents' workspace reachable by an unguessable link (`file-links/`). Only the
+ * token's SHA-256 is kept, so this table cannot be read back into working links. `path` is the
+ * file's real path relative to the workspace root, and `bytes` and `modified_ms` are the file as
+ * it was shared: a link serves that file and nothing written over it later.
+ */
+export const fileLinks = pgTable(
+  'file_links',
+  {
+    id: uuid('id').primaryKey(),
+    profileId: uuid('profile_id')
+      .notNull()
+      .references(() => profiles.id, { onDelete: 'cascade' }),
+    // The conversation it was made in, for the record; a link outlives a deleted one.
+    sessionId: uuid('session_id').references(() => sessions.id, { onDelete: 'set null' }),
+    tokenHash: text('token_hash').notNull(),
+    path: text('path').notNull(),
+    bytes: bigint('bytes', { mode: 'number' }).notNull(),
+    // Whole milliseconds since the epoch, as `stat` reports the modification time.
+    modifiedMs: bigint('modified_ms', { mode: 'number' }).notNull(),
+    createdAt,
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    revokedAt: timestamp('revoked_at', { withTimezone: true }),
+  },
+  (table) => [
+    uniqueIndex('file_links_token_hash').on(table.tokenHash),
+    index('file_links_profile_expires').on(table.profileId, table.expiresAt),
+  ],
+);

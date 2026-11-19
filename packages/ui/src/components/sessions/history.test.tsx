@@ -302,6 +302,45 @@ it('a progress frame that is reconnecting shows it, counting down to the next at
   }
 });
 
+it('a run queued while every slot is held says it waits for one, not that it is starting', async () => {
+  const runId = '3a1f3c1e-5d1a-4f7e-9a51-1c2d3e4f5a6b';
+  const sessionId = '4b1d2e3f-4a5b-4c6d-8e7f-9a0b1c2d3e4f';
+  const queued = {
+    id: runId,
+    profileId: 'profile',
+    sessionId,
+    status: 'queued',
+    progress: {
+      phase: 'thinking',
+      text: '',
+      steps: 0,
+      queued: { working: 48, slots: 48 },
+      updatedAt: '2026-11-07T10:00:05.000Z',
+    },
+    createdAt: '2026-11-07T10:00:00Z',
+    updatedAt: '2026-11-07T10:00:00Z',
+  } as Run;
+  const api = {
+    messages: async () => [],
+    activities: async () => [queued],
+    timeline: async () => [],
+  };
+  const view = await mount(
+    <History api={api} profileId="profile" sessionId={sessionId} initialRun={queued} />,
+  );
+  const line = () => view.element.querySelector('.thought-line');
+
+  try {
+    expect(line()?.querySelector('.thought-label')?.textContent).toBe('Waiting for a free slot');
+    expect(line()?.querySelector('.thought-retry')?.textContent).toBe('48 runs are working');
+    expect(line()?.querySelector('[role="status"]')?.textContent).toBe(
+      'Waiting for a free slot · 48 runs are working',
+    );
+  } finally {
+    await view.done();
+  }
+});
+
 it('opens with the latest 40 and reads 40 more near the top', async () => {
   const all = Array.from({ length: 100 }, (_, number) => ({
     id: `m${number}`,

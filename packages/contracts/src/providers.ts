@@ -90,6 +90,8 @@ export const providerInputSchema = z.strictObject({
     .url({ protocol: /^https?$/ })
     .max(500)
     .optional(),
+  /** What the owner calls this account ("Work"); the gateway names one left unnamed. */
+  label: z.string().trim().min(1).max(60).optional(),
 });
 
 /**
@@ -103,6 +105,16 @@ export const providerRecordSchema = providerInputSchema.omit({ secret: true }).e
   id: z.uuid(),
   createdAt: z.iso.datetime(),
   revokedAt: z.iso.datetime().optional(),
+  /**
+   * The account runs use. A vendor and authentication mode may hold several live accounts and
+   * exactly one of them is active; absent on a credential read from the gateway's environment.
+   */
+  active: z.boolean().optional(),
+});
+
+/** Renaming is the only change an account takes in place: its credential is never shown back. */
+export const providerAccountPatchSchema = z.strictObject({
+  label: z.string().trim().min(1).max(60),
 });
 
 export const codexLoginSchema = z.strictObject({
@@ -172,6 +184,7 @@ export const modelDefaultsRecordSchema = modelDefaultsInputSchema.extend({
 
 export type ProviderCredential = z.infer<typeof providerCredentialSchema>;
 export type ProviderRecord = z.infer<typeof providerRecordSchema>;
+export type ProviderAccountPatch = z.infer<typeof providerAccountPatchSchema>;
 export type ProviderModel = z.infer<typeof providerModelSchema>;
 export type ProviderModelList = z.infer<typeof providerModelListSchema>;
 export type ModelCapabilities = z.infer<typeof modelCapabilitiesSchema>;

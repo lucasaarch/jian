@@ -115,7 +115,7 @@ export class CodexLogin {
           .parse(await response.json());
         const tokens = await this.exchange(code.authorization_code, code.code_verifier);
         if (this.stopped) return;
-        // Registering the provider revokes any previous one of the same vendor with its key.
+        // A new ChatGPT account is added and made active; the same one signing in again is refreshed.
         await this.services.providers.configureCodexProvider(JSON.stringify(tokens));
         this.pending.delete(GATEWAY_SCOPE);
         return;

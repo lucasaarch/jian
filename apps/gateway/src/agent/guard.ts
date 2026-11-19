@@ -26,6 +26,8 @@ const ACTION_KINDS: Partial<Record<string, ActionKind>> = {
   merge_worktree: 'machine',
   remove_worktree: 'machine',
   send_file: 'message',
+  // A link hands the file to whoever holds it, as sending it would.
+  share_file_link: 'message',
   // An Artifact sent as a file is a file that leaves, as send_file's is.
   send_artifact: 'message',
   send_session_message: 'message',
@@ -124,6 +126,15 @@ export function requestText(input: unknown): string {
   return text.length > REQUEST_CHARS ? `${text.slice(0, REQUEST_CHARS - 1)}…` : text;
 }
 
+/** The command secrets a call to `run_command` asks to be handed, by name. */
+export function secretNames(input: unknown): string[] {
+  const value =
+    input && typeof input === 'object' ? (input as { secrets?: unknown }).secrets : undefined;
+  return Array.isArray(value)
+    ? value.filter((name): name is string => typeof name === 'string')
+    : [];
+}
+
 /** One argument of a call, as text, when it is there and is text. */
 const field = (input: unknown, name: string): string | undefined => {
   const value =
@@ -181,11 +192,16 @@ const PLAIN: Record<
       .join(' · '),
     confirm: 'Allow',
   }),
-  run_command: (input) => ({
-    title: 'Run a command',
-    detail: field(input, 'command'),
-    confirm: 'Run',
-  }),
+  run_command: (input) => {
+    const lent = secretNames(input);
+    return {
+      title: lent.length
+        ? `Run a command with the ${lent.length === 1 ? 'secret' : 'secrets'} ${lent.join(', ')}`
+        : 'Run a command',
+      detail: field(input, 'command'),
+      confirm: 'Run',
+    };
+  },
   run_remote_command: (input) => ({
     title: 'Run a command on a connected machine',
     detail: field(input, 'command'),
@@ -239,6 +255,13 @@ const PLAIN: Record<
         }
       : { title: `Remove worktree ${field(input, 'name')}`, confirm: 'Remove' },
   send_file: (input) => ({ title: 'Send a file', detail: field(input, 'path'), confirm: 'Send' }),
+  share_file_link: (input) => ({
+    title: 'Share a file by a temporary link',
+    detail: [field(input, 'path'), 'Anyone with the link can download it until it expires.']
+      .filter(Boolean)
+      .join('\n'),
+    confirm: 'Share',
+  }),
   send_artifact: (input) => ({
     title: field(input, 'format')
       ? `Send an Artifact as a ${field(input, 'format')?.toUpperCase()} file`
@@ -328,11 +351,13 @@ const PLAIN: Record<
 
 /**
  * Cards no model writes: the owner approves exactly what leaves, so they read it from the call
- * itself, never from a summary the agent being approved wrote about it.
+ * itself, never from a summary the agent being approved wrote about it. A command handed the
+ * owner's secrets is one: the card names each secret and shows the command that gets it.
  */
 const PLAIN_ONLY = new Set(['send_email']);
 
-export const plainOnly = (toolName: string) => PLAIN_ONLY.has(toolName);
+export const plainOnly = (toolName: string, input?: unknown) =>
+  PLAIN_ONLY.has(toolName) || (toolName === 'run_command' && secretNames(input).length > 0);
 
 /** A tool of X's, of which there are too many to word by hand: its own summary, and its words. */
 function xPlain(toolName: string, input: unknown) {

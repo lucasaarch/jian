@@ -23,7 +23,7 @@ export type RoleSelections = Record<ModelRole, ModelSelection | 'disabled' | nul
  * Columns come back as dates and as nulls, while the contract speaks ISO strings and leaves an
  * unset field out entirely; the parse is the boundary.
  */
-function toProviderRecord(row: Row): ProviderRecord {
+export function toProviderRecord(row: Row): ProviderRecord {
   return providerRecordSchema.parse({
     id: row.id,
     name: row.name,
@@ -32,8 +32,10 @@ function toProviderRecord(row: Row): ProviderRecord {
     ...(row.credential ? { credential: row.credential } : {}),
     ...(row.apiKeyEnv ? { apiKeyEnv: row.apiKeyEnv } : {}),
     ...(row.baseUrl ? { baseURL: row.baseUrl } : {}),
+    ...(row.label ? { label: row.label } : {}),
     createdAt: row.createdAt.toISOString(),
     ...(row.revokedAt ? { revokedAt: row.revokedAt.toISOString() } : {}),
+    active: !row.revokedAt && row.active,
   });
 }
 
@@ -61,8 +63,17 @@ export async function findProvider(db: Queryable, id: string): Promise<ProviderR
   return row ? toProviderRecord(row) : null;
 }
 
+/**
+ * What runs can use: each vendor's active account. The others stay out, so a client that predates
+ * accounts still sees one credential per vendor and mode, and so does every automatic choice.
+ */
 export async function listProviders(db: Queryable): Promise<ProviderRecord[]> {
-  const rows = await db.select().from(providers).orderBy(providers.createdAt).limit(100);
+  const rows = await db
+    .select()
+    .from(providers)
+    .where(and(isNull(providers.revokedAt), eq(providers.active, true)))
+    .orderBy(providers.createdAt)
+    .limit(100);
 
   return rows.map(toProviderRecord);
 }
@@ -101,40 +112,19 @@ export async function insertProvider(db: Queryable, provider: ProviderRecord): P
     credential: provider.credential ?? null,
     apiKeyEnv: provider.apiKeyEnv ?? null,
     baseUrl: provider.baseURL ?? null,
+    label: provider.label ?? null,
+    active: provider.active ?? true,
     createdAt: new Date(provider.createdAt),
     revokedAt: provider.revokedAt ? new Date(provider.revokedAt) : null,
   });
 }
 
 /**
- * Retires whatever this vendor still had live and names it, so the caller can discard the key
- * that went with it. Revoking first is what keeps the live-per-vendor index free for the
- * replacement inside the same transaction.
+ * Written unconditionally: a second revocation carries the first one's instant, not a new one.
+ * A revoked account is never the active one, whatever it was.
  */
-export async function revokeLiveProviders(
-  db: Queryable,
-  kind: ProviderRecord['kind'],
-  at: Date,
-  authMode: 'api' | 'codex' = 'api',
-): Promise<string[]> {
-  const rows = await db
-    .update(providers)
-    .set({ revokedAt: at })
-    .where(
-      and(
-        eq(providers.kind, kind),
-        isNull(providers.revokedAt),
-        sql`coalesce(${providers.authMode}, 'api') = ${authMode}`,
-      ),
-    )
-    .returning({ id: providers.id });
-
-  return rows.map((row) => row.id);
-}
-
-/** Written unconditionally: a second revocation carries the first one's instant, not a new one. */
 export async function markProviderRevoked(db: Queryable, id: string, at: Date): Promise<void> {
-  await db.update(providers).set({ revokedAt: at }).where(eq(providers.id, id));
+  await db.update(providers).set({ revokedAt: at, active: false }).where(eq(providers.id, id));
 }
 
 /**

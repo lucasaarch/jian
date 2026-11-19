@@ -8,10 +8,12 @@ import { registerOpenAiRoutes } from './channels/openai/routes.js';
 import { registerChannelRoutes } from './channels/routes.js';
 import type { Channels } from './channels/service.js';
 import type { WhatsAppConnections } from './channels/whatsapp/connections.js';
+import { registerCommandSecretRoutes } from './command-secrets/routes.js';
 import { registerCoordinationRoutes } from './coordination/routes.js';
 import { Coordination } from './coordination/service.js';
 import { registerDecisionRoutes } from './decisions/routes.js';
 import { registerDeviceRoutes } from './devices/routes.js';
+import { registerFileLinkRoutes } from './file-links/routes.js';
 import { registerEventRoutes } from './http/events.js';
 import { registerMetaRoutes } from './http/meta.js';
 import { registerReturnPages } from './http/returned.js';
@@ -195,6 +197,7 @@ export function createApp(
     registerSecurityRoutes(routes, options);
     registerDeviceRoutes(routes, options);
     registerSshRoutes(routes, options);
+    registerCommandSecretRoutes(routes, options);
     registerPushRoutes(routes, options);
     registerRemoteRoutes(routes, options);
     registerSkillRoutes(routes, options);
@@ -203,6 +206,7 @@ export function createApp(
     registerProjectRoutes(routes, options.projects);
     registerSessionRoutes(routes, { ...options, coordination });
     registerArtifactRoutes(routes, options);
+    registerFileLinkRoutes(routes, options);
     registerWorktreeRoutes(routes, options);
     registerTerminalRoutes(routes, { ...options, terminals });
     registerMemoryRoutes(routes, options);

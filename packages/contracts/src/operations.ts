@@ -14,6 +14,12 @@ import {
   telegramUpdateSchema,
 } from './channels.js';
 import {
+  commandSecretCreateSchema,
+  commandSecretParamsSchema,
+  commandSecretSchema,
+  commandSecretUpdateSchema,
+} from './command-secrets.js';
+import {
   artifactPageSchema,
   artifactQuerySchema,
   leaseInputSchema,
@@ -36,6 +42,7 @@ import {
   devicePushInputSchema,
   deviceSchema,
 } from './devices.js';
+import { fileLinkParamsSchema } from './file-links.js';
 import {
   githubFixConflictsInputSchema,
   githubIssueSchema,
@@ -106,6 +113,7 @@ import {
   codexLoginSchema,
   modelDefaultsInputSchema,
   modelDefaultsRecordSchema,
+  providerAccountPatchSchema,
   providerInputSchema,
   providerModelListSchema,
   providerRecordSchema,
@@ -622,6 +630,39 @@ export const operations: Operation[] = [
   },
   {
     method: 'GET',
+    path: `${profile}/command-secrets`,
+    operationId: 'listCommandSecrets',
+    access: 'admin',
+    response: z.array(commandSecretSchema),
+  },
+  {
+    method: 'POST',
+    path: `${profile}/command-secrets`,
+    operationId: 'createCommandSecret',
+    access: 'admin',
+    body: commandSecretCreateSchema,
+    response: commandSecretSchema,
+    status: 201,
+  },
+  {
+    method: 'PATCH',
+    path: `${profile}/command-secrets/:name`,
+    operationId: 'updateCommandSecret',
+    access: 'admin',
+    params: commandSecretParamsSchema,
+    body: commandSecretUpdateSchema,
+    response: commandSecretSchema,
+  },
+  {
+    method: 'DELETE',
+    path: `${profile}/command-secrets/:name`,
+    operationId: 'deleteCommandSecret',
+    access: 'admin',
+    params: commandSecretParamsSchema,
+    response: z.strictObject({ name: z.string() }),
+  },
+  {
+    method: 'GET',
     path: `${profile}/sessions/:sessionId/subagents`,
     operationId: 'listConversationSubagents',
     access: 'admin',
@@ -738,6 +779,28 @@ export const operations: Operation[] = [
     body: providerInputSchema,
     response: providerRecordSchema,
     status: 201,
+  },
+  {
+    method: 'GET',
+    path: '/v1/provider-accounts',
+    operationId: 'listProviderAccounts',
+    access: 'admin',
+    response: z.array(providerRecordSchema),
+  },
+  {
+    method: 'PATCH',
+    path: '/v1/providers/:providerId',
+    operationId: 'renameProviderAccount',
+    access: 'admin',
+    body: providerAccountPatchSchema,
+    response: providerRecordSchema,
+  },
+  {
+    method: 'POST',
+    path: '/v1/providers/:providerId/activate',
+    operationId: 'activateProviderAccount',
+    access: 'admin',
+    response: providerRecordSchema,
   },
   {
     method: 'GET',
@@ -1753,6 +1816,20 @@ export const operations: Operation[] = [
     access: 'public',
     params: publicArtifactParamsSchema,
     query: publicArtifactExportQuerySchema,
+    response: z.string(),
+    responseContentType: 'application/octet-stream',
+  },
+  {
+    // Public because the token in the path is the proof: only a link an agent made, unexpired and
+    // not revoked, has one. It answers that one file of the agents' workspace as it was when the
+    // link was made, with Range for players and services that seek; HEAD answers its headers.
+    // Anything else, whether unknown, expired, revoked, changed or gone, is the same bare 404. A
+    // desktop app's own gateway makes no links and has no such route.
+    method: 'GET',
+    path: '/v1/file-links/:token/:name',
+    operationId: 'readFileLink',
+    access: 'public',
+    params: fileLinkParamsSchema,
     response: z.string(),
     responseContentType: 'application/octet-stream',
   },

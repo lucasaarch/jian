@@ -1,12 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import { type Profile, profilePatchSchema, profileSchema } from '@jian/contracts';
-import { and, eq, isNull } from 'drizzle-orm';
 import { type Clock, nowIso } from '../core/clock.js';
 import { assertFound, GatewayError } from '../core/errors.js';
 import { recordEvent } from '../core/events.js';
+import { activeAccountOf } from '../providers/accounts.js';
 import { environmentProvider, type ProviderKind, providerCatalog } from '../providers/catalog.js';
 import type { Queryable, Store } from '../storage/database.js';
-import { providers } from '../storage/schema.js';
 import {
   deleteProfileRow,
   findProfile,
@@ -25,14 +24,15 @@ export class Profiles {
   ) {}
 
   /**
-   * Run ahead of every delete, inside the same transaction the row dies in. Wired once, from
-   * outside — `Profiles` does not know `Channels` exists, only that something may need telling
-   * before a profile it is watching disappears (a live WhatsApp socket, an open webhook).
+   * Run ahead of every delete, in the order wired, inside the same transaction the row dies in.
+   * Wired from outside — `Profiles` does not know `Channels` exists, only that something may need
+   * telling before a profile it is watching disappears (a live WhatsApp socket, an open webhook,
+   * a command secret only it could use).
    */
-  private beforeDelete?: (profileId: string, tx: Queryable) => Promise<void>;
+  private beforeDelete: ((profileId: string, tx: Queryable) => Promise<void>)[] = [];
 
   useBeforeDelete(hook: (profileId: string, tx: Queryable) => Promise<void>): void {
-    this.beforeDelete = hook;
+    this.beforeDelete.push(hook);
   }
 
   async profile(id: string, reader: Queryable = this.store.db) {
@@ -84,13 +84,9 @@ export class Profiles {
       return;
     }
 
-    const [live] = await reader
-      .select({ id: providers.id })
-      .from(providers)
-      .where(and(eq(providers.id, providerId), isNull(providers.revokedAt)))
-      .limit(1);
-
-    if (!live) {
+    // An account switched away from, or removed, still names its vendor, which runs then use
+    // through its active account.
+    if (!(await activeAccountOf(reader, providerId))) {
       throw new GatewayError(400, 'Provider reference is not configured on this gateway');
     }
   }
@@ -143,7 +139,7 @@ export class Profiles {
     await this.profile(id);
 
     await this.store.transaction(id, async (tx) => {
-      await this.beforeDelete?.(id, tx);
+      for (const hook of this.beforeDelete) await hook(id, tx);
       await deleteProfileRow(tx, id);
     });
 

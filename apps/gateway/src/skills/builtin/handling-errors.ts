@@ -1,4 +1,5 @@
 import type { Skill } from '@jian/contracts';
+import { RUN_CONCURRENCY } from '../../runs/executors.js';
 
 export const handlingErrors: Skill = {
   name: 'handling-errors',
@@ -46,8 +47,8 @@ goes. The turn goes on where it was once a call gets through; the owner's Cancel
   billing error or a refused subscription request, fails at once with the provider's own words.
 - A provider that asks to be left alone for more than 15 minutes, as a subscription's usage
   limit does until its window reopens, is not waited out: the turn fails at once, saying when
-  the provider takes calls again (in UTC). Tell the owner when, and that another model works
-  meanwhile.
+  the provider takes calls again (in UTC). Tell the owner when, and that another model, or
+  another account of that provider made active under **Providers**, works meanwhile.
 - A look back in your Learning conversation gets one round, ten attempts, then fails as before.
 - Any other status, such as 400 for a request too large or 401, fails at once.
 
@@ -62,6 +63,10 @@ Other messages you may see:
 - A tool that is not there at all — its group is not loaded (\`load_tools\`), or this run does not
   have it: a subagent has no browser or X tools, and a conversation outside the desktop app has no
   browser.
+- A turn that stays at **Waiting for a free slot**, with how many runs are working — the gateway
+  runs at most ${RUN_CONCURRENCY} turns at once by default, subagents and turns waiting on them
+  included, and the rest start in order as slots free. Nothing is broken. Fewer subagents at once
+  frees them; the host admin can raise \`JIAN_RUN_CONCURRENCY\` in the gateway's environment and restart it.
 - A channel that does not deliver — check Channels in the panel; WhatsApp may need its QR
   code scanned again.
 - An MCP server that does not connect or needs sign-in — the owner can test or sign in under

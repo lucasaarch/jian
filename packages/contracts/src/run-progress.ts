@@ -44,6 +44,19 @@ export const runProgressSchema = z.strictObject({
     })
     .optional(),
   /**
+   * Set on a queued run while every run slot of the worker that would take it is held, so the
+   * panel can say why nothing has started. Gone once the run starts; a run that is queued
+   * without it is about to start.
+   */
+  queued: z
+    .strictObject({
+      /** Runs holding a slot when this was written. */
+      working: z.number().int().nonnegative(),
+      /** How many runs the worker executes at once. */
+      slots: z.number().int().positive(),
+    })
+    .optional(),
+  /**
    * An Artifact the agent is writing right now, as far as its tool call has been written. Never a
    * version: it ends when the tool runs (the version takes over) or fails, and nothing of it is
    * kept. Whoever may read the run's progress may read it, no one else.

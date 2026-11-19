@@ -3,12 +3,24 @@ import { result } from './result';
 import type { DecisionsSettingsPatch, ModelDefaultsInput, NewProvider } from './types';
 
 /**
- * A credential belongs to the installation; the roles it is bound to belong to a profile. That
- * split is why the first four calls take no profile and the last two do.
+ * A credential belongs to the installation, as an account of its vendor: several may be kept and
+ * one is active, the one runs use. Nothing here takes a profile.
  */
 export const providerCalls = (client: Client) => ({
   providers: () => result(client.GET('/v1/providers')),
   createProvider: (body: NewProvider) => result(client.POST('/v1/providers', { body })),
+  providerAccounts: () => result(client.GET('/v1/provider-accounts')),
+  renameProviderAccount: (providerId: string, label: string) =>
+    result(
+      client.PATCH('/v1/providers/{providerId}', {
+        params: { path: { providerId } },
+        body: { label },
+      }),
+    ),
+  activateProviderAccount: (providerId: string) =>
+    result(
+      client.POST('/v1/providers/{providerId}/activate', { params: { path: { providerId } } }),
+    ),
   revokeProvider: (providerId: string) =>
     result(client.DELETE('/v1/providers/{providerId}', { params: { path: { providerId } } })),
   providerModels: (providerId: string) =>

@@ -51,7 +51,7 @@ describe('profile vault', () => {
     await expect(services.vault.read(otherProfile, owner)).rejects.toThrow();
   });
 
-  it('discards a provider key when the provider is revoked or replaced', async () => {
+  it('keeps each account its own key and discards it when the account is removed', async () => {
     const { services } = await setup();
 
     const first = await services.providers.createProvider({
@@ -68,11 +68,13 @@ describe('profile vault', () => {
       secret: 'synthetic-second-key',
     });
 
-    expect(await services.gatewayVault.read(providerSecret(first.id))).toBeUndefined();
+    // The first stays an account of its own, key and all, until it is removed.
+    expect(await services.gatewayVault.read(providerSecret(first.id))).toBe('synthetic-first-key');
 
     await services.providers.revokeProvider(second.id);
 
     expect(await services.gatewayVault.read(providerSecret(second.id))).toBeUndefined();
+    expect(await services.gatewayVault.read(providerSecret(first.id))).toBe('synthetic-first-key');
   });
 
   it('stores an MCP token with its server and forgets it when the server goes', async () => {

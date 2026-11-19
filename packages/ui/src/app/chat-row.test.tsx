@@ -1,7 +1,8 @@
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, expect, it, vi } from 'vitest';
-import { ChatRow, RenameDialog, type Renaming } from './chat-row';
+import { RenameDialog, type Renaming } from '../kit';
+import { ChatRow } from './chat-row';
 
 const chat = (rename: Renaming['rename']): Renaming => ({ what: 'chat', maxLength: 160, rename });
 

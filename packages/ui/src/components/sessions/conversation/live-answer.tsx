@@ -84,6 +84,8 @@ export function LiveWork({
         retries: progress?.reconnecting?.attempts,
         retryAt: progress?.reconnecting?.nextAt,
         retryReason: progress?.reconnecting?.reason,
+        working: progress?.queued?.working,
+        slots: progress?.queued?.slots,
         // A settled line stops its clock at the last word only when no tool ended after it.
         updatedAt: progress?.text && unfinished ? progress.updatedAt : undefined,
       };
@@ -104,6 +106,9 @@ export function LiveWork({
             reason: now.retryReason ?? '',
           },
         }
+      : {}),
+    ...(now.working !== undefined && now.slots
+      ? { queued: { working: now.working, slots: now.slots } }
       : {}),
     updatedAt: now.updatedAt ?? createdAt,
   };

@@ -1,10 +1,38 @@
 import type { Skill } from '@jian/contracts';
 
-export const media: Skill = {
-  name: 'media',
-  description:
-    'Use when someone sends an image, voice note, audio, document or any file, asks you to look at one, asks you to make or send a file, an image or a voice reply, or wants a video or audio edited or made.',
-  instructions: `# Files, images, audio and documents
+/**
+ * Links to a file (`share_file_link`) exist only on a server gateway with an https:// public
+ * address, and only for a run whose files are on it, so the skill teaches them only to such a run.
+ */
+const LINKS = `## Sharing a file by link
+
+\`share_file_link\` (in the \`files\` group) makes a temporary link to one file in the
+directory the agents share. Use it when:
+
+- the file is over 16 MB, such as a finished video: send the owner the link instead, on any
+  channel, and say when it expires;
+- a service takes a file by its URL, such as HeyGen's avatar photo or narration audio: give it
+  the link.
+
+A link lasts 60 minutes unless you set \`minutes\`, up to 7 days; a service that fetches the file
+right away needs no more than the default. Files go up to 2 GB; a folder cannot be linked, so zip
+it first, and nothing under a hidden folder such as \`.ssh\` can be.
+
+Anyone who holds the link can download the file until it expires. Give it only to the owner or
+to the service that needs it, never to a group or a public place, and never on your own to
+someone the owner did not name. When the job is done, or the owner asks, end it at once with
+\`revoke_file_link\`, by its \`linkId\` or its \`url\`.
+
+The link serves the file as it was when you made it. If you change or delete the file, the link
+stops working: make a new one for the new file.`;
+
+/** The skill as a run reads it; `links` says whether it has `share_file_link`. */
+export function mediaFor(links: boolean): Skill {
+  return {
+    name: 'media',
+    description:
+      'Use when someone sends an image, voice note, audio, document or any file, asks you to look at one, asks you to make or send a file, an image or a voice reply, or wants a video or audio edited or made.',
+    instructions: `# Files, images, audio and documents
 
 Files travel both ways on every channel: WhatsApp, Telegram, email, the panel and the API. Anyone
 can send you a file, and you can send one back in any conversation.
@@ -80,7 +108,7 @@ script and run it with \`uv run --with <library>\`: \`reportlab\` for a PDF, \`p
 for Word, \`openpyxl\` for Excel, \`python-pptx\` for PowerPoint. Then send it by \`path\`.
 Without the machine, send the content in a text format (Markdown, CSV, HTML) and say so.
 
-Files go up to 16 MB each.
+Files go up to 16 MB each.${links ? ' A larger one goes as a link: see below.' : ` Sharing a larger one by a temporary link is offered only in a conversation working on a server gateway whose \`JIAN_PUBLIC_URL\` is an https:// address, never on the desktop app's own gateway or on another machine; this conversation does not have it.`}
 
 ## Making images and voice
 
@@ -100,7 +128,9 @@ installed: \`ffmpeg\` and \`ffprobe\`, ImageMagick 6 (\`convert\`, \`identify\`,
 most scripts are drawn. To burn in subtitles, write an \`.srt\` and use ffmpeg's \`subtitles\`
 filter. On the owner's own computer, check each with \`command -v\` first. A received video is
 saved with \`save_attachment\` before you work on it. Send the result by \`path\`; one over 16 MB
-does not go, so make it smaller (resolution, bitrate, length) or say where it is.
+does not go, so ${links ? 'share it with `share_file_link`, or make it smaller (resolution, bitrate, length)' : 'make it smaller (resolution, bitrate, length) or say where it is'}.
+For an ad or a reel made from a script, with narration, captions and music, load the
+\`video-production\` skill: it has the recipes.
 
 Generating a video, a talking avatar, a voice, music or sound effects takes a service. Use one
 you are already connected to. Without one, tell the owner what can be connected in Plugins:
@@ -116,5 +146,9 @@ provider is set up for it, say so and where to set one: Capabilities, in the set
 
 On a chat, the file is the answer: keep the words around it to a line or two. WhatsApp and
 Telegram show images and videos inline, play voice notes, and show other files as documents
-under their name, so name files the way the reader would want to keep them.`,
-};
+under their name, so name files the way the reader would want to keep them.${links ? `\n\n${LINKS}` : ''}`,
+  };
+}
+
+/** As a run without links reads it, which is what the panel shows: never a tool a run may lack. */
+export const media: Skill = mediaFor(false);

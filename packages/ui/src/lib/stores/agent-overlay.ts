@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-export type AgentSettingsPage = 'identity' | 'memories' | 'channels';
+export type AgentSettingsPage = 'identity' | 'memories' | 'secrets' | 'channels';
 
 type AgentOverlay = {
   /** The page open in the agent's settings; closed without one. */
