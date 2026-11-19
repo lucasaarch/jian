@@ -1260,6 +1260,12 @@ export class AgentRuntime {
       const builtOptions = new Map<string, Tool['providerOptions']>();
       let referencedNow = new Set<string>();
 
+      /** Masks every value a call of `toolName` carries in what this run records from now on. */
+      const maskCarried = (toolName: string, input: unknown) => {
+        for (const value of secretsIn(tools[toolName], input)) {
+          for (const form of secretForms(value)) secrets.add(form);
+        }
+      };
       const guarded: ToolSet = {};
       const toolCalls = new ToolCalls();
       // One step's results as they came back, each bounded on its own, until the step's
@@ -1345,9 +1351,7 @@ export class AgentRuntime {
             try {
               // A value the call carries (a Secret it saves) is masked before anything of the
               // call is recorded: its protection, its card and its start all come after this.
-              for (const value of secretsIn(definition, input)) {
-                for (const form of secretForms(value)) secrets.add(form);
-              }
+              maskCarried(name, input);
 
               // What the model said before this call is written first, so the conversation
               // and the channels read in the order things happened. An approved action runs
@@ -2415,6 +2419,10 @@ export class AgentRuntime {
           return request;
         },
         onStepEnd: async ({ text, toolCalls, toolResults, finishReason, usage }) => {
+          // Before this step is recorded: it may end before the stream tells of a refused call.
+          for (const call of toolCalls) {
+            if ((call as { invalid?: boolean }).invalid) maskCarried(call.toolName, call.input);
+          }
           const measured = await account(
             usage,
             preparedInputTokens,
@@ -2602,6 +2610,9 @@ export class AgentRuntime {
             progress.thinking();
             break;
           case 'tool-call':
+            // A call the SDK refused never reaches `execute`, and its error quotes the input:
+            // a value it carries is masked from here, as `execute` would have.
+            if (part.invalid) maskCarried(part.toolName, part.input);
             await narrator.endStep(true).catch(() => {});
             progress.draft(narrator.draft);
             toolCalls.hear(part.toolCallId);
@@ -2611,7 +2622,8 @@ export class AgentRuntime {
           case 'tool-error': {
             const failed = work.find((item) => item.id === part.toolCallId);
 
-            if (failed) failed.error = describe(part.error).slice(0, 300);
+            // Kept for the look back, which quotes it: the error may quote the call's input.
+            if (failed) failed.error = redactText(describe(part.error), secrets).slice(0, 300);
             artifactDraft.end();
             progress.artifactDraft(undefined);
             break;
