@@ -58,6 +58,7 @@ import { longRunningWork, longRunningWorkFor } from '../skills/builtin/long-runn
 import { managingContext, managingContextFor } from '../skills/builtin/managing-context.js';
 import { ownerAndContacts, ownerAndContactsFor } from '../skills/builtin/owner-and-contacts.js';
 import { remoteControl, remoteControlFor } from '../skills/builtin/remote-control.js';
+import { videoProduction, videoProductionFor } from '../skills/builtin/video-production.js';
 import { type WebAccess, webResearch, webResearchFor } from '../skills/builtin/web-research.js';
 import { worktreesFor, worktrees as worktreesSkill } from '../skills/builtin/worktrees.js';
 import { x, xFor } from '../skills/builtin/x.js';
@@ -172,7 +173,7 @@ export const cardInput = (definition: unknown, input: unknown): Promise<unknown>
   Promise.resolve(input);
 
 /**
- * A skill as this run may load it: the owner's own of that name as they wrote it, and the two
+ * A skill as this run may load it: the owner's own of that name as they wrote it, and the
  * built-in ones that say only what the run can do, written for this run.
  */
 export function skillFor(
@@ -211,6 +212,7 @@ export function skillFor(
     });
   }
   if (skill === remoteControl) return remoteControlFor(can.machine);
+  if (skill === videoProduction) return videoProductionFor(can.machine);
   if (skill === ownerAndContacts) return ownerAndContactsFor(Boolean(can.email));
   return skill;
 }

@@ -101,6 +101,8 @@ most scripts are drawn. To burn in subtitles, write an \`.srt\` and use ffmpeg's
 filter. On the owner's own computer, check each with \`command -v\` first. A received video is
 saved with \`save_attachment\` before you work on it. Send the result by \`path\`; one over 16 MB
 does not go, so make it smaller (resolution, bitrate, length) or say where it is.
+For an ad or a reel made from a script, with narration, captions and music, load the
+\`video-production\` skill: it has the recipes.
 
 Generating a video, a talking avatar, a voice, music or sound effects takes a service. Use one
 you are already connected to. Without one, tell the owner what can be connected in Plugins:

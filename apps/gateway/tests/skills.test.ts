@@ -8,6 +8,7 @@ import {
   findSkill,
   NO_LIBRARY,
 } from '../src/skills/builtin/index.js';
+import { videoProductionFor } from '../src/skills/builtin/video-production.js';
 import { parseSkillDocument } from '../src/skills/document.js';
 import { Skills } from '../src/skills/service.js';
 import { testServices } from './helpers/services.js';
@@ -267,6 +268,8 @@ describe('the skills every agent carries', () => {
     ])) {
       expect(() => skillSchema.parse(skill), skill.name).not.toThrow();
     }
+    // The longest form a run may be told, on a machine without file tools there.
+    expect(() => skillSchema.parse(videoProductionFor({ files: false }))).not.toThrow();
   });
 
   it('keeps product identity separate from operational guidance', () => {
@@ -319,6 +322,44 @@ describe('the skills every agent carries', () => {
 
     expect((await read('memory-keeping')).instructions).toContain('expectedVersion');
     expect((await read('house-style')).instructions).toBe('Lead with the answer.');
+  });
+
+  it('tells a conversation on a machine to make a video there, with the tools that reach it', async () => {
+    const services = await testServices();
+    const profile = await services.profiles.createProfile({
+      name: 'Atlas',
+      instructions: 'Help.',
+      model,
+    });
+    // A conversation each: one that loaded a skill already is answered without it.
+    const read = async (machine?: string) => {
+      const session = await services.sessions.createSession(profile.id, { title: 'Ad' });
+      const run = await services.runs.submit(profile.id, session.id, {
+        text: 'Make the ad',
+        requestKey: 'video',
+      });
+      const load = profileTools(
+        { ...services, store: services.store },
+        run,
+        undefined,
+        machine,
+      ).load_skill;
+
+      if (!load?.execute) {
+        throw new Error('load_skill is unavailable');
+      }
+
+      const call = { toolCallId: 'test', messages: [], context: {} };
+      const loaded = await load.execute({ name: 'video-production' } as never, call);
+      return (loaded as { instructions: string }).instructions;
+    };
+
+    expect(await read()).toContain('`run_command`');
+    // A machine's conversation has neither the gateway's shell nor file tools on that machine.
+    const there = await read('machine-1');
+    expect(there).toContain('`run_remote_command`');
+    expect(there).toContain('`push_remote_file`');
+    expect(there).not.toMatch(/`run_command`|`write_file`/);
   });
 
   it('lets the owner switch one off for every agent, and an import replace one', async () => {
