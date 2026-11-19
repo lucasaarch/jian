@@ -308,11 +308,13 @@ describe('who reads an Artifact', () => {
         "form-action 'none'",
         "frame-src 'none'",
         "frame-ancestors 'none'",
-        // The page saves its own downloads; the Artifact's frame is given scripts alone.
-        'sandbox allow-scripts allow-downloads',
+        // The page saves its own downloads and opens its links to Jian in a tab of their own;
+        // the Artifact's frame is given scripts alone, which no flag here widens.
+        'sandbox allow-scripts allow-downloads allow-popups allow-popups-to-escape-sandbox',
       ]),
     );
-    expect(policy).not.toMatch(/allow-same-origin|allow-popups|allow-top|unsafe-eval|https?:|\*/);
+    expect(policy).not.toMatch(/allow-same-origin|allow-top|unsafe-eval|https?:|\*/);
+    expect(page.body).toContain('<iframe id="artifact" sandbox="allow-scripts" ');
     // The source arrives as data, and what it holds never reads as the page's own markup.
     expect(page.body).toContain('Hello \\u003c/script&#62;\\u003cscript&#62;alert(1)');
     expect(page.body).not.toContain('<script>alert(1)');

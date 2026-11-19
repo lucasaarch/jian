@@ -104,7 +104,7 @@ something later, or every day, see \`schedules\`.
   needs is written in it, and a React component imports only react and react-dom.
   Whether anyone else can open it is the owner's choice: Private, or Public with a link, which
   only a gateway on a server offers. Whoever opens the link sees it as the owner does, with a
-  toolbar at the top that downloads it, and for a component copies a prompt that asks another
+  toolbar across its top, always shown, that links to Jian and downloads it, and for a component copies a prompt that asks another
   AI to use it in React or rewrite it for Vue, Angular, Svelte, SolidJS, plain HTML or React
   Native; the owner copies the same prompts from the component's menu. They set it in that tab,
   or ask you, and then

@@ -56,11 +56,12 @@ import { SHEET } from './sheet-frame.js';
 export function artifactPolicy(
   ancestors: "'self'" | "'none'",
   /**
-   * The public page's own leave to save a file, for its Download menu (public-page.ts). The
-   * Artifact's frame inside it is still given `allow-scripts` alone, and a frame never has a flag
-   * its own `sandbox` attribute does not grant.
+   * The public page's own leave to save a file, for its Download menu, and to open its links to
+   * Jian in a tab of their own (public-page.ts). The Artifact's frame inside it is still given
+   * `allow-scripts` alone, and a frame never has a flag its own `sandbox` attribute does not
+   * grant.
    */
-  downloads = false,
+  publicPage = false,
 ): string {
   return [
     "default-src 'none'",
@@ -74,7 +75,7 @@ export function artifactPolicy(
     "form-action 'none'",
     "frame-src 'none'",
     `frame-ancestors ${ancestors}`,
-    `sandbox allow-scripts${downloads ? ' allow-downloads' : ''}`,
+    `sandbox allow-scripts${publicPage ? ' allow-downloads allow-popups allow-popups-to-escape-sandbox' : ''}`,
   ].join('; ');
 }
 
