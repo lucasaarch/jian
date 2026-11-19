@@ -591,14 +591,14 @@ export function profileTools(
 
     read_memories: tool({
       description:
-        'Find shared memories, with their versions and what each is linked to; a flash memory shows when it expires. Give a few words of the subject to search; with none, the most recent. Search before remember, and update the memory you find instead of writing a near-duplicate.',
+        'Find shared memories, with their versions and what each is linked to. Give a few words of the subject to search; with none, the most recent. Search before remember, and update the memory you find instead of writing a near-duplicate.',
       inputSchema: z.object({ query: z.string().max(200).optional() }),
       execute: async ({ query }) => services.memories.search(run.profileId, query ?? ''),
     }),
 
     remember: tool({
       description:
-        'Save a fact or decision shared by all sessions of this profile. Use expectedVersion=0 for a new key, or the current version for an update. Set flash: true for what only matters for now (a pull request in flight, a task of today): a flash memory is recalled like any other until expiresInHours pass (24 by default, 1 at least), then deleted. Saving it with flash again restarts its hours; flash: false keeps it for good. A permanent memory never becomes flash.',
+        'Save a fact or decision shared by all sessions of this profile. Use expectedVersion=0 for a new key, or the current version for an update. flash: true keeps it only expiresInHours (1-24, default 24): for work in flight, never for what lasts.',
       inputSchema: memorySchema,
       execute: async (input) => {
         // Checked once per key and turn: an agent told of a near-duplicate that saves again
