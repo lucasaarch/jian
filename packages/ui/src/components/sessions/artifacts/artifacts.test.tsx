@@ -410,14 +410,71 @@ describe('the frame an Artifact runs in', () => {
     expect(sent).toHaveBeenCalledTimes(1);
   });
 
-  it('is never listened to by the panel', async () => {
+  it('is never listened to by the panel, but for a component’s tweaks', async () => {
     const heard = vi.spyOn(window, 'addEventListener');
 
-    await opened(counter);
+    await opened(page);
     await loaded();
 
     expect(heard.mock.calls.filter(([type]) => type === 'message')).toEqual([]);
     heard.mockRestore();
+  });
+
+  it('draws the tweaks a component says, from its own frame only, and sends their values', async () => {
+    await opened(counter);
+    const { element, sent } = await loaded();
+    const tweaks = () => drawer()?.querySelector('aside[aria-label="Tweaks"]');
+    const say = (source: unknown, controls: unknown) =>
+      act(async () => {
+        window.dispatchEvent(
+          new MessageEvent('message', {
+            data: { jianArtifactTweaks: { controls } },
+            source: source as MessageEventSource,
+          }),
+        );
+      });
+    const values = () =>
+      sent.mock.calls.filter(([said]) => said.jianArtifactTweaks).at(-1)?.[0].jianArtifactTweaks;
+
+    // Another window saying it is heard as nothing at all.
+    await say({ postMessage: vi.fn() }, { label: 'Count' });
+    expect(tweaks()).toBeNull();
+
+    // From its own frame: drawn, open by itself, a tweak that does not fit left out, and the
+    // component sent every value shown.
+    await say(element.contentWindow, {
+      label: 'Count',
+      size: { type: 'number', min: 8, max: 64, default: 16 },
+      'not a prop': true,
+      __proto__x: { type: 'nothing' },
+    });
+    expect(tweaks()?.querySelector('input:not([type])')).toHaveProperty('value', 'Count');
+    expect(tweaks()?.textContent).toContain('Size');
+    expect(tweaks()?.textContent).not.toContain('not a prop');
+    expect(values()).toEqual({ values: { label: 'Count', size: 16 } });
+
+    const field = tweaks()?.querySelector('input:not([type])') as HTMLInputElement;
+    const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+    await act(async () => {
+      set?.call(field, 'Clicks');
+      field.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    expect(values()).toEqual({ values: { label: 'Clicks', size: 16 } });
+
+    // The theme it is tried in goes to its frame alone, as the panel's own would.
+    await click(
+      [...(tweaks()?.querySelectorAll('button') ?? [])].find(
+        (item) => item.textContent === 'Light',
+      ),
+    );
+    expect(sent).toHaveBeenCalledWith({ jianArtifactTheme: 'light' }, '*');
+
+    // Drawn anew, it keeps what the owner set for a tweak that still takes it.
+    await say(element.contentWindow, { label: 'Count', size: 'large' });
+    expect(values()).toEqual({ values: { label: 'Clicks', size: 'large' } });
+
+    await click(button('Tweaks'));
+    expect(tweaks()).toBeNull();
   });
 
   it('gives way to the source as written, and comes back', async () => {

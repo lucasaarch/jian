@@ -1,7 +1,14 @@
 'use client';
 
 import { EDITABLE_ARTIFACT_TYPES } from '@jian/contracts';
-import { ArrowLeft, Code, Eye, Pencil, Presentation as PresentIcon } from 'lucide-react';
+import {
+  ArrowLeft,
+  Code,
+  Eye,
+  Pencil,
+  Presentation as PresentIcon,
+  SlidersHorizontal,
+} from 'lucide-react';
 import { type RefObject, useRef, useState } from 'react';
 import { Action, HoverTip, iconButton, SkeletonLine, SkeletonRegion } from '../../../kit';
 import type { SessionArtifact } from '../../../lib/api';
@@ -20,6 +27,8 @@ import { DeckDownload } from './deck/deck-download';
 import { DeckView } from './deck/deck-view';
 import { Presentation } from './deck/presentation';
 import { fileName, LANGUAGE } from './source';
+import { TweaksPanel } from './tweaks/tweaks-panel';
+import { useTweaks } from './tweaks/use-tweaks';
 import { type ArtifactsApi, useArtifactVersion } from './use-artifacts';
 import { useAutosave } from './use-autosave';
 
@@ -42,6 +51,9 @@ const EDIT_TIP: Partial<Record<SessionArtifact['type'], string>> = {
  * page and a deck open on Edit and close on Done. Nothing is saved by hand: use-autosave.ts asks
  * the frame for the source as the owner pauses or leaves, and the gateway keeps one stretch of
  * editing as one version of the owner's. The frame saves nothing itself.
+ *
+ * A React component is tried out beside its canvas, in Tweaks (tweaks/tweaks-panel.tsx): the
+ * props it declares and the theme it is drawn in. It opens by itself on one that declares props.
  */
 export function ArtifactView({
   api,
@@ -92,6 +104,12 @@ export function ArtifactView({
   const editing = editable && !code && !streaming && (direct || toggled);
   // What has a drawing and a source to switch between: all but a deck.
   const sourced = artifact.type !== 'deck';
+  const component = artifact.type === 'react';
+  const tweaks = useTweaks(frame, component);
+  // Open or shut by the owner; until then, open on a component that has props to tweak.
+  const [tweaking, setTweaking] = useState<boolean>();
+  const tweaksShown =
+    component && !code && !streaming && (tweaking ?? (tweaks.tweaks?.length ?? 0) > 0);
   const autosave = useAutosave({
     api,
     profileId,
@@ -167,6 +185,22 @@ export function ArtifactView({
                     ) : (
                       <Code size={15} aria-hidden="true" />
                     )}
+                  </button>
+                </HoverTip>
+              )}
+              {component && (
+                <HoverTip tip={tweaksShown ? 'Hide tweaks' : 'Tweaks'} side="bottom" align="end">
+                  <button
+                    type="button"
+                    aria-label="Tweaks"
+                    aria-pressed={tweaksShown}
+                    className={`${iconButton} aria-pressed:bg-glass-press aria-pressed:text-ink`}
+                    onClick={() => {
+                      setCode(false);
+                      setTweaking(!tweaksShown);
+                    }}
+                  >
+                    <SlidersHorizontal size={15} aria-hidden="true" />
                   </button>
                 </HoverTip>
               )}
@@ -286,6 +320,20 @@ export function ArtifactView({
           editing={editing}
           frame={frame}
         />
+      ) : component ? (
+        // The frame stays mounted while Tweaks opens and shuts beside it.
+        <div className="relative flex min-h-0 flex-1">
+          <ArtifactFrame
+            key={version}
+            type={artifact.type}
+            title={artifact.title}
+            source={read.data.compiled ?? read.data.content}
+            frame={frame}
+            className="min-h-0 min-w-0 flex-1 border-0"
+            scheme={tweaks.scheme === 'auto' ? undefined : tweaks.scheme}
+          />
+          {tweaksShown && <TweaksPanel tweaks={tweaks} />}
+        </div>
       ) : (
         <ArtifactFrame
           key={`${version}:${editing}`}

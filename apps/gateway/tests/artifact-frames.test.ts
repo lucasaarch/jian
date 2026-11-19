@@ -5,6 +5,7 @@ import {
   ARTIFACT_EDIT_MESSAGE,
   ARTIFACT_FRAME_MESSAGE,
   ARTIFACT_THEME_MESSAGE,
+  ARTIFACT_TWEAKS_MESSAGE,
   type SessionArtifactType,
 } from '@jian/contracts';
 import { type Browser, chromium, type Frame, type Page } from 'playwright';
@@ -98,10 +99,15 @@ describe.runIf(existsSync(process.env.PLAYWRIGHT_EXECUTABLE_PATH ?? chromium.exe
 <script>
 const held = document.getElementById('held');
 window.answers = [];
+window.tweaks = [];
 addEventListener('message', (event) => {
-  const said = event.source === held.contentWindow && event.data.${ARTIFACT_EDIT_MESSAGE};
+  if (event.source !== held.contentWindow) return;
+  const said = event.data.${ARTIFACT_EDIT_MESSAGE};
   if (said && 'collect' in said) window.answers.push(said);
+  if (event.data.${ARTIFACT_TWEAKS_MESSAGE}) window.tweaks.push(event.data.${ARTIFACT_TWEAKS_MESSAGE});
 });
+window.tweak = (values) =>
+  held.contentWindow.postMessage({ ${ARTIFACT_TWEAKS_MESSAGE}: { values } }, '*');
 window.collect = (nonce) =>
   held.contentWindow.postMessage({ ${ARTIFACT_EDIT_MESSAGE}: { collect: nonce } }, '*');
 window.hand = () => {
@@ -215,6 +221,53 @@ ${wait ? '' : "held.addEventListener('load', window.hand, { once: true });"}
           .toBe(true);
         await page.close();
       }
+    });
+
+    it("says a component's tweaks, draws it with the ones the panel sets, on its canvas", async () => {
+      const page = await inPanel(
+        'tweaks',
+        'react',
+        `exports.tweaks = { label: { type: 'text', default: 'Count' }, start: 3, kept: 'yes' };
+exports.default = (props) =>
+  React.createElement('p', { id: 'card', style: { width: '200px', margin: 0 } }, [props.label, props.start, props.kept, Object.keys(props).join('|')].join(' '));`,
+      );
+      const said = () => page.evaluate('window.tweaks');
+      await expect
+        .poll(said)
+        .toEqual([
+          { controls: { label: { type: 'text', default: 'Count' }, start: 3, kept: 'yes' } },
+        ]);
+      await expect.poll(() => read(page)).toContain('Count 3 yes label|start|kept');
+
+      // Only the names it declared are taken: anything else the panel sends is left out.
+      await page.evaluate("window.tweak({ label: 'Clicks', start: 9, other: 'no' })");
+      await expect.poll(() => read(page)).toContain('Clicks 9 yes label|start|kept');
+      const component = page.frames().at(-1) as Frame;
+
+      // A component with no ground of its own stands in the middle of the dotted canvas.
+      const placed = (frame: Frame) =>
+        frame.evaluate(`(() => {
+          const card = document.getElementById('root').firstElementChild.getBoundingClientRect();
+          return { middle: Math.round(card.x + card.width / 2), filled: document.body.classList.contains('filled'), dots: getComputedStyle(document.body).backgroundImage.startsWith('radial-gradient') };
+        })()`);
+      expect(await placed(component)).toEqual({ middle: 450, filled: false, dots: true });
+      await page.close();
+
+      // One that paints the whole view fills it from the corner, with no canvas around it.
+      const full = await inPanel(
+        'tweaks-full',
+        'react',
+        `exports.default = () => React.createElement('main', { style: { background: '#123', minHeight: '100vh', width: '300px' } }, 'Full');`,
+      );
+      await expect.poll(() => read(full)).toContain('Full');
+      expect(await placed(full.frames().at(-1) as Frame)).toEqual({
+        middle: 150,
+        filled: true,
+        dots: false,
+      });
+      // A component that declares no tweaks still says so, with nothing.
+      await expect.poll(() => full.evaluate('window.tweaks')).toEqual([{ controls: {} }]);
+      await full.close();
     });
 
     it('lays a document out as a column of its own, which prints on the whole page', async () => {

@@ -407,12 +407,15 @@ describe('the frame the panel draws one in', () => {
       expect(own).not.toContain('allowfullscreen');
     }
     // The others are drawn by a page of the gateway's, which the shell posts the source on to.
+    // A component's shell alone says something back: its tweaks, under that one key.
     for (const type of ['react', 'markdown', 'mermaid', 'sheet']) {
       const own = (await app.inject({ url: `/v1/artifact-frames/${type}` })).body.replace(
         /srcdoc="[^"]*"/,
         '',
       );
-      expect(own.match(/postMessage/g)).toHaveLength(1);
+      expect(own.match(/postMessage/g)).toHaveLength(type === 'react' ? 2 : 1);
+      if (type === 'react')
+        expect(own).toContain('parent.postMessage({ jianArtifactTweaks: said }');
       expect(own).toContain('frame.contentWindow.postMessage');
       expect(own).toContain('frame.remove()');
       expect(own).not.toMatch(/document\.(open|write)|allowfullscreen/);

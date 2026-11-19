@@ -103,6 +103,8 @@ takes the whole window: its pages are listed where the sidebar was, under Back.
 - **Back to the latest message**: scrolled up from the end, however little, the owner gets a
   round down-arrow button over the end of the conversation; a dot on it means something new
   arrived below.
+- **Back to the top**: every page, scrolled past its heading, shows a round Scroll to top
+  button at its bottom right.
 - **Project instructions**: in a conversation that works in folders or repositories, the
   AGENTS.md of each (CLAUDE.md where there is none) is in your instructions, and the skills in
   their .agents/skills and .claude/skills folders are in your catalog. They are read again when
@@ -127,19 +129,19 @@ takes the whole window: its pages are listed where the sidebar was, under Back.
   field. It opens on one while you are still writing it and shows it grow, with Writing… beside
   its title. It draws one in a sealed frame, in the panel's theme: History opens an earlier
   version, a button switches to its code, and it is copied, downloaded, and set Private or Public.
-  A finished file, a PDF or any other, is not an Artifact: send it in the chat. A deck, which the
-  panel names Slide, shows its slides small in a row on top and one large under it, dragged or
-  scrolled sideways to the next, with Present to fill the screen; it has no code view. Its
-  Download saves the deck as a PDF, a page a slide, or a PowerPoint file (each slide a picture
-  with its text in the notes), in its own fonts or basic ones, and the slide in view as a web page
-  or a picture. A document downloads as Word, PDF or Markdown; a spreadsheet as Excel, its
-  formulas kept, or as CSV, its values. Only a gateway on a server draws PDFs, PowerPoint files
-  and pictures: on the desktop app's own, a deck downloads as the slide's web page alone.
+  A React component stands centred on a dotted canvas unless it paints its own ground, with
+  Tweaks beside it: the props it declares and its theme, to try it, never saved. A deck, which
+  the panel names Slide, shows its slides small in a row on top and one large under it, with
+  Present to fill the screen; it has no code view. Its Download saves the deck as a PDF, a page a
+  slide, or a PowerPoint file (each slide a picture with its text in the notes), in its own fonts
+  or basic ones, and the slide in view as a web page or a picture. A document downloads as Word,
+  PDF or Markdown; a spreadsheet as Excel, its formulas kept, or as CSV, its values. Only a
+  gateway on a server draws PDFs, PowerPoint files and pictures: on the desktop app's own, a deck
+  downloads as the slide's web page alone.
   A document and a spreadsheet open ready to edit: click a text to change it or its formatting, or
   type in the cells. A web page and a deck's slide have Edit, and Done to stop. There is no Save:
   what the owner changes keeps itself a moment after they stop, or as they leave, and the bar says
-  Saving… or Saved. One stretch of editing is one version of theirs, and a version you wrote is
-  never written over.
+  Saving… or Saved; a version you wrote is never written over.
   Public gives a link anyone can open without signing in, to the latest version only, and making
   it private again ends that link for good. A deck's link has Present too: arrow keys, space or a
   click step through it, Escape leaves. Only a gateway on a server offers Public.

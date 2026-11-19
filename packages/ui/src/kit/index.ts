@@ -1,6 +1,7 @@
 /** The glass kit: the pieces the app is drawn with, and the web as it moves to them. */
 export { Action, type ActionTone } from './action';
 export { CheckBox } from './checkbox';
+export { ColorField } from './color-field';
 export { type Command, CommandPalette, type PaletteLabels } from './command-palette';
 export { ConfirmDialog } from './confirm-dialog';
 export { DateTimeField, TimeField } from './date-time-field';
@@ -51,6 +52,7 @@ export {
   SettingsRowsSkeleton,
 } from './settings-skeleton';
 export { Skeleton, SkeletonLine, SkeletonRegion } from './skeleton';
+export { SliderField } from './slider-field';
 export { pillClass, StatusPill, type StatusTone } from './status-pill';
 export { TextArea, TextField } from './text-field';
 export { SwitchControl, Toggle } from './toggle';

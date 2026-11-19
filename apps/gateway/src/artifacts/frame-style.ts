@@ -5,7 +5,7 @@ export type FrameTheme = 'dark' | 'light';
 /**
  * The page's own colours follow `color-scheme`, which is the panel's theme when it names one.
  * A frame whose scheme differs from the element that holds it gets an opaque canvas behind it,
- * so a mismatch is a white flash in a dark panel; never paint a ground here, let the scheme do it.
+ * so a mismatch is a white flash in a dark panel; a ground painted here follows the scheme too.
  *
  * `theme` is undefined for a public link, which follows the reader's system.
  */
@@ -15,9 +15,7 @@ html, body { margin: 0; }
 body { padding: 16px; font: 15px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif;
   overflow-wrap: anywhere; }
 body.react, body.deck, body.sheet, body.markdown { padding: 0; }
-/* A component that sizes itself to its parent (h-full, min-h-screen) fills the view, and one that
-   is taller scrolls the page. */
-body.react #root { min-height: 100vh; }
+${canvasStyle()}
 #failure { margin: 12px; padding: 12px; border-radius: 8px; white-space: pre-wrap;
   font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; color: #b42318;
   background: color-mix(in srgb, #b42318 12%, transparent); }
@@ -32,6 +30,24 @@ blockquote { margin-inline: 0; padding-inline-start: 12px;
   border-inline-start: 3px solid color-mix(in srgb, CanvasText 25%, transparent); }
 ${documentStyle()}
 ${PLAYER_STYLE}`;
+
+/**
+ * A component stands centred on a canvas of dots, the canvas's ground being its own so a component
+ * drawn light on a dark panel still has a light canvas. `safe` keeps one larger than the view
+ * reachable by scrolling, from its start. `filled` is a component that paints its own ground over
+ * the view (document.ts decides): no canvas, and it fills the view from the corner, as one sized
+ * to its parent (height 100%, 100vh) expects.
+ */
+function canvasStyle() {
+  return `
+body.react { background-color: light-dark(#f4f4f5, #0d0d0f);
+  background-image: radial-gradient(light-dark(#00000024, #ffffff1c) 1px, transparent 1.4px);
+  background-size: 18px 18px; background-position: 9px 9px; }
+body.react #root { box-sizing: border-box; min-height: 100vh; padding: 56px 32px; display: flex;
+  flex-direction: column; align-items: safe center; justify-content: safe center; }
+body.react.filled { background: none; }
+body.react.filled #root { display: block; padding: 0; }`;
+}
 
 /**
  * A Markdown document as a page to read: one centred column of about 44rem with room around it,

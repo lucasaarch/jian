@@ -3,6 +3,7 @@ import {
   ARTIFACT_FRAME_MESSAGE,
   ARTIFACT_PRESENT_MESSAGE,
   ARTIFACT_THEME_MESSAGE,
+  ARTIFACT_TWEAKS_MESSAGE,
   EDITABLE_ARTIFACT_TYPES,
   type SessionArtifactType,
 } from '@jian/contracts';
@@ -39,9 +40,10 @@ import { SHEET } from './sheet-frame.js';
  * `eval` stays refused, which none of the libraries needs.
  *
  * The page takes its source and gives nothing back: it posts no message, and the panel listens
- * for none. The one exception is the frame the owner opens to edit by hand (edit-frame.ts),
- * which runs nothing the agent wrote and answers the panel's request for the edited source; a
- * public link never serves it.
+ * for none. One exception is the frame the owner opens to edit by hand (edit-frame.ts), which
+ * runs nothing the agent wrote and answers the panel's request for the edited source; a public
+ * link never serves it. The other is a component's tweaks (ARTIFACT_TWEAKS_MESSAGE): the shell
+ * relays that key alone, and the panel takes it as data to draw fields from, checked first.
  */
 export function artifactPolicy(ancestors: "'self'" | "'none'"): string {
   return [
@@ -122,9 +124,56 @@ define('react-dom', libraries[2]);
 const { createRoot } = define('react-dom/client', libraries[3]);
 // A component written without importing React still finds it.
 window.React = React;
-const Component = define('artifact', source).default;
+const exported = define('artifact', source);
+const Component = exported.default;
 if (!Component) throw new Error('The component must be the default export.');
-createRoot(root).render(React.createElement(Component));`,
+// The props it is drawn with: each tweak's default, then what the owner sets in the panel.
+const declared = exported.tweaks && typeof exported.tweaks === 'object' ? exported.tweaks : {};
+const props = {};
+for (const [key, spec] of Object.entries(declared)) {
+  props[key] = spec && typeof spec === 'object' ? spec.default : spec;
+}
+// Centred on the canvas, unless the component paints a ground of its own over the view: on its
+// root element, as wide or as tall as the view, or on the page's body. Decided once, before the
+// first paint, so nothing moves after.
+const grounds = (style) => style.backgroundColor + style.backgroundImage;
+const ground = grounds(getComputedStyle(document.body));
+const painted = (style) =>
+  style.backgroundImage !== 'none' ||
+  !(style.backgroundColor === 'transparent' || /,\\s*0\\)$/.test(style.backgroundColor));
+const Frame = ({ children }) => {
+  React.useLayoutEffect(() => {
+    const own = root.firstElementChild;
+    const box = getComputedStyle(root);
+    const room = root.clientWidth - parseFloat(box.paddingLeft) - parseFloat(box.paddingRight);
+    const rect = own && own.getBoundingClientRect();
+    const filled =
+      grounds(getComputedStyle(document.body)) !== ground ||
+      Boolean(own && painted(getComputedStyle(own)) &&
+        (rect.width >= room - 1 || rect.height >= innerHeight - 1));
+    document.body.classList.toggle('filled', filled);
+  }, []);
+  return children;
+};
+const view = createRoot(root);
+const paint = () =>
+  view.render(React.createElement(Frame, null, React.createElement(Component, { ...props })));
+addEventListener('message', (event) => {
+  const said = event.source === parent && event.data && event.data.${ARTIFACT_TWEAKS_MESSAGE};
+  const values = said && said.values;
+  if (!values || typeof values !== 'object') return;
+  for (const key of Object.keys(declared)) if (Object.hasOwn(values, key)) props[key] = values[key];
+  paint();
+});
+paint();
+if (parent !== window) {
+  // As plain data: a function or a cycle in it is the panel's to go without.
+  let controls = null;
+  try {
+    controls = JSON.parse(JSON.stringify(declared));
+  } catch {}
+  parent.postMessage({ ${ARTIFACT_TWEAKS_MESSAGE}: { controls } }, '*');
+}`,
   },
 };
 
@@ -260,6 +309,9 @@ addEventListener('message', (event) => {
  * `fullscreen` lets the frame take the whole screen when its reader asks for it. It changes
  * nothing of where the frame can go or what it can reach, and a frame inside it is not given it.
  *
+ * `tweaks` is a component's shell: it also relays the tweaks key, and only that key, both ways,
+ * for as long as the frame lives (ARTIFACT_TWEAKS_MESSAGE).
+ *
  * `sheet` paints the white a slide is drawn on, here, inside the frame the panel holds. The panel
  * rounds that frame's corners, and a white it painted under the frame itself was cut by the
  * corner apart from the slide: it showed past a dark slide as a pale arc. It is painted only once
@@ -270,10 +322,19 @@ function shell(
   title: string,
   inner: string | null,
   hears: 'nothing' | 'once' | 'always' | 'present',
-  fullscreen = false,
-  sheet = false,
-  theme?: FrameTheme,
-  dressed = false,
+  {
+    fullscreen = false,
+    sheet = false,
+    theme,
+    dressed = false,
+    tweaks = false,
+  }: {
+    fullscreen?: boolean;
+    sheet?: boolean;
+    theme?: FrameTheme | undefined;
+    dressed?: boolean;
+    tweaks?: boolean;
+  } = {},
 ): string {
   const out = hears === 'present' ? ARTIFACT_PRESENT_MESSAGE : ARTIFACT_EDIT_MESSAGE;
   const held =
@@ -339,12 +400,26 @@ function shell(
       ? ''
       : `
   const hear = (event) => {
-    if (event.source !== parent || !event.data${theme ? ` || event.data.${ARTIFACT_THEME_MESSAGE}` : ''}) return;
+    if (event.source !== parent || !event.data${theme ? ` || event.data.${ARTIFACT_THEME_MESSAGE}` : ''}${tweaks ? ` || event.data.${ARTIFACT_TWEAKS_MESSAGE}` : ''}) return;
     ${hears === 'always' ? '' : "removeEventListener('message', hear);"}
     waiting.push(event.data);
     relay();
   };
   addEventListener('message', hear);`
+  }${
+    tweaks
+      ? `
+  addEventListener('message', (event) => {
+    const said = event.data && event.data.${ARTIFACT_TWEAKS_MESSAGE};
+    if (!said) return;
+    if (event.source === parent) {
+      waiting.push({ ${ARTIFACT_TWEAKS_MESSAGE}: said });
+      relay();
+    } else if (event.source === frame.contentWindow) {
+      parent.postMessage({ ${ARTIFACT_TWEAKS_MESSAGE}: said }, '*');
+    }
+  });`
+      : ''
   }${
     hears === 'always' || hears === 'present'
       ? `
@@ -410,25 +485,23 @@ export function artifactFrame(
 
   if (!frame) {
     frame = present
-      ? shell('Artifact', page(type, undefined, false, true, theme), 'present', false, false, theme)
+      ? shell('Artifact', page(type, undefined, false, true, theme), 'present', { theme })
       : editing
-        ? shell(
-            'Artifact',
-            page(type, undefined, true, false, theme),
-            'always',
-            false,
-            type === 'deck',
+        ? shell('Artifact', page(type, undefined, true, false, theme), 'always', {
+            sheet: type === 'deck',
             theme,
-          )
+          })
         : shell(
             'Artifact',
             DRAW[type].whole ? null : page(type, undefined, false, false, theme),
             'once',
-            false,
-            type === 'deck',
-            theme,
-            // A slide keeps its own page; only an HTML page takes the panel's theme.
-            type === 'html' && theme !== undefined,
+            {
+              sheet: type === 'deck',
+              theme,
+              // A slide keeps its own page; only an HTML page takes the panel's theme.
+              dressed: type === 'html' && theme !== undefined,
+              tweaks: type === 'react',
+            },
           );
     frames.set(key, frame);
   }
@@ -445,4 +518,5 @@ export const publishedArtifact = (
   type: SessionArtifactType,
   title: string,
   source: string,
-): string => shell(title, page(type, { title, source }), 'nothing', type === 'deck');
+): string =>
+  shell(title, page(type, { title, source }), 'nothing', { fullscreen: type === 'deck' });

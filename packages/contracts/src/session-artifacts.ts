@@ -344,6 +344,19 @@ export const ARTIFACT_PRESENT_MESSAGE = 'jianArtifactPresent';
  */
 export const ARTIFACT_THEME_MESSAGE = 'jianArtifactTheme';
 
+/**
+ * A React component's tweaks, the props the owner changes in the panel to try it, both ways:
+ *
+ * - From the frame, once the component is drawn: `{ controls }`, what its `tweaks` export
+ *   declares as plain data, or null. The panel reads it as display data only, checked against
+ *   its own schema, and draws nothing it does not recognise.
+ * - From the panel: `{ values }`, the props to draw it with, by name. The frame takes only the
+ *   names the component declared.
+ *
+ * The shell of a component's frame relays this key, and nothing else, both ways.
+ */
+export const ARTIFACT_TWEAKS_MESSAGE = 'jianArtifactTweaks';
+
 export type SessionArtifactType = z.infer<typeof sessionArtifactTypeSchema>;
 export type SessionArtifactVisibility = z.infer<typeof sessionArtifactVisibilitySchema>;
 export type SessionArtifactAuthor = z.infer<typeof sessionArtifactAuthorSchema>;
