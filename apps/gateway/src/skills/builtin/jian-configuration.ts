@@ -58,9 +58,8 @@ takes the whole window: its pages are listed where the sidebar was, under Back.
 - **Identity**: name, picture, instructions, summary for the team and boundaries, and Compact
   conversations: whether its conversations are summarised near the model's limit, the default,
   or at a size the owner sets. See \`managing-context\`.
-- **Memories**: this agent's, as a map (a node each, a line for each link) or a list, with a
-  search and a filter by project. Opening one lets the owner rewrite it, link it to others or
-  pin it to projects, and forget it.
+- **Memories**: this agent's, as a list with a search and tabs for Permanent and Flash (temporary
+  ones that expire). A row opens its page: Edit, links, projects, and Forget under More.
 - **Channels**: on a server gateway, WhatsApp, Telegram, Email and API Server, with contact
   approvals and groups. Email goes through Resend or Cloudflare, chosen when it is connected,
   with JIAN_PUBLIC_URL set so the provider can reach the gateway. Resend takes an API key with

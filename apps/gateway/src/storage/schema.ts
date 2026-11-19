@@ -666,10 +666,16 @@ export const memories = pgTable(
       onDelete: 'set null',
     }),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+    // A flash memory's end: past it, the memory is never read again and the next write of the
+    // profile deletes it. Null on a permanent memory.
+    expiresAt: timestamp('expires_at', { withTimezone: true }),
   },
   (table) => [
     primaryKey({ columns: [table.profileId, table.key] }),
     index('memories_recent').on(table.profileId, table.updatedAt.desc()),
+    index('memories_expiring')
+      .on(table.profileId, table.expiresAt)
+      .where(sql`${table.expiresAt} IS NOT NULL`),
     index('memories_search').using(
       'gin',
       sql`to_tsvector('simple', ${table.key} || ' ' || ${table.content})`,

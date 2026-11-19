@@ -983,7 +983,9 @@ it.each([false, true])(
   async (subscription) => {
     const { services, profile, session, run } = await fixture(
       {
-        inputTokens: 32000,
+        // Room for every built-in tool and the system prompt, at one token a byte; it grows
+        // with them, or the run fails on its budget before it ever compacts.
+        inputTokens: 33000,
         historyTokens: 1000,
         toolResultTokens: 8000,
         maxSteps: 10,
@@ -1054,7 +1056,9 @@ it.each([false])(
   async (subscription) => {
     const { services, profile, session, run } = await fixture(
       {
-        inputTokens: 32000,
+        // Room for every built-in tool and the system prompt, at one token a byte; it grows
+        // with them, or the run fails on its budget before it ever compacts.
+        inputTokens: 33000,
         historyTokens: 1000,
         toolResultTokens: 8000,
         maxSteps: 10,

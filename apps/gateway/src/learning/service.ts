@@ -144,6 +144,7 @@ export class Learning {
       'This is your own review, not a message from anyone. Look back at the work below and decide whether something in it will help you next time:',
       '- a way of doing a kind of task — steps, an order, a format, a check that caught a mistake — becomes a skill: update one of yours if it covers the task, otherwise create one (see skill-creator);',
       '- a fact about a person, a decision or a preference that you learned becomes a memory, if you do not keep it already;',
+      '- the state of work in flight — a pull request, a branch, a deploy, a task of today — is never a permanent memory: keep it as a flash memory (remember with flash: true), which is gone in a day, or not at all;',
       '- a correction from the owner is the strongest signal: keep what they wanted, and how to tell next time.',
       'Most turns teach nothing new. Then change nothing. Never keep what is private to one conversation in a skill: skills are how you work everywhere.',
       'End with one or two lines for the owner: what you kept and why, or "Nothing to keep."',

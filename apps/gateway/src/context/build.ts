@@ -146,7 +146,7 @@ export function buildContext(
     .map((entry, order) => ({ ...entry, order }))
     .sort((a, b) => judged(b.memory.key) - judged(a.memory.key) || a.order - b.order);
 
-  type Recalled = Pick<Memory, 'key' | 'content' | 'version' | 'sourceSessionId'> & {
+  type Recalled = Pick<Memory, 'key' | 'content' | 'version' | 'sourceSessionId' | 'expiresAt'> & {
     /** Present on a memory that came because it is linked to this one. */
     recalledWith?: string;
   };
@@ -159,6 +159,8 @@ export function buildContext(
       content: memory.content,
       version: memory.version,
       sourceSessionId: memory.sourceSessionId,
+      // A flash memory says when it ends, so the agent can tell a passing note from a lasting one.
+      ...(memory.expiresAt ? { expiresAt: memory.expiresAt } : {}),
       ...(recalledWith ? { recalledWith } : {}),
     };
     // Rounded up: a budget in the provider's tokens may be met, never passed.

@@ -41,3 +41,14 @@ export function ago(value: string, now = Date.now()): string {
     new Date(value),
   );
 }
+
+/**
+ * How long until, as `ago` writes how long since: `45m`, `5h`, `3d`. Rounded down, so what is
+ * said is never later than the moment itself; under a minute it is `1m`, never `0m`.
+ */
+export function until(value: string, now = Date.now()): string {
+  const minutes = Math.max(1, Math.floor((Date.parse(value) - now) / 60_000));
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  return hours < 48 ? `${hours}h` : `${Math.floor(hours / 24)}d`;
+}
