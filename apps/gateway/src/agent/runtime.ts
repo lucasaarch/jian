@@ -1872,10 +1872,14 @@ export class AgentRuntime {
           // fill the window on paper and bring compaction early.
           const referenced = () => (defers ? referencedTools(messages) : new Set<string>());
           let inContext = referenced();
+          // A model its router serves without tool calling refuses any request carrying one
+          // (OpenRouter answers 404), so it gets plain conversation instead.
+          const takesTools =
+            (await this.services.providers?.loadCapabilities?.(config))?.tools !== false;
           const pick = () => {
-            const names = Object.keys(guarded).filter(
-              (name) => offeredNow(name) || inContext.has(name),
-            );
+            const names = takesTools
+              ? Object.keys(guarded).filter((name) => offeredNow(name) || inContext.has(name))
+              : [];
             return {
               names,
               tools: Object.fromEntries(names.map((name) => [name, guarded[name]])) as ToolSet,
