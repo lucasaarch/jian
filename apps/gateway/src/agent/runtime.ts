@@ -1003,6 +1003,7 @@ export class AgentRuntime {
           email,
           replyTo,
           commandSecrets,
+          keepsSecrets,
         ),
         ...(keepsSecrets && secretService
           ? secretTools({
@@ -1159,6 +1160,7 @@ export class AgentRuntime {
               ...(worktreeCan ? { worktrees: worktreeCan } : {}),
               email: 'send_email' in tools,
               links: 'share_file_link' in tools,
+              secrets: !commandSecrets ? 'none' : keepsSecrets ? 'manage' : 'lend',
               // As load_skill builds it: a skill kept from an earlier turn reads the same.
               ...(session.remoteMachineId ? { machine: { files: Boolean(machineFiles) } } : {}),
             },

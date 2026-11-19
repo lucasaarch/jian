@@ -61,7 +61,7 @@ whole window, its pages listed where the sidebar was.
   or at a size the owner sets. See \`managing-context\`.
 - **Memories**: this agent's, as a list with a search and tabs for Permanent and Flash (temporary
   ones). A row opens its page: Edit, links, projects, and Forget under More.
-- **Command secrets**: keys its commands may use (\`machine-tools\`).
+- **Secrets**: keys and logins its commands may use (\`machine-tools\`).
 - **Channels**: on a server gateway, WhatsApp, Telegram, Email and API Server, with contact
   approvals and groups. Email goes through Resend or Cloudflare, chosen when it is connected,
   with JIAN_PUBLIC_URL set so the provider can reach the gateway. Resend takes an API key with

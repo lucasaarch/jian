@@ -56,6 +56,11 @@ import type { SessionNamer, SessionReader, SessionSummarizer } from '../sessions
 import type { Sessions } from '../sessions/service.js';
 import { findSkill, NO_LIBRARY, type SkillLibraryState } from '../skills/builtin/index.js';
 import { longRunningWork, longRunningWorkFor } from '../skills/builtin/long-running-work.js';
+import {
+  isMachineTools,
+  machineToolsFor,
+  type SecretsRun,
+} from '../skills/builtin/machine-tools.js';
 import { managingContext, managingContextFor } from '../skills/builtin/managing-context.js';
 import { media, mediaFor } from '../skills/builtin/media.js';
 import { ownerAndContacts, ownerAndContactsFor } from '../skills/builtin/owner-and-contacts.js';
@@ -78,6 +83,7 @@ import { type FileBackend, fileTools } from './files.js';
 import { remoteTools } from './remote-tools.js';
 import { artifactPage } from './results.js';
 import { type SecretAccess, shellTools } from './shell.js';
+import { onOwnerComputer } from './workspace-home.js';
 
 /** What the tool set reaches for on the profile's behalf during a run. */
 const jevQuestionSchema = z.discriminatedUnion('type', [
@@ -197,6 +203,8 @@ export function skillFor(
     email?: boolean;
     /** The run has `share_file_link`. */
     links?: boolean;
+    /** What the run has of Secrets: a `run_command` that lends them, and tools to keep them. */
+    secrets?: SecretsRun;
   },
   /** The skills of the conversation's workspaces, named apart from the library's already. */
   projectSkills: readonly Skill[] = [],
@@ -223,6 +231,8 @@ export function skillFor(
   if (skill === videoProduction) return videoProductionFor(can.machine);
   if (skill === ownerAndContacts) return ownerAndContactsFor(Boolean(can.email));
   if (skill === media) return mediaFor(Boolean(can.links));
+  if (skill && isMachineTools(skill))
+    return machineToolsFor(onOwnerComputer(), can.secrets ?? 'none');
   return skill;
 }
 
@@ -268,6 +278,8 @@ export function profileTools(
   replyTo?: string,
   /** The owner's Secrets this run's `run_command` may hand a command. */
   secrets?: SecretAccess,
+  /** Whether this run also has the tools to keep Secrets, which the skill about commands goes by. */
+  keepsSecrets = false,
 ): ToolSet {
   const coordination = new Coordination(services);
   const rechecked = new Set<string>();
@@ -787,6 +799,7 @@ export function profileTools(
             worktrees,
             email,
             links: !remoteTarget && Boolean(services.fileLinks),
+            secrets: !secrets ? 'none' : keepsSecrets ? 'manage' : 'lend',
             ...(remoteTarget ? { machine: { files: Boolean(machineFiles) } } : {}),
           },
           projectSkills,

@@ -2,7 +2,9 @@ import type { Skill } from '@jian/contracts';
 
 const PER_AGENT = `Memories, conversations and the browser's logins stay per agent. Files do not.`;
 
-const SERVER_FILES = `Commands run with \`run_command\`, in the \`shell\` tool group: load it with \`load_tools\`
+const serverFiles = (
+  named: string,
+) => `Commands run with \`run_command\`, in the \`shell\` tool group: load it with \`load_tools\`
 first. They run on the machine the gateway runs on, as whoever started it.
 
 Every agent of this installation works in one shared directory. It is your \`$HOME\`, a command
@@ -20,8 +22,7 @@ A command may write only in this directory and read only it and the system's too
 supports it. The file tools, \`send_file\` and \`save_attachment\` follow the same line.
 
 A command does not inherit the gateway's environment: it gets \`PATH\`, \`HOME\`, the locale
-and a few install paths, and nothing else — no \`DATABASE_URL\`, no \`NODE_ENV\`, no keys but
-the command secrets you name (below). When a project needs a variable, set it in the command
+and a few install paths, and nothing else — no \`DATABASE_URL\`, no \`NODE_ENV\`, no keys${named}. When a project needs a variable, set it in the command
 itself. Point database tests at a database made for them, never at the gateway's own. The network
 is not restricted.
 
@@ -31,7 +32,9 @@ exists with \`command -v <tool>\`, and install nothing there unless the owner as
 
 `;
 
-const OWNER_FILES = `Commands run with \`run_command\`, in the \`shell\` tool group: load it with \`load_tools\`
+const ownerFiles = (
+  named: string,
+) => `Commands run with \`run_command\`, in the \`shell\` tool group: load it with \`load_tools\`
 first. They run on the owner's own computer, as the owner.
 
 \`$HOME\` is the owner's real home. A command starts there, or in this chat's first folder when it
@@ -55,8 +58,7 @@ and the refusal above does not stop it. That calls for care, and is no way aroun
 read Jian's own data through a command.
 
 A command does not inherit the gateway's environment: it gets \`PATH\`, \`HOME\`, the locale and the
-owner's SSH agent, and nothing else — no \`NODE_ENV\`, no keys but the command secrets you name
-(below). When a project needs a variable, set it in the command itself.
+owner's SSH agent, and nothing else — no \`NODE_ENV\`, no keys${named}. When a project needs a variable, set it in the command itself.
 
 Find what exists with \`command -v <tool>\`, and install nothing here unless the owner asks.
 
@@ -123,15 +125,51 @@ the image. Install what the task needs, not what might be handy, and say what yo
 
 `;
 
-const COMMAND_SECRETS = `The owner can keep keys for your commands in Jian, such as a transcription service's API key:
-command secrets, added in this agent's settings. When you have any, \`run_command\`'s description
-lists their names and what each is for. Name the ones a command needs in its \`secrets\` and write
-\`"$NAME"\` in the command: each reaches that one command as an environment variable, and whatever
-it prints of one comes back as [REDACTED]. You never see a value. Where the conversation asks
-before acting, the owner approves each such command. When a task needs a key you do not have, ask
-the owner to add it there; never ask them to paste one into the chat.
+/** What a run has of the Secrets: `run_command` lends them, and the agent may also keep them. */
+export type SecretsRun = 'none' | 'lend' | 'manage';
+
+const NAMED = ' but the Secrets you name (below)';
+
+const LENDING = `## Secrets
+
+The owner keeps keys and logins for your commands in Jian, such as a transcription service's API
+key. A Secret has fields, each one a variable. A password, key or token is sensitive: you never
+see its value. A username, region or account id is not, and can be read.
+
+When you have any, \`run_command\`'s description lists them and what each is for. Naming one
+variable of a Secret in a command's \`secrets\` lends the whole Secret: every variable of it
+reaches that one command as an environment variable. Write \`"$NAME"\` in the command, never a
+value; whatever it prints of a sensitive one comes back as [REDACTED]. Where the conversation
+asks before acting, the owner approves each such command. When a task needs a key you do not
+have, ask the owner to add it in this agent's settings under **Secrets**; never ask them to paste
+one into the chat.
 
 `;
+
+const MANAGING = `Where you may keep Secrets, they are in the \`secrets\` tool group: load it with
+\`load_tools({ groups: ['secrets'] })\`.
+
+- \`list_secrets\` shows the Secrets you may use, with their fields. Only a field that is not
+  sensitive shows its value.
+- \`save_secret\` makes a Secret only you may use, from a value you already have: one the owner
+  typed to you in this conversation. A sensitive value is masked from that call on and a command
+  can use it at once. Never save a value you copied from output: a masked one, shown as
+  [REDACTED], is refused. With \`secretId\` it changes one you made: \`fields\` replace its list,
+  and a field without \`value\` keeps the one it has.
+- \`delete_secret\` deletes a Secret you made. One the owner or another agent made, you can use
+  and not change.
+- To use a Secret another agent has, ask that agent with \`ask_agent\`. It lets you use it with
+  \`share_secret\`, naming you from \`list_agents\`, and the owner is not asked. Share one the same
+  way only when another agent asks you for a job the owner gave it, and never to pass one on that
+  it does not need.
+
+The owner sees and edits every Secret, yours included, in this agent's settings under
+**Secrets**.
+
+`;
+
+const secretsSection = (secrets: SecretsRun) =>
+  secrets === 'none' ? '' : secrets === 'lend' ? LENDING : LENDING + MANAGING;
 
 const SERVER_LOGINS = `## Logins and keys
 
@@ -185,17 +223,36 @@ here may approve, say what you would run and do not try to reach the same effect
 
 For reading and changing code, load the \`coding-work\` skill.`;
 
+const composed = (owner: boolean, secrets: SecretsRun): string => {
+  const named = secrets === 'none' ? '' : NAMED;
+  return owner
+    ? `# The computer you run commands on\n\n${ownerFiles(named)}${OWNER_LOGINS}${secretsSection(secrets)}${LIMITS}`
+    : `# The machine you run commands on\n\n${serverFiles(named)}${IMAGE}${SERVER_INSTALLS}${SERVER_LOGINS}${secretsSection(secrets)}${LIMITS}`;
+};
+
 /** What is true where the run is: the two hosts share neither the files nor the rules on them. */
 export const machineTools: Skill = {
   name: 'machine-tools',
   description:
-    'Use before running commands or installing anything: what the machine has, how to install more without root, logins and keys, and the limits of a command.',
-  instructions: `# The machine you run commands on\n\n${SERVER_FILES}${IMAGE}${SERVER_INSTALLS}${SERVER_LOGINS}${COMMAND_SECRETS}${LIMITS}`,
+    'Use before running commands or installing anything: what the machine has, how to install more without root, logins and keys, Secrets, and the limits of a command.',
+  instructions: composed(false, 'manage'),
 };
 
 const onOwnerComputer: Skill = {
   ...machineTools,
-  instructions: `# The computer you run commands on\n\n${OWNER_FILES}${OWNER_LOGINS}${COMMAND_SECRETS}${LIMITS}`,
+  instructions: composed(true, 'manage'),
 };
 
-export const machineToolsFor = (owner: boolean): Skill => (owner ? onOwnerComputer : machineTools);
+/**
+ * `secrets` is what the run has: none, a command that may lend them, or the tools to keep them
+ * too. Taught only where the run has them, or the agent would look for tools it was not given.
+ * Left out, the fullest, as the owner reads it in the panel.
+ */
+export const machineToolsFor = (owner: boolean, secrets: SecretsRun = 'manage'): Skill => {
+  const base = owner ? onOwnerComputer : machineTools;
+  return secrets === 'manage' ? base : { ...base, instructions: composed(owner, secrets) };
+};
+
+/** Either of the two this file hands out, whatever the host: the run's own is built from them. */
+export const isMachineTools = (skill: Skill): boolean =>
+  skill === machineTools || skill === onOwnerComputer;
