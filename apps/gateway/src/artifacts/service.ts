@@ -2,7 +2,6 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import {
   type ArtifactFolder,
   type ArtifactFolders,
-  boardContentSchema,
   type DeckExport,
   deckExportQuerySchema,
   deckSlideAddSchema,
@@ -78,27 +77,6 @@ function compiled(content: string): string {
 const drawn = (type: SessionArtifactType, content: string) =>
   type === 'react' ? compiled(content) : content;
 
-/**
- * A whiteboard is data its frame draws, not code: checked against its form, so a mistake is the
- * agent's to fix now rather than a board that will not draw.
- */
-function checkBoard(content: string): void {
-  let given: unknown;
-  try {
-    given = JSON.parse(content);
-  } catch {
-    throw new GatewayError(400, 'A whiteboard is given as JSON: {"items": [ … ]}.');
-  }
-  const checked = boardContentSchema.safeParse(given);
-  const issue = checked.error?.issues[0];
-  if (issue) {
-    throw new GatewayError(
-      400,
-      `The whiteboard does not fit its form at ${issue.path.join('.') || 'its top'}: ${issue.message}`,
-    );
-  }
-}
-
 /** What the agent gives for a version: which of these it takes depends on the type. */
 type Given = {
   content?: string | undefined;
@@ -126,8 +104,6 @@ function kept(type: SessionArtifactType, given: Given): string {
     );
   }
   drawn(type, given.content);
-  if (type === 'board') checkBoard(given.content);
-
   return given.content;
 }
 

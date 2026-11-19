@@ -24373,7 +24373,7 @@ export interface operations {
                 before?: string;
                 limit?: number;
                 q?: string;
-                type?: "html" | "react" | "markdown" | "svg" | "mermaid" | "deck" | "sheet" | "board";
+                type?: "html" | "react" | "markdown" | "mermaid" | "deck" | "sheet";
                 folder?: string;
                 project?: string | "none";
                 pinned?: "true" | "false";
@@ -24400,7 +24400,7 @@ export interface operations {
                             sessionId: string;
                             title: string;
                             /** @enum {string} */
-                            type: "html" | "react" | "markdown" | "svg" | "mermaid" | "deck" | "sheet" | "board";
+                            type: "html" | "react" | "markdown" | "mermaid" | "deck" | "sheet";
                             /** @enum {string} */
                             visibility: "private" | "public";
                             version: number;
@@ -24528,7 +24528,7 @@ export interface operations {
                         sessionId: string;
                         title: string;
                         /** @enum {string} */
-                        type: "html" | "react" | "markdown" | "svg" | "mermaid" | "deck" | "sheet" | "board";
+                        type: "html" | "react" | "markdown" | "mermaid" | "deck" | "sheet";
                         /** @enum {string} */
                         visibility: "private" | "public";
                         version: number;
@@ -24887,7 +24887,7 @@ export interface operations {
                         sessionId: string;
                         title: string;
                         /** @enum {string} */
-                        type: "html" | "react" | "markdown" | "svg" | "mermaid" | "deck" | "sheet" | "board";
+                        type: "html" | "react" | "markdown" | "mermaid" | "deck" | "sheet";
                         /** @enum {string} */
                         visibility: "private" | "public";
                         version: number;
@@ -25124,7 +25124,7 @@ export interface operations {
                         sessionId: string;
                         title: string;
                         /** @enum {string} */
-                        type: "html" | "react" | "markdown" | "svg" | "mermaid" | "deck" | "sheet" | "board";
+                        type: "html" | "react" | "markdown" | "mermaid" | "deck" | "sheet";
                         /** @enum {string} */
                         visibility: "private" | "public";
                         version: number;
@@ -25245,7 +25245,7 @@ export interface operations {
                         sessionId: string;
                         title: string;
                         /** @enum {string} */
-                        type: "html" | "react" | "markdown" | "svg" | "mermaid" | "deck" | "sheet" | "board";
+                        type: "html" | "react" | "markdown" | "mermaid" | "deck" | "sheet";
                         /** @enum {string} */
                         visibility: "private" | "public";
                         version: number;
@@ -25803,7 +25803,7 @@ export interface operations {
             };
             header?: never;
             path: {
-                type: "html" | "react" | "markdown" | "svg" | "mermaid" | "deck" | "sheet" | "board";
+                type: "html" | "react" | "markdown" | "mermaid" | "deck" | "sheet";
             };
             cookie?: never;
         };

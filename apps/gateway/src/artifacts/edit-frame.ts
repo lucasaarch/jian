@@ -1,5 +1,4 @@
 import { ARTIFACT_EDIT_MESSAGE, type SessionArtifactType } from '@jian/contracts';
-import { BOARD } from './board-frame.js';
 import { MARKDOWN } from './markdown-frame.js';
 import { SHEET } from './sheet-frame.js';
 
@@ -310,7 +309,7 @@ const editPage = (source, options, finish) => {
 `;
 
 /**
- * How a type drawn by a script of ours (sheet-frame.ts, board-frame.ts) answers: `made` is what
+ * How a type drawn by a script of ours (sheet-frame.ts) answers: `made` is what
  * that script returned editable, `{ now, changed }`. As for a page, only when asked, and only
  * the source; a scale is nothing to it, being drawn at the frame's own size.
  */
@@ -351,5 +350,4 @@ export const EDITORS: Partial<Record<SessionArtifactType, string>> = {
   deck: `${EDITING}const editing = editPage;\n`,
   markdown: EDITING + MARKDOWN + MARKDOWN_EDITING,
   sheet: `${SHEET}${ANSWERING}const editing = (source, options) => answering(options, sheet(source, root, true));\n`,
-  board: `${BOARD}${ANSWERING}const editing = (source, options) => answering(options, board(source, root, true));\n`,
 };

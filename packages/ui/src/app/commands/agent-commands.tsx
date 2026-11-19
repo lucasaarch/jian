@@ -154,7 +154,6 @@ export function useAgentCommands({
           'slides',
           'diagram',
           'spreadsheet',
-          'whiteboard',
           'made',
         ],
         icon: <Shapes size={15} />,

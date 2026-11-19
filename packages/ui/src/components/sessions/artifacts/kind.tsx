@@ -4,9 +4,7 @@ import {
   Globe,
   type LucideIcon,
   Presentation,
-  Shapes,
   Sheet,
-  StickyNote,
   Workflow,
 } from 'lucide-react';
 import type { SessionArtifact } from '../../../lib/api';
@@ -18,11 +16,9 @@ const ICON: Record<SessionArtifact['type'], LucideIcon> = {
   html: Globe,
   react: Atom,
   markdown: FileText,
-  svg: Shapes,
   mermaid: Workflow,
   deck: Presentation,
   sheet: Sheet,
-  board: StickyNote,
 };
 
 /** The kind of an Artifact as the owner reads it in the list. */
@@ -38,10 +34,8 @@ export const KIND_TINT: Record<SessionArtifact['type'], string> = {
   markdown: 'bg-accent/15 text-accent',
   html: 'bg-good/15 text-good',
   react: 'bg-merged/15 text-merged',
-  svg: 'bg-merged/15 text-merged',
   mermaid: 'bg-good/15 text-good',
   sheet: 'bg-good/15 text-good',
-  board: 'bg-warn/15 text-warn',
 };
 
 /**

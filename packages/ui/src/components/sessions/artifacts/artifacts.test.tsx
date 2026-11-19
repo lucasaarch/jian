@@ -279,7 +279,7 @@ describe('the Artifacts tab', () => {
     await search('LAUNCH');
     expect(cards()).toEqual(['Launch notes']);
     // Narrowed, the shortcuts make way for what was found, as on the page.
-    expect(starter('Deck')).toBeUndefined();
+    expect(starter('Slide')).toBeUndefined();
 
     await search('nothing like it');
     expect(cards()).toEqual([]);
@@ -301,11 +301,9 @@ describe('the Artifacts tab', () => {
     useDrafts.getState().write(field, 'Hello ');
     const api = await listed();
 
-    await click(starter('Deck'));
+    await click(starter('Slide'));
 
-    expect(useDrafts.getState().texts[field]).toBe(
-      'Hello\n\nCreate a deck of slides as an Artifact about ',
-    );
+    expect(useDrafts.getState().texts[field]).toBe('Hello\n\nCreate slides as an Artifact about ');
     // Nothing was made: the owner finishes the request and sends it.
     expect(api.duplicateSessionArtifact).not.toHaveBeenCalled();
     expect(api.editSessionArtifact).not.toHaveBeenCalled();
@@ -348,7 +346,7 @@ describe('the Artifacts tab', () => {
     await settled(() => !drawer()?.querySelector('[role=status]'));
 
     expect(drawer()?.textContent).toContain('Nothing here yet');
-    expect(starter('Deck')).toBeDefined();
+    expect(starter('Slide')).toBeDefined();
   });
 
   it('draws nothing while another tab is in front', async () => {

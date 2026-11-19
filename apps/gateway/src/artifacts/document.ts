@@ -6,7 +6,6 @@ import {
   type SessionArtifactType,
 } from '@jian/contracts';
 import { GatewayError } from '../core/errors.js';
-import { BOARD } from './board-frame.js';
 import { EDITORS } from './edit-frame.js';
 import { PLAYER, PLAYER_EMBEDDED, PLAYER_STYLE } from './player.js';
 import { type RuntimeFile, runtimeSource } from './runtime.js';
@@ -64,7 +63,7 @@ const STYLE = `
 html, body { margin: 0; }
 body { padding: 16px; font: 15px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif;
   overflow-wrap: anywhere; }
-body.react, body.deck, body.sheet, body.board { padding: 0; }
+body.react, body.deck, body.sheet { padding: 0; }
 #failure { margin: 12px; padding: 12px; border-radius: 8px; white-space: pre-wrap;
   font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; color: #b42318;
   background: color-mix(in srgb, #b42318 12%, transparent); }
@@ -99,8 +98,6 @@ const DRAW: Record<
   html: { libraries: [], body: WRITE, whole: true },
   // The panel hands its frame one slide, a page like any other; the public page holds them all.
   deck: { libraries: [], body: PLAYER, whole: true },
-  // Markup set this way runs no script element of its own.
-  svg: { libraries: [], body: `root.innerHTML = source;` },
   markdown: {
     libraries: ['marked'],
     body: `run(libraries[0]); root.innerHTML = marked.parse(source);`,
@@ -118,7 +115,6 @@ root.innerHTML = (await mermaid.render('diagram', source)).svg;`,
   },
   // Drawn by scripts of the gateway's own, which read the source as data and never run it.
   sheet: { libraries: [], body: `${SHEET}\nsheet(source, root, false);` },
-  board: { libraries: [], body: `${BOARD}\nboard(source, root, false);` },
   // React ships as CommonJS, and the component arrives compiled to it: each is wrapped in a
   // function and handed a require that knows these few names and nothing else.
   react: {

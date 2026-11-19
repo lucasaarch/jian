@@ -136,7 +136,7 @@ export function ArtifactCards({
             <p className={`px-4 py-3 text-[13px] leading-relaxed text-muted ${surfaceCard}`}>
               {narrowed
                 ? 'No Artifact matches.'
-                : 'Nothing here yet. When the agent makes something to look at, such as a page, a component, a document, a picture, a diagram or a deck of slides, it is shown here and kept with every version.'}
+                : 'Nothing here yet. When the agent makes something to look at, such as a page, a component, a document, a diagram or slides, it is shown here and kept with every version.'}
             </p>
           )}
         </div>

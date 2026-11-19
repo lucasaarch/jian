@@ -23,13 +23,9 @@ const SOURCE: Partial<Record<SessionArtifactType, string>> = {
   html: slide('A page'),
   deck: slide('One slide'),
   markdown: '# A document',
-  svg: '<svg xmlns="http://www.w3.org/2000/svg"><text y="20">A picture</text></svg>',
   // A component as the gateway hands it over: compiled to CommonJS.
   react: `exports.default = () => React.createElement('p', null, 'A component');`,
   sheet: 'Item,Cost\nA,2\nB,3\nTotal,=SUM(B2:B3)*21\n',
-  board: JSON.stringify({
-    items: [{ kind: 'note', x: 0, y: 0, w: 180, h: 140, text: 'A board' }],
-  }),
 };
 const DECK = JSON.stringify({ slides: [slide('First'), slide('Second'), slide('Third')] });
 
@@ -150,11 +146,9 @@ ${wait ? '' : "held.addEventListener('load', window.hand, { once: true });"}
         html: 'A page ran',
         deck: 'One slide ran',
         markdown: 'A document',
-        svg: 'A picture',
         react: 'A component',
         // Worked out by the sheet itself, which runs no code: (2 + 3) * 21.
         sheet: '105',
-        board: 'A board',
       };
 
       for (const [type, text] of Object.entries(drawn)) {
@@ -212,24 +206,6 @@ ${wait ? '' : "held.addEventListener('load', window.hand, { once: true });"}
         collect: 'edited',
         html: 'Item,Cost\nA,7\nB,3\nTotal,=SUM(B2:B3)*21\n',
       });
-      await page.close();
-    });
-
-    it('adds a note to a whiteboard and hands back its JSON', async () => {
-      const page = await inPanel('board-edit', 'board', SOURCE.board ?? '', true);
-      const board = await editing(page);
-      await expect.poll(() => board.evaluate(() => document.body.innerText)).toContain('A board');
-
-      await board.click('button[aria-label="Note"]');
-      await board.locator('svg[aria-label="Whiteboard"]').click({ position: { x: 600, y: 400 } });
-      await page.keyboard.type('Mine');
-      await page.keyboard.press('Control+Enter');
-
-      const answer = (await collect(page, 'drawn')) as { html: string };
-      const { items } = JSON.parse(answer.html);
-      expect(items).toHaveLength(2);
-      expect(items[0]).toEqual({ kind: 'note', x: 0, y: 0, w: 180, h: 140, text: 'A board' });
-      expect(items[1]).toMatchObject({ kind: 'note', w: 180, h: 140, text: 'Mine' });
       await page.close();
     });
 

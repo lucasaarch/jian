@@ -22,10 +22,9 @@ import { collectEdit } from './edit';
 import { fileName, LANGUAGE } from './source';
 import { type ArtifactsApi, artifactChanged, useArtifactVersion } from './use-artifacts';
 
-/** What Edit changes, by type: the words of a page, a sheet's cells, a board's notes and shapes. */
+/** What Edit changes, by type: the words of a page, a sheet's cells. */
 const EDIT_TIP: Partial<Record<SessionArtifact['type'], string>> = {
   sheet: 'Edit the cells',
-  board: 'Edit the board',
 };
 
 /**
@@ -37,7 +36,7 @@ const EDIT_TIP: Partial<Record<SessionArtifact['type'], string>> = {
  * A deck is read as slides, never as code: a slide's markup is still copied from the options,
  * and the deck is taken away as a file from a menu of its own (deck/deck-download.tsx).
  *
- * A page, a deck's slide, a document, a spreadsheet and a whiteboard can be edited by hand: Edit
+ * A page, a deck's slide, a document and a spreadsheet can be edited by hand: Edit
  * opens the version in view in the frame that edits (artifact-frame.tsx), and Save asks that
  * frame for the source and hands it to the gateway, which keeps it as a new version of the
  * owner's. The frame saves nothing itself.

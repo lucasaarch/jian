@@ -8,11 +8,9 @@ export const TYPE_NAME: Record<Kind, string> = {
   html: 'Web page',
   react: 'React component',
   markdown: 'Document',
-  svg: 'Picture',
   mermaid: 'Diagram',
-  deck: 'Deck',
+  deck: 'Slide',
   sheet: 'Spreadsheet',
-  board: 'Whiteboard',
 };
 
 /** The choices of a filter by type, the Artifacts page's and the Inspector's: empty for all. */
@@ -29,22 +27,18 @@ export const LANGUAGE: Partial<Record<Kind, string>> = {
   html: 'xml',
   react: 'typescript',
   markdown: 'markdown',
-  svg: 'xml',
   deck: 'xml',
-  board: 'json',
 };
 
 const EXTENSION: Record<Kind, string> = {
   html: 'html',
   react: 'tsx',
   markdown: 'md',
-  svg: 'svg',
   mermaid: 'mmd',
   // A deck is read, copied and downloaded one slide at a time, and a slide is a page.
   deck: 'html',
   // Opened by Excel or Google Sheets, which work its formulas out again.
   sheet: 'csv',
-  board: 'json',
 };
 
 /**
