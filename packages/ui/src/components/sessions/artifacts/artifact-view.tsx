@@ -301,6 +301,7 @@ export function ArtifactView({
                         : fileName(artifact, version)
                     }
                     what="Source"
+                    component={artifact.type === 'react' ? artifact.title : undefined}
                   />
                 </>
               )}

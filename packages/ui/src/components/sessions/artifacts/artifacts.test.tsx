@@ -577,7 +577,32 @@ describe('who can read an Artifact', () => {
     // Everything else is still there, behind the bar's one button of options.
     await click(button('Artifact options'));
     await settled(() => entries().length > 0);
-    expect(entries().map((entry) => entry.textContent)).toEqual(['Copy source', 'Download']);
+    expect(entries().map((entry) => entry.textContent)).toEqual([
+      'Copy source',
+      'Copy prompt for',
+      'Download',
+    ]);
+  });
+
+  it('copies a component as a prompt for another framework, with its source as written', async () => {
+    const copied = vi.fn(async () => undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText: copied },
+      configurable: true,
+    });
+    await opened(counter, gateway(), 'local');
+
+    await click(button('Artifact options'));
+    await settled(() => entries().length > 0);
+    await click(entries().find((entry) => entry.textContent === 'Copy prompt for'));
+    await settled(() => entries().some((entry) => entry.textContent === 'Vue 3'));
+    await click(entries().find((entry) => entry.textContent === 'Vue 3'));
+
+    const prompt = String(copied.mock.calls.at(-1)?.[0]);
+    expect(prompt).toMatch(/^# Counter\n/);
+    expect(prompt).toContain('Vue 3 single-file component');
+    expect(prompt).toContain(SOURCE);
+    expect(prompt).not.toContain(COMPILED);
   });
 
   it('makes one public on a server, with a link to copy from the gateway’s own address', async () => {

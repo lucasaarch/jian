@@ -98,9 +98,11 @@ describe('public API contracts', () => {
         'pairDevice',
         'completeMcpLogin',
         // The sandboxed frame shell holds no content, and a public Artifact proves itself
-        // with its unguessable id; a private one never answers here.
+        // with its unguessable id; a private one never answers here. The same id gives the
+        // files of its latest version, and nothing else of it.
         'artifactFrame',
         'readPublicArtifact',
+        'exportPublicArtifact',
       ]);
     } finally {
       await app.close();

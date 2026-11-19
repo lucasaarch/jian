@@ -20,7 +20,10 @@ import {
   type MediaMime,
   mediaMimeOf,
   type ProfileArtifact,
+  PUBLIC_ARTIFACT_FORMATS,
+  type PublicArtifactFormat,
   profileArtifactsQuerySchema,
+  publicArtifactExportQuerySchema,
   SESSION_ARTIFACT_MAX,
   type SessionArtifact,
   type SessionArtifactAuthor,
@@ -53,6 +56,7 @@ import { editedSource } from './edits.js';
 import { exportDeck, exportDocumentPdf, MIME } from './export.js';
 import { createFolder, deleteFolder, listFolders, ownFolder, renameFolder } from './folders.js';
 import { pageProfileArtifacts } from './listing.js';
+import { drawnInTurn, SOURCE_FILES } from './public-files.js';
 import { sheetCsv, sheetXlsx } from './sheet-export.js';
 
 /** What a component's frame can hand it; anything else would have to come from the network. */
@@ -668,6 +672,15 @@ export class SessionArtifacts {
     const artifact = await this.find(this.store.db, profileId, sessionId, artifactId);
 
     const { content } = await this.stored(this.store.db, artifact.id, version);
+    return this.file(artifact, content, wanted);
+  }
+
+  /** What `export` draws from a version's content, however that version was found. */
+  private async file(
+    artifact: { type: SessionArtifactType; title: string },
+    content: string,
+    wanted: DeckExportQuery,
+  ): Promise<DeckExport> {
     const refused = (what: string) =>
       new GatewayError(
         400,
@@ -921,9 +934,59 @@ export class SessionArtifacts {
    * What a link answers: the latest version of the one Artifact that holds this secret while it
    * is public, and nothing of the conversation, the profile or any other version.
    */
-  async published(
+  async published(token: string): Promise<{
+    type: SessionArtifactType;
+    title: string;
+    /** What its page draws: a component compiled. */
+    source: string;
+    /** The source as written, for what its page offers to copy. */
+    written: string;
+  }> {
+    const found = await this.latestPublic(token);
+
+    return {
+      type: found.type,
+      title: found.title,
+      source: drawn(found.type, found.content),
+      written: found.content,
+    };
+  }
+
+  /**
+   * One file of what a link answers, for anyone holding it: the source as written, or a file
+   * drawn from it as the owner's are (`file` above). Only a format its type offers
+   * (PUBLIC_ARTIFACT_FORMATS); a drawing one waits for its turn at the browser (public-files.ts).
+   */
+  async publicFile(
     token: string,
-  ): Promise<{ type: SessionArtifactType; title: string; source: string }> {
+    input: unknown,
+  ): Promise<{ title: string; format: PublicArtifactFormat; mimeType: string; data: Buffer }> {
+    const { format } = publicArtifactExportQuerySchema.parse(input);
+    const found = await this.latestPublic(token);
+    if (!PUBLIC_ARTIFACT_FORMATS[found.type].includes(format)) {
+      throw new GatewayError(400, `This Artifact is not downloaded as ${format.toUpperCase()}.`);
+    }
+    const asWritten = SOURCE_FILES[format];
+    if (asWritten) {
+      return { title: found.title, format, mimeType: asWritten, data: Buffer.from(found.content) };
+    }
+    const file = await drawnInTurn(token, format, () =>
+      this.file(found, found.content, { format: format as DeckExportQuery['format'] }),
+    );
+
+    return {
+      title: found.title,
+      format,
+      mimeType: file.mimeType,
+      data: Buffer.from(file.data, 'base64'),
+    };
+  }
+
+  /**
+   * The latest version of the one Artifact that holds this secret while it is public, as it is
+   * kept. A desktop app's own gateway finds none, whatever its data holds.
+   */
+  private async latestPublic(token: string) {
     const [row] = this.local
       ? []
       : await this.store.db
@@ -944,8 +1007,7 @@ export class SessionArtifacts {
             and(eq(sessionArtifacts.publicToken, token), eq(sessionArtifacts.visibility, 'public')),
           )
           .limit(1);
-    const found = assertFound(row, 'Artifact');
 
-    return { type: found.type, title: found.title, source: drawn(found.type, found.content) };
+    return assertFound(row, 'Artifact');
   }
 }

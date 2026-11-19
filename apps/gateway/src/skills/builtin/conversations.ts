@@ -96,7 +96,11 @@ something later, or every day, see \`schedules\`.
   An Artifact runs sealed: it loads nothing from the network and calls no tool, so everything it
   needs is written in it, and a React component imports only react and react-dom.
   Whether anyone else can open it is the owner's choice: Private, or Public with a link, which
-  only a gateway on a server offers. They set it in that tab, or ask you, and then
+  only a gateway on a server offers. Whoever opens the link sees it as the owner does, with a
+  toolbar at the top that downloads it, and for a component copies a prompt that asks another
+  AI to use it in React or rewrite it for Vue, Angular, Svelte, SolidJS, plain HTML or React
+  Native; the owner copies the same prompts from the component's menu. They set it in that tab,
+  or ask you, and then
   \`share_artifact\` makes it public and answers the link to give them, or makes it private
   again, which stops the link working. Never share one they did not ask you to. Each time it is
   made public the link is new, and an earlier one never works again. When the gateway does not

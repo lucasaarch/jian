@@ -451,6 +451,57 @@ export const publicArtifactParamsSchema = z.strictObject({
 });
 
 /**
+ * A file a public Artifact's reader takes away, named by its extension. `html`, `tsx`, `md` and
+ * `mmd` are the source as written; the rest are drawn from it as the owner's downloads are.
+ */
+export const publicArtifactFormatSchema = z.enum([
+  'html',
+  'tsx',
+  'md',
+  'mmd',
+  'csv',
+  'xlsx',
+  'pdf',
+  'docx',
+  'pptx',
+]);
+
+export type PublicArtifactFormat = z.infer<typeof publicArtifactFormatSchema>;
+
+/**
+ * The files each type offers through its public link, in the order its Download menu lists them.
+ * A new type adds its line here, and the compiler asks for it. It should converge with the
+ * formats the agent sends an Artifact as, once both exist.
+ */
+export const PUBLIC_ARTIFACT_FORMATS: Record<SessionArtifactType, readonly PublicArtifactFormat[]> =
+  {
+    html: ['html'],
+    react: ['tsx'],
+    markdown: ['pdf', 'docx', 'md'],
+    mermaid: ['mmd'],
+    deck: ['pdf', 'pptx'],
+    sheet: ['xlsx', 'csv'],
+  };
+
+/** How a reader is told each file apart in the Download menu. */
+export const PUBLIC_ARTIFACT_FORMAT_LABEL: Record<PublicArtifactFormat, string> = {
+  html: 'HTML page',
+  tsx: 'Component source (.tsx)',
+  md: 'Markdown (.md)',
+  mmd: 'Mermaid source (.mmd)',
+  csv: 'CSV',
+  xlsx: 'Excel (.xlsx)',
+  pdf: 'PDF',
+  docx: 'Word (.docx)',
+  pptx: 'PowerPoint (.pptx)',
+};
+
+/** One file of a public Artifact's latest version: a format its type offers. */
+export const publicArtifactExportQuerySchema = z.strictObject({
+  format: publicArtifactFormatSchema,
+});
+
+/**
  * How the panel hands a frame what to draw: one message to the frame's window, with the source
  * (a React component's `compiled`, or one slide of a deck) under this key.
  */
