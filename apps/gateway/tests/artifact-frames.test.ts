@@ -612,14 +612,17 @@ exports.default = (props) =>
         ['mermaid', 'Alpha', '.canvas-world svg'],
       ] as const) {
         const page = await inPanel(`canvas-${type}`, type, SOURCE[type] ?? '');
-        await expect.poll(() => read(page), { message: type }).toContain(text);
+        // Mermaid's library is several megabytes for the frame to parse, and a frame busy parsing
+        // answers no read: on a slow runner that alone outlasts the default second.
+        const slow = { message: type, timeout: 15_000 };
+        await expect.poll(() => read(page), slow).toContain(text);
         const drawing = innermost(page);
         // The text shows before the drawing is placed: Mermaid measures it in a node of its own
         // first, and the canvas fits the drawing only once it has landed. On a slow machine a
         // drawing read at once is not there yet, so it is read until it stands where it should.
         // The frame is 900 by 600, with a little more room kept at the bottom for the zoom.
         await expect
-          .poll(() => middleOf(drawing, selector), { message: type })
+          .poll(() => middleOf(drawing, selector), slow)
           .toSatisfy(([x, y]) => Math.abs(x - 450) <= 2 && Math.abs(y - 292) <= 2);
         const [x, y] = await middleOf(drawing, selector);
         expect(
