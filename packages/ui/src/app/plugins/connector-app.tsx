@@ -2,6 +2,7 @@
 
 import { useMcpServers } from '../../components/integrations/mcp-list';
 import { Action } from '../../kit';
+import { useGatewayMode } from '../../lib/gateway-mode';
 import { useActions } from '../../lib/workspace';
 import { freeName, type McpApp, serversOf } from '../settings/mcp-apps';
 import {
@@ -34,6 +35,10 @@ export function AppConnector({
   const accounts = serversOf(app, servers);
   const checks = useAccountChecks(accounts.map((server) => server.name));
   const tools = toolsOf(accounts, checks);
+  const mode = useGatewayMode();
+  // Until the gateway says what it is, an app only a server can sign in to offers nothing: a
+  // Connect that appeared and went would be one the owner could press on the wrong gateway.
+  const offered = !app.needsHttps || mode === 'server';
   const connect = () =>
     save(
       {
@@ -58,15 +63,17 @@ export function AppConnector({
       back={back}
       lead={`${app.description} Every agent reaches each account you connect, by its name.`}
       actions={
-        <Action
-          tone={accounts.length > 0 ? 'outline' : 'primary'}
-          size="field"
-          busy={busy}
-          {...(accounts.length > 0 ? {} : { 'aria-label': `Connect ${app.name}` })}
-          onClick={() => void connect()}
-        >
-          {accounts.length > 0 ? 'Add account' : 'Connect'}
-        </Action>
+        offered && (
+          <Action
+            tone={accounts.length > 0 ? 'outline' : 'primary'}
+            size="field"
+            busy={busy}
+            {...(accounts.length > 0 ? {} : { 'aria-label': `Connect ${app.name}` })}
+            onClick={() => void connect()}
+          >
+            {accounts.length > 0 ? 'Add account' : 'Connect'}
+          </Action>
+        )
       }
       details={[
         ['Status', accountsStatus(accounts, checks)],
@@ -83,6 +90,14 @@ export function AppConnector({
           remove={(server) => remove(servers.indexOf(server))}
         />
       )}
+      {app.needsHttps && (
+        <Note>
+          {mode === 'local'
+            ? `${app.name} signs in by reading who Jian is from the gateway’s HTTPS address, which the desktop app’s own gateway does not have. Connect it on a server gateway whose JIAN_PUBLIC_URL is its https:// address.`
+            : `${app.name} signs in by reading who Jian is from this gateway, so it needs JIAN_PUBLIC_URL set to the gateway’s https:// address, one the internet reaches.`}
+        </Note>
+      )}
+      {app.note && <Note>{app.note}</Note>}
       <Note>
         Each account is named after who signs in, once {app.name} says who that is. It signs in
         whichever account your browser is logged into: to connect another one, switch account there

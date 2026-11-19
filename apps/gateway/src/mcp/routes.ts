@@ -41,6 +41,23 @@ export function registerMcpRoutes(app: FastifyInstance, deps: McpRouteServices):
     return deps.mcpLogins?.withAuthorization(status) ?? status;
   });
 
+  // Read by an authorization server, not by the owner. It names a server whether or not one is
+  // saved under that name: telling which exist would be the only thing it gave away.
+  app.get<{ Params: ServerParams }>(
+    '/v1/mcp-servers/:name/oauth/client',
+    async (request, reply) => {
+      const document = deps.mcpLogins?.clientDocument(request.params.name);
+
+      if (!document) {
+        throw new GatewayError(404, 'This gateway has no HTTPS address to sign in from');
+      }
+
+      // What one address answers never changes, as the address and the callback in it come from
+      // the same JIAN_PUBLIC_URL, so a server may keep it a while instead of asking each sign-in.
+      return reply.header('cache-control', 'public, max-age=3600').send(document);
+    },
+  );
+
   // The authorization server redirects the owner's browser here, so the answer is a page.
   app.get<{ Params: ServerParams; Querystring: Record<string, string> }>(
     '/v1/mcp-servers/:name/oauth/callback',

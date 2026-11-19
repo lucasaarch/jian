@@ -26260,6 +26260,195 @@
         }
       }
     },
+    "/v1/mcp-servers/{name}/oauth/client": {
+      "get": {
+        "operationId": "getMcpClientDocument",
+        "security": [],
+        "description": "Required permission: public.",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9_]{1,30}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "client_id": {
+                      "type": "string",
+                      "format": "uri"
+                    },
+                    "client_name": {
+                      "type": "string",
+                      "const": "Jian"
+                    },
+                    "client_uri": {
+                      "type": "string",
+                      "format": "uri"
+                    },
+                    "logo_uri": {
+                      "type": "string",
+                      "format": "uri"
+                    },
+                    "redirect_uris": {
+                      "minItems": 1,
+                      "maxItems": 1,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "format": "uri"
+                      }
+                    },
+                    "grant_types": {
+                      "type": "array",
+                      "items": [
+                        {
+                          "type": "string",
+                          "const": "authorization_code"
+                        },
+                        {
+                          "type": "string",
+                          "const": "refresh_token"
+                        }
+                      ],
+                      "additionalItems": false,
+                      "minItems": 2,
+                      "maxItems": 2
+                    },
+                    "response_types": {
+                      "type": "array",
+                      "items": [
+                        {
+                          "type": "string",
+                          "const": "code"
+                        }
+                      ],
+                      "additionalItems": false,
+                      "minItems": 1,
+                      "maxItems": 1
+                    },
+                    "token_endpoint_auth_method": {
+                      "type": "string",
+                      "const": "none"
+                    }
+                  },
+                  "required": [
+                    "client_id",
+                    "client_name",
+                    "client_uri",
+                    "redirect_uris",
+                    "grant_types",
+                    "response_types",
+                    "token_endpoint_auth_method"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/profiles/{profileId}/activity": {
       "get": {
         "operationId": "getActivityCalendar",

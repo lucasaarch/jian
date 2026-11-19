@@ -97,6 +97,9 @@ describe('public API contracts', () => {
         'startPanelSession',
         'pairDevice',
         'completeMcpLogin',
+        // What an authorization server reads to know who signs in: metadata with no secret,
+        // built only from this gateway's address and a name held to the server name's rule.
+        'getMcpClientDocument',
         // The sandboxed frame shell holds no content, and a public Artifact proves itself
         // with its unguessable id; a private one never answers here. The same id gives the
         // files of its latest version, and nothing else of it.

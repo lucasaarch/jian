@@ -2,6 +2,7 @@ import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
 import { MAX_PATH_PARAM, operationSchema, operations } from '@jian/contracts';
 import Fastify, { LogController } from 'fastify';
+import type { McpLogins } from './agent/mcp-login.js';
 import { registerArtifactRoutes } from './artifacts/routes.js';
 import { registerOpenAiRoutes } from './channels/openai/routes.js';
 import { registerChannelRoutes } from './channels/routes.js';
@@ -66,6 +67,8 @@ export function createApp(
     x?: XIntegration;
     channels?: Channels;
     whatsapp?: WhatsAppConnections;
+    /** Absent without a public address: no MCP server can sign in with OAuth then. */
+    mcpLogins?: McpLogins;
     /** `local` for the gateway a desktop app runs, which serves no panel notice of its own. */
     mode?: 'server' | 'local';
     maxStreams?: number;

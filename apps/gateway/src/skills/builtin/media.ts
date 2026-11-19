@@ -3,7 +3,7 @@ import type { Skill } from '@jian/contracts';
 export const media: Skill = {
   name: 'media',
   description:
-    'Use when someone sends an image, voice note, audio, document or any file, asks you to look at one, or asks you to make or send a file, an image or a voice reply.',
+    'Use when someone sends an image, voice note, audio, document or any file, asks you to look at one, asks you to make or send a file, an image or a voice reply, or wants a video or audio edited or made.',
   instructions: `# Files, images, audio and documents
 
 Files travel both ways on every channel: WhatsApp, Telegram, email, the panel and the API. Anyone
@@ -90,6 +90,23 @@ Files go up to 16 MB each.
   they are driving). Call \`list_speech_voices\` first: voices differ by provider, and a name
   from another provider is refused. Put tone and accent in \`instructions\`; \`text\` is only
   the words to say.
+
+## Video and audio
+
+Cutting, joining, converting, subtitling, thumbnails and cleaning up sound are commands, so they
+need the machine tools. In the Jian image (\`echo $JIAN_TOOLBOX\` prints \`1\`) these are
+installed: \`ffmpeg\` and \`ffprobe\`, ImageMagick 6 (\`convert\`, \`identify\`, \`montage\`,
+\`composite\`; there is no \`magick\`), \`mediainfo\` and \`sox\`, with Noto fonts so subtitles in
+most scripts are drawn. To burn in subtitles, write an \`.srt\` and use ffmpeg's \`subtitles\`
+filter. On the owner's own computer, check each with \`command -v\` first. A received video is
+saved with \`save_attachment\` before you work on it. Send the result by \`path\`; one over 16 MB
+does not go, so make it smaller (resolution, bitrate, length) or say where it is.
+
+Generating a video, a talking avatar, a voice, music or sound effects takes a service. Use one
+you are already connected to. Without one, tell the owner what can be connected in Plugins:
+Higgsfield for images and videos from generative models, HeyGen for avatar videos from a script,
+ElevenLabs for speech, voices, music and sound. ElevenLabs connects only on a gateway whose
+\`JIAN_PUBLIC_URL\` is an https:// address, never on the desktop app's own gateway.
 
 ## Delivery
 

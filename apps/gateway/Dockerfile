@@ -81,13 +81,20 @@ FROM node:24-bookworm-slim
 # The fonts are the gateway's too, for the deck it draws into a file (src/artifacts/export.ts):
 # Liberation has the measures of Arial and Courier New, which a deck's basic fonts ask for, and
 # without a colour emoji font every emoji on a slide is drawn as an empty box.
+# Video work is the rest of ffmpeg's line: ImageMagick for thumbnails, frames and compositing,
+# mediainfo to read what a file holds, sox (with MP3) for audio, and Noto's core set, about 43 MB,
+# so subtitles burned into a video in Arabic, Hebrew, Devanagari, Thai and most other scripts
+# are drawn rather than boxes. Debian's ImageMagick policy keeps it off the network (no URL
+# coders) and caps its memory and disk, and without recommended packages no Ghostscript stands
+# behind it to run PostScript or PDF. Nothing here downloads from a third-party site.
 RUN apt-get update && apt-get install -y --no-install-recommends \
       bash ffmpeg ca-certificates gnupg \
+      imagemagick mediainfo sox libsox-fmt-mp3 \
       git openssh-client curl wget rsync \
       chromium xvfb xauth x11-utils x11-apps mesa-utils vulkan-tools \
       libgl1-mesa-dri libegl1 libglx-mesa0 mesa-vulkan-drivers \
       libx11-dev libgl-dev libxcursor1 libxi6 libxrandr2 libxkbcommon-x11-0 \
-      fonts-dejavu-core fonts-liberation fonts-noto-color-emoji \
+      fonts-dejavu-core fonts-liberation fonts-noto-color-emoji fonts-noto-core \
       jq ripgrep fd-find gawk sed grep diffutils patch file tree less nano vim-tiny \
       zip unzip xz-utils bzip2 zstd \
       procps psmisc lsof iproute2 iputils-ping dnsutils netcat-openbsd \

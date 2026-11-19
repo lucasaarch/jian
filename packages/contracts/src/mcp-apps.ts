@@ -1,6 +1,6 @@
 /**
  * Where each app of the panel's catalog keeps its MCP server, by the app's id: the address it
- * connects to first, then any it used before. The panel draws the cards; the gateway reads this
+ * connects to first, then any other it is known at, where it used to be or a region's own. The panel draws the cards; the gateway reads this
  * to tell an app's server from one added by hand, which is all it needs to name an account after
  * its owner and to count an app's use without ever reporting an address.
  */
@@ -45,6 +45,13 @@ export const MCP_APP_ADDRESSES = {
   postman: ['https://mcp.postman.com/mcp'],
   buildkite: ['https://mcp.buildkite.com/mcp'],
   mixpanel: ['https://mcp.mixpanel.com/mcp'],
+  higgsfield: ['https://mcp.higgsfield.ai/mcp'],
+  // With the trailing slash: without it the server answers with a redirect to it, which the
+  // gateway's client refuses to follow. A server saved without one is still HeyGen, as `same` says.
+  heygen: ['https://mcp.heygen.com/mcp/v1/'],
+  // The second is the same server for an account kept in the EU, which signs in on its own
+  // authorization server.
+  elevenlabs: ['https://api.elevenlabs.io/v1/mcp', 'https://api.eu.residency.elevenlabs.io/v1/mcp'],
 } as const satisfies Record<string, readonly [string, ...string[]]>;
 
 export type McpAppId = keyof typeof MCP_APP_ADDRESSES;

@@ -72,7 +72,9 @@ const IMAGE = `## Already installed in the image
 - Archives: \`tar\`, \`zip\`/\`unzip\`, \`xz\`, \`bzip2\`, \`zstd\`.
 - Builds: \`gcc\`, \`g++\`, \`make\`, \`pkg-config\`.
 - Diagnosis: \`ps\`, \`kill\`, \`lsof\`, \`ip\`, \`ping\`, \`dig\`, \`nc\`.
-- Data and media: \`sqlite3\`, \`psql\`, \`ffmpeg\`.
+- Data and media: \`sqlite3\`, \`psql\`, \`ffmpeg\` and \`ffprobe\`, ImageMagick 6 (\`convert\`,
+  \`identify\`, \`montage\`, \`composite\`; no \`magick\`), \`mediainfo\`, \`sox\`. Fonts: DejaVu,
+  Liberation, Noto for most scripts, and Noto Color Emoji.
 
 ## GUI applications and screenshots
 
