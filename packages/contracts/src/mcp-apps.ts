@@ -14,6 +14,9 @@ export const MCP_APP_ADDRESSES = {
   notion: ['https://mcp.notion.com/mcp'],
   airtable: ['https://mcp.airtable.com/mcp'],
   zapier: ['https://mcp.zapier.com/api/mcp/mcp'],
+  // Composio Connect: one hosted server for the apps Composio connects, signed in by OAuth.
+  composio: ['https://connect.composio.dev/mcp'],
+  'reactive-resume': ['https://rxresu.me/mcp'],
   make: ['https://mcp.make.com'],
   calendly: ['https://mcp.calendly.com'],
   cal_com: ['https://mcp.cal.com/mcp'],
