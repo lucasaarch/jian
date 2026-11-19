@@ -508,6 +508,42 @@ exports.default = (props) =>
       await page.close();
     });
 
+    it("edits a web page in the panel's theme, and saves none of the theme with it", async () => {
+      // A page with a dark look of its own: read in a dark panel, it is dark, and editing it
+      // must not turn it light. What is saved is the page as written, with its own class.
+      const source =
+        '<!doctype html>\n<html class="brand"><head><style>body { background: rgb(255, 255, 255); }' +
+        ' .dark body { background: rgb(0, 0, 0); }</style></head><body><h1>Bananas</h1></body></html>';
+      handed.set('html-edit-theme', source);
+      const page = await browser.newPage({ colorScheme: 'light' });
+      await page.goto(`${origin}/panel/html-edit-theme?type=html&edit=1&theme=dark`);
+      const edited = await editing(page);
+      await expect
+        .poll(() => edited.evaluate('getComputedStyle(document.body).backgroundColor'))
+        .toBe('rgb(0, 0, 0)');
+      expect(await edited.evaluate('getComputedStyle(document.documentElement).colorScheme')).toBe(
+        'dark',
+      );
+
+      await edited.click('h1');
+      await page.keyboard.press('End');
+      await page.keyboard.type('!');
+      // The panel turns light while the page is open: it follows, and still saves none of it.
+      await page.evaluate(
+        `document.getElementById('held').contentWindow.postMessage({ ${ARTIFACT_THEME_MESSAGE}: 'light' }, '*')`,
+      );
+      await expect
+        .poll(() => edited.evaluate('getComputedStyle(document.body).backgroundColor'))
+        .toBe('rgb(255, 255, 255)');
+
+      const answer = (await collect(page, 'themed')) as { html: string };
+      expect(answer.html).toContain('<h1>Bananas!</h1>');
+      // The page's own tag, as written: no dark class and no scheme of the panel's.
+      expect(answer.html).toMatch(/<html class="brand">/);
+      expect(answer.html).not.toMatch(/<html[^>]*(dark|style=)/);
+      await page.close();
+    });
+
     it('edits a document as it is drawn and hands back Markdown', async () => {
       const source = [
         '# Title',
