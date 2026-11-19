@@ -72,7 +72,9 @@ something later, or every day, see \`schedules\`.
   and a call that fails leaves no version.
   The owner edits a web page, a slide, a document and a spreadsheet by hand in
   that tab, and what they change is kept by itself as they pause or leave, with no Save: one
-  stretch of editing is one version of theirs, never written over one of yours. Before you
+  stretch of editing is one version of theirs, never written over one of yours. In a
+  spreadsheet they write in the cells themselves and put in or take out rows and columns from
+  the menu of a cell or a header (a right click), its formulas following. Before you
   change an Artifact you did not
   just write, read it with \`read_artifact_source\`: the latest source, and whether you or the
   owner wrote it. Build on that, or your update undoes their edit. A component and a
