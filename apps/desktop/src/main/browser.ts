@@ -703,16 +703,22 @@ export class JianBrowser {
     });
     ipcMain.handle('browser:import-cookies', async (event, source: unknown, scope: unknown) => {
       trusted(event);
-      const contents = this.view?.webContents;
-      if (!contents || typeof source !== 'string') throw new Error('Open the browser first');
-      const url = contents.getURL();
+      if (typeof source !== 'string') throw new Error('Pick the browser to bring logins from');
+      // The logins go to the conversation's browser profile, which is there whether or not its
+      // page is drawn now: a tab put away or still coming back has no view, and asking for one
+      // failed an import with the browser open. The site is the tab's address, live or kept.
+      const conversation = this.current ?? this.shownConversation();
+      const page = this.shownPage();
+      const candidate = page?.view?.webContents;
+      const live = candidate && !candidate.isDestroyed() ? candidate : undefined;
+      const url = live?.getURL() || page?.url || '';
       if (scope === 'site' && !allowed(url)) throw new Error('Open the site first');
       const result = await importCookies(
-        contents.session,
+        session.fromPartition(this.partition(conversation.scope)),
         source as CookieSourceId,
         scope === 'site' ? new URL(url).hostname : undefined,
       );
-      if (allowed(url)) contents.reload();
+      if (live && allowed(url)) live.reload();
       return result;
     });
   }
