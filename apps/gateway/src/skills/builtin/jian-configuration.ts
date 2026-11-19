@@ -19,16 +19,17 @@ Shared by the whole installation.
   Artifacts, models, tools, apps, panel screens and features used, why runs failed), never a
   message, name, address, file or credential. The owner turns it off there; a host with
   \`DO_NOT_TRACK=1\` or \`JIAN_TELEMETRY=off\` has it off for good.
-- **Providers**: model providers, the Tavily web-search key and Decisions (Jev).
+- **Providers**: model providers, the Tavily web-search key and Decisions (Jev). A provider
+  can hold several accounts (two Claude Code tokens); Configure lists them; runs use the one
+  marked Active.
 - **Capabilities**: the models for channels, incoming audio, image generation and speech. A
   conversation is compacted by its own model. Automatic selects from connected providers;
   Disabled turns that activity off where offered.
 - **SSH keys**: the keys every agent uses for Git.
 - **Machines**: on a server gateway, the computers every agent can use, and how to install their
   worker. A desktop app connected to that gateway is listed as This computer.
-- **Mobile**: on a server gateway, pairs a phone with the Jian app by QR code, lists the paired
-  phones with when each was last seen, turns message previews in notifications on or off per
-  phone, and revokes a phone. The gateway needs its public address set to pair one.
+- **Mobile**: on a server gateway, pairs a phone with the Jian app by QR code, lists paired
+  phones and when each was last seen, sets notification previews per phone, and revokes one. Pairing needs the gateway's public address.
 - **Connection**: on a server gateway, how this panel reaches it.
 
 ## Plugins
@@ -52,8 +53,8 @@ In the main sidebar, in place of the chat: what every agent is given, in tabs, w
 
 ## Agent settings
 
-One agent's own, from the agent chooser at the foot of the sidebar. Like the app's Settings, it
-takes the whole window: its pages are listed where the sidebar was, under Back.
+One agent's own, from the agent chooser at the foot of the sidebar. Like Settings, it takes the
+whole window, its pages listed where the sidebar was.
 
 - **Identity**: name, picture, instructions, summary for the team and boundaries, and Compact
   conversations: whether its conversations are summarised near the model's limit, the default,
@@ -89,7 +90,7 @@ takes the whole window: its pages are listed where the sidebar was, under Back.
   pull requests of every connected account in place of the chat. Review there hands one to an
   agent; Review settings choose the reviewing agent, its instructions, and whether new pull
   requests are reviewed on their own through the GitHub App's webhook.
-- **Activity**, always last at the top of the sidebar, in place of the chat: tokens, runs and
+- **Activity**, last at the top of the sidebar, in place of the chat: tokens, runs and
   estimated cost. For your own full figures, see \`activity\`.
 - **Renaming**: right-click a conversation in the sidebar, or use the palette, to rename a chat
   or a person on WhatsApp or Telegram. A chat is named by you from its first message until the
@@ -100,11 +101,10 @@ takes the whole window: its pages are listed where the sidebar was, under Back.
   it what new chats start with.
 - **Stopping you**: while you work, the composer's send button becomes a stop button whenever its
   box is empty. What the owner writes meanwhile still reaches you in the same turn.
-- **Back to the latest message**: scrolled up from the end, however little, the owner gets a
-  round down-arrow button over the end of the conversation; a dot on it means something new
-  arrived below.
-- **Back to the top**: every page, scrolled past its heading, shows a round Scroll to top
-  button at its bottom right.
+- **Back to the latest message**: scrolled up from the end, the owner gets a round down-arrow
+  button over the end of the conversation; a dot on it means something new arrived below.
+- **Back to the top**: a page scrolled past its heading shows a Scroll to top button at its
+  bottom right.
 - **Project instructions**: in a conversation that works in folders or repositories, the
   AGENTS.md of each (CLAUDE.md where there is none) is in your instructions, and the skills in
   their .agents/skills and .claude/skills folders are in your catalog. They are read again when

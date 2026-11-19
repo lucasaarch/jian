@@ -60,7 +60,7 @@ it('runs on a host provider credential without registering a provider by hand', 
   });
 });
 
-it('replaces one provider key and refuses the model default left behind', async () => {
+it('moves the model default to an account added after it, keeping the first', async () => {
   const services = await testServices();
   const profile = await services.profiles.createProfile({ name: 'Replace', instructions: 'Help.' });
   const add = (name: string) =>
@@ -76,28 +76,18 @@ it('replaces one provider key and refuses the model default left behind', async 
   const current = await add('current');
   const session = await services.sessions.createSession(profile.id, { title: 'Test' });
 
-  // The replaced provider is revoked, so the default pointing at it must not start a run
-  // against a key the owner already took away.
-  await expect(
-    services.runs.submit(profile.id, session.id, { text: 'Hello', requestKey: 'stale' }),
-  ).rejects.toMatchObject({ statusCode: 409 });
-
-  await services.providers.setModelDefaults({
-    conversation: { providerId: current.id, modelId: 'gpt-4.1' },
-  });
-
+  // The new account is the active one: the default follows it, and so does the run.
   const run = await services.runs.submit(profile.id, session.id, {
     text: 'Hello',
     requestKey: 'new',
   });
 
   expect(run.model?.providerId).toBe(current.id);
-  expect(
-    (await services.providers.providers()).find((item) => item.id === old.id)?.revokedAt,
-  ).toBeDefined();
-  expect(
-    (await services.providers.providers()).find((item) => item.id === current.id)?.revokedAt,
-  ).toBeUndefined();
+  expect((await services.providers.modelDefaults()).conversation?.providerId).toBe(current.id);
+  expect((await services.providers.accounts()).map((item) => [item.id, item.active])).toEqual([
+    [old.id, false],
+    [current.id, true],
+  ]);
 });
 
 it("keeps the agent's compaction point over the policy its chosen model gives", async () => {

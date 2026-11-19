@@ -266,7 +266,7 @@ export type RuntimeServices = ToolServices & {
   /** The installation's MCP servers, which every run reaches. */
   mcp: McpServerReader;
   providers?: Pick<Providers, 'selectedModel'> &
-    Partial<Pick<Providers, 'modelDefaults' | 'loadCapabilities'>>;
+    Partial<Pick<Providers, 'modelDefaults' | 'loadCapabilities' | 'activeConfig'>>;
   media?: Pick<Media, 'prepare' | 'tools'>;
   web?: Pick<WebSearch, 'tools' | 'browserFor' | 'access'>;
   learning?: Pick<Learning, 'consider'>;
@@ -679,7 +679,9 @@ export class AgentRuntime {
     try {
       const defaults = await this.services.providers?.modelDefaults?.();
       const policy = run.contextPolicy ?? run.profile.contextPolicy;
-      const config = run.model ?? run.profile.model;
+      // The account is the one its vendor has active as the run starts, kept to its end.
+      const frozen = run.model ?? run.profile.model;
+      const config = (await this.services.providers?.activeConfig?.(frozen)) ?? frozen;
       let providerKey: string | undefined;
 
       if (config.provider === 'openai-codex' && config.providerId) {

@@ -36,6 +36,16 @@ const unavailable = (provider: 'codex' | 'claude'): SubscriptionUsage => ({
   weekly: null,
 });
 
+/** Which account the windows are of; one from the host's environment is the vendor's only one. */
+const accountOf = (provider: ProviderRecord) =>
+  provider.apiKeyEnv
+    ? { active: true }
+    : {
+        providerId: provider.id,
+        ...(provider.label ? { label: provider.label } : {}),
+        active: provider.active !== false,
+      };
+
 /** Private provider endpoints may change without notice. Never surface their response bodies. */
 export class SubscriptionUsageReader {
   private codexLogin?: Pick<CodexLogin, 'accessToken'>;
@@ -43,7 +53,10 @@ export class SubscriptionUsageReader {
   private pending?: Promise<SubscriptionUsage[]>;
 
   constructor(
-    private readonly providers: { providers(): Promise<ProviderRecord[]> },
+    private readonly providers: {
+      providers(): Promise<ProviderRecord[]>;
+      accounts(): Promise<ProviderRecord[]>;
+    },
     private readonly vault: GatewayVault,
     private readonly fetcher: typeof fetch,
     private readonly clock: () => number = Date.now,
@@ -67,7 +80,12 @@ export class SubscriptionUsageReader {
   }
 
   private async load(): Promise<SubscriptionUsage[]> {
-    const providers = (await this.providers.providers()).filter((provider) => !provider.revokedAt);
+    // Every account has its own plan and limits, so each is read, the inactive ones too; the
+    // host's own key stands in only while no account is stored.
+    const providers = [
+      ...(await this.providers.accounts()),
+      ...(await this.providers.providers()).filter((provider) => provider.apiKeyEnv),
+    ].filter((provider) => !provider.revokedAt);
     const subscribed: ProviderRecord[] = [];
     for (const provider of providers) {
       if (provider.authMode === 'codex') {
@@ -82,11 +100,15 @@ export class SubscriptionUsageReader {
 
     return Promise.all(
       subscribed.map(async (provider): Promise<SubscriptionUsage> => {
-        if (provider.authMode === 'codex') return this.readCodex(provider);
+        if (provider.authMode === 'codex')
+          return { ...(await this.readCodex(provider)), ...accountOf(provider) };
         // Only what a real answer said: its headers carry the windows. No request is ever made
         // just to learn them, so a gateway that has not run on Claude since it started knows none.
         const seen = claudeLimits(limitsKey(provider.id), this.clock());
-        return seen ? { provider: 'claude', status: 'available', ...seen } : unavailable('claude');
+        return {
+          ...(seen ? { provider: 'claude', status: 'available', ...seen } : unavailable('claude')),
+          ...accountOf(provider),
+        };
       }),
     );
   }

@@ -7,7 +7,16 @@ import type { Providers } from './service.js';
 
 type ProviderRouteServices = {
   providers: ProviderAdmin &
-    Pick<Providers, 'createProvider' | 'revokeProvider' | 'modelDefaults' | 'setModelDefaults'>;
+    Pick<
+      Providers,
+      | 'accounts'
+      | 'createProvider'
+      | 'activateAccount'
+      | 'renameAccount'
+      | 'revokeProvider'
+      | 'modelDefaults'
+      | 'setModelDefaults'
+    >;
   codexLogin?: CodexLogin;
   providerModels?: Pick<ProviderModels, 'list'>;
 };
@@ -38,6 +47,18 @@ export function registerProviderRoutes(app: FastifyInstance, deps: ProviderRoute
 
   app.post('/v1/providers', async (request, reply) =>
     reply.code(201).send(await deps.providers.createProvider(request.body)),
+  );
+
+  // Every account, the ones runs do not use included, for the panel's list of them.
+  app.get('/v1/provider-accounts', async () => deps.providers.accounts());
+
+  app.patch<{ Params: { providerId: string } }>('/v1/providers/:providerId', async (request) =>
+    deps.providers.renameAccount(request.params.providerId, request.body),
+  );
+
+  app.post<{ Params: { providerId: string } }>(
+    '/v1/providers/:providerId/activate',
+    async (request) => deps.providers.activateAccount(request.params.providerId),
   );
 
   app.get<{ Params: { providerId: string } }>('/v1/providers/:providerId/models', async (request) =>

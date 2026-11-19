@@ -72,6 +72,8 @@ vi.mock('../../lib/query/client', () => ({
     mcpServers: async () => [],
     modelDefaults: async () => ({}),
     providerModels: async () => ({ models: [] }),
+    // The same live credentials, as accounts: each the only one of its vendor.
+    providerAccounts: async () => providers.filter((item) => !item.revokedAt),
     repository: async () => ({ stars: 0 }),
     codexLogin: async () => ({ status: 'idle' }),
   }),

@@ -6,32 +6,35 @@ import { useCodexLogin } from '../../components/providers/use-codex-login';
 import { Action, Overlay, OverlayActions, StatusPill } from '../../kit';
 import type { Provider } from '../../lib/api';
 import { CodexCodeDialog } from './codex-code-dialog';
+import { AccountList } from './provider-accounts';
 import { ProviderTitle } from './provider-title';
 
 /**
- * Codex: OpenAI through the owner's ChatGPT plan instead of an API key, configured — signing
- * in, the wait for the code to be entered, and disconnecting, which the page asks to confirm.
+ * Codex: OpenAI through the owner's ChatGPT plan instead of an API key. Its accounts are listed
+ * as any provider's, each a ChatGPT sign-in named by its email; signing in adds another, or
+ * refreshes one already here when it is the same account, and the wait for the code to be
+ * entered is said in the header.
  */
 export function CodexDialog({
   open,
   onOpenChange,
-  codex,
+  accounts,
   apiKey,
-  actions: { api, mutate, busy },
-  onDisconnect,
+  actions,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** The sign-in in place, if any. */
-  codex: Provider | undefined;
+  /** The ChatGPT sign-ins kept, the active one among them. */
+  accounts: Provider[];
   /** Whether an OpenAI API key is connected beside it. */
   apiKey: boolean;
   actions: SectionActions;
-  onDisconnect: (provider: Provider) => void;
 }) {
+  const { api, mutate, busy } = actions;
   const { login, codeShown, start, showCode, hideCode } = useCodexLogin(api, mutate);
   const [startError, setStartError] = useState('');
   const pending = login?.status === 'pending';
+  const connected = accounts.length > 0;
   // The code to enter, while a sign-in waits for it.
   const code =
     pending && login.verificationUrl && login.userCode
@@ -68,10 +71,9 @@ export function CodexDialog({
         </button>
       </>
     );
-  } else if (codex) {
-    state = apiKey
-      ? 'Signed in with your ChatGPT plan.'
-      : 'Signed in with your ChatGPT plan. An API key alongside it adds image and voice generation.';
+  } else if (connected) {
+    // The sign-in takes whichever ChatGPT account the browser is logged into.
+    state = `Signed in with your ChatGPT plan.${apiKey ? '' : ' An API key alongside it adds image and voice generation.'} To add another account, log in to it on chatgpt.com first.`;
   }
 
   return (
@@ -81,27 +83,18 @@ export function CodexDialog({
           <header className="grid gap-1.5 pr-10">
             <h2 className="flex items-center gap-2.5 text-lg font-semibold tracking-tight">
               <ProviderTitle kind="openai">Codex</ProviderTitle>
-              {codex && <StatusPill tone="good">Connected</StatusPill>}
+              {connected && <StatusPill tone="good">Connected</StatusPill>}
             </h2>
             <p className="text-sm leading-relaxed text-muted">{state}</p>
           </header>
+          {connected && <AccountList service="Codex" accounts={accounts} actions={actions} />}
           <OverlayActions>
-            {codex && (
-              <Action
-                tone="danger"
-                className="bg-bad/10"
-                disabled={busy}
-                onClick={() => onDisconnect(codex)}
-              >
-                Disconnect
-              </Action>
-            )}
             <span className="flex-1" />
             <Action tone="quiet" onClick={() => onOpenChange(false)}>
               Close
             </Action>
             <Action tone="primary" busy={busy || pending} onClick={signIn}>
-              {codex ? 'Sign in again' : 'Sign in'}
+              {connected ? 'Add another account' : 'Sign in'}
             </Action>
           </OverlayActions>
         </div>

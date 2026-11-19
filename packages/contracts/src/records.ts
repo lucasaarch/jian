@@ -300,6 +300,11 @@ const subscriptionWindowSchema = z.strictObject({
 
 export const subscriptionUsageSchema = z.strictObject({
   provider: z.enum(['codex', 'claude']),
+  /** The account the windows belong to: each account has its own plan and its own limits. */
+  providerId: z.uuid().optional(),
+  label: z.string().optional(),
+  /** Whether runs use this account now; the others are listed for their own windows. */
+  active: z.boolean().optional(),
   status: z.enum(['available', 'unavailable']),
   fiveHour: subscriptionWindowSchema.nullable(),
   weekly: subscriptionWindowSchema.nullable(),

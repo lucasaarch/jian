@@ -1,73 +1,55 @@
 'use client';
 
-import { type FormEvent, useState } from 'react';
+import { Plus } from 'lucide-react';
+import { useState } from 'react';
 import type { SectionActions } from '../../components/props';
-import { anthropicCredentials } from '../../components/providers/catalog';
-import {
-  addressHint,
-  credentialLine,
-  type ProviderEntry,
-  providerRequest,
-  secretHint,
-  secretLabel,
-  staleLine,
-} from '../../components/providers/connection';
-import { Action, Overlay, OverlayActions, Segmented, StatusPill, TextField } from '../../kit';
-import type { Provider, ProviderModelList } from '../../lib/api';
+import type { Credential } from '../../components/providers/accounts';
+import type { ProviderEntry } from '../../components/providers/connection';
+import { Action, Overlay, OverlayActions, StatusPill } from '../../kit';
+import type { Provider } from '../../lib/api';
+import { AccountList } from './provider-accounts';
+import { ConnectForm } from './provider-form';
 import { ProviderTitle } from './provider-title';
-
-export type Credential = (typeof anthropicCredentials)[number]['value'];
 
 /**
  * One of Anthropic's two credentials, shown as a provider of its own: an API key, or a Claude
- * Code token from `claude setup-token`. The gateway keeps one Anthropic credential at a time.
+ * Code token from `claude setup-token`. The gateway keeps one Anthropic account active at a
+ * time, across both.
  */
 export type AnthropicAs = {
   credential: Credential;
   name: string;
   description: string;
-  /** Said when the other credential is connected: saving this one replaces it. */
+  /** Said while the other credential's account is the active one: adding here switches. */
   replaces?: string;
 };
 
-const count = (n: number, one: string) => `${n} ${n === 1 ? one : `${one}s`}`;
-
-/** What a connected vendor holds and offers, a fact to a line. */
-function factsOf(configured: Provider, list: ProviderModelList | undefined): string[] {
-  const unknown = list?.models.filter((model) => !model.known).length ?? 0;
-  return [
-    configured.baseURL ? `At ${configured.baseURL}` : credentialLine(configured),
-    list?.models.length ? count(list.models.length, 'model') : '',
-    unknown ? `${unknown} with unknown capabilities` : '',
-  ].filter(Boolean);
-}
-
 /**
- * One vendor, configured: how it is connected and what it offers, its credential to replace, and
- * the way to disconnect it. Its credential is written here and never shown back; Anthropic asks
- * which of its two credentials it is, and a server of the owner's where it answers. The form is
- * drawn again on each opening, so nothing typed outlives a cancel.
+ * One provider's accounts: each one listed, the active one marked, with the way to make another
+ * active, rename it or remove it, and Add another account, which opens the connect form. With
+ * no account yet the form is all there is. Its credential is written there and never shown back.
  */
 export function ProviderDialog({
   entry,
   as,
-  configured,
-  list,
+  accounts,
+  environment,
+  stale,
   open,
   onOpenChange,
-  onDisconnect,
   actions,
 }: {
   entry: ProviderEntry | undefined;
   /** For Anthropic, which of its credentials this dialog is about. */
   as?: AnthropicAs;
-  /** What this vendor holds now, if anything: the dialog then replaces it. */
-  configured: Provider | undefined;
-  list: ProviderModelList | undefined;
+  /** This provider's live accounts. */
+  accounts: Provider[];
+  /** A key the gateway reads from its environment, standing in while no account is stored. */
+  environment?: Provider | undefined;
+  /** The active account's models could not be listed. */
+  stale: boolean;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** Asks to confirm, then disconnects; absent for a credential the gateway reads from its environment. */
-  onDisconnect: (provider: Provider) => void;
   actions: SectionActions;
 }) {
   return (
@@ -78,14 +60,14 @@ export function ProviderDialog({
       size="form"
     >
       {entry && (
-        <ProviderForm
+        <ProviderAccounts
           key={`${entry.kind}-${as?.credential ?? ''}`}
           entry={entry}
           {...(as ? { as } : {})}
-          configured={configured}
-          list={list}
+          accounts={accounts}
+          environment={environment}
+          stale={stale}
           close={() => onOpenChange(false)}
-          onDisconnect={onDisconnect}
           actions={actions}
         />
       )}
@@ -93,142 +75,85 @@ export function ProviderDialog({
   );
 }
 
-function ProviderForm({
+function ProviderAccounts({
   entry,
   as,
-  configured,
-  list,
+  accounts,
+  environment,
+  stale,
   close,
-  onDisconnect,
-  actions: { api, mutate, busy },
+  actions,
 }: {
   entry: ProviderEntry;
   as?: AnthropicAs;
-  configured: Provider | undefined;
-  list: ProviderModelList | undefined;
+  accounts: Provider[];
+  environment: Provider | undefined;
+  stale: boolean;
   close: () => void;
-  onDisconnect: (provider: Provider) => void;
   actions: SectionActions;
 }) {
-  const stale = staleLine(list);
-  const server = entry.kind === 'openai-compatible' || entry.kind === 'ollama';
-  const [credential, setCredential] = useState<Credential>(
-    as?.credential ?? (configured?.credential === 'subscription' ? 'subscription' : 'key'),
-  );
+  const [adding, setAdding] = useState(false);
   const name = as?.name ?? entry.name;
-  const [baseURL, setBaseURL] = useState(
-    configured?.baseURL ?? (entry.kind === 'ollama' ? 'http://localhost:11434' : ''),
+  const inUse = accounts.some((account) => account.active) || Boolean(environment);
+  const header = (
+    <header className="grid gap-1.5 pr-10">
+      <h2 className="flex items-center gap-2.5 text-lg font-semibold tracking-tight">
+        <ProviderTitle kind={entry.kind}>{name}</ProviderTitle>
+        {inUse && (
+          <StatusPill tone={stale ? 'bad' : 'good'}>
+            {stale ? 'Unreachable' : 'Connected'}
+          </StatusPill>
+        )}
+      </h2>
+      <p className="text-sm leading-relaxed text-muted">
+        {as?.description ?? entry.description}
+        {!inUse && !as && entry.variables
+          ? ` Or set ${entry.variables} where the gateway runs.`
+          : ''}
+      </p>
+    </header>
   );
-  const [secret, setSecret] = useState('');
-  const [error, setError] = useState('');
-  const detail = anthropicCredentials.find((item) => item.value === credential)?.detail;
 
-  const submit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setError('');
-    const request = providerRequest(entry, { secret, baseURL, credential });
-    if ('error' in request) {
-      setError(request.error);
-      return;
-    }
-    if (await mutate(() => api.createProvider(request.input), `${name} configured.`)) {
-      close();
-    }
-  };
+  if (adding || (accounts.length === 0 && !environment)) {
+    return (
+      <ConnectForm
+        entry={entry}
+        {...(as ? { as } : {})}
+        header={header}
+        another={accounts.length > 0}
+        environment={environment}
+        // Back to the list it was opened from, or closed when there is none.
+        cancel={accounts.length > 0 ? () => setAdding(false) : close}
+        done={close}
+        actions={actions}
+      />
+    );
+  }
 
   return (
-    <form className="grid w-full gap-5 p-7" onSubmit={submit}>
-      <header className="grid gap-1.5 pr-10">
-        <h2 className="flex items-center gap-2.5 text-lg font-semibold tracking-tight">
-          <ProviderTitle kind={entry.kind}>{name}</ProviderTitle>
-          {configured && (
-            <StatusPill tone={stale ? 'bad' : 'good'}>
-              {stale ? 'Unreachable' : 'Connected'}
-            </StatusPill>
-          )}
-        </h2>
-        <p className="text-sm leading-relaxed text-muted">
-          {as?.description ?? entry.description}
-          {!configured && !as && entry.variables
-            ? ` Or set ${entry.variables} where the gateway runs.`
-            : ''}
-        </p>
-      </header>
-      {configured && (
-        <ul className="grid gap-1 rounded-lg bg-ink/5 px-3 py-2.5 text-xs leading-relaxed text-muted">
-          {factsOf(configured, list).map((fact) => (
-            <li key={fact}>{fact}</li>
-          ))}
-          {stale && <li className="text-bad">{stale}</li>}
-        </ul>
-      )}
-      {as?.replaces && !configured && (
+    <div className="grid w-full gap-5 p-7">
+      {header}
+      {as?.replaces && !inUse && (
         <p className="rounded-lg bg-warn/10 px-3 py-2.5 text-xs leading-relaxed text-warn">
           {as.replaces}
         </p>
       )}
-      {entry.kind === 'anthropic' && !as && (
-        <div className="grid gap-1.5">
-          <span className="text-[13px] font-medium text-ink">Credential type</span>
-          <Segmented
-            label="Credential type"
-            value={credential}
-            options={anthropicCredentials.map(({ value, label }) => ({ value, label }))}
-            onChange={setCredential}
-          />
-          <small className="text-xs leading-snug text-muted">
-            {detail} Anthropic refuses either one sent as the other.
-          </small>
-        </div>
-      )}
-      {server && (
-        <TextField
-          label="Address"
-          hint={addressHint(entry)}
-          type="url"
-          required
-          placeholder={
-            entry.kind === 'ollama' ? 'http://localhost:11434' : 'https://server.example/v1'
-          }
-          value={baseURL}
-          onChange={(event) => setBaseURL(event.target.value)}
-        />
-      )}
-      <TextField
-        label={as ? (as.credential === 'subscription' ? 'Token' : 'API key') : secretLabel(entry)}
-        hint={secretHint(entry, configured)}
-        type="password"
-        autoComplete="off"
-        spellCheck={false}
-        required={!server}
-        value={secret}
-        onChange={(event) => setSecret(event.target.value)}
+      <AccountList
+        service={name}
+        accounts={accounts}
+        environment={accounts.length === 0 ? environment : undefined}
+        actions={actions}
       />
-      {error && (
-        <p role="alert" className="text-[13px] text-bad">
-          {error}
-        </p>
-      )}
       <OverlayActions>
-        {/* A credential read from the gateway's environment is changed there, not here. */}
-        {configured && !configured.apiKeyEnv && (
-          <Action
-            tone="danger"
-            className="bg-bad/10"
-            disabled={busy}
-            onClick={() => onDisconnect(configured)}
-          >
-            Disconnect
-          </Action>
-        )}
-        <span className="flex-1" />
-        <Action tone="quiet" onClick={close} disabled={busy}>
-          Cancel
+        <Action tone="outline" onClick={() => setAdding(true)} disabled={actions.busy}>
+          <Plus size={14} aria-hidden="true" />
+          {accounts.length > 0 ? 'Add another account' : 'Add account'}
         </Action>
-        <Action tone="primary" type="submit" busy={busy}>
-          {configured ? 'Replace' : 'Connect'}
+        <span className="flex-1" />
+        <Action tone="quiet" onClick={close}>
+          Close
         </Action>
       </OverlayActions>
-    </form>
+    </div>
   );
 }

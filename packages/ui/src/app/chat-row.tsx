@@ -2,25 +2,11 @@
 
 import { ContextMenu } from '@base-ui/react/context-menu';
 import { Cloud, Pencil, Pin, PinOff, Trash2 } from 'lucide-react';
-import { type ReactNode, useEffect, useRef, useState } from 'react';
+import { type ReactNode, useState } from 'react';
 import { Spinner } from '../components/ui/spinner';
-import { Action, ConfirmDialog, Overlay, OverlayActions, TextField } from '../kit';
+import { ConfirmDialog, RenameDialog, type Renaming } from '../kit';
 import { MenuEntry, menuPopup } from '../kit/menu';
 import { ago } from '../lib/format';
-
-/**
- * How something is renamed: a chat by its title, a person by their name, an Artifact or a
- * folder of them by its own.
- */
-export type Renaming = {
-  what: 'chat' | 'contact' | 'Artifact' | 'folder';
-  /** The dialog's heading where it names something new rather than renames it. */
-  heading?: string;
-  /** The longest name the gateway keeps for it. */
-  maxLength: number;
-  /** Whether the name was saved. */
-  rename: (title: string) => Promise<boolean>;
-};
 
 export type ChatRowProps = {
   name: string;
@@ -205,82 +191,5 @@ function Standing({ is }: { is: Standing }) {
     <span role="img" aria-label="Waiting for you" className="size-1.5 rounded-full bg-warn" />
   ) : (
     <span role="img" aria-label="Unread" className="size-1.5 rounded-full bg-accent" />
-  );
-}
-
-/**
- * The chat's name in a dialog, chosen whole to be typed over: Enter keeps it, Escape leaves it as
- * it was. A dialog, as a field in the row lost its focus to the row the moment the menu closed,
- * and ended before anything could be typed. It stays open when the name could not be saved.
- */
-export function RenameDialog({
-  open,
-  onOpenChange,
-  name,
-  renaming,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  name: string;
-  renaming: Renaming;
-}) {
-  return (
-    <Overlay
-      open={open}
-      onOpenChange={onOpenChange}
-      title={renaming.heading ?? `Rename ${renaming.what}`}
-      size="form"
-    >
-      {open && <RenameForm name={name} renaming={renaming} close={() => onOpenChange(false)} />}
-    </Overlay>
-  );
-}
-
-function RenameForm({
-  name,
-  renaming: { what, heading = `Rename ${what}`, maxLength, rename },
-  close,
-}: {
-  name: string;
-  renaming: Renaming;
-  close: () => void;
-}) {
-  const [title, setTitle] = useState(name);
-  const [busy, setBusy] = useState(false);
-  const form = useRef<HTMLFormElement>(null);
-
-  useEffect(() => form.current?.querySelector('input')?.select(), []);
-
-  return (
-    <form
-      ref={form}
-      className="grid w-full gap-5 p-7"
-      onSubmit={async (event) => {
-        event.preventDefault();
-        const next = title.trim();
-        if (!next || next === name) return close();
-        setBusy(true);
-        const saved = await rename(next);
-        setBusy(false);
-        if (saved) close();
-      }}
-    >
-      <h2 className="pr-10 text-lg font-semibold tracking-tight">{heading}</h2>
-      <TextField
-        label="Name"
-        value={title}
-        maxLength={maxLength}
-        autoComplete="off"
-        onChange={(event) => setTitle(event.target.value)}
-      />
-      <OverlayActions>
-        <Action tone="quiet" onClick={close}>
-          Cancel
-        </Action>
-        <Action tone="primary" type="submit" busy={busy} disabled={!title.trim()}>
-          Save
-        </Action>
-      </OverlayActions>
-    </form>
   );
 }

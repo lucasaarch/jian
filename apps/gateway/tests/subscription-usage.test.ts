@@ -72,8 +72,17 @@ it('reports an unavailable window instead of inventing zero after endpoint failu
     (async () => new Response('secret echoed here', { status: 401 })) as typeof fetch,
   );
 
+  const [claude] = await services.providers.accounts();
   expect(await reader.read()).toEqual([
-    { provider: 'claude', status: 'unavailable', fiveHour: null, weekly: null },
+    {
+      provider: 'claude',
+      status: 'unavailable',
+      fiveHour: null,
+      weekly: null,
+      providerId: claude?.id,
+      label: 'Account 1',
+      active: true,
+    },
   ]);
 });
 
@@ -208,4 +217,32 @@ it('counts a subscription saved before the owner was asked which it is', async (
     provider: 'claude',
     fiveHour: { usedPercent: 25 },
   });
+});
+
+it('keeps each Claude account’s windows to itself, the inactive ones listed too', async () => {
+  const services = await testServices();
+  const plan = (secret: string, label: string) =>
+    services.providers.createProvider({
+      name: 'Anthropic',
+      kind: 'anthropic',
+      credential: 'subscription',
+      secret,
+      label,
+    });
+  const work = await plan('sk-ant-oat-synthetic-work', 'Work');
+  const home = await plan('sk-ant-oat-synthetic-home', 'Home');
+  recordClaudeLimits(
+    limitsKey(work.id),
+    new Headers({ 'anthropic-ratelimit-unified-7d-utilization': '0.9' }),
+  );
+  const reader = new SubscriptionUsageReader(
+    services.providers,
+    services.gatewayVault,
+    (async () => new Response('{}')) as typeof fetch,
+  );
+
+  expect(await reader.read()).toMatchObject([
+    { providerId: work.id, label: 'Work', active: false, weekly: { usedPercent: 90 } },
+    { providerId: home.id, label: 'Home', active: true, status: 'unavailable', weekly: null },
+  ]);
 });
