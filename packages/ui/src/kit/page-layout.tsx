@@ -20,8 +20,10 @@ export const surfaceCard = 'rounded-xl border border-glass-edge bg-glass-hover';
 /**
  * The scrolling column of such a screen, 60rem at most on every one of them: a screen of rows
  * and one of cards side by side are as wide, so going from one to another nothing jumps. It
- * scrolls under the host's title bar, which runs over the whole window's top, never beneath it:
- * what scrolls away goes out of sight at the bar's edge, where the toolbar stays.
+ * starts where the host's title bar ends: what scrolls away goes out of sight at the bar's edge,
+ * and that is where the toolbar stays. The room above the heading is the column's, not the
+ * scroller's: a sticky toolbar stops at its scroller's padding, so padding there left a strip
+ * over the stuck toolbar where the rows passing by showed.
  */
 export function PageBody({
   label,
@@ -38,9 +40,11 @@ export function PageBody({
     <section
       aria-label={label}
       aria-labelledby={labelledBy}
-      className={`scroll-inset mt-(--chrome-top,0px) min-h-0 min-w-0 flex-1 overflow-y-auto px-10 pt-9 pb-14 phone:px-4 phone:pt-3 ${className}`}
+      className={`scroll-inset mt-(--chrome-top,0px) min-h-0 min-w-0 flex-1 overflow-y-auto px-10 pb-14 phone:px-4 ${className}`}
     >
-      <div className="mx-auto grid max-w-[60rem] grid-cols-1 gap-7 phone:gap-5">{children}</div>
+      <div className="mx-auto grid max-w-[60rem] grid-cols-1 gap-7 pt-9 phone:gap-5 phone:pt-3">
+        {children}
+      </div>
     </section>
   );
 }

@@ -49,7 +49,10 @@ for the pieces; this one is about how a screen goes together.
   to it (Refresh, settings) sits at its right: `Action tone="outline" size="field"`, or
   `iconButton`s with a `HoverTip`. Never patch a size with `className="h-8"`. No bar of tools at the window's top
   (`ScreenHeader`): that is only for a document open full size, as an Artifact is.
-- **The toolbar** is sticky: it stays under the title bar while the page scrolls. Put the search
+- **The toolbar** is sticky: it stays right at the title bar's edge while the page scrolls, so
+  nothing that scrolled away shows above it. That holds only while the scroller has no top
+  padding (a sticky box stops at its scroller's padding): the room above the heading is
+  `PageBody`'s inner column's, never padding on the scroller. Put the search
   first, taking the room left, then filters, then what adds to the list (New schedule, New
   folder, Import, Create) at its right end, as the same outline `Action`s: they stay in reach
   however far the list scrolls. Anything that narrows the list goes here too, never above the
