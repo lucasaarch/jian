@@ -374,7 +374,7 @@ it('connects an AWS account as its own command server, keys kept as secret value
     name: 'aws_prod',
     transport: 'stdio',
     command: 'uvx',
-    args: ['awslabs.aws-api-mcp-server@latest'],
+    args: ['mcp-proxy-for-aws-cli@latest', 'https://aws-mcp.us-east-1.api.aws/mcp'],
     env: [],
   };
   read.mcpServers.mockResolvedValue([first]);
@@ -397,7 +397,8 @@ it('connects an AWS account as its own command server, keys kept as secret value
       name: 'aws_staging_eu',
       transport: 'stdio',
       command: 'uvx',
-      args: ['awslabs.aws-api-mcp-server@latest'],
+      // AWS runs its MCP server in eu-west-1, so the signature is scoped there.
+      args: ['mcp-proxy-for-aws-cli@latest', 'https://aws-mcp.eu-west-1.api.aws/mcp'],
       auth: 'none',
       env: [
         { name: 'AWS_ACCESS_KEY_ID', value: 'AKIAEXAMPLE' },

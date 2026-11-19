@@ -177,7 +177,7 @@ it("counts a server saved at an app's address as that app, never as a custom con
       name: 'aws_prod',
       transport: 'stdio',
       command: 'uvx',
-      args: ['awslabs.aws-api-mcp-server@latest'],
+      args: ['mcp-proxy-for-aws-cli@latest', 'https://aws-mcp.us-east-1.api.aws/mcp'],
     },
   ]);
 

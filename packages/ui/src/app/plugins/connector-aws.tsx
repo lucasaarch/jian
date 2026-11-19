@@ -1,6 +1,6 @@
 'use client';
 
-import { AWS_MCP_COMMAND, AWS_MCP_PACKAGE, isAwsServer } from '@jian/contracts';
+import { AWS_MCP_COMMAND, awsMcpArgs, isAwsServer } from '@jian/contracts';
 import { type FormEvent, useState } from 'react';
 import { useMcpServers } from '../../components/integrations/mcp-list';
 import { Action, TextField } from '../../kit';
@@ -26,16 +26,16 @@ const serverName = (account: string) =>
     .slice(0, 26)}`;
 
 /**
- * One account as the command server that runs it: the awslabs AWS API MCP server, started on
- * this gateway with the account's keys in its environment. The keys go to the gateway's vault on
- * save and never come back, so the form is always typed anew.
+ * One account as the command server that runs it: AWS's proxy to its managed MCP server, started
+ * on this gateway with the account's keys in its environment. The keys go to the gateway's vault
+ * on save and never come back, so the form is always typed anew.
  */
 function awsServer(name: string, keys: Record<string, string>): McpServer {
   return {
     name,
     transport: 'stdio',
     command: AWS_MCP_COMMAND,
-    args: [AWS_MCP_PACKAGE],
+    args: awsMcpArgs(keys.AWS_REGION ?? ''),
     auth: 'none',
     headers: [],
     env: Object.entries(keys)
@@ -123,6 +123,7 @@ function AwsForm({
         value={region}
         autoComplete="off"
         required
+        hint="Where the agent's calls go, such as sa-east-1."
         onChange={(event) => setRegion(event.target.value)}
       />
       <div className="flex items-center justify-end gap-2">
@@ -165,9 +166,9 @@ export function AwsConnector({ connector, back }: { connector: Connector; back: 
       back={back}
       lead={
         <>
-          {connector.description} Every agent reaches each account you connect, by its name. Use
-          keys of an IAM user limited to what agents may do; the server runs on this gateway and
-          needs <code>uv</code> installed there.
+          {connector.description} Every agent reaches each account you connect, by its name, through
+          AWS's own MCP server. Use keys of an IAM user limited to what agents may do; the proxy
+          that signs the calls runs on this gateway and needs <code>uv</code> installed there.
         </>
       }
       actions={

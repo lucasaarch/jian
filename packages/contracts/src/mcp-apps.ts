@@ -71,11 +71,46 @@ export function mcpAppOf(url: string | undefined): McpAppId | undefined {
 }
 
 /**
- * AWS is the one app that is no address: each account is the awslabs AWS API MCP server run as a
- * command with that account's keys in its environment, so a server is AWS's by its command.
+ * AWS is the one app that is no address: each account is AWS's managed MCP server, reached
+ * through AWS's proxy run as a command with that account's keys in its environment, so a server
+ * is AWS's by its command. The proxy signs each call with SigV4 for the endpoint's region, and
+ * the account's `AWS_REGION` is where the calls operate.
+ * https://docs.aws.amazon.com/agent-toolkit/latest/userguide/getting-started-aws-mcp-server.html
  */
 export const AWS_MCP_COMMAND = 'uvx';
-export const AWS_MCP_PACKAGE = 'awslabs.aws-api-mcp-server@latest';
+export const AWS_MCP_PACKAGE = 'mcp-proxy-for-aws-cli@latest';
+/** The awslabs AWS API MCP server accounts ran before 1.12.1; migration 0116 moves them on. */
+const AWS_API_MCP_PACKAGE = 'awslabs.aws-api-mcp-server@latest';
+
+/** The regions AWS runs its MCP server in. */
+export const AWS_MCP_REGIONS = [
+  'us-east-1',
+  'us-west-2',
+  'ap-southeast-1',
+  'ap-southeast-2',
+  'ap-northeast-1',
+  'eu-central-1',
+  'eu-west-1',
+  'eu-west-2',
+] as const;
+
+/**
+ * The server for an account in `region`: its own region's when AWS runs one there, otherwise one
+ * on the same continent, otherwise N. Virginia. Only the signature's scope follows it; the calls
+ * still operate in the account's region.
+ */
+export function awsMcpEndpoint(region: string): string {
+  const own = (AWS_MCP_REGIONS as readonly string[]).includes(region);
+  const near = region.startsWith('eu-')
+    ? 'eu-west-1'
+    : region.startsWith('ap-')
+      ? 'ap-southeast-1'
+      : 'us-east-1';
+  return `https://aws-mcp.${own ? region : near}.api.aws/mcp`;
+}
+
+export const awsMcpArgs = (region: string) => [AWS_MCP_PACKAGE, awsMcpEndpoint(region)];
 
 export const isAwsServer = (server: { command?: string | undefined; args?: readonly string[] }) =>
-  server.command === AWS_MCP_COMMAND && server.args?.[0] === AWS_MCP_PACKAGE;
+  server.command === AWS_MCP_COMMAND &&
+  (server.args?.[0] === AWS_MCP_PACKAGE || server.args?.[0] === AWS_API_MCP_PACKAGE);
