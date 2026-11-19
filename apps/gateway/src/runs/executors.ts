@@ -16,6 +16,14 @@ export interface RunExecutor {
 const queueName = 'jian-agent-runs';
 
 /**
+ * How many runs one worker executes at once. A turn spends its time waiting on a model or a
+ * tool, not on this process, and a parent waiting for its subagents holds its place while they
+ * need theirs: at four, one conversation with a few subagents at work left every other turn,
+ * the owner's next one included, queued and shown as starting for minutes.
+ */
+export const RUN_CONCURRENCY = 16;
+
+/**
  * How a run's job is held in pg-boss. A turn has no clock of its own (a waiting
  * `spawn_subagent` call alone may hold one for 15 minutes), and pg-boss fails a job whose
  * handler outlives `expireInSeconds`: the run would go on under its own lease, but the job
@@ -59,7 +67,7 @@ export class BossExecutor implements RunExecutor {
 
     await this.boss.work<{ profileId: string; runId: string }>(
       queueName,
-      { localConcurrency: 4, batchSize: 1, pollingIntervalSeconds: 1 },
+      { localConcurrency: RUN_CONCURRENCY, batchSize: 1, pollingIntervalSeconds: 1 },
       async (jobs) => {
         for (const job of jobs) {
           await execute(job.data.profileId, job.data.runId);
@@ -88,7 +96,7 @@ export class LocalExecutor implements RunExecutor {
   private stopped = false;
 
   /** Runs at once, as the server executor's local concurrency. */
-  constructor(private readonly concurrency = 4) {}
+  constructor(private readonly concurrency = RUN_CONCURRENCY) {}
 
   async start(execute: Execute): Promise<void> {
     this.execute = execute;

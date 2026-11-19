@@ -4,7 +4,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, expect, it, vi } from 'vitest';
 import type { GatewaySummary } from '../../shared/bridge';
 
-const reconnectGateway = vi.fn();
+const reconnectGateway = vi.fn(async (_id: string) => {});
 vi.mock('../desktop', () => ({ desktop: () => ({ reconnectGateway }) }));
 
 import { GatewayPicker } from './gateway-picker';

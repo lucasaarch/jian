@@ -17,9 +17,20 @@ interface EventOptions {
   maxStreams?: number;
   /** How long a quiet stream waits before a heartbeat, in ms; tests shorten it. */
   heartbeatMs?: number;
+  /** How long one stream lasts before it is ended for the client to open the next, in ms. */
+  streamLifetimeMs?: number;
 }
 
 const HEARTBEAT_MS = 25_000;
+/**
+ * How long one stream lasts, in ms. A client that went away without its close reaching here,
+ * behind a proxy or across a network change, leaves a stream that heartbeats into nothing and
+ * holds one of the streams allowed; ending each now and then lets go of those. A client opens
+ * the next from the cursor it holds and misses nothing.
+ */
+const LIFETIME_MS = 30 * 60_000;
+/** How long an ended stream may take to finish sending before its socket is dropped, in ms. */
+const LINGER_MS = 10_000;
 
 /**
  * What a stream says of an event: that it happened and which conversation it concerns, which is
@@ -103,6 +114,10 @@ export function registerEventRoutes(app: FastifyInstance, options: EventOptions)
       }
 
       let closed = false;
+      // Writing to a response that ended throws from the socket's next tick, and the pump may be
+      // between two awaits when the stream's lifetime ends it.
+      const over = () => closed || reply.raw.writableEnded;
+      const send = (text: string) => !over() && reply.raw.write(text);
       const heartbeatMs = options.heartbeatMs ?? HEARTBEAT_MS;
       // A phone was let in once, when the stream opened; a stream outlives any request, so its
       // token is checked again at least once a heartbeat, and a revoked phone hears no more.
@@ -112,14 +127,24 @@ export function registerEventRoutes(app: FastifyInstance, options: EventOptions)
       // When each working run last changed its progress, as this stream last told it.
       const told = new Map<string, string>();
 
+      let linger: ReturnType<typeof setTimeout> | undefined;
+      const lifetime = setTimeout(() => {
+        wake.abort();
+        reply.raw.end();
+        // A peer that is gone never takes the end, and the stream would stay counted.
+        linger = setTimeout(() => reply.raw.destroy(), LINGER_MS);
+      }, options.streamLifetimeMs ?? LIFETIME_MS);
+
       reply.raw.on('close', () => {
         closed = true;
         streams -= 1;
+        clearTimeout(lifetime);
+        clearTimeout(linger);
         wake.abort();
       });
 
       const pump = async () => {
-        if (closed) {
+        if (over()) {
           return;
         }
 
@@ -166,12 +191,12 @@ export function registerEventRoutes(app: FastifyInstance, options: EventOptions)
           const events = await readEvents(options.store.db, profileId, cursor);
 
           for (const event of events) {
-            if (closed) {
+            if (over()) {
               stop();
               return;
             }
 
-            const ready = reply.raw.write(
+            const ready = send(
               `id: ${event.id}\nevent: ${event.type}\ndata: ${JSON.stringify(toldOf(event))}\n\n`,
             );
 
@@ -192,7 +217,7 @@ export function registerEventRoutes(app: FastifyInstance, options: EventOptions)
             if (told.get(run.runId) !== run.at) {
               told.set(run.runId, run.at);
               const frame = progress && withText ? { ...run, progress } : run;
-              reply.raw.write(`event: run.progress\ndata: ${JSON.stringify(frame)}\n\n`);
+              send(`event: run.progress\ndata: ${JSON.stringify(frame)}\n\n`);
             }
           }
 
@@ -201,7 +226,7 @@ export function registerEventRoutes(app: FastifyInstance, options: EventOptions)
           }
 
           if (events.length === 0) {
-            reply.raw.write(': heartbeat\n\n');
+            send(': heartbeat\n\n');
           }
 
           // A full page means more is waiting: a client catching up reads on at once, or it would

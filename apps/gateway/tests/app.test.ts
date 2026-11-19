@@ -20,7 +20,9 @@ const input = {
 
 const apps: FastifyInstance[] = [];
 
-async function setup(options: { trustedProxies?: string[] } = {}) {
+async function setup(
+  options: { trustedProxies?: string[]; maxStreams?: number; streamLifetimeMs?: number } = {},
+) {
   const services = await testServices();
   const app = createApp({ ...services, token, logger: false, ...options });
 
@@ -303,6 +305,39 @@ it('hands over a long backlog at once, with no wait between its pages', async ()
     }
 
     expect(data).toContain(`id: ${newest.id}\n`);
+  } finally {
+    clearTimeout(limit);
+    controller.abort();
+  }
+});
+
+it('ends a stream at the end of its life, which lets the next one in', async () => {
+  const { app, services } = await setup({ maxStreams: 1, streamLifetimeMs: 300 });
+  const profile = await services.profiles.createProfile(input);
+  const url = await app.listen({ host: '127.0.0.1', port: 0 });
+  const controller = new AbortController();
+  const limit = setTimeout(() => controller.abort(), 5_000);
+  const open = () =>
+    fetch(`${url}/v1/profiles/${profile.id}/events/stream`, {
+      headers,
+      signal: controller.signal,
+    });
+
+  try {
+    // The one place is taken until the first stream's life ends, as by a client gone silent.
+    const first = await open();
+    expect(first.status).toBe(200);
+    expect((await open()).status).toBe(429);
+
+    assert.ok(first.body, 'SSE response must have a body');
+    const reader = first.body.getReader();
+    while (!(await reader.read()).done) {}
+
+    await vi.waitFor(async () => {
+      const next = await open();
+      expect(next.status).toBe(200);
+      await next.body?.cancel();
+    });
   } finally {
     clearTimeout(limit);
     controller.abort();

@@ -26,9 +26,7 @@ export function useWindowCommands({
   const id = current?.id;
   useAppCommands(
     openSettings,
-    useCallback(() => {
-      if (id) desktop().reconnectGateway(id);
-    }, [id]),
+    useCallback(() => (id ? desktop().reconnectGateway(id) : undefined), [id]),
   );
   const commands = useMemo<AppCommand[]>(
     () => [
