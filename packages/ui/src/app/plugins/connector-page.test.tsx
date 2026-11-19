@@ -24,6 +24,7 @@ const api = vi.hoisted(() => ({
   replaceMcpServers: vi.fn(async (servers: unknown[]) => servers),
   checkMcpServer: vi.fn(),
   saveXApp: vi.fn(),
+  startGithubInstallation: vi.fn(),
 }));
 vi.mock('../../lib/workspace', () => ({
   useActions: () => ({
@@ -191,6 +192,40 @@ it('offers to connect GitHub until an account is in, and to add another after', 
   expect(detail('Added')).toBe('November 2026');
   // The whole of it is the page: nothing opens over it.
   expect(document.querySelector('[role="dialog"]')).toBeNull();
+});
+
+it('connects an approved installation by signing in alone, and lists requests still waiting', async () => {
+  const assign = vi.spyOn(window.location, 'assign').mockImplementation(() => undefined);
+  api.startGithubInstallation.mockResolvedValue({
+    url: 'https://github.com/login/oauth/authorize?client_id=synthetic',
+  });
+  read.githubIntegration.mockResolvedValue({
+    ...github,
+    accounts: [],
+    pending: [{ login: 'member-example', requestedAt: '2026-11-10T12:00:00.000Z' }],
+  });
+
+  await show('github');
+
+  expect(host.textContent).toContain('Waiting for an owner to approve');
+  expect(host.textContent).toContain('member-example');
+  expect(host.textContent).toContain('For an organization you are not an owner of');
+  expect(button('Connect GitHub', host)).toBeDefined();
+  await press('Connect an approved installation', host);
+  expect(api.startGithubInstallation).toHaveBeenCalledWith(
+    '/settings/integrations/github',
+    'authorize',
+  );
+  expect(assign).toHaveBeenCalledWith(
+    'https://github.com/login/oauth/authorize?client_id=synthetic',
+  );
+  assign.mockRestore();
+});
+
+it('offers no approved installation before the App is registered', async () => {
+  read.githubIntegration.mockResolvedValue({ ...none, callbackUrl: githubCallback });
+  await show('github');
+  expect(button('Connect an approved installation', host)).toBeUndefined();
 });
 
 it('says what GitHub sent the owner back with, once, and drops it from the address', async () => {

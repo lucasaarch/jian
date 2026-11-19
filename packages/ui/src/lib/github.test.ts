@@ -15,6 +15,24 @@ it('still reports a failure whose reason it does not know', () => {
   expect(outcome('github=failed')?.failed).toBe(true);
 });
 
+it('says a request to an organization was sent, as news and not a failure', () => {
+  expect(outcome('github=requested')).toEqual({
+    text: 'Your request to install Jian’s GitHub App was sent to the organization’s owners. Once one approves it, the account connects here by itself.',
+    failed: false,
+  });
+  expect(outcome('github=requested&reason=manual')).toEqual({
+    text: 'Your request to install Jian’s GitHub App was sent to the organization’s owners. Once one approves it, connect it here with Connect an approved installation.',
+    failed: false,
+  });
+});
+
+it('says when the signed-in account reaches no installation yet', () => {
+  expect(outcome('github=failed&reason=none')).toEqual({
+    text: 'No installation of Jian’s GitHub App is reachable with that GitHub account yet. If an owner still has to approve it, wait for the approval.',
+    failed: true,
+  });
+});
+
 it('reports success and stays quiet when GitHub left nothing', () => {
   expect(outcome('github=connected')).toEqual({ text: 'GitHub account connected.', failed: false });
   expect(outcome('tab=mcps')).toBeUndefined();

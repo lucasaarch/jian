@@ -42,11 +42,16 @@ export const queries = {
       queryKey: keys.xIntegration,
       queryFn: () => panelApi().xIntegration(),
     }),
-  /** The installation's GitHub App and the accounts it is installed on. */
+  /**
+   * The installation's GitHub App and the accounts it is installed on. While a request waits for
+   * an organization owner, it is read again every half minute: the approval connects on the
+   * gateway, through GitHub's webhook, and no event of the gateway tells the panel.
+   */
   githubIntegration: () =>
     queryOptions({
       queryKey: keys.githubIntegration,
       queryFn: () => panelApi().githubIntegration(),
+      refetchInterval: (query) => (query.state.data?.pending?.length ? 30_000 : false),
     }),
   // Every connected account's repositories, read from GitHub: kept for a few minutes so each
   // new chat's composer opens its list at once instead of asking GitHub again.

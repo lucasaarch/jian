@@ -67,6 +67,7 @@ import {
   githubInstallSchema,
   githubIntegrationStatusSchema,
   githubManifestSchema,
+  githubRegistrationInputSchema,
   xAppInputSchema,
   xConnectSchema,
   xIntegrationStatusSchema,
@@ -316,7 +317,7 @@ export const operations: Operation[] = [
     path: '/v1/integrations/github/manifest',
     operationId: 'startGithubAppRegistration',
     access: 'admin',
-    body: githubInstallInputSchema,
+    body: githubRegistrationInputSchema,
     response: githubManifestSchema,
   },
   {
@@ -345,10 +346,13 @@ export const operations: Operation[] = [
     path: '/v1/integrations/github/callback',
     operationId: 'completeGithubInstallation',
     access: 'public',
+    // Redirects to the panel that started it. An owner approving another member's request comes
+    // back with no state, and is answered a page of its own (200, HTML) that connects nothing.
     query: z.looseObject({
       code: z.string().min(1).max(500).optional(),
       state: z.string().min(1).max(128).optional(),
       installation_id: z.coerce.number().int().positive().safe().optional(),
+      setup_action: z.string().max(20).optional(),
       error: z.string().max(100).optional(),
     }),
     response: z.string(),

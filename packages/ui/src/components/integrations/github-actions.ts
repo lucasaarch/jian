@@ -97,19 +97,21 @@ export function useGithubRegistration(api: GatewayApi) {
  */
 export function useGithubInstallations(api: GatewayApi) {
   const client = useQueryClient();
-  const [connecting, setConnecting] = useState(false);
+  const [connecting, setConnecting] = useState<'install' | 'authorize'>();
   const [disconnecting, setDisconnecting] = useState<string>();
-  const leave = useReturnFromGithub(() => setConnecting(false));
+  const leave = useReturnFromGithub(() => setConnecting(undefined));
 
-  const connect = async () => {
-    setConnecting(true);
+  // `authorize` only signs in to GitHub, to connect installations the owner already reaches:
+  // one an organization owner approved after they asked, or one made on GitHub itself.
+  const start = async (mode: 'install' | 'authorize') => {
+    setConnecting(mode);
     try {
-      const result = await api.startGithubInstallation('/settings/integrations/github');
+      const result = await api.startGithubInstallation('/settings/integrations/github', mode);
       leave();
       window.location.assign(result.url);
     } catch (error) {
       notifyError(error, 'GitHub authorization could not start.');
-      setConnecting(false);
+      setConnecting(undefined);
     }
   };
 
@@ -126,5 +128,12 @@ export function useGithubInstallations(api: GatewayApi) {
     }
   };
 
-  return { connecting, connect, disconnecting, disconnect };
+  return {
+    connecting: connecting === 'install',
+    connect: () => start('install'),
+    connectingApproved: connecting === 'authorize',
+    connectApproved: () => start('authorize'),
+    disconnecting,
+    disconnect,
+  };
 }

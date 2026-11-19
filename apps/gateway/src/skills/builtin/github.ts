@@ -19,6 +19,10 @@ this conversation, signed in as the Jian GitHub App, and lends the same App to g
   \`github_<login>\` when there are several — covering the repositories the owner granted the App
   on that account. Pick the server of the account that owns the repository.
 - A 404 on a repository usually means the App was not granted it, not that it does not exist.
+- An account the owner has not connected is out of reach. On an organization where the owner is
+  a member but not an owner, **Connect** under Plugins → Connectors → GitHub sends its owners a
+  request for the App. Once one approves it, it connects by itself on a server gateway, or from
+  **Connect an approved installation** on the same page.
 - You act as the App, not as the owner: what you write shows as the App's bot account.
 - **Not reachable, by GitHub's design**: anything that belongs to a person rather than to a
   repository — their stars, their profile as "the authenticated user", their notifications.
