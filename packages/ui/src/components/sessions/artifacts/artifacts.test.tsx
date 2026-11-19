@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { SessionArtifact } from '../../../lib/api';
+import type { DeckExportQuery, SessionArtifact } from '../../../lib/api';
 import { publish } from '../../../lib/events';
 import { keys } from '../../../lib/query/keys';
 import { useCrew } from '../../../lib/stores/crew';
@@ -52,6 +52,12 @@ const deck: SessionArtifact = {
   title: 'Plan',
   type: 'deck',
 };
+const sheet: SessionArtifact = {
+  ...counter,
+  id: '55555555-5555-4555-8555-555555555555',
+  title: 'Budget',
+  type: 'sheet',
+};
 
 function gateway(artifacts: SessionArtifact[] = [counter, notes, page, deck]) {
   const held = [...artifacts];
@@ -83,7 +89,7 @@ function gateway(artifacts: SessionArtifact[] = [counter, notes, page, deck]) {
         _session: string,
         _artifactId: string,
         _version: number,
-        wanted: { format: 'pdf' | 'png' | 'pptx'; slide?: number; fonts?: 'current' | 'basic' },
+        wanted: { format: DeckExportQuery['format']; slide?: number; fonts?: 'current' | 'basic' },
       ) => ({ mimeType: `test/${wanted.format}`, data: btoa(`drawn as ${wanted.format}`) }),
     ),
     editSessionArtifact: vi.fn(
@@ -237,6 +243,13 @@ const starter = (kind: string) =>
     (item) => item.textContent === kind,
   );
 const entries = () => [...document.querySelectorAll<HTMLElement>('[role=menuitem]')];
+/** A bar button's menu, opened once the one before has closed: its entries. */
+async function menu(label: string) {
+  await settled(() => entries().length === 0);
+  await click(button(label));
+  await settled(() => entries().length > 0);
+  return entries();
+}
 
 /** The tab of the conversation's cards, read. */
 async function listed(api = gateway()) {
@@ -791,14 +804,6 @@ describe('a deck of slides', () => {
     expect(drawer()).not.toBeNull();
   });
 
-  const entries = () => [...document.querySelectorAll<HTMLElement>('[role=menuitem]')];
-  const menu = async (label: string) => {
-    await settled(() => entries().length === 0);
-    await click(button(label));
-    await settled(() => entries().length > 0);
-    return entries();
-  };
-
   it('is taken away as a file the gateway draws, or as the page of the slide in view', async () => {
     // What the browser was handed to save: each file's name, type and text.
     const saved: string[] = [];
@@ -887,6 +892,58 @@ describe('a deck of slides', () => {
       'Copy source',
       'Download',
     ]);
+  });
+});
+
+describe('a Document and a spreadsheet as files', () => {
+  it('offers Word, PDF and Markdown, and Excel and CSV, from one Download menu', async () => {
+    const saved: string[] = [];
+    const address = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:file');
+    const taken = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (
+      this: HTMLAnchorElement,
+    ) {
+      saved.push(this.download);
+    });
+    const api = await opened(notes);
+
+    expect((await menu('Download')).map((entry) => entry.textContent)).toEqual([
+      'Word (.docx)',
+      'PDF (.pdf)',
+      'Markdown (.md)',
+    ]);
+    await click(entries()[0]);
+    await settled(() => saved.length === 1);
+    expect(api.exportSessionArtifact.mock.calls[0]?.slice(2)).toEqual([
+      notes.id,
+      3,
+      { format: 'docx' },
+    ]);
+    expect(saved).toEqual(['Launch-notes-v3.docx']);
+    // Only the Document's PDF needs the gateway's browser; the Markdown is the panel's own.
+    await click((await menu('Download'))[2]);
+    await settled(() => saved.length === 2);
+    expect(saved[1]).toBe('Launch-notes-v3.md');
+    expect(api.exportSessionArtifact).toHaveBeenCalledTimes(1);
+    address.mockRestore();
+    taken.mockRestore();
+  });
+
+  it('leaves out the PDF on the gateway a desktop app runs', async () => {
+    await opened(notes, gateway(), 'local');
+    expect((await menu('Download')).map((entry) => entry.textContent)).toEqual([
+      'Word (.docx)',
+      'Markdown (.md)',
+    ]);
+  });
+
+  it('gives a spreadsheet Excel and CSV', async () => {
+    const api = await opened(sheet, gateway([sheet]));
+
+    expect((await menu('Download')).map((entry) => entry.textContent)).toEqual([
+      'Excel (.xlsx)',
+      'CSV, values (.csv)',
+    ]);
+    expect(api.exportSessionArtifact).not.toHaveBeenCalled();
   });
 });
 

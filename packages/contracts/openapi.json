@@ -43165,7 +43165,10 @@
               "enum": [
                 "pdf",
                 "png",
-                "pptx"
+                "pptx",
+                "docx",
+                "xlsx",
+                "csv"
               ]
             }
           },

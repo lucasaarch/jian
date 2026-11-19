@@ -60,7 +60,8 @@ something later, or every day, see \`schedules\`.
   \`update_slide\`, \`delete_slide\` or \`move_slide\` instead of sending the deck again.
   Slides are numbered from 1, and each change is a new version of the whole deck.
   A spreadsheet is CSV, where a cell starting with \`=\` is a formula the sheet works out
-  (\`=SUM(B2:B9)\`); downloaded, it opens in Excel or Google Sheets with the formulas. A
+  (\`=SUM(B2:B9)\`); downloaded, it is an Excel file with the formulas kept, or a CSV of the values. A document
+  downloads as Word, PDF or Markdown. A
   whiteboard is JSON, notes, texts, boxes, ellipses, arrows, lines and pen strokes placed in
   pixels, as \`create_artifact\` describes.
   The owner edits a web page, a slide, a document, a spreadsheet and a whiteboard by hand in

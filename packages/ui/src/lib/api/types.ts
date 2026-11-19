@@ -41,7 +41,7 @@ export type DeckExport = JsonResponse<'exportSessionArtifactVersion', 200>;
 /** The query is generated with every field optional; the format is what is being asked for. */
 export type DeckExportQuery = NonNullable<
   operations['exportSessionArtifactVersion']['parameters']['query']
-> & { format: 'pdf' | 'png' | 'pptx' };
+> & { format: 'pdf' | 'png' | 'pptx' | 'docx' | 'xlsx' | 'csv' };
 export type SessionWorktree = JsonResponse<'listSessionWorktrees', 200>[number];
 export type SubscriptionUsage = JsonResponse<'listSubscriptionUsage', 200>[number];
 export type BuiltinSkill = JsonResponse<'listBuiltinSkills', 200>[number];

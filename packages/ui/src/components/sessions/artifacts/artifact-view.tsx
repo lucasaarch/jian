@@ -11,6 +11,7 @@ import { useGatewayMode } from '../../../lib/gateway-mode';
 import { CodeBlock } from '../../ui/code-block';
 import { InspectorBody } from '../inspector';
 import { ArtifactBar } from './artifact-bar';
+import { ArtifactDownload } from './artifact-download';
 import { ArtifactFrame } from './artifact-frame';
 import { ArtifactHistory } from './artifact-history';
 import { ArtifactOptions } from './artifact-options';
@@ -71,7 +72,7 @@ export function ArtifactView({
   const [saving, setSaving] = useState(false);
   const [presenting, setPresenting] = useState(false);
   const frame = useRef<HTMLIFrameElement>(null);
-  // Only a server gateway makes one public, or draws a deck into a file, so nothing else offers
+  // Only a server gateway makes one public, or draws a deck or a document into a file, so nothing else offers
   // either; until the gateway says which it is, neither does this.
   const server = useGatewayMode() === 'server';
   const version = editing ?? picked ?? artifact.version;
@@ -220,7 +221,27 @@ export function ArtifactView({
                   <ArtifactOptions source={source} what="Slide" />
                 </>
               ) : (
-                <ArtifactOptions source={source} file={fileName(artifact, version)} what="Source" />
+                <>
+                  {(artifact.type === 'markdown' || artifact.type === 'sheet') && (
+                    <ArtifactDownload
+                      api={api}
+                      profileId={profileId}
+                      artifact={artifact}
+                      version={version}
+                      source={source}
+                      drawn={server}
+                    />
+                  )}
+                  <ArtifactOptions
+                    source={source}
+                    file={
+                      artifact.type === 'markdown' || artifact.type === 'sheet'
+                        ? undefined
+                        : fileName(artifact, version)
+                    }
+                    what="Source"
+                  />
+                </>
               )}
             </>
           )

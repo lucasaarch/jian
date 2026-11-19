@@ -221,6 +221,9 @@ ${editing ? '' : body}
 `;
 }
 
+/** One Artifact's page on its own, with no shell, for a file drawn from it (export.ts). */
+export { page as artifactPage };
+
 /**
  * What the gateway answers: a shell that holds the Artifact's page in a sandboxed `srcdoc` frame.
  * Loading a `srcdoc` is no request, so `frame-src 'none'` lets it be and refuses every later

@@ -24743,7 +24743,7 @@ export interface operations {
     exportSessionArtifactVersion: {
         parameters: {
             query?: {
-                format?: "pdf" | "png" | "pptx";
+                format?: "pdf" | "png" | "pptx" | "docx" | "xlsx" | "csv";
                 slide?: number;
                 fonts?: "current" | "basic";
             };

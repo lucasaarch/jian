@@ -32,9 +32,11 @@ import type { SessionReader } from '../sessions/port.js';
 import type { Queryable, Store } from '../storage/database.js';
 import { sessionArtifacts, sessionArtifactVersions } from '../storage/schema.js';
 import { changedSlides, deckContent, type SlideChange, slidesOf } from './deck.js';
-import { exportDeck } from './export.js';
+import { documentDocx } from './document-export.js';
+import { exportDeck, exportDocumentPdf, MIME } from './export.js';
 import { createFolder, deleteFolder, listFolders, ownFolder, renameFolder } from './folders.js';
 import { pageProfileArtifacts } from './listing.js';
+import { sheetCsv, sheetXlsx } from './sheet-export.js';
 
 /** What a component's frame can hand it; anything else would have to come from the network. */
 const IMPORTABLE = new Set(['react', 'react-dom', 'react-dom/client']);
@@ -479,9 +481,10 @@ export class SessionArtifacts {
   }
 
   /**
-   * A deck's version as a file to keep, drawn by the gateway's browser (export.ts): a PDF or a
-   * PowerPoint file of every slide, or one slide as a picture. It reads and changes nothing.
-   * Whatever can be refused is refused before a browser is started.
+   * A version as a file to keep. A deck is drawn by the gateway's browser (export.ts): a PDF or a
+   * PowerPoint file of every slide, or one slide as a picture. A Document is a Word file, which
+   * needs no browser, or a PDF, which does. A spreadsheet is an Excel file. It reads and changes
+   * nothing. Whatever can be refused is refused before a browser is started.
    */
   async export(
     profileId: string,
@@ -493,16 +496,50 @@ export class SessionArtifacts {
     const wanted = deckExportQuerySchema.parse(input);
     const artifact = await this.find(this.store.db, profileId, sessionId, artifactId);
 
-    if (artifact.type !== 'deck') {
-      throw new GatewayError(400, 'Only a deck is exported as slides.');
+    const { content } = await this.stored(this.store.db, artifact.id, version);
+    const refused = (what: string) =>
+      new GatewayError(
+        400,
+        `${what} cannot be downloaded as ${wanted.format.toUpperCase()}. Pick a format its download menu offers.`,
+      );
+
+    if (artifact.type === 'sheet') {
+      if (wanted.format === 'csv') {
+        return {
+          mimeType: 'text/csv; charset=utf-8',
+          data: Buffer.from(sheetCsv(content)).toString('base64'),
+        };
+      }
+      if (wanted.format !== 'xlsx') throw refused('A spreadsheet');
+      return {
+        mimeType: MIME.xlsx,
+        data: (await sheetXlsx(artifact.title, content)).toString('base64'),
+      };
     }
-    if (this.local) {
+    if (artifact.type === 'markdown') {
+      if (wanted.format === 'docx') {
+        return {
+          mimeType: MIME.docx,
+          data: (await documentDocx(artifact.title, content)).toString('base64'),
+        };
+      }
+      if (wanted.format !== 'pdf') throw refused('A document');
+      this.assertDrawing('A document is drawn for a PDF');
+      const pdf = await exportDocumentPdf(artifact.title, content);
+
+      return { mimeType: pdf.mimeType, data: pdf.data.toString('base64') };
+    }
+    if (artifact.type !== 'deck') {
       throw new GatewayError(
-        409,
-        'A deck is drawn for a PDF, a picture or PowerPoint only on a server gateway. This one runs inside the desktop app, which has no browser of its own to draw with.',
+        400,
+        'Only a deck, a document and a spreadsheet are downloaded as files.',
       );
     }
-    const slides = slidesOf((await this.stored(this.store.db, artifact.id, version)).content);
+    if (wanted.format === 'docx' || wanted.format === 'xlsx' || wanted.format === 'csv') {
+      throw refused('A deck');
+    }
+    this.assertDrawing('A deck is drawn for a PDF, a picture or PowerPoint');
+    const slides = slidesOf(content);
     let drawn: readonly string[] = slides;
 
     if (wanted.format === 'png') {
@@ -517,9 +554,22 @@ export class SessionArtifacts {
       }
       drawn = [slide];
     }
-    const file = await exportDeck(artifact.title, drawn, wanted);
+    const file = await exportDeck(artifact.title, drawn, {
+      format: wanted.format,
+      fonts: wanted.fonts,
+    });
 
     return { mimeType: file.mimeType, data: file.data.toString('base64') };
+  }
+
+  /** The desktop app's own gateway has no browser to draw with. */
+  private assertDrawing(what: string): void {
+    if (this.local) {
+      throw new GatewayError(
+        409,
+        `${what} only on a server gateway. This one runs inside the desktop app, which has no browser of its own to draw with.`,
+      );
+    }
   }
 
   /**
