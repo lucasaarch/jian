@@ -27,6 +27,7 @@ import { sshKeys, sshKeysFor } from './ssh-keys.js';
 import { caveman } from './vendored/caveman.js';
 import { discernmentNudge } from './vendored/discernment-nudge.js';
 import { ponytailSkills } from './vendored/ponytail.js';
+import { videoProduction } from './video-production.js';
 import { webResearch } from './web-research.js';
 import { workingWithAgents } from './working-with-agents.js';
 import { worktrees } from './worktrees.js';
@@ -50,6 +51,7 @@ const ALWAYS: readonly Skill[] = [
   schedules,
   skillCreator,
   media,
+  videoProduction,
   sshKeys,
   longRunningWork,
   managingContext,

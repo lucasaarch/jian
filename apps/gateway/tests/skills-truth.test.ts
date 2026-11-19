@@ -21,6 +21,7 @@ import { builtinSkillNames, builtinSkills } from '../src/skills/builtin/index.js
 import { machineToolsFor } from '../src/skills/builtin/machine-tools.js';
 import { managingContext } from '../src/skills/builtin/managing-context.js';
 import { sshKeysFor } from '../src/skills/builtin/ssh-keys.js';
+import { videoProductionFor } from '../src/skills/builtin/video-production.js';
 import { xFor } from '../src/skills/builtin/x.js';
 
 const source = fileURLToPath(new URL('../src', import.meta.url));
@@ -55,6 +56,9 @@ const everything = [
   ...builtinSkills([github], { worktrees: true }),
   machineToolsFor(true),
   sshKeysFor(true),
+  // As a conversation on a connected machine is told it, with and without file tools there.
+  videoProductionFor({ files: true }),
+  videoProductionFor({ files: false }),
 ];
 const text = everything.map(({ instructions }) => instructions).join('\n');
 
@@ -75,6 +79,8 @@ const NOT_TOOLS = new Set([
   'right_click',
   'screen_changed',
   'screen_recording',
+  // An ffmpeg option the video-production skill tunes.
+  'stop_duration',
 ]);
 
 /** Plain enough from their own description, so no skill has to teach them. */
