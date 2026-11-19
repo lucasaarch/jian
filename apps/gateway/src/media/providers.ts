@@ -37,6 +37,21 @@ async function meter(body: unknown, google: boolean, account?: MediaMeter) {
   if (parsed.success) await account(parsed.data);
 }
 
+const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1';
+
+/** OpenRouter reports usage the chat way; the meter reads it the Responses way. */
+const routedUsage = (body: unknown) => {
+  const usage = (body as { usage?: Record<string, unknown> } | undefined)?.usage;
+  return usage
+    ? {
+        usage: {
+          input_tokens: usage.prompt_tokens ?? 0,
+          output_tokens: usage.completion_tokens ?? 0,
+        },
+      }
+    : undefined;
+};
+
 const googleResponse = z.object({
   candidates: z
     .array(
@@ -214,6 +229,28 @@ export class MediaProviders {
       if (!text) throw new Error('Media provider did not return an analysis');
       return text;
     }
+    if (config.provider === 'openrouter' && media.mimeType.startsWith('audio/')) {
+      // https://openrouter.ai/docs/guides/overview/multimodal/stt — JSON, the audio inline.
+      const subtype = media.mimeType.split(';')[0]?.split('/')[1] ?? '';
+      const response = await this.request(
+        `${config.baseURL ?? OPENROUTER_BASE_URL}/audio/transcriptions`,
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', authorization: `Bearer ${key}` },
+          body: JSON.stringify({
+            model: config.modelId,
+            input_audio: {
+              data: media.data,
+              format: subtype === 'mpeg' ? 'mp3' : subtype.replace(/^x-/, ''),
+            },
+          }),
+          signal,
+        },
+      );
+      const body: unknown = JSON.parse((await readMediaBody(response, 1_000_000)).toString());
+      await meter(routedUsage(body), false, account);
+      return z.object({ text: z.string().min(1) }).parse(body).text;
+    }
     const transcribes =
       config.provider === 'openai' || (config.provider === 'openai-compatible' && config.baseURL);
     if (transcribes && media.mimeType.startsWith('audio/')) {
@@ -240,7 +277,7 @@ export class MediaProviders {
         .parse(JSON.parse((await readMediaBody(response, 100_000)).toString())).text;
     }
     throw new Error(
-      'Select Gemini for audio analysis, or a Whisper model from OpenAI, Groq or your own server',
+      'Select Gemini for audio analysis, or a transcription model from OpenAI, Groq, OpenRouter or your own server',
     );
   }
 
@@ -303,8 +340,19 @@ export class MediaProviders {
     }
     if (isXai(config))
       return this.xai(kind, config, key, prompt, selectedVoice, signal, account, aspectRatio);
+    if (config.provider === 'openrouter')
+      return this.openrouter(
+        kind,
+        config,
+        key,
+        prompt,
+        selectedVoice,
+        signal,
+        account,
+        aspectRatio,
+      );
     if (config.provider !== 'openai')
-      throw new Error('Select an OpenAI API, Gemini or xAI model for media generation');
+      throw new Error('Select an OpenAI API, Gemini, xAI or OpenRouter model for media generation');
     const response = await this.request(
       `https://api.openai.com/v1/${kind === 'image' ? 'images/generations' : 'audio/speech'}`,
       {
@@ -339,6 +387,57 @@ export class MediaProviders {
       .object({ data: z.array(z.object({ b64_json: z.string().min(1) })).min(1) })
       .parse(body);
     return { mimeType: 'image/png', data: parsed.data[0]?.b64_json ?? '' };
+  }
+
+  /**
+   * OpenRouter's Image and speech APIs: an image comes back inline with its type, speech as the
+   * audio itself, asked for as MP3.
+   * https://openrouter.ai/docs/guides/overview/multimodal/image-generation
+   * https://openrouter.ai/docs/guides/overview/multimodal/tts
+   */
+  private async openrouter(
+    kind: 'image' | 'speech',
+    config: ModelConfig,
+    key: string,
+    prompt: string,
+    voice: string | undefined,
+    signal: AbortSignal,
+    account: MediaMeter | undefined,
+    aspectRatio: ImageAspect,
+  ): Promise<InlineMedia> {
+    const response = await this.request(
+      `${config.baseURL ?? OPENROUTER_BASE_URL}/${kind === 'image' ? 'images' : 'audio/speech'}`,
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${key}` },
+        signal,
+        body: JSON.stringify(
+          kind === 'image'
+            ? { model: config.modelId, prompt, n: 1, aspect_ratio: aspectRatio }
+            : {
+                model: config.modelId,
+                input: prompt,
+                ...(voice ? { voice } : {}),
+                response_format: 'mp3',
+              },
+        ),
+      },
+    );
+    const data = await readMediaBody(response);
+    if (kind === 'speech') return { mimeType: 'audio/mpeg', data: data.toString('base64') };
+    const body: unknown = JSON.parse(data.toString());
+    await meter(routedUsage(body), false, account);
+    const image = z
+      .object({
+        data: z
+          .array(z.object({ b64_json: z.string().min(1), media_type: z.string().nullish() }))
+          .min(1),
+      })
+      .parse(body).data[0];
+    return inlineMediaSchema.parse({
+      mimeType: image?.media_type ?? 'image/png',
+      data: image?.b64_json ?? '',
+    });
   }
 
   /**

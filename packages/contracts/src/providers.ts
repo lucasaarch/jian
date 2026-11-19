@@ -30,6 +30,10 @@ export const modelCapabilitiesSchema = z.strictObject({
   fast: z.boolean().optional(),
   inputModalities: z.array(modelModalitySchema).min(1).max(5),
   outputModalities: z.array(modelModalitySchema).max(5).optional(),
+  /** False when the model takes no tool definitions: a run then sends it none. */
+  tools: z.boolean().optional(),
+  /** The voices a speech model speaks in, when its listing names them (OpenRouter). */
+  voices: z.array(z.string().min(1).max(80)).max(200).optional(),
   /**
    * False when the capability table has no entry for this model: every number above is the
    * gateway's conservative floor, not something the provider stated. The model stays
@@ -51,7 +55,7 @@ export const providerModelSchema = modelCapabilitiesSchema.extend({
  */
 export const providerModelListSchema = z.strictObject({
   providerId: z.uuid(),
-  models: z.array(providerModelSchema).max(500),
+  models: z.array(providerModelSchema).max(1000),
   fetchedAt: z.iso.datetime(),
   stale: z.boolean(),
   reason: z.string().max(300).optional(),
@@ -188,11 +192,14 @@ export function supportsProviderRole(
   role: ModelRole,
 ): boolean {
   if (['image', 'speech'].includes(role))
-    return provider.authMode !== 'codex' && ['openai', 'google', 'xai'].includes(provider.kind);
+    return (
+      provider.authMode !== 'codex' &&
+      ['openai', 'google', 'xai', 'openrouter'].includes(provider.kind)
+    );
   if (['transcription', 'audio'].includes(role))
     return (
       provider.authMode !== 'codex' &&
-      ['openai', 'google', 'groq', 'openai-compatible'].includes(provider.kind)
+      ['openai', 'google', 'groq', 'openai-compatible', 'openrouter'].includes(provider.kind)
     );
   return true;
 }
@@ -205,6 +212,15 @@ export function supportsModelRole(
 ): boolean {
   if (!supportsProviderRole(provider, role)) return false;
   const id = model.id.toLowerCase();
+  // OpenRouter says which endpoint serves each model; discovery turns that into modalities:
+  // image out is its Image API, audio alone out its speech API, audio alone in its transcriber.
+  if (provider.kind === 'openrouter') {
+    const out = model.outputModalities ?? [];
+    if (role === 'image') return out.includes('image');
+    if (role === 'speech') return out.includes('audio') && !out.includes('text');
+    if (role === 'audio' || role === 'transcription')
+      return model.inputModalities.length === 1 && model.inputModalities[0] === 'audio';
+  }
   if (role === 'image')
     return (
       provider.authMode !== 'codex' &&
@@ -239,6 +255,8 @@ export function supportsModelRole(
       (!model.known || model.inputModalities.includes('image'))
     );
   return (
+    // A model that takes no text (a transcriber) cannot hold a conversation.
+    (!model.inputModalities.length || model.inputModalities.includes('text')) &&
     !/^(gpt-image|dall-e|tts-|whisper)/.test(id) &&
     !/transcribe|embedding|tts|live|native-audio/.test(id) &&
     (!model.outputModalities?.length || model.outputModalities.includes('text'))

@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { type ModelRole, supportsModelRole } from '@jian/contracts';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, expect, it } from 'vitest';
 import { createApp } from '../src/app.js';
@@ -309,6 +310,92 @@ it('takes the router listing as the whole truth about a model', async () => {
 
   expect(plain).toMatchObject({ known: true, contextWindow: 32_768 });
   expect(plain?.reasoningEfforts).toEqual([]);
+});
+
+it('offers OpenRouter models that draw, speak or transcribe, and marks one without tools', async () => {
+  const services = await testServices();
+  const provider = await services.providers.createProvider({
+    name: 'OpenRouter',
+    kind: 'openrouter',
+    secret: 'synthetic-key',
+  });
+  const chat = ['/api/v1/chat/completions', '/api/v1/responses'];
+  const called: string[] = [];
+  const fetcher = (async (input: unknown) => {
+    called.push(String(input));
+    return Response.json({
+      data: [
+        {
+          id: 'some/chat',
+          context_length: 32_768,
+          architecture: { input_modalities: ['text'], output_modalities: ['text'] },
+          supported_parameters: ['tools'],
+          endpoints: chat,
+        },
+        {
+          id: 'venice/uncensored',
+          context_length: 32_768,
+          architecture: { input_modalities: ['text'], output_modalities: ['text'] },
+          supported_parameters: ['temperature'],
+          endpoints: chat,
+        },
+        {
+          id: 'openai/gpt-image-1',
+          architecture: { input_modalities: ['text', 'image'], output_modalities: ['image'] },
+          supported_parameters: [],
+          endpoints: ['/api/v1/images'],
+        },
+        {
+          id: 'elevenlabs/eleven-v3',
+          architecture: { input_modalities: ['text'], output_modalities: ['speech'] },
+          supported_parameters: [],
+          supported_voices: ['george', 'sarah'],
+          endpoints: ['/api/v1/audio/speech'],
+        },
+        {
+          id: 'openai/whisper-1',
+          architecture: { input_modalities: ['audio'], output_modalities: ['transcription'] },
+          supported_parameters: [],
+          endpoints: ['/api/v1/audio/transcriptions'],
+        },
+        {
+          id: 'auto/router',
+          architecture: { input_modalities: ['text'], output_modalities: ['text', 'image'] },
+          supported_parameters: ['tools'],
+          endpoints: chat,
+        },
+        {
+          id: 'some/embedding',
+          architecture: { input_modalities: ['text'], output_modalities: ['embeddings'] },
+          endpoints: ['/api/v1/embeddings'],
+        },
+      ],
+    });
+  }) as typeof globalThis.fetch;
+
+  const list = await new ProviderModels(
+    { providers: services.providers, vault: services.gatewayVault },
+    fetcher,
+  ).list(provider.id);
+  const offered = (role: ModelRole) =>
+    list.models
+      .filter((model) => supportsModelRole(provider, model, role))
+      .map((model) => model.id);
+
+  // Without the parameter the router lists only the models that answer in text.
+  expect(called[0]).toContain('output_modalities=all');
+  expect(list.models.map((model) => model.id)).not.toContain('some/embedding');
+  expect(offered('image')).toEqual(['openai/gpt-image-1']);
+  expect(offered('speech')).toEqual(['elevenlabs/eleven-v3']);
+  expect(offered('audio')).toEqual(['openai/whisper-1']);
+  expect(offered('conversation')).toEqual(['auto/router', 'some/chat', 'venice/uncensored']);
+  expect(list.models.find((model) => model.id === 'elevenlabs/eleven-v3')?.voices).toEqual([
+    'george',
+    'sarah',
+  ]);
+  // A request carrying tools is refused by this one, so a run sends it none.
+  expect(list.models.find((model) => model.id === 'venice/uncensored')?.tools).toBe(false);
+  expect(list.models.find((model) => model.id === 'some/chat')?.tools).toBeUndefined();
 });
 
 it('lets the owner change one model default while a stored role is no longer offered', async () => {
