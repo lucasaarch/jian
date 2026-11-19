@@ -48,14 +48,27 @@ const STYLE = `
 `;
 
 const EDITING = String.raw`
-const editPage = (source, options, finish, build) => {
+const editPage = (source, options, finish, build, themed) => {
   const KEY = ${JSON.stringify(ARTIFACT_EDIT_MESSAGE)};
   const parsed = new DOMParser().parseFromString(source, 'text/html');
   const doctype = parsed.doctype ? '<!doctype html>\n' : '';
   // With no script awake, a page that sends its reader elsewhere is all that could still take
   // this frame somewhere. It goes, and is not in what is saved.
   for (const meta of parsed.querySelectorAll('meta[http-equiv="refresh" i]')) meta.remove();
+  // The panel's theme, which this frame's own page carries until the page edited replaces it.
+  const theme = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
   document.replaceChild(document.adoptNode(parsed.documentElement), document.documentElement);
+  // What the page itself says, put back in what is saved: the theme is the panel's, and the
+  // frame's listener changes it on the page whenever the panel's changes.
+  const own = {
+    dark: document.documentElement.classList.contains('dark'),
+    scheme: document.documentElement.style.colorScheme,
+  };
+  // A web page is edited in the panel's theme, as it is read there (document.ts dresses it).
+  if (themed) {
+    document.documentElement.style.colorScheme = theme;
+    document.documentElement.classList.toggle('dark', theme === 'dark');
+  }
 
   let scale = 1;
   let changed = false;
@@ -298,6 +311,10 @@ const editPage = (source, options, finish, build) => {
   // The page as it now stands, with nothing of this script left in it.
   const markup = () => {
     const copy = document.documentElement.cloneNode(true);
+    copy.classList.toggle('dark', own.dark);
+    if (!copy.classList.length) copy.removeAttribute('class');
+    copy.style.colorScheme = own.scheme;
+    if (!copy.getAttribute('style')) copy.removeAttribute('style');
     for (const node of copy.querySelectorAll('[data-jian-edit]')) node.remove();
     for (const node of copy.querySelectorAll('[data-jian-editing]')) {
       node.removeAttribute('contenteditable');
@@ -356,7 +373,7 @@ const answering = (options, made) => {
  * frame page's `root`, `run` and `read` in reach. Only the types in `EDITABLE_ARTIFACT_TYPES`.
  */
 export const EDITORS: Partial<Record<SessionArtifactType, string>> = {
-  html: `${EDITING}const editing = editPage;\n`,
+  html: `${EDITING}const editing = (source, options) => editPage(source, options, null, null, true);\n`,
   deck: `${EDITING}${SLIDE_BUILDER}const editing = (source, options) => editPage(source, options, null, buildSlide);\n`,
   // A document is one surface to write on, not a page of blocks opened one at a time.
   markdown: DOCUMENT_EDITOR,
