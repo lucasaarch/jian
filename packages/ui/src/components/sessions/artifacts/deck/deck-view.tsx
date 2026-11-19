@@ -5,6 +5,7 @@ import type { KeyboardEvent, RefObject } from 'react';
 import { HoverTip, iconButton } from '../../../../kit';
 import { SlideCarousel } from './slide-carousel';
 import { SlideRail } from './slide-rail';
+import type { SlideOps } from './use-slide-ops';
 
 /**
  * A deck in the Inspector: its slides small and numbered in a row on top (slide-rail.tsx), the
@@ -14,9 +15,10 @@ import { SlideRail } from './slide-rail';
  * one slide in view, `at`. Mount it with a key per version, so a new version's slides are new
  * frames.
  *
- * While the owner edits, it is the slide in view that is open for editing, and it stays in
- * view: moving to another would drop what was typed, so the rail, the track and the steps wait
- * for Done.
+ * While the owner edits, it is the slide in view that is open for editing. Going to another, from
+ * the rail or the steps, keeps what was typed first (the caller's `onAt`) and opens that one;
+ * the track itself stays put under the owner's hands. The rail also adds, copies, moves and
+ * deletes slides (`ops`), each change kept the same way first.
  */
 export function DeckView({
   title,
@@ -25,6 +27,7 @@ export function DeckView({
   onAt,
   editing,
   frame,
+  ops,
 }: {
   title: string;
   slides: readonly string[];
@@ -34,12 +37,14 @@ export function DeckView({
   editing: boolean;
   /** The frame of the slide in view, for the one who keeps an edit. */
   frame: RefObject<HTMLIFrameElement | null>;
+  /** The owner's changes to the slides, or none where the deck is only read. */
+  ops?: SlideOps | undefined;
 }) {
   const last = slides.length - 1;
 
   const keyed = (event: KeyboardEvent) => {
     const by = { ArrowLeft: -1, PageUp: -1, ArrowRight: 1, PageDown: 1 }[event.key];
-    if (!by || editing) return;
+    if (!by) return;
     const to = at + by;
     if (to < 0 || to > last) return;
     event.preventDefault();
@@ -49,7 +54,7 @@ export function DeckView({
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: the arrows step from any of its buttons.
     <div className="flex min-h-0 min-w-0 flex-1 flex-col" onKeyDown={keyed}>
-      <SlideRail slides={slides} at={at} onAt={onAt} disabled={editing} />
+      <SlideRail slides={slides} at={at} onAt={onAt} ops={ops} />
       <SlideCarousel
         title={title}
         slides={slides}
@@ -63,7 +68,7 @@ export function DeckView({
           <button
             type="button"
             aria-label="Previous slide"
-            disabled={editing || at === 0}
+            disabled={at === 0}
             className={iconButton}
             onClick={() => onAt(at - 1)}
           >
@@ -77,7 +82,7 @@ export function DeckView({
           <button
             type="button"
             aria-label="Next slide"
-            disabled={editing || at === last}
+            disabled={at === last}
             className={iconButton}
             onClick={() => onAt(at + 1)}
           >

@@ -5,6 +5,7 @@ import type {
   ArtifactFolders,
   DeckExport,
   DeckExportQuery,
+  DeckSlidesEdit,
   MediaUpload,
   ModelSelection,
   ProfileArtifact,
@@ -466,6 +467,19 @@ export const sessionCalls = (client: Client, origin = '') => ({
       client.POST('/v1/profiles/{profileId}/sessions/{sessionId}/artifacts/{artifactId}/versions', {
         params: { path: { profileId, sessionId, artifactId } },
         body: edit,
+      }),
+    ),
+  /** The owner's change to a deck's slides, a new version as an edit is. */
+  editDeckSlides: (
+    profileId: string,
+    sessionId: string,
+    artifactId: string,
+    change: DeckSlidesEdit,
+  ): Promise<SessionArtifact> =>
+    result(
+      client.POST('/v1/profiles/{profileId}/sessions/{sessionId}/artifacts/{artifactId}/slides', {
+        params: { path: { profileId, sessionId, artifactId } },
+        body: change,
       }),
     ),
   people: (profileId: string, sessionId: string) =>

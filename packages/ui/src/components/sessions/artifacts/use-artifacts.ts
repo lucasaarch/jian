@@ -18,6 +18,7 @@ export type ArtifactsApi = Pick<
   | 'exportSessionArtifact'
   | 'setSessionArtifactVisibility'
   | 'editSessionArtifact'
+  | 'editDeckSlides'
 >;
 
 /** One page of the agent's page of every Artifact, as the gateway answers it. */
@@ -43,6 +44,25 @@ export function artifactChanged(client: QueryClient, profileId: string, next: Se
         })),
       },
   );
+}
+
+/**
+ * The latest version the panel knows of one, from whichever list holds it. It is read here, not
+ * from what was last drawn, because `artifactChanged` sets it at once while a redraw comes later:
+ * what was saved a moment ago is already in it.
+ */
+export function latestKnown(client: QueryClient, profileId: string, artifact: SessionArtifact) {
+  const listed = client
+    .getQueryData<SessionArtifact[]>(keys.sessionArtifacts(profileId, artifact.sessionId))
+    ?.find((item) => item.id === artifact.id);
+  if (listed) return listed.version;
+  for (const [, all] of client.getQueriesData<InfiniteData<ArtifactsPage>>({
+    queryKey: keys.profileArtifacts(profileId),
+  })) {
+    const paged = all?.pages.flatMap((page) => page.items).find((item) => item.id === artifact.id);
+    if (paged) return paged.version;
+  }
+  return artifact.version;
 }
 
 /** Every Artifact of the conversation, the one changed last first. */

@@ -26,6 +26,8 @@ import { ArtifactSharing } from './artifact-sharing';
 import { DeckDownload } from './deck/deck-download';
 import { DeckView } from './deck/deck-view';
 import { Presentation } from './deck/presentation';
+import { SlideBuildTools } from './deck/slide-build-tools';
+import { useSlideOps } from './deck/use-slide-ops';
 import { fileName, LANGUAGE } from './source';
 import { TweaksPanel } from './tweaks/tweaks-panel';
 import { useTweaks } from './tweaks/use-tweaks';
@@ -131,6 +133,18 @@ export function ArtifactView({
     }
     return true;
   };
+  // A deck's slides, added, copied, moved and deleted by hand, each after what is typed is kept.
+  const ops = useSlideOps({
+    api,
+    profileId,
+    artifact,
+    from: held === undefined ? version : undefined,
+    settle,
+    shown: (index) => {
+      setPicked(undefined);
+      setAt(index);
+    },
+  });
 
   return (
     <>
@@ -156,17 +170,20 @@ export function ArtifactView({
         }
         options={
           editing && !direct ? (
-            <Action
-              size="small"
-              tone="primary"
-              onClick={() =>
-                void settle().then((kept) => {
-                  if (kept) setToggled(false);
-                })
-              }
-            >
-              Done
-            </Action>
+            <>
+              {slides && <SlideBuildTools frame={frame} used={source?.length ?? 0} />}
+              <Action
+                size="small"
+                tone="primary"
+                onClick={() =>
+                  void settle().then((kept) => {
+                    if (kept) setToggled(false);
+                  })
+                }
+              >
+                Done
+              </Action>
+            </>
           ) : (
             <>
               {sourced && (
@@ -221,7 +238,7 @@ export function ArtifactView({
                   tip={
                     slide === undefined
                       ? (EDIT_TIP[artifact.type] ?? 'Edit the text')
-                      : 'Edit this slide’s text'
+                      : 'Edit this slide'
                   }
                   side="bottom"
                   align="end"
@@ -316,9 +333,13 @@ export function ArtifactView({
           title={artifact.title}
           slides={slides}
           at={slide}
-          onAt={setAt}
+          // Another slide while one is open for editing: what was typed is kept first.
+          onAt={(index) =>
+            editing ? void settle().then((kept) => kept && setAt(index)) : setAt(index)
+          }
           editing={editing}
           frame={frame}
+          ops={ops}
         />
       ) : component ? (
         // The frame stays mounted while Tweaks opens and shuts beside it.
