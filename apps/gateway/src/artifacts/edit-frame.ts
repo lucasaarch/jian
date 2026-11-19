@@ -1,12 +1,14 @@
 import { ARTIFACT_EDIT_MESSAGE, type SessionArtifactType } from '@jian/contracts';
 import { MARKDOWN } from './markdown-frame.js';
 import { SHEET } from './sheet-frame.js';
+import { SLIDE_BUILDER } from './slide-builder.js';
 
 /**
  * What the frame runs in place of drawing when the owner edits a page or a slide by hand. It is
- * script for the frame's page, kept as text: `const editPage = (source, options, finish) => …`.
+ * script for the frame's page, kept as text: `const editPage = (source, options, finish, build) => …`.
  * `finish`, when given, is what the edited page is saved as instead of its markup (a
- * document's Markdown).
+ * document's Markdown). `build`, when given, adds to the editor before it hears anything: a deck's
+ * slide is built on as well as typed in (slide-builder.ts).
  *
  * - The source is read as a document and never run. A page's own scripts are left exactly as
  *   written and stay asleep, so what is saved is the page the agent wrote plus the owner's
@@ -42,7 +44,7 @@ const STYLE = `
 `;
 
 const EDITING = String.raw`
-const editPage = (source, options, finish) => {
+const editPage = (source, options, finish, build) => {
   const KEY = ${JSON.stringify(ARTIFACT_EDIT_MESSAGE)};
   const parsed = new DOMParser().parseFromString(source, 'text/html');
   const doctype = parsed.doctype ? '<!doctype html>\n' : '';
@@ -180,6 +182,9 @@ const editPage = (source, options, finish) => {
     mark();
     place();
   };
+
+  // Before the editor's own listeners, so what it handles first never reaches them.
+  if (build) build({ KEY, mark, release, active: () => active, options: options || {} });
 
   addEventListener('click', (event) => {
     if (bar.contains(event.target)) return;
@@ -361,7 +366,7 @@ const editing = (source, options) => {
  */
 export const EDITORS: Partial<Record<SessionArtifactType, string>> = {
   html: `${EDITING}const editing = editPage;\n`,
-  deck: `${EDITING}const editing = editPage;\n`,
+  deck: `${EDITING}${SLIDE_BUILDER}const editing = (source, options) => editPage(source, options, null, buildSlide);\n`,
   markdown: EDITING + MARKDOWN + MARKDOWN_EDITING,
   sheet: `${SHEET}${ANSWERING}const editing = (source, options) => answering(options, sheet(source, root, true));\n`,
 };

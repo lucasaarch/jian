@@ -126,25 +126,24 @@ takes the whole window: its pages are listed where the sidebar was, under Back.
   one printed.
   Its Artifacts tab shows this conversation's Artifacts as cards, as the Artifacts page does, with
   no pins or folders; Create something new begins the request, unsent, in this conversation's own
-  field. It opens on one while you are still writing it and shows it grow, with Writing… beside
-  its title. It draws one in a sealed frame, in the panel's theme: History opens an earlier
-  version, a button switches to its code, and it is copied, downloaded, and set Private or Public.
-  A React component stands centred on a dotted canvas unless it paints its own ground, with
-  Tweaks beside it: the props it declares and its theme, to try it, never saved. A deck, which
-  the panel names Slide, shows its slides small in a row on top and one large under it, with
-  Present to fill the screen; it has no code view. Its Download saves the deck as a PDF, a page a
-  slide, or a PowerPoint file (each slide a picture with its text in the notes), in its own fonts
-  or basic ones, and the slide in view as a web page or a picture. A document downloads as Word,
-  PDF or Markdown; a spreadsheet as Excel, its formulas kept, or as CSV, its values. Only a
-  gateway on a server draws PDFs, PowerPoint files and pictures: on the desktop app's own, a deck
-  downloads as the slide's web page alone.
-  A document and a spreadsheet open ready to edit: click a text to change it or its formatting, or
-  type in the cells. A web page and a deck's slide have Edit, and Done to stop. There is no Save:
-  what the owner changes keeps itself a moment after they stop, or as they leave, and the bar says
-  Saving… or Saved; a version you wrote is never written over.
-  Public gives a link anyone can open without signing in, to the latest version only, and making
-  it private again ends that link for good. A deck's link has Present too: arrow keys, space or a
-  click step through it, Escape leaves. Only a gateway on a server offers Public.
+  field. It opens on one while you write it, with Writing… beside its title. It draws one sealed, in
+  the panel's theme: History opens an earlier version, a button switches to its code, and it is
+  copied, downloaded, and set Private or Public. A React component stands on a dotted canvas, with
+  Tweaks beside it: the props it declares and its theme, never saved. A deck, which the panel names
+  Slide, shows its slides small in a row on top and one large under it, with Present to fill the
+  screen; it has no code view. Its Download saves a PDF, a page a slide, a PowerPoint file (each
+  slide a picture, its text in the notes) in its own fonts or basic ones, or the slide in view as a
+  web page or a picture. A document downloads as Word, PDF or Markdown; a spreadsheet as Excel or
+  CSV. Only a gateway on a server draws PDFs, PowerPoint files and pictures: on the desktop app's
+  own, a deck downloads as the slide's web page alone. A document and a spreadsheet open ready to
+  edit: click a text to change it or its formatting, or type in the cells. A web page and a deck's
+  slide have Edit, and Done to stop. A deck is built by hand too: New slide adds one from a layout
+  in the deck's look, or a copy; a slide's right-click menu, a drag or Delete (with Undo) copies,
+  moves or deletes it; a slide being edited takes text boxes and pictures. No Save: what the owner
+  changes keeps itself a moment after they stop, or as they leave, and the bar says Saving… or
+  Saved; a version you wrote is never written over. Public gives a link anyone opens without signing
+  in, to the latest version only, and making it private again ends that link for good. A deck's link
+  has Present too. Only a gateway on a server offers Public.
 - **The conversation's badges**, where it runs, show its objective and how many pull requests
   you created in it through GitHub's MCP server, your subagents' included; one you only linked or
   read is not counted. That one opens the list of them with how each stands — Watching while the

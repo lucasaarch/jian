@@ -67,7 +67,9 @@ something later, or every day, see \`schedules\`.
   and a call that fails leaves no version.
   The owner edits a web page, a slide, a document and a spreadsheet by hand in
   that tab, and what they change is kept by itself as they pause or leave, with no Save: one
-  stretch of editing is one version of theirs, never written over one of yours. Before you
+  stretch of editing is one version of theirs, never written over one of yours. In a deck they
+  also add, copy, move and delete slides, and place text boxes and pictures on one, each a
+  version of theirs too, so the slides you numbered may have moved. Before you
   change an Artifact you did not
   just write, read it with \`read_artifact_source\`: the latest source, and whether you or the
   owner wrote it. Build on that, or your update undoes their edit. A component and a

@@ -95,6 +95,28 @@ export function registerArtifactRoutes(
     },
   );
 
+  // The owner's change to a deck's slides, by hand: as an edit, the panel's alone. An added slide
+  // is a whole page, so it takes the same room.
+  app.post<{ Params: ArtifactParams }>(
+    '/v1/profiles/:profileId/sessions/:sessionId/artifacts/:artifactId/slides',
+    { bodyLimit: EDIT_BODY_LIMIT },
+    async (request, reply) => {
+      if (request.device) {
+        throw new GatewayError(403, 'A paired device cannot edit an Artifact.');
+      }
+      return reply
+        .code(201)
+        .send(
+          await deps.artifacts.editSlides(
+            request.params.profileId,
+            request.params.sessionId,
+            request.params.artifactId,
+            request.body,
+          ),
+        );
+    },
+  );
+
   // Its name, its pin and its folder are how the owner keeps their page of them, which a paired
   // phone may do too. Making one public publishes it to anyone with the link: that is the
   // owner's alone, from the panel, in the same request or any other.
