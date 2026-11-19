@@ -201,14 +201,18 @@ async function settled(done: () => boolean, limit = 100) {
   }
 }
 
-async function render(api: ArtifactsDrawerApi, mode: 'server' | 'local' = 'server') {
+async function render(
+  api: ArtifactsDrawerApi,
+  mode: 'server' | 'local' = 'server',
+  ask?: (text: string) => void,
+) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   // What kind of gateway this is, as its health answer said.
   client.setQueryData(keys.gateway, { status: 'ok', mode });
   await act(async () =>
     root.render(
       <QueryClientProvider client={client}>
-        <ArtifactsDrawer api={api} profileId="profile" />
+        <ArtifactsDrawer api={api} profileId="profile" ask={ask} />
       </QueryClientProvider>,
     ),
   );
@@ -925,6 +929,73 @@ describe('an Artifact being written', () => {
     expect(document.activeElement).toBe(composer);
     expect(drawer()?.textContent).toContain('Updating…');
     composer.remove();
+  });
+});
+
+describe('an Artifact that fails as it runs', () => {
+  const failing = async () => {
+    const ask = vi.fn();
+    await act(async () => useCrew.getState().showArtifacts(counter.id));
+    await render(gateway(), 'server', ask);
+    await settled(() => Boolean(frame()));
+    const { element } = await loaded();
+    const say = (source: unknown, said: unknown) =>
+      act(async () => {
+        window.dispatchEvent(
+          new MessageEvent('message', {
+            data: { jianArtifactError: said },
+            source: source as MessageEventSource,
+          }),
+        );
+      });
+    return { ask, element, say };
+  };
+  const alert = () => drawer()?.querySelector('[role=alert]');
+  const action = (name: string) =>
+    [...(alert()?.querySelectorAll('button') ?? [])].find((item) => item.textContent === name);
+
+  it('says what its frame reported, as text, and Fix asks the agent with all of it', async () => {
+    const { ask, element, say } = await failing();
+
+    // Another window saying it is heard as nothing at all, and so is a shape it does not have.
+    await say({ postMessage: vi.fn() }, { message: 'Not mine' });
+    await say(element.contentWindow, { message: 42 });
+    expect(alert()).toBeFalsy();
+
+    await say(element.contentWindow, {
+      message: 'TypeError: <b>items</b>.map is not a function',
+      componentStack: 'at List\nat App',
+      stack: 'at List (about:srcdoc:3:9)',
+    });
+    expect(alert()?.textContent).toContain('The component failed');
+    expect(alert()?.textContent).toContain('<b>items</b>.map is not a function');
+    expect(alert()?.querySelector('b')).toBeNull();
+
+    // Only the first is said: what follows from it repeats it.
+    await say(element.contentWindow, { message: 'Error: later' });
+    expect(alert()?.textContent).not.toContain('later');
+
+    await click(action('Fix'));
+    expect(ask).toHaveBeenCalledTimes(1);
+    const [text] = ask.mock.calls[0] as [string];
+    expect(text).toContain(counter.id);
+    expect(text).toContain(`version ${counter.version}`);
+    expect(text).toContain('<b>items</b>.map is not a function');
+    expect(text).toContain('at List\nat App');
+    expect(text).toContain('about:srcdoc:3:9');
+    // Asked once: the button holds until the fixed version arrives.
+    expect(action('Asked to fix')?.hasAttribute('disabled')).toBe(true);
+  });
+
+  it('holds Fix while the agent is already changing it', async () => {
+    const { ask, element, say } = await failing();
+    await say(element.contentWindow, { message: 'Error: broken' });
+    await act(async () =>
+      hearArtifactDraft('session', { toolCallId: 'call', artifactId: counter.id, content: '' }),
+    );
+
+    expect(action('Fix')?.hasAttribute('disabled')).toBe(true);
+    expect(ask).not.toHaveBeenCalled();
   });
 });
 

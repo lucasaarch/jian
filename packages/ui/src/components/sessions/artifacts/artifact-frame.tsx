@@ -2,8 +2,11 @@
 
 import {
   ARTIFACT_EDIT_MESSAGE,
+  ARTIFACT_ERROR_MESSAGE,
   ARTIFACT_FRAME_MESSAGE,
   ARTIFACT_THEME_MESSAGE,
+  type ArtifactFrameError,
+  artifactFrameErrorSchema,
   type SessionArtifactType,
 } from '@jian/contracts';
 import { type CSSProperties, type RefObject, useEffect, useRef, useState } from 'react';
@@ -36,8 +39,9 @@ const REVEAL_LATEST = 1000;
  * when it changes, so nothing reloads. `scheme` holds it to one theme instead, as a component's
  * tweaks do.
  *
- * A component's frame also says its tweaks and takes their values (tweaks/use-tweaks.ts), the
- * one thing read from a frame that draws: checked, and drawn as fields, never run.
+ * A component's frame also says its tweaks and takes their values (tweaks/use-tweaks.ts):
+ * checked, and drawn as fields, never run. A component's, a diagram's and a document's frame say
+ * what went wrong as they ran, once (`onFailure`): checked, and drawn as text.
  *
  * It stays unseen until it has drawn: until the gateway's frame has loaded, been handed its
  * source and had two frames to paint it. Until it loads, the element holds the browser's own
@@ -62,6 +66,7 @@ export function ArtifactFrame({
   lazy = false,
   onReady,
   scheme,
+  onFailure,
 }: {
   type: SessionArtifactType;
   title: string;
@@ -92,6 +97,8 @@ export function ArtifactFrame({
   onReady?: () => void;
   /** The theme it is drawn in whatever the panel's, as the owner picks among a component's tweaks. */
   scheme?: 'light' | 'dark' | undefined;
+  /** Told what went wrong as the Artifact ran, as its frame says it: the first time only. */
+  onFailure?: ((error: ArtifactFrameError) => void) | undefined;
 }) {
   const own = useRef<HTMLIFrameElement>(null);
   const element = frame ?? own;
@@ -107,6 +114,24 @@ export function ArtifactFrame({
     if (!handed.current) return;
     element.current?.contentWindow?.postMessage({ [ARTIFACT_THEME_MESSAGE]: theme }, '*');
   }, [theme, element]);
+
+  const failed = useRef(onFailure);
+  failed.current = onFailure;
+  // Only a frame asked about is listened to: of any other, the panel hears nothing at all.
+  const listens = Boolean(onFailure);
+  useEffect(() => {
+    if (!listens) return;
+    let told = false;
+    const hear = (event: MessageEvent) => {
+      if (told || !failed.current || event.source !== element.current?.contentWindow) return;
+      const said = artifactFrameErrorSchema.safeParse(event.data?.[ARTIFACT_ERROR_MESSAGE]);
+      if (!said.success) return;
+      told = true;
+      failed.current(said.data);
+    };
+    window.addEventListener('message', hear);
+    return () => window.removeEventListener('message', hear);
+  }, [element, listens]);
 
   // The panel being resized changes the scale while a page is open for editing.
   useEffect(() => {

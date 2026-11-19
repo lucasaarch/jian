@@ -357,6 +357,30 @@ export const ARTIFACT_THEME_MESSAGE = 'jianArtifactTheme';
  */
 export const ARTIFACT_TWEAKS_MESSAGE = 'jianArtifactTweaks';
 
+/**
+ * What went wrong as an Artifact ran, from its frame to the panel, once:
+ * `{ [this]: { message, stack?, componentStack? } }`. A component, a diagram and a document say
+ * it; the shell of their frames relays this key, and nothing else, outward, and only the first
+ * time. It is the Artifact's own word, so the panel reads it as text checked against
+ * `artifactFrameErrorSchema` and never as markup, and it reaches the agent only when the owner
+ * asks for the Artifact to be fixed.
+ */
+export const ARTIFACT_ERROR_MESSAGE = 'jianArtifactError';
+
+/** The longest a frame's error and each of its stacks are kept, in characters. */
+export const ARTIFACT_ERROR_MAX = { message: 2_000, stack: 8_000 } as const;
+
+export const artifactFrameErrorSchema = z.strictObject({
+  /** The error as it reads, its kind first: "TypeError: items.map is not a function". */
+  message: z.string().min(1).max(ARTIFACT_ERROR_MAX.message),
+  /** Where it was thrown, as the browser tells it. */
+  stack: z.string().max(ARTIFACT_ERROR_MAX.stack).optional(),
+  /** For a component, which of its parts was being drawn, as React tells it. */
+  componentStack: z.string().max(ARTIFACT_ERROR_MAX.stack).optional(),
+});
+
+export type ArtifactFrameError = z.infer<typeof artifactFrameErrorSchema>;
+
 export type SessionArtifactType = z.infer<typeof sessionArtifactTypeSchema>;
 export type SessionArtifactVisibility = z.infer<typeof sessionArtifactVisibilitySchema>;
 export type SessionArtifactAuthor = z.infer<typeof sessionArtifactAuthorSchema>;

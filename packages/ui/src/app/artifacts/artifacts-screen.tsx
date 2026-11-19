@@ -21,6 +21,7 @@ import { useProjects } from '../../lib/query/agent';
 import { panelApi } from '../../lib/query/client';
 import { useCrew } from '../../lib/stores/crew';
 import { draftKey, useDrafts } from '../../lib/stores/drafts';
+import { sendNow } from '../../lib/stores/outbox';
 import { useNoInspector } from '../../lib/stores/screen';
 import { useRouter, useSearchParams } from '../../platform/navigation';
 import type { CardActions } from './artifact-card';
@@ -135,6 +136,7 @@ export function ArtifactsScreen({
   };
 
   if (artifact) {
+    const send = api.send;
     return (
       // The view is the Inspector's, but its bar is the screen's own (screen-header.tsx), in the
       // host's title bar; what lies under it keeps a page's wider edge.
@@ -149,6 +151,21 @@ export function ArtifactsScreen({
           artifact={artifact}
           page
           onBack={close}
+          // Asked in the conversation it was made in, which is where the agent then mends it,
+          // in the Inspector: the page goes there with it.
+          onFix={
+            send &&
+            ((text) => {
+              sendNow({
+                sessionId: artifact.sessionId,
+                text,
+                mediaIds: [],
+                deliver: (key) => send(profileId, artifact.sessionId, text, [], key),
+                delivered: () => {},
+              });
+              on.go(artifact);
+            })
+          }
         />
       </section>
     );

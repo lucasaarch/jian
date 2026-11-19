@@ -3,6 +3,7 @@ import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import {
   ARTIFACT_EDIT_MESSAGE,
+  ARTIFACT_ERROR_MESSAGE,
   ARTIFACT_FRAME_MESSAGE,
   ARTIFACT_THEME_MESSAGE,
   ARTIFACT_TWEAKS_MESSAGE,
@@ -100,11 +101,13 @@ describe.runIf(existsSync(process.env.PLAYWRIGHT_EXECUTABLE_PATH ?? chromium.exe
 const held = document.getElementById('held');
 window.answers = [];
 window.tweaks = [];
+window.errors = [];
 addEventListener('message', (event) => {
   if (event.source !== held.contentWindow) return;
   const said = event.data.${ARTIFACT_EDIT_MESSAGE};
   if (said && 'collect' in said) window.answers.push(said);
   if (event.data.${ARTIFACT_TWEAKS_MESSAGE}) window.tweaks.push(event.data.${ARTIFACT_TWEAKS_MESSAGE});
+  if (event.data.${ARTIFACT_ERROR_MESSAGE}) window.errors.push(event.data.${ARTIFACT_ERROR_MESSAGE});
 });
 window.tweak = (values) =>
   held.contentWindow.postMessage({ ${ARTIFACT_TWEAKS_MESSAGE}: { values } }, '*');
@@ -268,6 +271,43 @@ exports.default = (props) =>
       // A component that declares no tweaks still says so, with nothing.
       await expect.poll(() => full.evaluate('window.tweaks')).toEqual([{ controls: {} }]);
       await full.close();
+    });
+
+    it('says what broke a component, where, and in which part, to the page and the panel', async () => {
+      const page = await inPanel(
+        'broken',
+        'react',
+        `const List = (props) => React.createElement('ul', null, props.items.map((item) => item));
+exports.default = () => React.createElement('section', null, React.createElement(List, null));`,
+      );
+      const errors = () => page.evaluate('window.errors') as Promise<Record<string, string>[]>;
+      await expect.poll(async () => (await errors()).length).toBe(1);
+      const [said] = await errors();
+      expect(said?.message).toMatch(/^TypeError: .*map/);
+      expect(said?.componentStack).toContain('List');
+      expect(said?.stack).toBeTruthy();
+      // The frame says it too, in full, above what it drew.
+      await expect.poll(() => read(page)).toContain('TypeError');
+      expect(await read(page)).toContain('List');
+      await page.close();
+
+      // Thrown later, from a timer the component set, it is still told in full, once.
+      const later = await inPanel(
+        'broken-later',
+        'react',
+        `exports.default = () => {
+  React.useEffect(() => { setTimeout(() => { throw new RangeError('Too far'); }, 10); }, []);
+  React.useEffect(() => { setTimeout(() => { throw new Error('And again'); }, 30); }, []);
+  return React.createElement('p', null, 'Drawn');
+};`,
+      );
+      await expect
+        .poll(() => later.evaluate('window.errors'))
+        .toEqual([expect.objectContaining({ message: 'RangeError: Too far' })]);
+      await later.waitForTimeout(100);
+      expect(await later.evaluate('window.errors')).toHaveLength(1);
+      expect(await read(later)).toContain('Drawn');
+      await later.close();
     });
 
     it('lays a document out as a column of its own, which prints on the whole page', async () => {

@@ -1,6 +1,6 @@
 'use client';
 
-import { EDITABLE_ARTIFACT_TYPES } from '@jian/contracts';
+import { type ArtifactFrameError, EDITABLE_ARTIFACT_TYPES } from '@jian/contracts';
 import {
   ArrowLeft,
   Code,
@@ -26,6 +26,8 @@ import { ArtifactSkeleton, StagedFrame } from './artifact-stage';
 import { DeckDownload } from './deck/deck-download';
 import { DeckView } from './deck/deck-view';
 import { Presentation } from './deck/presentation';
+import { ArtifactFailure } from './failure/artifact-failure';
+import { fixRequest } from './failure/fix-request';
 import { fileName, LANGUAGE } from './source';
 import { TweaksPanel } from './tweaks/tweaks-panel';
 import { useTweaks } from './tweaks/use-tweaks';
@@ -54,6 +56,9 @@ const EDIT_TIP: Partial<Record<SessionArtifact['type'], string>> = {
  *
  * A React component is tried out beside its canvas, in Tweaks (tweaks/tweaks-panel.tsx): the
  * props it declares and the theme it is drawn in. It opens by itself on one that declares props.
+ *
+ * A component, a diagram or a document that fails as it runs says why, over it
+ * (failure/artifact-failure.tsx), with Fix to ask the agent to mend that version (`onFix`).
  */
 export function ArtifactView({
   api,
@@ -63,6 +68,7 @@ export function ArtifactView({
   page = false,
   onBack,
   draft,
+  onFix,
 }: {
   api: ArtifactsApi;
   profileId: string;
@@ -75,6 +81,8 @@ export function ArtifactView({
   onBack: () => void;
   /** What the agent is writing of this Artifact now, if it is revising it. */
   draft?: ArtifactDraft | undefined;
+  /** Asks the agent, in the Artifact's conversation, for what is given; none where it cannot. */
+  onFix?: ((request: string) => void) | undefined;
 }) {
   const [picked, setPicked] = useState<number>();
   const [code, setCode] = useState(false);
@@ -86,6 +94,8 @@ export function ArtifactView({
   // update of the agent's meanwhile must not take the page from under the owner's hands.
   const [held, setHeld] = useState<number>();
   const [presenting, setPresenting] = useState(false);
+  // What the frame of a version said went wrong, held with that version: another starts clean.
+  const [failure, setFailure] = useState<{ version: number; error: ArtifactFrameError }>();
   const frame = useRef<HTMLIFrameElement>(null);
   // Only a server gateway makes one public, or draws a deck or a document into a PDF, so nothing
   // else offers either; until the gateway says which it is, neither does this.
@@ -104,6 +114,13 @@ export function ArtifactView({
   // is half written of a page or a component draws nothing worth seeing.
   const streaming = artifact.type === 'sheet' && Boolean(draft?.content) && held === undefined;
   const editing = editable && !code && !streaming && (direct || toggled);
+  // Only what can fail as it is drawn says so; a frame open for editing runs nothing.
+  const fails =
+    (artifact.type === 'react' || artifact.type === 'mermaid' || artifact.type === 'markdown') &&
+    !editing;
+  const onFailure = fails
+    ? (error: ArtifactFrameError) => setFailure({ version, error })
+    : undefined;
   // What has a drawing and a source to switch between: all but a deck.
   const sourced = artifact.type !== 'deck';
   const component = artifact.type === 'react';
@@ -298,6 +315,15 @@ export function ArtifactView({
       />
 
       {writing && !streaming && <UpdatingLine />}
+      {failure?.version === version && !code && !streaming && (
+        <ArtifactFailure
+          key={version}
+          type={artifact.type}
+          error={failure.error}
+          busy={writing}
+          onFix={onFix && (() => onFix(fixRequest(artifact, version, failure.error)))}
+        />
+      )}
       {streaming && draft ? (
         <LiveSheet content={draft.content} done={draft.done} />
       ) : read.isError ? (
@@ -331,6 +357,7 @@ export function ArtifactView({
             frame={frame}
             className="min-h-0 w-full min-w-0 flex-1 border-0"
             scheme={tweaks.scheme === 'auto' ? undefined : tweaks.scheme}
+            onFailure={onFailure}
           />
           {tweaksShown && <TweaksPanel tweaks={tweaks} />}
         </div>
@@ -342,6 +369,7 @@ export function ArtifactView({
           source={read.data.compiled ?? read.data.content}
           editing={editing}
           frame={frame}
+          onFailure={onFailure}
         />
       )}
       {presenting && slides && read.data && (
