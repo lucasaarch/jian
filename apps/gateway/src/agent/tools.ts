@@ -576,12 +576,20 @@ export function profileTools(
               if (artifact.visibility === 'private') {
                 return { ...about, visibility: 'private', note: 'Its link no longer works.' };
               }
+              // The password is the owner's, set in the panel: the agent never learns it.
+              const guarded = artifact.passwordProtected
+                ? {
+                    password:
+                      'Its link asks for the password the owner set in the panel, which you do not know: whoever they give the link to needs it from them too.',
+                  }
+                : {};
               return link
-                ? { ...about, visibility: 'public', link }
+                ? { ...about, visibility: 'public', link, ...guarded }
                 : {
                     ...about,
                     visibility: 'public',
                     path: artifact.publicPath,
+                    ...guarded,
                     note: 'This gateway does not know the address the internet reaches it at (JIAN_PUBLIC_URL is not set), so this is only the path. Tell the owner: the link is this path after the address they open Jian at, and setting JIAN_PUBLIC_URL makes it whole.',
                   };
             },

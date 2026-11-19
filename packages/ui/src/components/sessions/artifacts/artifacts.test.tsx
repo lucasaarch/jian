@@ -36,6 +36,7 @@ const counter: SessionArtifact = {
   visibility: 'private',
   version: 1,
   publicPath: null,
+  passwordProtected: false,
   createdAt: at,
   updatedAt: at,
 };
@@ -150,6 +151,17 @@ function gateway(artifacts: SessionArtifact[] = [counter, notes, page, deck]) {
           ...(held[index] as SessionArtifact),
           visibility,
           publicPath: visibility === 'public' ? `/v1/public-artifacts/${'A'.repeat(43)}` : null,
+        };
+        held[index] = next;
+        return next;
+      },
+    ),
+    setSessionArtifactPassword: vi.fn(
+      async (_profile: string, _session: string, artifactId: string, password: string | null) => {
+        const index = held.findIndex((item) => item.id === artifactId);
+        const next: SessionArtifact = {
+          ...(held[index] as SessionArtifact),
+          passwordProtected: password !== null,
         };
         held[index] = next;
         return next;
@@ -635,6 +647,68 @@ describe('who can read an Artifact', () => {
     await click(entries().find((entry) => entry.textContent === 'Copy link'));
     expect(copied).toHaveBeenCalledWith(
       `${window.location.origin}/v1/public-artifacts/${'A'.repeat(43)}`,
+    );
+  });
+
+  it('gives a public link a password, changes it and takes it away', async () => {
+    const shared: SessionArtifact = {
+      ...counter,
+      visibility: 'public',
+      publicPath: `/v1/public-artifacts/${'A'.repeat(43)}`,
+    };
+    const api = await opened(shared, gateway([shared, notes, page, deck]), 'server');
+    const dialog = () => document.querySelector<HTMLElement>('[role=dialog]');
+    const input = () => dialog()?.querySelector<HTMLInputElement>('input[type=password]');
+    const save = () =>
+      [...(dialog()?.querySelectorAll('button') ?? [])].find((item) => item.textContent === 'Save');
+    const type = (value: string) =>
+      act(async () => {
+        const field = input();
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(
+          field,
+          value,
+        );
+        field?.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+    const choose = async (words: string) => {
+      await click(button('Public'));
+      await settled(() => entries().some((entry) => entry.textContent === words));
+      await click(entries().find((entry) => entry.textContent === words));
+    };
+
+    await choose('Add password');
+    await settled(() => Boolean(input()));
+    // Too short to keep: Save waits for four characters.
+    await type('abc');
+    expect(save()?.disabled).toBe(true);
+    await type('open sesame');
+    await act(async () => save()?.click());
+    await settled(() => !dialog());
+    expect(api.setSessionArtifactPassword).toHaveBeenCalledWith(
+      'profile',
+      'session',
+      counter.id,
+      'open sesame',
+    );
+    expect(button('Public with a password')).toBeDefined();
+
+    await choose('Change password');
+    await settled(() => Boolean(input()));
+    expect(dialog()?.textContent).toContain('Change password');
+    await click(
+      [...(dialog()?.querySelectorAll('button') ?? [])].find(
+        (item) => item.textContent === 'Cancel',
+      ),
+    );
+    await settled(() => !dialog());
+
+    await choose('Remove password');
+    await settled(() => button('Public: anyone') !== undefined);
+    expect(api.setSessionArtifactPassword).toHaveBeenLastCalledWith(
+      'profile',
+      'session',
+      counter.id,
+      null,
     );
   });
 });

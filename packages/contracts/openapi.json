@@ -44769,6 +44769,9 @@
                               "null"
                             ]
                           },
+                          "passwordProtected": {
+                            "type": "boolean"
+                          },
                           "createdAt": {
                             "type": "string",
                             "format": "date-time",
@@ -44813,6 +44816,7 @@
                           "visibility",
                           "version",
                           "publicPath",
+                          "passwordProtected",
                           "createdAt",
                           "updatedAt",
                           "sessionTitle",
@@ -45016,6 +45020,9 @@
                           "null"
                         ]
                       },
+                      "passwordProtected": {
+                        "type": "boolean"
+                      },
                       "createdAt": {
                         "type": "string",
                         "format": "date-time",
@@ -45035,6 +45042,7 @@
                       "visibility",
                       "version",
                       "publicPath",
+                      "passwordProtected",
                       "createdAt",
                       "updatedAt"
                     ],
@@ -45671,6 +45679,9 @@
                         "null"
                       ]
                     },
+                    "passwordProtected": {
+                      "type": "boolean"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time",
@@ -45690,6 +45701,7 @@
                     "visibility",
                     "version",
                     "publicPath",
+                    "passwordProtected",
                     "createdAt",
                     "updatedAt"
                   ],
@@ -46026,6 +46038,9 @@
                         "null"
                       ]
                     },
+                    "passwordProtected": {
+                      "type": "boolean"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time",
@@ -46045,6 +46060,7 @@
                     "visibility",
                     "version",
                     "publicPath",
+                    "passwordProtected",
                     "createdAt",
                     "updatedAt"
                   ],
@@ -46201,6 +46217,14 @@
                       "public"
                     ]
                   },
+                  "password": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "minLength": 4,
+                    "maxLength": 128
+                  },
                   "title": {
                     "type": "string",
                     "minLength": 1,
@@ -46274,6 +46298,9 @@
                         "null"
                       ]
                     },
+                    "passwordProtected": {
+                      "type": "boolean"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time",
@@ -46293,6 +46320,7 @@
                     "visibility",
                     "version",
                     "publicPath",
+                    "passwordProtected",
                     "createdAt",
                     "updatedAt"
                   ],
@@ -46629,6 +46657,9 @@
                         "null"
                       ]
                     },
+                    "passwordProtected": {
+                      "type": "boolean"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time",
@@ -46648,6 +46679,7 @@
                     "visibility",
                     "version",
                     "publicPath",
+                    "passwordProtected",
                     "createdAt",
                     "updatedAt"
                   ],
@@ -47710,6 +47742,145 @@
             }
           }
         }
+      },
+      "post": {
+        "operationId": "unlockPublicArtifact",
+        "security": [],
+        "description": "Required permission: public.",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{43}$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "password": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  }
+                },
+                "required": [
+                  "password"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "303": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "null"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/v1/public-artifacts/{token}/export": {
@@ -47745,6 +47916,15 @@
                 "docx",
                 "pptx"
               ]
+            }
+          },
+          {
+            "name": "pass",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
             }
           }
         ],

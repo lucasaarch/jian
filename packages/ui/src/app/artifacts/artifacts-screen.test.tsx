@@ -36,6 +36,7 @@ const landing: ProfileArtifact = {
   visibility: 'public',
   version: 2,
   publicPath: `/v1/public-artifacts/${'A'.repeat(43)}`,
+  passwordProtected: false,
   createdAt: at,
   updatedAt: at,
 };
@@ -84,6 +85,7 @@ function gateway(artifacts: ProfileArtifact[] = [landing, notes, diagram], made 
     sessionArtifacts: refused,
     exportSessionArtifact: refused,
     setSessionArtifactVisibility: refused,
+    setSessionArtifactPassword: refused,
     editSessionArtifact: refused,
     editDeckSlides: refused,
     sessionArtifactVersion: vi.fn(

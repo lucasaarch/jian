@@ -102,9 +102,11 @@ describe('public API contracts', () => {
         'getMcpClientDocument',
         // The sandboxed frame shell holds no content, and a public Artifact proves itself
         // with its unguessable id; a private one never answers here. The same id gives the
-        // files of its latest version, and nothing else of it.
+        // files of its latest version, and nothing else of it. One with a password takes it
+        // here, by a form held to a few tries a minute, and gives a pass only to the right one.
         'artifactFrame',
         'readPublicArtifact',
+        'unlockPublicArtifact',
         'exportPublicArtifact',
         // A link an agent made to one file, proved by its unguessable token alone; expired,
         // revoked or unknown, it answers nothing but 404.

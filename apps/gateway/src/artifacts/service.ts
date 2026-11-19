@@ -56,6 +56,7 @@ import { editedSource } from './edits.js';
 import { exportDeck, exportDocumentPdf, MIME } from './export.js';
 import { createFolder, deleteFolder, listFolders, ownFolder, renameFolder } from './folders.js';
 import { pageProfileArtifacts } from './listing.js';
+import { hashPassword, issuePass, passOpens, passwordMatches } from './password.js';
 import { drawnInTurn, SOURCE_FILES } from './public-files.js';
 import { sheetCsv, sheetXlsx } from './sheet-export.js';
 
@@ -197,6 +198,7 @@ const recordOf = (row: typeof sessionArtifacts.$inferSelect): SessionArtifact =>
     row.visibility === 'public' && row.publicToken
       ? `/v1/public-artifacts/${row.publicToken}`
       : null,
+  passwordProtected: row.publicPassword !== null,
   createdAt: row.createdAt.toISOString(),
   updatedAt: row.updatedAt.toISOString(),
 });
@@ -815,11 +817,13 @@ export class SessionArtifacts {
   }
 
   /**
-   * What the owner changes of one with no new version: who reads it, its name, its pin and its
-   * folder. None of them is a change to what it is, so it keeps its place in the list.
+   * What the owner changes of one with no new version: who reads it, the password its link asks
+   * for, its name, its pin and its folder. None of them is a change to what it is, so it keeps its
+   * place in the list.
    *
    * Public gives it a link made of a new secret; private takes the link away, and making it
-   * public again gives another, so a link that was once shared never comes back to life.
+   * public again gives another, so a link that was once shared never comes back to life. A new
+   * password, or none, ends every pass a reader was given with the old one (password.ts).
    */
   async update(
     profileId: string,
@@ -827,7 +831,8 @@ export class SessionArtifacts {
     artifactId: string,
     input: unknown,
   ): Promise<SessionArtifact> {
-    const { visibility, title, pinned, folderId } = sessionArtifactUpdateSchema.parse(input);
+    const { visibility, password, title, pinned, folderId } =
+      sessionArtifactUpdateSchema.parse(input);
 
     if (visibility === 'public' && this.local) {
       throw new GatewayError(
@@ -835,6 +840,9 @@ export class SessionArtifacts {
         'An Artifact can be made public only on a server gateway. This one runs inside the desktop app, where no link from outside reaches it.',
       );
     }
+    // Hashed before the transaction, which a slow hash would otherwise hold open.
+    const publicPassword =
+      password === undefined ? undefined : password && (await hashPassword(password));
 
     return this.store.transaction(profileId, async (tx) => {
       const current = await this.find(tx, profileId, sessionId, artifactId);
@@ -847,6 +855,7 @@ export class SessionArtifacts {
               publicToken: visibility === 'public' ? randomBytes(32).toString('base64url') : null,
             }
           : {}),
+        ...(publicPassword !== undefined ? { publicPassword } : {}),
         ...(title !== undefined ? { title } : {}),
         ...(pinned !== undefined ? { pinned } : {}),
         ...(folderId !== undefined ? { folderId } : {}),
@@ -932,37 +941,72 @@ export class SessionArtifacts {
 
   /**
    * What a link answers: the latest version of the one Artifact that holds this secret while it
-   * is public, and nothing of the conversation, the profile or any other version.
+   * is public, and nothing of the conversation, the profile or any other version. One with a
+   * password answers nothing of itself, its title included, until `pass` opens it (`unlock`).
    */
-  async published(token: string): Promise<{
-    type: SessionArtifactType;
-    title: string;
-    /** What its page draws: a component compiled. */
-    source: string;
-    /** The source as written, for what its page offers to copy. */
-    written: string;
-  }> {
+  async published(
+    token: string,
+    pass?: string,
+  ): Promise<
+    | { locked: true }
+    | {
+        locked: false;
+        type: SessionArtifactType;
+        title: string;
+        /** What its page draws: a component compiled. */
+        source: string;
+        /** The source as written, for what its page offers to copy. */
+        written: string;
+        /** The pass that opened it, which its downloads carry; none for one without a password. */
+        pass: string | undefined;
+      }
+  > {
     const found = await this.latestPublic(token);
+    if (found.password && !passOpens(token, found.password, pass, this.clock())) {
+      return { locked: true };
+    }
 
     return {
+      locked: false,
       type: found.type,
       title: found.title,
       source: drawn(found.type, found.content),
       written: found.content,
+      pass: found.password ? pass : undefined,
     };
+  }
+
+  /**
+   * A reader's try at a link's password: a pass to it when the password is right, `undefined`
+   * when the link asks for none, and `false` when it is wrong.
+   */
+  async unlock(token: string, password: string): Promise<string | false | undefined> {
+    const found = await this.latestPublic(token);
+    if (!found.password) return undefined;
+
+    return (await passwordMatches(password, found.password))
+      ? issuePass(token, found.password, this.clock())
+      : false;
   }
 
   /**
    * One file of what a link answers, for anyone holding it: the source as written, or a file
    * drawn from it as the owner's are (`drawnFile` above). Only a format its type offers
    * (PUBLIC_ARTIFACT_FORMATS); a drawing one waits for its turn at the browser (public-files.ts).
+   * One with a password asks for a pass to it: the query's, which its page's Download menu
+   * carries, or the cookie's (`cookie`).
    */
   async publicFile(
     token: string,
     input: unknown,
+    cookie?: string,
   ): Promise<{ title: string; format: PublicArtifactFormat; mimeType: string; data: Buffer }> {
-    const { format } = publicArtifactExportQuerySchema.parse(input);
+    const { format, pass } = publicArtifactExportQuerySchema.parse(input);
     const found = await this.latestPublic(token);
+    const kept = found.password;
+    if (kept && ![pass, cookie].some((given) => passOpens(token, kept, given, this.clock()))) {
+      throw new GatewayError(401, 'This Artifact asks for its password.');
+    }
     if (!PUBLIC_ARTIFACT_FORMATS[found.type].includes(format)) {
       throw new GatewayError(400, `This Artifact is not downloaded as ${format.toUpperCase()}.`);
     }
@@ -993,6 +1037,7 @@ export class SessionArtifacts {
           .select({
             type: sessionArtifacts.type,
             title: sessionArtifacts.title,
+            password: sessionArtifacts.publicPassword,
             content: sessionArtifactVersions.content,
           })
           .from(sessionArtifacts)
