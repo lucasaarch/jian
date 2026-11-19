@@ -5,8 +5,8 @@ import type { providers } from './catalog';
 export type ProviderEntry = (typeof providers)[number];
 
 /**
- * What the installation holds for one vendor: a credential of its own, and for OpenAI the
- * ChatGPT sign-in, which is a provider of the same kind beside it. Revoked ones are history.
+ * What runs use of one vendor: its active account, and for OpenAI the active ChatGPT sign-in,
+ * a provider of the same kind beside it. Revoked ones are history.
  */
 export function connectionOf(connected: Provider[], kind: string) {
   const live = connected.filter((provider) => provider.kind === kind && !provider.revokedAt);
@@ -15,26 +15,6 @@ export function connectionOf(connected: Provider[], kind: string) {
     configured: live.find((provider) => provider.authMode !== 'codex'),
     codex: live.find((provider) => provider.authMode === 'codex'),
   };
-}
-
-/** What a row says about the credential in place, in one line. */
-export function credentialLine(provider: {
-  apiKeyEnv?: string;
-  authMode?: string;
-  credential?: string;
-  createdAt: string;
-}) {
-  if (provider.apiKeyEnv) {
-    return `From the environment · ${provider.apiKeyEnv}`;
-  }
-
-  if (provider.authMode === 'codex') {
-    return 'ChatGPT login';
-  }
-
-  const kind = provider.credential === 'subscription' ? 'Subscription token' : 'Key';
-
-  return `${kind} saved on ${date(provider.createdAt)}`;
 }
 
 /** Why a provider's model list may be out of date, or nothing while it is current. */
@@ -54,9 +34,9 @@ export function secretLabel(entry: ProviderEntry) {
 }
 
 /** What becomes of what is entered: it replaces a key from the host, and is never shown again. */
-export function secretHint(entry: ProviderEntry, configured: Provider | undefined) {
-  if (configured?.apiKeyEnv) {
-    return `Currently ${configured.apiKeyEnv}. What you save here replaces it.`;
+export function secretHint(entry: ProviderEntry, environment: Provider | undefined) {
+  if (environment?.apiKeyEnv) {
+    return `Currently ${environment.apiKeyEnv}. What you save here replaces it.`;
   }
   if (entry.kind === 'openai-compatible') {
     return 'Only if your server asks for one. It is never shown again.';
@@ -75,15 +55,16 @@ export function addressHint(entry: ProviderEntry) {
 }
 
 /**
- * The provider to register from what the owner entered, or what is missing. Registering
- * replaces the provider of this vendor, key included; a server of the owner's needs no key.
+ * The account to add from what the owner entered, or what is missing. It joins the vendor's
+ * other accounts and becomes the active one; a server of the owner's needs no key.
  */
 export function providerRequest(
   entry: ProviderEntry,
-  form: { secret: string; baseURL: string; credential: string },
+  form: { secret: string; baseURL: string; credential: string; label?: string },
 ): { error: string } | { input: NewProvider } {
   const secret = form.secret.trim();
   const baseURL = form.baseURL.trim();
+  const label = form.label?.trim();
   const server = entry.kind === 'openai-compatible' || entry.kind === 'ollama';
   if (!secret && !server) return { error: `Enter the ${entry.name} credential.` };
 
@@ -96,6 +77,7 @@ export function providerRequest(
       ...(entry.kind === 'anthropic'
         ? { credential: form.credential as 'key' | 'subscription' }
         : {}),
+      ...(label ? { label } : {}),
     },
   };
 }

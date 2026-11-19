@@ -43,6 +43,8 @@ export const useActivities = () => useSuspenseQuery(queries.activities(useAgentI
 const useModelDefaults = () => useSuspenseQuery(queries.modelDefaults()).data;
 export const useGroups = () => useSuspenseQuery(queries.groups()).data;
 export const useProviders = () => useSuspenseQuery(queries.providers()).data;
+/** Every account of every provider, the ones runs do not use included. */
+export const useProviderAccounts = () => useSuspenseQuery(queries.providerAccounts()).data;
 
 /** Defined once, outside a render, so the combined map keeps its identity between renders. */
 const byProvider = (results: UseQueryResult<ProviderModelList>[]) =>

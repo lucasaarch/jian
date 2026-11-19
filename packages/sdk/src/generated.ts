@@ -724,7 +724,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/providers/{providerId}/models": {
+    "/v1/provider-accounts": {
         parameters: {
             query?: never;
             header?: never;
@@ -732,7 +732,7 @@ export interface paths {
             cookie?: never;
         };
         /** @description Required permission: admin. */
-        get: operations["listProviderModels"];
+        get: operations["listProviderAccounts"];
         put?: never;
         post?: never;
         delete?: never;
@@ -753,6 +753,41 @@ export interface paths {
         post?: never;
         /** @description Required permission: admin. */
         delete: operations["revokeProvider"];
+        options?: never;
+        head?: never;
+        /** @description Required permission: admin. */
+        patch: operations["renameProviderAccount"];
+        trace?: never;
+    };
+    "/v1/providers/{providerId}/activate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Required permission: admin. */
+        post: operations["activateProviderAccount"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/providers/{providerId}/models": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Required permission: admin. */
+        get: operations["listProviderModels"];
+        put?: never;
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -9161,6 +9196,7 @@ export interface operations {
                         credential?: "key" | "subscription";
                         /** Format: uri */
                         baseURL?: string;
+                        label?: string;
                         apiKeyEnv?: string;
                         /** @enum {string} */
                         authMode?: "api" | "codex";
@@ -9170,6 +9206,7 @@ export interface operations {
                         createdAt: string;
                         /** Format: date-time */
                         revokedAt?: string;
+                        active?: boolean;
                     }[];
                 };
             };
@@ -9274,6 +9311,7 @@ export interface operations {
                     credential?: "key" | "subscription";
                     /** Format: uri */
                     baseURL?: string;
+                    label?: string;
                 };
             };
         };
@@ -9292,6 +9330,7 @@ export interface operations {
                         credential?: "key" | "subscription";
                         /** Format: uri */
                         baseURL?: string;
+                        label?: string;
                         apiKeyEnv?: string;
                         /** @enum {string} */
                         authMode?: "api" | "codex";
@@ -9301,6 +9340,499 @@ export interface operations {
                         createdAt: string;
                         /** Format: date-time */
                         revokedAt?: string;
+                        active?: boolean;
+                    };
+                };
+            };
+            /** @description Error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listProviderAccounts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        name: string;
+                        /** @enum {string} */
+                        kind: "openai" | "anthropic" | "google" | "openrouter" | "groq" | "xai" | "ollama" | "openai-compatible";
+                        /** @enum {string} */
+                        credential?: "key" | "subscription";
+                        /** Format: uri */
+                        baseURL?: string;
+                        label?: string;
+                        apiKeyEnv?: string;
+                        /** @enum {string} */
+                        authMode?: "api" | "codex";
+                        /** Format: uuid */
+                        id: string;
+                        /** Format: date-time */
+                        createdAt: string;
+                        /** Format: date-time */
+                        revokedAt?: string;
+                        active?: boolean;
+                    }[];
+                };
+            };
+            /** @description Error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    revokeProvider: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                providerId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        name: string;
+                        /** @enum {string} */
+                        kind: "openai" | "anthropic" | "google" | "openrouter" | "groq" | "xai" | "ollama" | "openai-compatible";
+                        /** @enum {string} */
+                        credential?: "key" | "subscription";
+                        /** Format: uri */
+                        baseURL?: string;
+                        label?: string;
+                        apiKeyEnv?: string;
+                        /** @enum {string} */
+                        authMode?: "api" | "codex";
+                        /** Format: uuid */
+                        id: string;
+                        /** Format: date-time */
+                        createdAt: string;
+                        /** Format: date-time */
+                        revokedAt?: string;
+                        active?: boolean;
+                    };
+                };
+            };
+            /** @description Error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    renameProviderAccount: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                providerId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    label: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        name: string;
+                        /** @enum {string} */
+                        kind: "openai" | "anthropic" | "google" | "openrouter" | "groq" | "xai" | "ollama" | "openai-compatible";
+                        /** @enum {string} */
+                        credential?: "key" | "subscription";
+                        /** Format: uri */
+                        baseURL?: string;
+                        label?: string;
+                        apiKeyEnv?: string;
+                        /** @enum {string} */
+                        authMode?: "api" | "codex";
+                        /** Format: uuid */
+                        id: string;
+                        /** Format: date-time */
+                        createdAt: string;
+                        /** Format: date-time */
+                        revokedAt?: string;
+                        active?: boolean;
+                    };
+                };
+            };
+            /** @description Error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    activateProviderAccount: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                providerId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        name: string;
+                        /** @enum {string} */
+                        kind: "openai" | "anthropic" | "google" | "openrouter" | "groq" | "xai" | "ollama" | "openai-compatible";
+                        /** @enum {string} */
+                        credential?: "key" | "subscription";
+                        /** Format: uri */
+                        baseURL?: string;
+                        label?: string;
+                        apiKeyEnv?: string;
+                        /** @enum {string} */
+                        authMode?: "api" | "codex";
+                        /** Format: uuid */
+                        id: string;
+                        /** Format: date-time */
+                        createdAt: string;
+                        /** Format: date-time */
+                        revokedAt?: string;
+                        active?: boolean;
                     };
                 };
             };
@@ -9424,126 +9956,6 @@ export interface operations {
                         fetchedAt: string;
                         stale: boolean;
                         reason?: string;
-                    };
-                };
-            };
-            /** @description Error */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description Error */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description Error */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description Error */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description Error */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description Error */
-            413: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description Error */
-            429: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description Error */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-        };
-    };
-    revokeProvider: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                providerId: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Success */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        name: string;
-                        /** @enum {string} */
-                        kind: "openai" | "anthropic" | "google" | "openrouter" | "groq" | "xai" | "ollama" | "openai-compatible";
-                        /** @enum {string} */
-                        credential?: "key" | "subscription";
-                        /** Format: uri */
-                        baseURL?: string;
-                        apiKeyEnv?: string;
-                        /** @enum {string} */
-                        authMode?: "api" | "codex";
-                        /** Format: uuid */
-                        id: string;
-                        /** Format: date-time */
-                        createdAt: string;
-                        /** Format: date-time */
-                        revokedAt?: string;
                     };
                 };
             };
@@ -29729,6 +30141,10 @@ export interface operations {
                         subscriptions: {
                             /** @enum {string} */
                             provider: "codex" | "claude";
+                            /** Format: uuid */
+                            providerId?: string;
+                            label?: string;
+                            active?: boolean;
                             /** @enum {string} */
                             status: "available" | "unavailable";
                             fiveHour: {
@@ -29895,6 +30311,10 @@ export interface operations {
                     "application/json": {
                         /** @enum {string} */
                         provider: "codex" | "claude";
+                        /** Format: uuid */
+                        providerId?: string;
+                        label?: string;
+                        active?: boolean;
                         /** @enum {string} */
                         status: "available" | "unavailable";
                         fiveHour: {

@@ -161,14 +161,19 @@ export const providers = pgTable(
     apiKeyEnv: text('api_key_env'),
     // Where an OpenAI-compatible server's API is; null for every vendor with a fixed address.
     baseUrl: text('base_url'),
+    // A row is one account of its vendor; the owner may name it ("Work"). Null only on a row
+    // revoked before accounts existed.
+    label: text('label'),
+    // The account runs use. Several may be live for one vendor and mode; one of them is active.
+    active: boolean('active').notNull().default(true),
     createdAt,
     revokedAt: timestamp('revoked_at', { withTimezone: true }),
   },
   (table) => [
-    // One live provider per vendor: the rule the service enforced by scanning.
-    uniqueIndex('providers_live_per_kind_auth')
+    // One active account per vendor and mode: what runs use is never a choice between two.
+    uniqueIndex('providers_active_per_kind_auth')
       .on(table.kind, sql`coalesce(${table.authMode}, 'api')`)
-      .where(sql`${table.revokedAt} is null`),
+      .where(sql`${table.revokedAt} is null and ${table.active}`),
   ],
 );
 

@@ -94,8 +94,10 @@ function Details({ subscription }: { subscription: SubscriptionUsage }) {
  * come only with its answers, so it appears after a run on it.
  */
 export function SubscriptionMeter() {
+  // The account each provider runs on now: another account's windows are in its row, under
+  // Providers, and would only crowd the bar.
   const usage = (useQuery(queries.subscriptionUsage()).data ?? []).filter(
-    (subscription) => windowsOf(subscription).length > 0,
+    (subscription) => subscription.active !== false && windowsOf(subscription).length > 0,
   );
   if (!usage.length) return null;
 
@@ -103,7 +105,10 @@ export function SubscriptionMeter() {
     <Popover.Root>
       <Popover.Trigger className={`${statusItem} gap-2.5`} aria-label="Subscription limits">
         {usage.map((subscription) => (
-          <Glance key={subscription.provider} subscription={subscription} />
+          <Glance
+            key={subscription.providerId ?? subscription.provider}
+            subscription={subscription}
+          />
         ))}
       </Popover.Trigger>
       <Popover.Portal>
@@ -119,7 +124,10 @@ export function SubscriptionMeter() {
               </p>
             </header>
             {usage.map((subscription) => (
-              <Details key={subscription.provider} subscription={subscription} />
+              <Details
+                key={subscription.providerId ?? subscription.provider}
+                subscription={subscription}
+              />
             ))}
           </Popover.Popup>
         </Popover.Positioner>

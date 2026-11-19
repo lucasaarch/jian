@@ -13,6 +13,8 @@ export const queries = {
     queryOptions({ queryKey: keys.profiles, queryFn: () => panelApi().profiles(), retry: false }),
   providers: () =>
     queryOptions({ queryKey: keys.providers, queryFn: () => panelApi().providers() }),
+  providerAccounts: () =>
+    queryOptions({ queryKey: keys.providerAccounts, queryFn: () => panelApi().providerAccounts() }),
   /**
    * A provider that is down answers with an empty, stale list instead of failing, so one
    * unreachable vendor cannot blank the panel. The gateway caches the answer too; this is only

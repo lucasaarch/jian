@@ -244,9 +244,12 @@ function Figure({ label, children }: { label: string; children: ReactNode }) {
 
 /** How much of each subscription's windows the period's work used, where a provider says. */
 function SubscriptionLimits({ subscriptions }: { subscriptions: ProfileStats['subscriptions'] }) {
+  // The account in use for each; the others are seen in Settings, under Providers.
   const available = subscriptions.filter(
     (subscription) =>
-      subscription.status === 'available' && (subscription.fiveHour || subscription.weekly),
+      subscription.active !== false &&
+      subscription.status === 'available' &&
+      (subscription.fiveHour || subscription.weekly),
   );
   if (available.length === 0) return null;
 
@@ -264,7 +267,7 @@ function SubscriptionLimits({ subscriptions }: { subscriptions: ProfileStats['su
               ] as const);
           return (
             <li
-              key={subscription.provider}
+              key={subscription.providerId ?? subscription.provider}
               aria-label={codex ? 'Codex' : 'Claude'}
               className={`${card} grid gap-3 p-4`}
             >

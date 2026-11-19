@@ -1,12 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import { type Profile, profilePatchSchema, profileSchema } from '@jian/contracts';
-import { and, eq, isNull } from 'drizzle-orm';
 import { type Clock, nowIso } from '../core/clock.js';
 import { assertFound, GatewayError } from '../core/errors.js';
 import { recordEvent } from '../core/events.js';
+import { activeAccountOf } from '../providers/accounts.js';
 import { environmentProvider, type ProviderKind, providerCatalog } from '../providers/catalog.js';
 import type { Queryable, Store } from '../storage/database.js';
-import { providers } from '../storage/schema.js';
 import {
   deleteProfileRow,
   findProfile,
@@ -84,13 +83,9 @@ export class Profiles {
       return;
     }
 
-    const [live] = await reader
-      .select({ id: providers.id })
-      .from(providers)
-      .where(and(eq(providers.id, providerId), isNull(providers.revokedAt)))
-      .limit(1);
-
-    if (!live) {
+    // An account switched away from, or removed, still names its vendor, which runs then use
+    // through its active account.
+    if (!(await activeAccountOf(reader, providerId))) {
       throw new GatewayError(400, 'Provider reference is not configured on this gateway');
     }
   }

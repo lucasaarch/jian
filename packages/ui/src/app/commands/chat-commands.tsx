@@ -2,12 +2,13 @@
 
 import { History, Pencil, Pin, PinOff, Trash2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { RenameDialog } from '../../kit';
 import { conversationName } from '../../lib/conversation-name';
 import { useAgents, useContacts, useProjects, useSessions } from '../../lib/query/agent';
 import { useReconnect } from '../../lib/stores/reconnect';
 import { useParams } from '../../platform/navigation';
 import { useChatActions } from '../chat-actions';
-import { DeleteChatDialog, RenameDialog } from '../chat-row';
+import { DeleteChatDialog } from '../chat-row';
 import { WorktreeLoss } from '../worktree-loss';
 import { type AppCommand, useCommands } from './registry';
 

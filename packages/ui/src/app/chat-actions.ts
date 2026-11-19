@@ -1,12 +1,12 @@
 'use client';
 
 import { GATEWAY_SESSION_CHANNEL } from '@jian/contracts';
+import type { Renaming } from '../kit';
 import type { Contact, Session } from '../lib/api';
 import { renamedContact } from '../lib/conversation-name';
 import { agentPath } from '../lib/navigation';
 import { useActions, useDeleteConversation, useRefresh } from '../lib/workspace';
 import { useParams, useRouter } from '../platform/navigation';
-import type { Renaming } from './chat-row';
 
 /** What is done to a chat from its row and from the palette alike. */
 export function useChatActions(profileId: string) {
