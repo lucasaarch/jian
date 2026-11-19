@@ -56,6 +56,7 @@ type GitHub = Pick<
   | 'webhookSecret'
   | 'appSettingsUrl'
   | 'configureWebhook'
+  | 'installationDelivered'
 >;
 
 type Answer = { rows: GitHubPullRow[]; truncated: boolean } | { failed: string };
@@ -193,7 +194,8 @@ export class PullReviews {
   /**
    * A delivery of the App's webhook. Its signature is checked over the bytes GitHub sent, with
    * the secret this gateway holds, before anything in it is read. Only a pull request newly up
-   * for review starts one, and only as the settings allow.
+   * for review starts one, and only as the settings allow; an approved installation request is
+   * handed to the integration to connect.
    */
   async receive(headers: Record<string, unknown>, body: Buffer): Promise<{ accepted: boolean }> {
     const secret = await this.github.webhookSecret();
@@ -206,6 +208,17 @@ export class PullReviews {
     }
     await this.write(RECEIVED_KEY, new Date(this.clock()).toISOString());
 
+    // The App has one webhook, and GitHub sends it `installation` whatever events were chosen:
+    // that is how an organization owner's approval of a member's request reaches Jian.
+    if (headers['x-github-event'] === 'installation') {
+      let payload: unknown;
+      try {
+        payload = JSON.parse(body.toString('utf8'));
+      } catch {
+        return { accepted: false };
+      }
+      return { accepted: await this.github.installationDelivered(payload) };
+    }
     if (headers['x-github-event'] !== 'pull_request') return { accepted: false };
     let parsed: z.infer<typeof deliverySchema>;
     try {

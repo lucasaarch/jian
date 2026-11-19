@@ -270,16 +270,34 @@ export const githubInstallations = pgTable(
   (table) => [uniqueIndex('github_installations_installation_id').on(table.installationId)],
 );
 
-/** A short-lived, single-use correlation for GitHub's installation authorization callback. */
+/**
+ * A short-lived, single-use correlation for GitHub's callbacks. `installation` installs the App,
+ * `authorization` only signs a GitHub user in to find the installations they reach, and
+ * `registration` creates the App itself.
+ */
 export const githubInstallationStates = pgTable('github_installation_states', {
   hash: text('hash').primaryKey(),
   returnOrigin: text('return_origin').notNull(),
   purpose: text('purpose')
-    .$type<'installation' | 'registration'>()
+    .$type<'installation' | 'authorization' | 'registration'>()
     .notNull()
     .default('installation'),
   expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
   createdAt,
+});
+
+/**
+ * An installation a member of an organization asked its owners for, started from this gateway,
+ * by the GitHub user who asked. When an owner approves, GitHub tells the App's webhook and names
+ * that user; only an approval matching one of these is connected. The App is public, so any
+ * other installation of it never binds here. The user's token is never kept.
+ */
+export const githubInstallationRequests = pgTable('github_installation_requests', {
+  githubUserId: bigint('github_user_id', { mode: 'number' }).primaryKey(),
+  login: text('login').notNull(),
+  returnOrigin: text('return_origin').notNull(),
+  requestedAt: timestamp('requested_at', { withTimezone: true }).notNull(),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
 });
 
 /**

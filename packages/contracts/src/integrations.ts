@@ -26,6 +26,14 @@ export const githubIntegrationStatusSchema = z.strictObject({
     .optional(),
   callbackUrl: z.url().optional(),
   accounts: z.array(githubIntegrationAccountSchema),
+  /**
+   * Installations requested from this gateway by a member who is not an owner of the
+   * organization, still waiting for an owner to approve them. Each is connected by the App's
+   * webhook when that happens; a gateway older than these sends none.
+   */
+  pending: z
+    .array(z.strictObject({ login: z.string().min(1).max(100), requestedAt: z.iso.datetime() }))
+    .optional(),
 });
 
 export const githubInstallSchema = z.strictObject({ url: z.url() });
@@ -39,7 +47,19 @@ export const githubReturnPathSchema = z.enum([
   '/settings/integrations',
   '/settings/integrations/github',
 ]);
-export const githubInstallInputSchema = z.strictObject({ returnPath: githubReturnPathSchema });
+/**
+ * `install` sends the owner to install the App, or to ask an organization's owners for it.
+ * `authorize` only signs them in to GitHub as the App, to connect installations they already
+ * reach: one an owner approved after they asked, or one made on GitHub itself.
+ */
+export const githubInstallModeSchema = z.enum(['install', 'authorize']);
+export const githubInstallInputSchema = z.strictObject({
+  returnPath: githubReturnPathSchema,
+  mode: githubInstallModeSchema.optional(),
+});
+export const githubRegistrationInputSchema = z.strictObject({
+  returnPath: githubReturnPathSchema,
+});
 export const githubManifestSchema = z.strictObject({
   state: z.string().min(1),
   action: z.url(),
