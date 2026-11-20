@@ -14,7 +14,9 @@ import { createApp } from '../src/app.js';
 import { Decisions } from '../src/decisions/service.js';
 import { readRunAction } from '../src/runs/repository.js';
 import { secretForms } from '../src/secrets/forms.js';
-import { secretFieldKey } from '../src/secrets/service.js';
+import { secretFieldKey, takenVariable } from '../src/secrets/service.js';
+import { GATEWAY_SCOPE } from '../src/security/gateway-vault.js';
+import { secretFields } from '../src/storage/schema.js';
 import { Telemetry } from '../src/telemetry/service.js';
 import { mockModel } from './helpers/model.js';
 import { everythingStored, leaksOf } from './helpers/secrets.js';
@@ -312,6 +314,57 @@ describe('the fields of a Secret', () => {
     ).rejects.toMatchObject({ statusCode: 409 });
   });
 
+  it('refuses the same variable to saves made at once, as it refuses one taken', async () => {
+    const { services, agent, other } = await installation();
+    // Each finds the name free before any of them is written: the index decides, and the ones it
+    // refuses are told why, as a save after the first would be.
+    const saves = await Promise.allSettled(
+      [agent, other, agent, other].map((profile) =>
+        services.secrets.create(profile.id, single('ACME_KEY'), byOwner),
+      ),
+    );
+    expect(saves.filter((save) => save.status === 'fulfilled')).toHaveLength(1);
+    for (const save of saves.filter((save) => save.status === 'rejected')) {
+      expect(save.reason).toMatchObject({
+        statusCode: 409,
+        message: 'A Secret already uses the variable ACME_KEY. Choose another name.',
+      });
+    }
+
+    const mine = await services.secrets.create(agent.id, single('ATLAS_KEY'), byOwner);
+    const theirs = await services.secrets.create(other.id, single('VEGA_KEY'), byOwner);
+    const renames = await Promise.allSettled([
+      services.secrets.update(agent.id, mine.id, single('SHARED_KEY'), byOwner),
+      services.secrets.update(other.id, theirs.id, single('SHARED_KEY'), byOwner),
+    ]);
+    expect(renames.filter((rename) => rename.status === 'fulfilled')).toHaveLength(1);
+    expect(renames.find((rename) => rename.status === 'rejected')?.reason).toMatchObject({
+      statusCode: 409,
+      message: 'A Secret already uses the variable SHARED_KEY. Choose another name.',
+    });
+  });
+
+  it('reads the variable a refused insert named from what Postgres said', async () => {
+    const { services, agent } = await installation();
+    await services.secrets.create(agent.id, single('ACME_KEY'), byOwner);
+    const second = await services.secrets.create(agent.id, single('VEGA_KEY'), byOwner);
+    // Past every check, as a writer outside the gateway's lock would be.
+    const refused = await services.store
+      .transaction(GATEWAY_SCOPE, (tx) =>
+        tx.insert(secretFields).values({
+          secretId: second.id,
+          position: 1,
+          label: 'Again',
+          envName: 'ACME_KEY',
+          sensitive: true,
+          vaultKey: secretFieldKey(second.id, 'ACME_KEY'),
+        }),
+      )
+      .catch((error: unknown) => error);
+    expect(takenVariable(refused)).toBe('ACME_KEY');
+    expect(takenVariable(new Error('Something else'))).toBeUndefined();
+  });
+
   it('keeps a value when a field is saved without one, and refuses making a short one sensitive', async () => {
     const { services, agent } = await installation();
     const made = await services.secrets.create(
@@ -548,7 +601,11 @@ async function shellOf(services: Awaited<ReturnType<typeof testServices>>, profi
     false,
     undefined,
     offered.length
-      ? { offered, reveal: (names) => services.secrets.reveal(profileId, names) }
+      ? {
+          offered,
+          reveal: (names) => services.secrets.reveal(profileId, names),
+          check: (names) => services.secrets.assertUsable(profileId, names),
+        }
       : undefined,
   );
   const runCommand = tools.run_command as unknown as {
@@ -831,6 +888,52 @@ describe('a command with a secret in a conversation that asks first', () => {
     }).reportIfDue();
     expect(sent.join('')).toContain('run_command');
     expect(leaks(sent.join(''))).toEqual([]);
+  });
+});
+
+describe('a command with a Secret it may not use, in a conversation that asks first', () => {
+  it('is refused at once, without a card for the owner', async () => {
+    const { services, agent, other } = await installation();
+    await services.secrets.create(agent.id, single('ASSEMBLYAI_API_KEY'), byOwner);
+    await services.secrets.create(other.id, single('VEGA_TOKEN'), byOwner);
+    const session = await services.sessions.createSession(agent.id, {
+      title: 'Captions',
+      channel: 'api',
+    });
+    const marker = join(root, `${agent.id}-asked`);
+    const answers: string[] = [];
+    const runtime = new AgentRuntime(services, () =>
+      mockModel({
+        doGenerate: async (options) => {
+          const prompt = JSON.stringify(options.prompt);
+          if (options.responseFormat?.type === 'json') throw new Error('No card from the model');
+          if (!prompt.includes('"load_tools"')) {
+            return call('load', 'load_tools', { groups: ['shell'] });
+          }
+          if (!prompt.includes('"cmd-1"')) {
+            return call('cmd-1', 'run_command', {
+              command: `touch ${marker}`,
+              secrets: ['VEGA_TOKEN'],
+              timeoutMs: 10_000,
+            });
+          }
+          answers.push(prompt);
+          return stop('Done.');
+        },
+      }),
+    );
+
+    const run = await services.runs.submit(agent.id, session.id, {
+      text: 'Use the token',
+      requestKey: 'refused',
+    });
+    await runtime.execute(agent.id, run.id);
+
+    const done = await services.runs.run(agent.id, run.id);
+    expect(done.status).toBe('completed');
+    expect(done.approval).toBeFalsy();
+    expect(answers.at(-1)).toContain('may not use VEGA_TOKEN');
+    expect(existsSync(marker)).toBe(false);
   });
 });
 

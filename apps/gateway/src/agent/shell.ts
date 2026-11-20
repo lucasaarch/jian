@@ -179,6 +179,8 @@ const RUN_COMMAND = {
 export type SecretAccess = {
   offered: readonly OfferedSecret[];
   reveal: (envNames: readonly string[]) => Promise<Record<string, LentValue>>;
+  /** Refuses as `reveal` does, reading no value. */
+  check: (envNames: readonly string[]) => Promise<void>;
 };
 
 /** What the agent reads of the Secrets it may use: names and what each is for, never a value. */
@@ -208,6 +210,8 @@ export function lentNames(offered: readonly OfferedSecret[], asked: readonly str
 }
 
 const refused = (stderr: string) => ({ exitCode: 126, stdout: '', stderr });
+
+const refusal = (error: unknown) => refused(error instanceof Error ? error.message : 'Not run.');
 
 export function shellTools(
   gitAccess: { readOnly: string[]; writable: string[]; sshCommand?: string } = {
@@ -247,7 +251,7 @@ export function shellTools(
             try {
               lent = await secrets.reveal(input.secrets);
             } catch (error) {
-              return refused(error instanceof Error ? error.message : 'Not run.');
+              return refusal(error);
             }
           }
           // Masked here, before the result leaves the tool, in every form a command could print a
@@ -302,6 +306,14 @@ export function shellTools(
         },
       }),
       {
+        // A Secret this agent may not use would be refused only once the owner approved the
+        // command: it is answered as it would be then, before anyone is asked.
+        refusedBeforeAsking: async (input: unknown) => {
+          const asked = (input as { secrets?: unknown } | null)?.secrets;
+          if (!Array.isArray(asked) || !asked.length) return undefined;
+          if (!secrets) return refused('Not run: this run has no Secrets to use.');
+          return secrets.check(asked.map(String)).then(() => undefined, refusal);
+        },
         // The card names every variable the command gets, which the call does not: naming one
         // lends its whole Secret.
         cardInput: async (input: unknown) => {

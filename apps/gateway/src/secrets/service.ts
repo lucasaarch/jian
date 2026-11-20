@@ -49,6 +49,36 @@ const notYours = () =>
 const clash = (envName: string) =>
   new GatewayError(409, `A Secret already uses the variable ${envName}. Choose another name.`);
 
+/** What Postgres says when `secret_fields.env_name` refuses a row: `Key (env_name)=(NAME) …`. */
+const TAKEN = /^Key \(env_name\)=\((.+)\) already exists\.$/;
+
+/**
+ * The variable a refused insert named, when its unique index refused it (23505). The driver's
+ * error reaches here wrapped by drizzle, so the whole cause chain is read.
+ */
+export function takenVariable(error: unknown): string | undefined {
+  for (let cursor = error; cursor instanceof Error; cursor = cursor.cause) {
+    const { code, detail } = cursor as { code?: unknown; detail?: unknown };
+    if (code !== '23505' || typeof detail !== 'string') continue;
+    const name = TAKEN.exec(detail)?.[1];
+    if (name) return name;
+  }
+  return undefined;
+}
+
+/**
+ * Every save runs under the gateway's lock, so `assertFree` sees each name already committed.
+ * Should two saves still meet at the index, the one it refuses is told the same as any other.
+ */
+async function saidAsClash<T>(work: () => Promise<T>): Promise<T> {
+  try {
+    return await work();
+  } catch (error) {
+    const name = takenVariable(error);
+    throw name ? clash(name) : error;
+  }
+}
+
 /** A list of origins, each once: two pages of one site are one place to use a Secret. */
 const sitesOf = (sites: readonly string[]) => [...new Set(sites)];
 
@@ -146,51 +176,53 @@ export class Secrets {
       ...new Set([profileId, ...(by.kind === 'owner' ? (asked.profileIds ?? []) : [])]),
     ];
 
-    return this.store.transaction(GATEWAY_SCOPE, async (tx) => {
-      await this.assertAgents(tx, agents, profileId);
-      await this.assertFree(
-        tx,
-        asked.fields.map((field) => field.envName),
-      );
-      const now = new Date(this.clock());
-      const [made] = await tx
-        .insert(secretEntries)
-        .values({
-          title: asked.title,
-          description: asked.description || null,
-          sites: sitesOf(asked.sites ?? []),
-          createdByProfileId: by.kind === 'agent' ? by.profileId : null,
-          createdAt: now,
-          updatedAt: now,
-        })
-        .returning({ id: secretEntries.id });
-      if (!made) throw new Error('The Secret was not saved');
+    return saidAsClash(() =>
+      this.store.transaction(GATEWAY_SCOPE, async (tx) => {
+        await this.assertAgents(tx, agents, profileId);
+        await this.assertFree(
+          tx,
+          asked.fields.map((field) => field.envName),
+        );
+        const now = new Date(this.clock());
+        const [made] = await tx
+          .insert(secretEntries)
+          .values({
+            title: asked.title,
+            description: asked.description || null,
+            sites: sitesOf(asked.sites ?? []),
+            createdByProfileId: by.kind === 'agent' ? by.profileId : null,
+            createdAt: now,
+            updatedAt: now,
+          })
+          .returning({ id: secretEntries.id });
+        if (!made) throw new Error('The Secret was not saved');
 
-      await tx.insert(secretFields).values(
-        asked.fields.map((field, position) => ({
-          secretId: made.id,
-          position,
-          label: field.label,
-          envName: field.envName,
-          sensitive: field.sensitive,
-          vaultKey: secretFieldKey(made.id, field.envName),
-        })),
-      );
-      for (const field of asked.fields) {
-        // The schema refused a field with no value on a create.
-        await this.vault.put(secretFieldKey(made.id, field.envName), field.value as string, tx);
-      }
-      await tx.insert(secretAgents).values(
-        agents.map((agent) => ({
-          secretId: made.id,
-          profileId: agent,
-          grantedByProfileId: by.kind === 'agent' ? by.profileId : null,
-          grantedAt: now,
-        })),
-      );
+        await tx.insert(secretFields).values(
+          asked.fields.map((field, position) => ({
+            secretId: made.id,
+            position,
+            label: field.label,
+            envName: field.envName,
+            sensitive: field.sensitive,
+            vaultKey: secretFieldKey(made.id, field.envName),
+          })),
+        );
+        for (const field of asked.fields) {
+          // The schema refused a field with no value on a create.
+          await this.vault.put(secretFieldKey(made.id, field.envName), field.value as string, tx);
+        }
+        await tx.insert(secretAgents).values(
+          agents.map((agent) => ({
+            secretId: made.id,
+            profileId: agent,
+            grantedByProfileId: by.kind === 'agent' ? by.profileId : null,
+            grantedAt: now,
+          })),
+        );
 
-      return this.one(tx, profileId, made.id);
-    });
+        return this.one(tx, profileId, made.id);
+      }),
+    );
   }
 
   /**
@@ -205,32 +237,34 @@ export class Secrets {
   ): Promise<Secret> {
     const asked = secretUpdateSchema.parse(input);
 
-    return this.store.transaction(GATEWAY_SCOPE, async (tx) => {
-      const current = await this.one(tx, profileId, secretId);
-      this.assertMaker(current, by);
-      if (asked.profileIds && by.kind === 'agent') {
-        throw new GatewayError(403, 'Only the owner chooses which agents use a Secret.');
-      }
-      if (asked.profileIds) await this.assertAgents(tx, asked.profileIds);
-      const now = new Date(this.clock());
+    return saidAsClash(() =>
+      this.store.transaction(GATEWAY_SCOPE, async (tx) => {
+        const current = await this.one(tx, profileId, secretId);
+        this.assertMaker(current, by);
+        if (asked.profileIds && by.kind === 'agent') {
+          throw new GatewayError(403, 'Only the owner chooses which agents use a Secret.');
+        }
+        if (asked.profileIds) await this.assertAgents(tx, asked.profileIds);
+        const now = new Date(this.clock());
 
-      if (asked.fields) await this.replaceFields(tx, secretId, asked.fields);
-      await tx
-        .update(secretEntries)
-        .set({
-          ...(asked.title !== undefined ? { title: asked.title } : {}),
-          ...(asked.description !== undefined ? { description: asked.description || null } : {}),
-          ...(asked.sites !== undefined ? { sites: sitesOf(asked.sites) } : {}),
-          updatedAt: now,
-        })
-        .where(eq(secretEntries.id, secretId));
-      if (asked.profileIds) await this.replaceGrants(tx, secretId, asked.profileIds, now);
+        if (asked.fields) await this.replaceFields(tx, secretId, asked.fields);
+        await tx
+          .update(secretEntries)
+          .set({
+            ...(asked.title !== undefined ? { title: asked.title } : {}),
+            ...(asked.description !== undefined ? { description: asked.description || null } : {}),
+            ...(asked.sites !== undefined ? { sites: sitesOf(asked.sites) } : {}),
+            updatedAt: now,
+          })
+          .where(eq(secretEntries.id, secretId));
+        if (asked.profileIds) await this.replaceGrants(tx, secretId, asked.profileIds, now);
 
-      // Read as an agent that still has it: the one it was changed from may have handed it on.
-      const [after] = await this.listOf(tx, secretId);
-      if (!after) throw notHere();
-      return after;
-    });
+        // Read as an agent that still has it: the one it was changed from may have handed it on.
+        const [after] = await this.listOf(tx, secretId);
+        if (!after) throw notHere();
+        return after;
+      }),
+    );
   }
 
   /** Gone for every agent that could use it, every value with it. */
@@ -314,27 +348,8 @@ export class Secrets {
    * anything runs.
    */
   async reveal(profileId: string, envNames: readonly string[]): Promise<Record<string, LentValue>> {
-    const wanted = [...new Set(envNames)];
-    if (!wanted.length) return {};
-    const allowed = await this.store.db
-      .select({ envName: secretFields.envName, secretId: secretFields.secretId })
-      .from(secretFields)
-      .innerJoin(
-        secretAgents,
-        and(
-          eq(secretAgents.secretId, secretFields.secretId),
-          eq(secretAgents.profileId, profileId),
-        ),
-      )
-      .where(inArray(secretFields.envName, wanted));
-    const found = new Set(allowed.map((row) => row.envName));
-    const refused = wanted.filter((name) => !found.has(name));
-    if (refused.length) {
-      throw new GatewayError(
-        403,
-        `Not run: this agent may not use ${refused.join(', ')}. Name a variable listed in run_command's description. The owner adds Secrets in this agent's settings, under Secrets.`,
-      );
-    }
+    const allowed = await this.usableFields(profileId, envNames);
+    if (!allowed.length) return {};
 
     const ids = [...new Set(allowed.map((row) => row.secretId))];
     const fields = await this.store.db
@@ -357,6 +372,40 @@ export class Secrets {
       .where(inArray(secretEntries.id, ids));
 
     return values;
+  }
+
+  /**
+   * Refuses, as `reveal` would, a variable this agent may not use, without reading any value: a
+   * command that would be refused is answered at once, not after the owner approved it.
+   */
+  async assertUsable(profileId: string, envNames: readonly string[]): Promise<void> {
+    await this.usableFields(profileId, envNames);
+  }
+
+  /** The fields of these variables this agent may use; any other one refuses them all. */
+  private async usableFields(profileId: string, envNames: readonly string[]) {
+    const wanted = [...new Set(envNames)];
+    if (!wanted.length) return [];
+    const allowed = await this.store.db
+      .select({ envName: secretFields.envName, secretId: secretFields.secretId })
+      .from(secretFields)
+      .innerJoin(
+        secretAgents,
+        and(
+          eq(secretAgents.secretId, secretFields.secretId),
+          eq(secretAgents.profileId, profileId),
+        ),
+      )
+      .where(inArray(secretFields.envName, wanted));
+    const found = new Set(allowed.map((row) => row.envName));
+    const refused = wanted.filter((name) => !found.has(name));
+    if (refused.length) {
+      throw new GatewayError(
+        403,
+        `Not run: this agent may not use ${refused.join(', ')}. Name a variable listed in run_command's description. The owner adds Secrets in this agent's settings, under Secrets.`,
+      );
+    }
+    return allowed;
   }
 
   /**
