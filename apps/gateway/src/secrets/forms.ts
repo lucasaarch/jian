@@ -5,9 +5,9 @@
 const SHORTEST = 8;
 
 /**
- * Every form of a command secret that output is masked for: the value as typed, URL-encoded (a
- * query string, a form body), and base64 and base64url, the way an `Authorization: Basic` header
- * or a debug dump carries it.
+ * Every form of a Secret's sensitive value that output is masked for: the value as typed,
+ * URL-encoded (a query string, a form body), and base64 and base64url, the way an
+ * `Authorization: Basic` header or a debug dump carries it.
  *
  * Base64 of a value inside a longer text depends on where the value starts in it, by its offset
  * modulo three, and the characters at either edge also hold bits of the bytes around it. So each

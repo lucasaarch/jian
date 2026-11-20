@@ -114,7 +114,7 @@ it('lists each Secret with its fields, who made it and who shares it', async () 
 it('adds a Secret with a login and a password', async () => {
   const createSecret = vi.fn(async () => mail);
   const { host } = await render({ createSecret });
-  expect(host.textContent).toContain('No secrets yet');
+  expect(host.textContent).toContain('No Secrets yet');
 
   await click(button('Add'));
   const dialog = lastDialog();
@@ -132,7 +132,7 @@ it('adds a Secret with a login and a password', async () => {
   const password = inputs(dialog, 'Value')[1];
   expect(password?.type).toBe('password');
   await type(password, PASSWORD);
-  await click(button('Add secret', dialog));
+  await click(button('Add Secret', dialog));
 
   expect(createSecret).toHaveBeenCalledWith(profile.id, {
     title: 'Mail account',
@@ -184,10 +184,10 @@ it('shows why a site is refused on its row, and sends only its origin', async ()
   await type(site, 'http://mail.example.com');
 
   expect(site?.closest('li')?.textContent).toContain('Use an https address');
-  expect(button('Add secret', dialog)?.disabled).toBe(true);
+  expect(button('Add Secret', dialog)?.disabled).toBe(true);
 
   await type(site, 'https://mail.example.com/login?next=1');
-  await click(button('Add secret', dialog));
+  await click(button('Add Secret', dialog));
   expect(createSecret).toHaveBeenCalledWith(
     profile.id,
     expect.objectContaining({ sites: ['https://mail.example.com'] }),
@@ -236,7 +236,7 @@ it('deletes once the title is typed', async () => {
 
   await click(button('Delete Mail account'));
   const dialog = lastDialog();
-  const confirm = button('Delete secret', dialog);
+  const confirm = button('Delete Secret', dialog);
   expect(confirm?.disabled).toBe(true);
   await type(dialog?.querySelector('input'), mail.title);
   await click(confirm);

@@ -13,6 +13,40 @@ export const control =
 export const bareInput =
   'h-full min-w-0 flex-1 rounded-none border-0 bg-transparent p-0 text-ink shadow-none outline-none placeholder:text-muted/70 focus:border-0 focus:bg-transparent focus:shadow-none';
 
+const labelText = 'text-[13px] font-medium text-ink';
+
+/**
+ * A field's label over what has no single control of its own, such as a list of rows: the same
+ * words a `TextField`'s label has. Rows name it with `aria-labelledby` and its `id`.
+ */
+export function FieldLabel({ id, children }: { id?: string; children: React.ReactNode }) {
+  return (
+    <span id={id} className={labelText}>
+      {children}
+    </span>
+  );
+}
+
+/**
+ * The line under a field: a hint, or (`bad`) what is wrong with what was typed. Tie it to its
+ * control with `aria-describedby` and its `id`.
+ */
+export function FieldNote({
+  id,
+  tone = 'muted',
+  children,
+}: {
+  id?: string;
+  tone?: 'muted' | 'bad';
+  children: React.ReactNode;
+}) {
+  return (
+    <small id={id} className={`text-xs leading-snug ${tone === 'bad' ? 'text-bad' : 'text-muted'}`}>
+      {children}
+    </small>
+  );
+}
+
 /** A labelled field of the kit; the hint is tied to the control, for whatever reads it out. */
 export function Labelled({
   label,
@@ -28,15 +62,11 @@ export function Labelled({
   return (
     // Never wider than the form it is in, whatever its control holds.
     <div className="grid min-w-0 grid-cols-1 gap-1.5">
-      <label htmlFor={id} className="text-[13px] font-medium text-ink">
+      <label htmlFor={id} className={labelText}>
         {label}
       </label>
       {children}
-      {hint && (
-        <small id={`${id}-hint`} className="text-xs leading-snug text-muted">
-          {hint}
-        </small>
-      )}
+      {hint && <FieldNote id={`${id}-hint`}>{hint}</FieldNote>}
     </div>
   );
 }

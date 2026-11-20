@@ -1370,7 +1370,7 @@ export const TOOL_GROUPS = {
     tools: ['run_command'],
   },
   secrets: {
-    summary: 'list, save, delete and share the Secrets your commands and logins use',
+    summary: 'list, save, delete and share the Secrets your commands use',
     tools: ['list_secrets', 'save_secret', 'delete_secret', 'share_secret'],
   },
   remote: {

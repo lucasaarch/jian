@@ -130,7 +130,7 @@ function SecretForm({ onOpenChange, profileId, editing, busy, add, change }: For
           Cancel
         </Action>
         <Action tone="primary" type="submit" busy={busy} disabled={!canSave}>
-          {editing ? 'Save' : 'Add secret'}
+          {editing ? 'Save' : 'Add Secret'}
         </Action>
       </OverlayActions>
     </form>

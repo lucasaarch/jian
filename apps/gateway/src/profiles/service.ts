@@ -27,7 +27,7 @@ export class Profiles {
    * Run ahead of every delete, in the order wired, inside the same transaction the row dies in.
    * Wired from outside — `Profiles` does not know `Channels` exists, only that something may need
    * telling before a profile it is watching disappears (a live WhatsApp socket, an open webhook,
-   * a command secret only it could use).
+   * a Secret only it could use).
    */
   private beforeDelete: ((profileId: string, tx: Queryable) => Promise<void>)[] = [];
 

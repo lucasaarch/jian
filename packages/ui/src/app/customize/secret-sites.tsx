@@ -2,7 +2,7 @@
 
 import { Plus, Trash2 } from 'lucide-react';
 import { useId, useRef } from 'react';
-import { Action, iconButton, RowInput } from '../../kit';
+import { Action, FieldLabel, FieldNote, iconButton, RowInput } from '../../kit';
 import { MAX_SITES } from './secret-form';
 
 /**
@@ -34,9 +34,7 @@ export function SecretSites({
 
   return (
     <div className="grid gap-2">
-      <span id={`${ids}-label`} className="text-[13px] font-medium text-ink">
-        Sites
-      </span>
+      <FieldLabel id={`${ids}-label`}>Sites</FieldLabel>
       {sites.length > 0 && (
         <ul className="grid gap-2">
           {sites.map((site, index) => {
@@ -70,9 +68,9 @@ export function SecretSites({
                   </button>
                 </div>
                 {problem && (
-                  <small id={`${ids}-${key}-problem`} className="text-xs leading-snug text-bad">
+                  <FieldNote id={`${ids}-${key}-problem`} tone="bad">
                     {problem}
-                  </small>
+                  </FieldNote>
                 )}
               </li>
             );
