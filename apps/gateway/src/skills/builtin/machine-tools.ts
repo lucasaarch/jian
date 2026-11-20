@@ -151,10 +151,10 @@ const MANAGING = `Where you may keep Secrets, they are in the \`secrets\` tool g
 
 - \`list_secrets\` shows the Secrets you may use, with their fields. Only a field that is not
   sensitive shows its value.
-- \`save_secret\` makes a Secret only you may use, from a value you already have: one the owner
-  typed to you in this conversation. A sensitive value is masked from that call on and a command
-  can use it at once. Never save a value you copied from output: a masked one, shown as
-  [REDACTED], is refused. With \`secretId\` it changes one you made: \`fields\` replace its list,
+- \`save_secret\` makes a Secret only you may use, from a value you already have, such as one the
+  owner typed to you or a key you just made on a site. A sensitive value is masked from that call
+  on and a command can use it at once. A value that came back masked, shown as [REDACTED], is
+  refused. With \`secretId\` it changes one you made: \`fields\` replace its list,
   and a field without \`value\` keeps the one it has.
 - \`delete_secret\` deletes a Secret you made. One the owner or another agent made, you can use
   and not change.

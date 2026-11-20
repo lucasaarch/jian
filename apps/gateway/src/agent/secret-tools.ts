@@ -4,8 +4,8 @@ import { GatewayError } from '../core/errors.js';
 import type { SecretActor, Secrets } from '../secrets/service.js';
 
 /**
- * The agent's own hand on the installation's Secrets: list the ones it may use, save one the
- * owner gave it in conversation, delete one it made, and let another agent use one.
+ * The agent's own hand on the installation's Secrets: list the ones it may use, save a value it
+ * already has, delete one it made, and let another agent use one.
  *
  * None of them is an action that asks (`ACTION_KINDS`): a Secret only reaches a command through
  * `run_command`, which asks where the conversation does. So they are offered only where someone
@@ -161,7 +161,7 @@ export function secretTools({
 
     save_secret: tool({
       description:
-        'Save a password, API key or login the owner gave you as a Secret, so your commands get it through run_command’s `secrets` instead of its text. Mark every password, key and token sensitive: it is masked in everything you see and is never shown again. Never save a value that came back as [REDACTED]. With `secretId`, change a Secret you made; one the owner or another agent made is theirs. Only you may use what you save, until you share it.',
+        'Save a password, API key or login you already have as a Secret, such as one the owner typed to you or a key you just made on a site, so your commands get it through run_command’s `secrets` instead of its text. Mark every password, key and token sensitive: it is masked in everything you see and is never shown again. Never save a value that came back as [REDACTED]. With `secretId`, change a Secret you made; one the owner or another agent made is theirs. Only you may use what you save, until you share it.',
       inputSchema: anySaveInput,
       execute: async (input: unknown) => {
         // Before anything checks it: a refusal may still carry the value back up.
@@ -186,7 +186,7 @@ export function secretTools({
 
     share_secret: tool({
       description:
-        'Let another agent of this installation use a Secret you may use; find its id with list_agents. It is recorded that you shared it. Share one only when the owner asked for it.',
+        'Let another agent of this installation use a Secret you may use; find its id with list_agents. It is recorded that you shared it, and the owner is not asked. Share one when another agent asks you for it for a job the owner gave it, and never pass on one it does not need.',
       inputSchema: z.object({ secretId: z.uuid(), agentId: z.uuid() }),
       execute: async ({ secretId, agentId }) =>
         told(() => secrets.share(profileId, secretId, agentId)),
