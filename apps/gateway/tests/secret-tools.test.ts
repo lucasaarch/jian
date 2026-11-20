@@ -241,6 +241,68 @@ describe('the agent keeping Secrets', () => {
     }
   });
 
+  /**
+   * One save the SDK could not take as it was written, and every place the run keeps or looks
+   * back on: none of them may hold `value`.
+   */
+  async function savedOnce(input: string, value: string) {
+    const { services, atlas } = await installation();
+    const chat = await session(services, atlas.id, 'full');
+    const looked: unknown[] = [];
+    const watched = {
+      ...services,
+      learning: {
+        consider: async (_run: unknown, turn: unknown) => {
+          looked.push(turn);
+        },
+      },
+    } as Services;
+
+    const { run } = await turn(watched, atlas.id, chat.id, [
+      loading('secrets'),
+      () => written('save', 'save_secret', input),
+    ]);
+
+    expect(run.status).toBe('completed');
+    expect(await services.secrets.list(atlas.id)).toEqual([]);
+    const stored = [
+      JSON.stringify(looked),
+      JSON.stringify(await services.sessions.timeline(atlas.id, chat.id)),
+      await everythingStored(services),
+    ].join('\n');
+    expect(stored).toContain('save_secret');
+    expect(leaksOf(value)(stored)).toEqual([]);
+  }
+
+  it('masks a value cut off before its closing quote', async () => {
+    const cut = 'sk_synthetic_cut_0123456789';
+    await savedOnce(
+      `{"title":"Acme","fields":[{"label":"Key","envName":"ACME_KEY","sensitive":true,"value":"${cut}`,
+      cut,
+    );
+  });
+
+  it('masks a value cut off right after a backslash', async () => {
+    const cut = 'sk_synthetic_slash_0123456789';
+    await savedOnce(
+      `{"title":"Acme","fields":[{"label":"Key","envName":"ACME_KEY","sensitive":true,"value":"${cut}\\`,
+      cut,
+    );
+  });
+
+  it('masks a value in fields written as a string of JSON', async () => {
+    const nested = 'sk_synthetic_nested_0123456789';
+    await savedOnce(
+      JSON.stringify({
+        title: 'Acme',
+        fields: JSON.stringify([
+          { label: 'Key', envName: 'ACME_KEY', sensitive: true, value: nested },
+        ]),
+      }),
+      nested,
+    );
+  });
+
   it("lets an agent delete its own Secret but not the owner's", async () => {
     const { services, atlas } = await installation();
     const chat = await session(services, atlas.id, 'full');
