@@ -39,7 +39,7 @@ it('carries every command secret across with its value, variable and agents', as
     VALUES ('ASSEMBLYAI_API_KEY', ${atlas.id}), ('ASSEMBLYAI_API_KEY', ${vega.id})`);
   await services.gatewayVault.put('command:ASSEMBLYAI_API_KEY', VALUE);
 
-  await run(db, '0117_secrets.sql');
+  await run(db, '0118_secrets.sql');
 
   const [secret, ...more] = await services.secrets.list(atlas.id);
   expect(more).toEqual([]);
