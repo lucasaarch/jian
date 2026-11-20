@@ -66,35 +66,49 @@ const anySaveInput = jsonSchema<unknown>(
   },
 );
 
-/** A `"value": "…"` of a call's input that is not even JSON, as it was written. */
-const WRITTEN_VALUE = /"value"\s*:\s*"((?:[^"\\]|\\.)*)"/g;
+/**
+ * A `"value": "…"` of a call's input that is not even JSON, as it was written: closed or not,
+ * since a call cut off mid-value still carries the value, and cut after a backslash too.
+ */
+const WRITTEN_VALUE = /"value"\s*:\s*"((?:[^"\\]|\\.)*)\\?(?:"|$)/g;
+
+const writtenValues = (text: string): string[] =>
+  [...text.matchAll(WRITTEN_VALUE)].flatMap(([, written]) => {
+    try {
+      return [JSON.parse(`"${written}"`) as string];
+    } catch {
+      return written ? [written] : [];
+    }
+  });
 
 /**
  * Every value a save carries that may be sensitive, which the run masks before the call is
- * recorded. Fail-safe: a value is kept out unless its field says `sensitive: false` in so many
- * words, so a call of the wrong shape (`"true"`, no flag at all) is masked too. Input the SDK
- * could not parse arrives as its text, and its values are read from that.
+ * recorded. Fail-safe: every string under a `value` key, at any depth, is kept out unless its
+ * sibling `sensitive` is `false` in so many words, so a call of the wrong shape (`"true"`, no flag
+ * at all, fields where they do not belong) is masked too. A string may be JSON in turn (`fields`
+ * written as a string), and input that is not JSON at all has its values read from its text.
  */
 const sensitiveValues = (input: unknown): string[] => {
   if (typeof input === 'string') {
+    let parsed: unknown;
     try {
-      return sensitiveValues(JSON.parse(input));
+      parsed = JSON.parse(input);
     } catch {
-      return [...input.matchAll(WRITTEN_VALUE)].flatMap(([, written]) => {
-        try {
-          return [JSON.parse(`"${written}"`) as string];
-        } catch {
-          return written ? [written] : [];
-        }
-      });
+      return writtenValues(input);
     }
+    // A string parsed from a string is shorter than it, so this ends.
+    return sensitiveValues(parsed);
   }
-  const fields = (input as { fields?: unknown } | null)?.fields;
-  if (!Array.isArray(fields)) return [];
-  return fields.flatMap((field) => {
-    const { sensitive, value } = (field ?? {}) as { sensitive?: unknown; value?: unknown };
-    return sensitive !== false && typeof value === 'string' && value ? [value] : [];
-  });
+  if (Array.isArray(input)) return input.flatMap(sensitiveValues);
+  if (!input || typeof input !== 'object') return [];
+  const { sensitive, value, ...rest } = input as Record<string, unknown>;
+  const own =
+    typeof value === 'string'
+      ? sensitive !== false && value
+        ? [value]
+        : []
+      : sensitiveValues(value);
+  return [...own, ...Object.values(rest).flatMap(sensitiveValues)];
 };
 
 /**
