@@ -27,7 +27,7 @@ import {
 } from 'ai';
 import { z } from 'zod';
 import { isChatChannel } from '../channels/kinds.js';
-import { findContactBySession } from '../channels/repository.js';
+import { findContactBySession, sessionContact } from '../channels/repository.js';
 import { fitPrompt, promptTokens, tokenCounter, truncatePrompt } from '../context/budget.js';
 import { withTurnNote } from '../context/build.js';
 import {
@@ -977,13 +977,17 @@ export class AgentRuntime {
       const secretService =
         !run.subagent && !learning && !session.remoteMachineId ? this.services.secrets : undefined;
       // A Secret reaches a command only through `run_command`, which asks where the conversation
-      // does: an agent keeps or hands on Secrets only where someone could approve that. A chat's
-      // contact the owner did not let approve, or an email's sender, could otherwise have it
-      // keep whatever they send it.
+      // does: an agent keeps or hands on Secrets only where someone could approve that. A contact
+      // the owner did not let approve (an email's sender, an API Server app's user, a chat's
+      // contact) could otherwise have it keep whatever they send it. The owner's own `api`
+      // sessions have no contact, and keep them.
+      const outsider = secretService
+        ? await sessionContact(this.services.store.db, profileId, session.id)
+        : null;
       const keepsSecrets =
         secretService !== undefined &&
-        ((!isChatChannel(session.channel) && session.channel !== 'email') ||
-          (await this.approvers(run, session)).contactCanApprove);
+        session.channel !== 'email' &&
+        (outsider ? outsider.canApprove : !isChatChannel(session.channel));
       const commandSecrets = secretService
         ? await secretAccess(secretService, profileId, keepsSecrets)
         : undefined;
