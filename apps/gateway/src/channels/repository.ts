@@ -294,6 +294,27 @@ export async function findContactBySession(
   return row ? toContact(row.contact, row.type) : null;
 }
 
+/**
+ * Whether a session is a conversation with someone other than the owner, on any channel,
+ * including an app's user on the API Server, whose session has the `api` channel the owner's own
+ * do. Unlike `findContactBySession`, a disconnected channel still counts: the conversation stays
+ * theirs. Its contact may approve only while that channel is connected.
+ */
+export async function sessionContact(
+  db: Queryable,
+  profileId: string,
+  sessionId: string,
+): Promise<{ canApprove: boolean } | null> {
+  const [row] = await db
+    .select({ canApprove: contacts.canApprove, revokedAt: channels.revokedAt })
+    .from(contacts)
+    .innerJoin(channels, eq(channels.id, contacts.channelId))
+    .where(and(eq(contacts.profileId, profileId), eq(contacts.sessionId, sessionId)))
+    .limit(1);
+
+  return row ? { canApprove: row.canApprove && !row.revokedAt } : null;
+}
+
 export async function findContact(db: Queryable, id: string): Promise<ContactRecord | null> {
   const [row] = await contactQuery(db).where(eq(contacts.id, id)).limit(1);
 

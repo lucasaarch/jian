@@ -356,7 +356,11 @@ describe('where the Secret tools are offered', () => {
         },
       },
     );
-    expect(await offered(services, atlas.id, own.id, child.id)).toEqual([]);
+    // The run reached the model and loaded the group: the Secret tools are absent, not unasked.
+    const helper = await turn(services, atlas.id, own.id, [loading('secrets')], child.id);
+    expect(helper.tools).toContain('load_tools');
+    expect(helper.results.has('load')).toBe(true);
+    expect(helper.tools.filter((name) => SECRET_TOOLS.includes(name))).toEqual([]);
 
     // A WhatsApp contact the owner did not let approve could otherwise have the agent keep, or
     // hand to another agent, whatever they send it.
@@ -388,5 +392,35 @@ describe('where the Secret tools are offered', () => {
       .set({ canApprove: true })
       .where(eq(contacts.id, contactId));
     expect(await offered(services, atlas.id, whatsapp.id)).toEqual(SECRET_TOOLS);
+  });
+
+  it('offers none to a contact of the API Server, and keeps them in the owner’s API sessions', async () => {
+    const { services, atlas } = await installation();
+    const channelId = randomUUID();
+    await services.store.db.insert(channels).values({
+      id: channelId,
+      profileId: atlas.id,
+      type: 'api',
+      webhookTokenHash: 'synthetic-hash',
+    });
+    // An app's user on the API Server: their conversation is an `api` session, like the owner's.
+    const outside = await services.sessions.createSession(atlas.id, { channel: 'api' });
+    await services.store.db.insert(contacts).values({
+      id: randomUUID(),
+      profileId: atlas.id,
+      channelId,
+      scope: 'direct',
+      chatId: 'app-user-vega',
+      actorId: 'app-user-vega',
+      status: 'approved',
+      canApprove: false,
+      sessionId: outside.id,
+    });
+    const contact = await turn(services, atlas.id, outside.id, [loading('secrets')]);
+    expect(contact.results.has('load')).toBe(true);
+    expect(contact.tools.filter((name) => SECRET_TOOLS.includes(name))).toEqual([]);
+
+    const owner = await services.sessions.createSession(atlas.id, { channel: 'api' });
+    expect(await offered(services, atlas.id, owner.id)).toEqual(SECRET_TOOLS);
   });
 });
