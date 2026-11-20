@@ -179,6 +179,15 @@ export type OwnerGate = {
 export const asksOwner = (definition: unknown, input: unknown): Promise<boolean> =>
   (definition as Partial<OwnerGate>).asksOwner?.(input) ?? Promise.resolve(false);
 
+/**
+ * What a call is answered with instead of asking the owner, when its tool knows now that it would
+ * refuse it once approved; undefined to ask. Only the answer is given: nothing of the call runs.
+ */
+export const refusedBeforeAsking = (definition: unknown, input: unknown): Promise<unknown> =>
+  (
+    definition as { refusedBeforeAsking?: (input: unknown) => Promise<unknown> }
+  ).refusedBeforeAsking?.(input) ?? Promise.resolve(undefined);
+
 /** The input the card is written from; the call's own when the tool adds nothing, or fails to. */
 export const cardInput = (definition: unknown, input: unknown): Promise<unknown> =>
   (definition as Partial<OwnerGate>).cardInput?.(input).catch(() => input) ??

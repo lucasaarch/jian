@@ -166,6 +166,7 @@ import {
   groupMates,
   MACHINE_FILES_SUMMARY,
   profileTools,
+  refusedBeforeAsking,
   skillFor,
   type ToolServices,
 } from './tools.js';
@@ -282,7 +283,10 @@ export type RuntimeServices = ToolServices & {
    * The installation's Secrets for agents' commands: what a run offers, lends and masks, and
    * what the agent's own Secret tools change.
    */
-  secrets?: Pick<Secrets, 'usable' | 'reveal' | 'masks' | 'create' | 'update' | 'remove' | 'share'>;
+  secrets?: Pick<
+    Secrets,
+    'usable' | 'reveal' | 'assertUsable' | 'masks' | 'create' | 'update' | 'remove' | 'share'
+  >;
 };
 
 /**
@@ -334,13 +338,17 @@ async function actsOnComputer(
  * can save one (`saves`), which its commands may use in the same run.
  */
 async function secretAccess(
-  secrets: Pick<Secrets, 'usable' | 'reveal'>,
+  secrets: Pick<Secrets, 'usable' | 'reveal' | 'assertUsable'>,
   profileId: string,
   saves: boolean,
 ): Promise<SecretAccess | undefined> {
   const offered = await secrets.usable(profileId);
   return offered.length || saves
-    ? { offered, reveal: (envNames) => secrets.reveal(profileId, envNames) }
+    ? {
+        offered,
+        reveal: (envNames) => secrets.reveal(profileId, envNames),
+        check: (envNames) => secrets.assertUsable(profileId, envNames),
+      }
     : undefined;
 }
 
@@ -1344,6 +1352,8 @@ export class AgentRuntime {
           execute: async (input, options) => {
             // An approved action runs before any step: its result is no step's to fit.
             const inStep = approvedCallId !== options.toolCallId;
+            // The tool's own refusal, given in place of asking the owner (`refusedBeforeAsking`).
+            let refusedNow: unknown;
             let feeding: ReturnType<typeof setInterval> | undefined;
             const previous = toolQueue;
             let release: () => void = () => {};
@@ -1448,17 +1458,23 @@ export class AgentRuntime {
                     return { declined: verdict.reason };
                   }
                 } else {
-                  if (!pausedCall) {
-                    pausedCall = { toolName: name, toolCallId: options.toolCallId, kind, input };
-                    // Read where the call itself would read, so the card sees what it sends.
-                    pausedCard = await withFolders(
-                      folders,
-                      () => cardInput(definition, input),
-                      worktrees?.scope.guarded,
-                    ).catch(() => input);
+                  // Once one call of the step waits, every other one stops with it.
+                  refusedNow = pausedCall
+                    ? undefined
+                    : await refusedBeforeAsking(definition, input);
+                  if (refusedNow === undefined) {
+                    if (!pausedCall) {
+                      pausedCall = { toolName: name, toolCallId: options.toolCallId, kind, input };
+                      // Read where the call itself would read, so the card sees what it sends.
+                      pausedCard = await withFolders(
+                        folders,
+                        () => cardInput(definition, input),
+                        worktrees?.scope.guarded,
+                      ).catch(() => input);
+                    }
+                    controller.abort();
+                    throw new ApprovalPause(pausedCall);
                   }
-                  controller.abort();
-                  throw new ApprovalPause(pausedCall);
                 }
               }
 
@@ -1485,11 +1501,14 @@ export class AgentRuntime {
               try {
                 // Read per call: this run or another of its conversation may have changed them.
                 await worktrees?.scope.reload();
-                const raw = await withFolders(
-                  folders,
-                  () => execute(input, options),
-                  worktrees?.scope.guarded,
-                );
+                const raw =
+                  refusedNow !== undefined
+                    ? refusedNow
+                    : await withFolders(
+                        folders,
+                        () => execute(input, options),
+                        worktrees?.scope.guarded,
+                      );
                 clearInterval(feeding);
                 // A file write's diff is for the owner, not the agent: it goes to its own
                 // checkpoint, read by the timeline alone, and leaves the result before the
