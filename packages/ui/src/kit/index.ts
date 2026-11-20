@@ -55,5 +55,5 @@ export {
 export { Skeleton, SkeletonLine, SkeletonRegion } from './skeleton';
 export { SliderField } from './slider-field';
 export { pillClass, StatusPill, type StatusTone } from './status-pill';
-export { TextArea, TextField } from './text-field';
+export { FieldLabel, FieldNote, TextArea, TextField } from './text-field';
 export { SwitchControl, Toggle } from './toggle';

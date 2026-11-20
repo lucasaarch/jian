@@ -104,8 +104,8 @@ const GONE = [
   // Settings → Apps and Settings → MCP servers became Plugins → Connectors, and each agent's
   // Skills page became Plugins → Skills.
   /Settings (→|>) (Apps|MCP servers)/,
-  // Command secrets became Secrets, which agents also keep.
-  /Command secrets/,
+  // The old command secrets became Secrets, which agents also keep.
+  /command secrets?\b/i,
   // Only the linked-device WhatsApp channel remains.
   /WhatsApp Business/,
 ];

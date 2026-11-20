@@ -118,7 +118,7 @@ export function SecretsPage() {
         ))}
         {!loading && (
           <SettingsRow
-            title={secrets.length ? 'Add a Secret' : 'No secrets yet'}
+            title={secrets.length ? 'Add a Secret' : 'No Secrets yet'}
             description={
               secrets.length
                 ? undefined
@@ -147,7 +147,7 @@ export function SecretsPage() {
         onOpenChange={setAsking}
         title={`Delete ${removing?.title ?? ''}?`}
         phrase={removing?.title ?? ''}
-        action="Delete secret"
+        action="Delete Secret"
         busy={actions.busy}
         run={async () => {
           if (removing && (await remove(removing.id))) setAsking(false);

@@ -2,7 +2,7 @@
 
 import { Plus, Trash2 } from 'lucide-react';
 import { useId, useRef } from 'react';
-import { Action, iconButton, SwitchControl, surfaceCard, TextField } from '../../kit';
+import { Action, FieldLabel, iconButton, SwitchControl, surfaceCard, TextField } from '../../kit';
 import {
   blankField,
   envNameOf,
@@ -46,7 +46,7 @@ export function SecretFields({
 
   return (
     <div className="grid gap-2">
-      <span className="text-[13px] font-medium text-ink">Fields</span>
+      <FieldLabel>Fields</FieldLabel>
       <ul className="grid gap-2">
         {fields.map((field, index) => {
           const problem = problems[index] ?? {};

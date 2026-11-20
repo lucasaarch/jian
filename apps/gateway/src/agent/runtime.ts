@@ -739,9 +739,9 @@ export class AgentRuntime {
         }
       }
 
-      // Every command secret, in each form a command could print it, whichever agent may use it
-      // and whether or not this run lends one: a value written to a shared file by one command is
-      // there for any later one to read back.
+      // Every sensitive value of every Secret, in each form a command could print it, whichever
+      // agent may use it and whether or not this run lends one: a value written to a shared file
+      // by one command is there for any later one to read back.
       for (const value of (await this.services.secrets?.masks()) ?? []) {
         for (const form of secretForms(value)) secrets.add(form);
       }
@@ -996,7 +996,7 @@ export class AgentRuntime {
         secretService !== undefined &&
         session.channel !== 'email' &&
         (outsider ? outsider.canApprove : !isChatChannel(session.channel));
-      const commandSecrets = secretService
+      const secretLending = secretService
         ? await secretAccess(secretService, profileId, keepsSecrets)
         : undefined;
       const tools: ToolSet = {
@@ -1014,7 +1014,7 @@ export class AgentRuntime {
           () => scale,
           email,
           replyTo,
-          commandSecrets,
+          secretLending,
           keepsSecrets,
         ),
         ...(keepsSecrets && secretService
@@ -1172,7 +1172,7 @@ export class AgentRuntime {
               ...(worktreeCan ? { worktrees: worktreeCan } : {}),
               email: 'send_email' in tools,
               links: 'share_file_link' in tools,
-              secrets: !commandSecrets ? 'none' : keepsSecrets ? 'manage' : 'lend',
+              secrets: !secretLending ? 'none' : keepsSecrets ? 'manage' : 'lend',
               // As load_skill builds it: a skill kept from an earlier turn reads the same.
               ...(session.remoteMachineId ? { machine: { files: Boolean(machineFiles) } } : {}),
             },
@@ -1257,7 +1257,7 @@ export class AgentRuntime {
                 ...(lowEffort ? { providerOptions: lowEffort } : {}),
                 account: (usage, text) => account(usage, 0, text, 0),
               },
-              ...(commandSecrets ? { offered: commandSecrets.offered } : {}),
+              ...(secretLending ? { offered: secretLending.offered } : {}),
               signal,
             })
           : undefined;
