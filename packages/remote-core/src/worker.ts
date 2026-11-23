@@ -8,6 +8,7 @@ import { executeShellTask } from './shell.ts';
 import type { WorkerStateFile } from './state.ts';
 import { detectSystem } from './system.ts';
 import { describeTask } from './task.ts';
+import { withinTaskLimit } from './task-limit.ts';
 import { compatibilityError, fetchGatewayVersion } from './version.ts';
 
 /** What a worker needs to reach its gateway as one machine. */
@@ -197,7 +198,9 @@ export async function runWorker({
       log.info('Task started', { task: task.id, ...action });
       const startedAt = Date.now();
       const { result, restart } =
-        task.kind === 'update' ? await runUpdate(task, update) : { result: await execute(task) };
+        task.kind === 'update'
+          ? await runUpdate(task, update)
+          : { result: await withinTaskLimit(task, execute) };
       const durationMs = Date.now() - startedAt;
       const ok = action.kind === 'computer' ? result.computer?.ok !== false : result.exitCode === 0;
       state.ran(action.kind, ok, durationMs);
