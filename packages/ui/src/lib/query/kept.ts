@@ -62,7 +62,7 @@ function githubList(key: QueryKey) {
  * read added later is not kept by accident. Attachments, file bodies, diffs, Artifact versions
  * and search results are left out: each is large or one of many, and all of them are read again.
  */
-export function keptOffline(key: QueryKey): boolean {
+function keptOffline(key: QueryKey): boolean {
   const [head, , slice] = key;
   if (head === 'history') return key.length === 3;
   if (head === 'profile') {
