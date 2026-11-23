@@ -596,6 +596,6 @@ export function unavailableNote(unavailable: Array<{ name: string; reason: strin
     'These MCP servers could not be reached for this run, and none of their tools are ' +
     `available:\n${list}\n` +
     'Do not pretend to have used them. If the request needs one, say which server is ' +
-    'unavailable and that the owner has to check its credentials.'
+    'unavailable and give its reason above, so the owner knows what to fix.'
   );
 }
