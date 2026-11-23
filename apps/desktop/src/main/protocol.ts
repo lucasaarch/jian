@@ -39,6 +39,33 @@ const SILENT_MS = 90_000;
 /** How long the window may leave an event stream unread before it is taken as abandoned, in ms. */
 const UNREAD_MS = 90_000;
 
+/** How to let go of each answer the window has not finished reading. */
+const unfinished = new Set<() => void>();
+/** The answers of the page a navigation under way would replace. */
+let leaving: Array<() => void> = [];
+
+/**
+ * A navigation of the window started. It may yet be refused, as a link to the outside is, and
+ * then the page stays: nothing is let go of until it commits. What is asked from here on may
+ * already be the next page's, so only what is open now counts.
+ */
+export function windowNavigating(): void {
+  leaving = [...unfinished];
+}
+
+/**
+ * The window left its page, and a reload may never cancel what that page was reading: each body
+ * would hold its share of the connection's flow control for good. Only then, so a video paused
+ * in a page that stays is left alone.
+ */
+export function windowNavigated(): void {
+  for (const release of leaving) {
+    release();
+    unfinished.delete(release);
+  }
+  leaving = [];
+}
+
 const seconds = (since: number) => `${Math.round((Date.now() - since) / 1000)}s`;
 const reason = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
@@ -109,7 +136,9 @@ async function forward(
     const stream = answered.get('content-type')?.startsWith('text/event-stream') ?? false;
     if (stream) logConnections(`${host} ${asked} opened`);
     const openedAt = Date.now();
+    const release = () => gone.abort();
     const ended = (how: BodyEnd, error?: unknown) => {
+      unfinished.delete(release);
       if (how === 'silent') stalled(host, `${asked} went silent, open for ${seconds(openedAt)}`);
       else if (how === 'unread') logConnections(`${host} ${asked} left unread, let go`);
       else if (how === 'failed') logConnections(`${host} ${asked} failed: ${reason(error)}`);
@@ -120,11 +149,12 @@ async function forward(
     };
     const body =
       response.body &&
-      releasing(response.body, () => gone.abort(), {
+      releasing(response.body, release, {
         silentMs: SILENT_MS,
         ...(stream ? { unreadMs: UNREAD_MS } : {}),
         ended,
       });
+    if (body) unfinished.add(release);
     return new Response(body, {
       status: response.status,
       statusText: response.statusText,
