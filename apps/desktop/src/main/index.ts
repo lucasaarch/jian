@@ -22,7 +22,7 @@ import { MachineRegistry } from './machines/registry';
 import { ComputerSharing } from './machines/sharing';
 import { Notifier } from './notify';
 import { notificationsOn } from './preferences';
-import { handleScheme, registerScheme } from './protocol';
+import { handleScheme, registerScheme, windowNavigated, windowNavigating } from './protocol';
 import { lockHolder, whenHolderLeft } from './single-instance';
 import { createTray, resourcesDir } from './tray';
 import { type TrayState, trayMenu } from './tray-menu';
@@ -292,6 +292,10 @@ void app.whenReady().then(async () => {
   window = createWindow({ quitting: () => quitting });
   browser.attach(window);
   window.on('focus', readShowing);
+  window.webContents.on('did-start-navigation', (details) => {
+    if (details.isMainFrame && !details.isSameDocument) windowNavigating();
+  });
+  window.webContents.on('did-navigate', windowNavigated);
   window.webContents.on('did-finish-load', () => {
     if (pending) bridge.open(pending);
     pending = undefined;
