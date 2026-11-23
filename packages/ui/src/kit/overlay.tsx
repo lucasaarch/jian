@@ -15,9 +15,13 @@ import { createPortal } from 'react-dom';
 import { watchSize } from '../lib/watch-size';
 import { FloatingActions } from './action';
 
-/** On a phone a room or a page fills the screen, clear of the status bar and home indicator. */
+/**
+ * On a phone a room or a page fills the screen, clear of the status bar and home indicator; with
+ * the keyboard open, only the part of it left above the keys, so its last field can scroll into
+ * sight (`--visible-*`, lib/viewport.ts).
+ */
 const fullScreen =
-  'phone:inset-0 phone:size-full phone:max-h-none phone:translate-0 phone:rounded-none phone:border-0 phone:bg-canvas phone:pt-[env(safe-area-inset-top)] phone:pb-[env(safe-area-inset-bottom)]';
+  'phone:inset-x-0 phone:top-(--visible-top,0px) phone:h-(--visible-height,100%) phone:w-full phone:max-h-none phone:translate-0 phone:rounded-none phone:border-0 phone:bg-canvas phone:pt-[env(safe-area-inset-top)] phone:pb-(--home-inset)';
 
 /**
  * Where what floats in a form or a page stands: the same 1.75rem as the padding of what they hold
@@ -30,8 +34,9 @@ const sizes = {
   settings: `flex h-[min(44rem,calc(100dvh-6rem))] w-[min(60rem,calc(100vw-3rem))] overflow-hidden ${fullScreen}`,
   // A form and a page scroll inside the pane, so what floats in its corners is placed from the
   // pane's own edges: placed inside what scrolls, it would sit a scrollbar further from the right.
-  // A form rises from the bottom on a phone, where the thumb is, as tall as it needs.
-  form: 'flex flex-col max-h-[calc(100dvh-6rem)] w-[min(36rem,calc(100vw-3rem))] overflow-hidden phone:top-auto phone:bottom-0 phone:left-0 phone:w-full phone:max-h-[calc(100dvh-env(safe-area-inset-top)-1rem)] phone:translate-0 phone:rounded-b-none phone:pb-[env(safe-area-inset-bottom)]',
+  // A form rises from the bottom on a phone, where the thumb is, as tall as it needs; over the
+  // keyboard while it is open, or its fields would be under the keys with no way to scroll to them.
+  form: 'flex flex-col max-h-[calc(100dvh-6rem)] w-[min(36rem,calc(100vw-3rem))] overflow-hidden phone:top-auto phone:bottom-(--keyboard-inset,0px) phone:left-0 phone:w-full phone:max-h-[calc(var(--visible-height,100dvh)-env(safe-area-inset-top)-1rem)] phone:translate-0 phone:rounded-b-none phone:pb-(--home-inset)',
   page: `flex flex-col max-h-[calc(100dvh-6rem)] w-[min(44rem,calc(100vw-3rem))] overflow-hidden ${fullScreen}`,
 };
 
@@ -148,7 +153,7 @@ export function Overlay({
             <div
               ref={setSlot}
               data-overlay-actions
-              className={`pointer-events-none absolute z-10 flex flex-wrap items-center justify-end gap-2 empty:hidden [&>:not(span)]:pointer-events-auto ${PANE_EDGE} bottom-7 phone:bottom-[max(1.75rem,env(safe-area-inset-bottom))]`}
+              className={`pointer-events-none absolute z-10 flex flex-wrap items-center justify-end gap-2 empty:hidden [&>:not(span)]:pointer-events-auto ${PANE_EDGE} bottom-7 phone:bottom-[max(1.75rem,var(--home-inset))]`}
             />
           )}
           {closeButton && (

@@ -131,3 +131,42 @@
 /* A phone's width, where the sidebar and what it opens take turns and an overlay fills the
    screen. The same width `usePhone` answers to. */
 @custom-variant phone (@media (max-width: 760px));
+
+/* A phone's lower edge. `--home-inset` is the home indicator's band, for a surface whose ground
+   runs to the edge (a sheet, a list); `--home-gap` is what a control floating above it keeps,
+   tucked a little into that band as a native app's bar is, since the indicator itself is only
+   its lowest 13px. The keyboard covers the indicator, so both drop while it is open
+   (`data-keyboard`, lib/viewport.ts). */
+:root {
+  --home-inset: env(safe-area-inset-bottom, 0px);
+  --home-gap: max(0.5rem, calc(env(safe-area-inset-bottom, 0px) - 0.75rem));
+}
+:root[data-keyboard] {
+  --home-inset: 0px;
+  --home-gap: 0.5rem;
+}
+
+/* An installed web app on iOS measures `dvh` a home indicator short of the screen, which left a
+   dead band under the app with the composer clear of the indicator a second time above it.
+   There `vh` is the whole screen. Only WebKit has `-webkit-touch-callout`; a Safari tab and
+   Android keep the dynamic height, which follows their bars and keyboard. */
+@media (display-mode: standalone) {
+  @supports (-webkit-touch-callout: none) {
+    :root {
+      --app-height: 100vh;
+    }
+  }
+}
+
+/* While a phone's keyboard is open, iOS keeps laying the page out at the full screen and only
+   shows part of it, so the app shell follows the part on screen (`--visible-top` and
+   `--visible-height`, lib/viewport.ts): its bar stays at the top and its composer just above the
+   keys, instead of the page sliding up under the status bar. */
+@media (max-width: 760px) {
+  :root[data-keyboard] [data-app-shell] {
+    position: fixed;
+    inset-inline: 0;
+    top: var(--visible-top, 0px);
+    height: var(--visible-height, var(--app-height));
+  }
+}

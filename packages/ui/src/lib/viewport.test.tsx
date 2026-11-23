@@ -37,12 +37,24 @@ it('says when a keyboard is open, and puts back a page it shifted when it goes',
   act(() => listeners.get('resize')?.());
   expect(root.hasAttribute('data-keyboard')).toBe(true);
   expect(scrollTo).not.toHaveBeenCalled();
+  // The shell stands on the part shown; a sheet at the layout's bottom rises over the keys.
+  expect(root.style.getPropertyValue('--visible-top')).toBe('120px');
+  expect(root.style.getPropertyValue('--visible-height')).toBe('508px');
+  expect(root.style.getPropertyValue('--keyboard-inset')).toBe('216px');
+
+  // iOS slides the part shown further down without resizing it, to bring a field into view.
+  Object.assign(view, { offsetTop: 336 });
+  act(() => listeners.get('scroll')?.());
+  expect(root.style.getPropertyValue('--visible-top')).toBe('336px');
+  expect(root.style.getPropertyValue('--keyboard-inset')).toBe('0px');
 
   // It closes with the page still shifted: the page goes back to the top.
   Object.assign(view, { height: 844, offsetTop: 0 });
   act(() => listeners.get('resize')?.());
   expect(root.hasAttribute('data-keyboard')).toBe(false);
   expect(scrollTo).toHaveBeenCalledWith(0, 0);
+  expect(root.style.getPropertyValue('--keyboard-inset')).toBe('');
+  expect(root.style.getPropertyValue('--visible-height')).toBe('');
 
   // An installed app can see a little less than it lays out with no keyboard at all: that is
   // not a keyboard, and the screen keeps its bottom.

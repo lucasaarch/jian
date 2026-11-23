@@ -35,7 +35,9 @@ A detail only one host has reaches the panel as a prop or slot, like `AppHost`, 
 - **Desktop:** native browser, local gateway, tray, updates, this computer as a machine, system
   notifications. Offered only if the host passes them, as `openBrowser` does.
 - **Web:** signing in and out, addresses that open a screen, phone layouts. Test `phone:` styles
-  and overlays that fill the screen.
+  and overlays that fill the screen. The desktop window's minimum width (`MINIMUM` in
+  `apps/desktop/src/main/window.ts`) stays above the phone width, so a phone-only change has
+  nothing to carry over to the desktop.
 - **Mode, not host:** channels and machines exist only on a server gateway. Ask `useGatewayMode()`.
   The desktop app can be connected to either.
 

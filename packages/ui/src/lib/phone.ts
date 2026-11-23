@@ -2,7 +2,10 @@
 
 import { useSyncExternalStore } from 'react';
 
-/** The width below which the sidebar and what it opens take turns, as the `phone:` styles do. */
+/**
+ * The width below which the sidebar and what it opens take turns, as the `phone:` styles do. The
+ * desktop window's minimum width stays above it (`MINIMUM` in apps/desktop's main/window.ts).
+ */
 const PHONE = '(max-width: 760px)';
 
 /** Once, for what is decided as it happens and is not drawn from it. */

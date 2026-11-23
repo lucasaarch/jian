@@ -15,8 +15,9 @@ for the pieces; this one is about how a screen goes together.
   Activity. This is the default for anything of the agent's that is listed, read or managed.
   - An address in `lib/navigation.ts`: `xPath(profileId)` and `onX(pathname)`.
   - A branch in `app/chats.tsx`, in `AgentChats` and in `opened`, so a phone shows it.
-  - Its title in `app/phone-bar.tsx`; its button in `chat-sidebar.tsx` (`aria-current` from
-    `onX`); its command in `commands/agent-commands.tsx` (`place(xPath(...))`).
+  - Its title in `app/phone-bar.tsx`; its entry in `places` in `chat-sidebar.tsx`, a row on
+    desktop (`aria-current` from `onX`) and a tile in one row on a phone, with a short name when
+    its own is too long; its command in `commands/agent-commands.tsx` (`place(xPath(...))`).
   - A web route `apps/web/app/(workspace)/agents/[profileId]/x/page.tsx` returning `null`: the
     layout draws it.
   - `useNoInspector()` at its top: a screen with no conversation has no Inspector.

@@ -187,8 +187,9 @@ export function ChatsApp({
           ) : null
         }
       >
-        {/* Clip, not hidden: an app never scrolls as a whole, by the wheel, focus or script. */}
-        <div className="relative flex h-(--app-height) overflow-clip">
+        {/* Clip, not hidden: an app never scrolls as a whole, by the wheel, focus or script. On a
+            phone with the keyboard open it follows the part of the screen left (kit.css). */}
+        <div data-app-shell className="relative flex h-(--app-height) overflow-clip">
           {sidebar && header}
           {!phone && corner}
           <ReadFailed>

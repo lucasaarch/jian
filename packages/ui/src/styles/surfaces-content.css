@@ -371,8 +371,29 @@
   .conversation-pane {
     --chat-gutter: 0.5rem;
   }
+  /* The phone's bar stands above the conversation, not over it: nothing goes under it to blur,
+     and no corner control takes room at the top, so the history starts right under the bar. */
   .conversation-pane .message-history {
-    @apply px-3;
+    @apply px-3 pt-3;
+  }
+  .conversation-glass-top {
+    display: none;
+  }
+  /* The glass behind the composer starts just above it and is deep only behind it: a phone's
+     screen is too short to give a band of it to text going out of focus. */
+  .conversation-glass {
+    height: calc(var(--dock-height, 0px) + var(--tray-height, 0px) + 0.5rem);
+  }
+  .conversation-glass::before {
+    -webkit-mask-image: linear-gradient(to bottom, transparent, black 0.75rem);
+    mask-image: linear-gradient(to bottom, transparent, black 0.75rem);
+  }
+  .conversation-glass::after {
+    -webkit-mask-image: linear-gradient(to bottom, transparent 0.5rem, black 1.75rem);
+    mask-image: linear-gradient(to bottom, transparent 0.5rem, black 1.75rem);
+  }
+  .pane-badges {
+    bottom: max(0.75rem, var(--home-gap));
   }
   .trouble-card {
     width: min(
@@ -381,17 +402,20 @@
     );
   }
   /* Clear of the home indicator and the rounded corners, which are the margin themselves; on
-     the keyboard there is neither. */
+     the keyboard there is neither (`--home-gap`, kit.css). */
   .composer,
   .agent-toolbar {
     @apply px-3;
-    padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+    padding-bottom: var(--home-gap);
   }
   .composer {
     padding-inline: calc(0.75rem - var(--chat-gutter, 0.5rem));
   }
-  :root[data-keyboard] :is(.composer, .agent-toolbar) {
-    @apply pb-2;
+  /* A long draft scrolls in its box before the box takes the conversation over: with the
+     keyboard open, a third of the little screen left is all it gets. */
+  .composer-box textarea,
+  .composer-box textarea:focus {
+    max-height: min(12rem, calc(var(--visible-height, 100dvh) * 0.3));
   }
   .attachment.audio .audio-player {
     @apply w-64;
