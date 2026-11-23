@@ -1,6 +1,7 @@
 import type { MCPClient } from '@ai-sdk/mcp';
 import type { McpServer, McpValue } from '@jian/contracts';
 import type { GatewayVault } from '../security/gateway-vault.js';
+import { boundedMcpFetch } from './mcp-fetch.js';
 import { createNegotiatedMcpClient } from './mcp-negotiate.js';
 import { stdioTransport } from './mcp-stdio.js';
 
@@ -154,7 +155,7 @@ export async function connectMcp(connection: McpConnection): Promise<MCPClient> 
       url: server.url as string,
       ...(headers ? { headers } : {}),
       ...(connection.authProvider ? { authProvider: connection.authProvider } : {}),
-      fetch: fetcher,
+      fetch: boundedMcpFetch(fetcher),
       redirect: 'error',
     },
     initializationOptions: { signal, timeout: 15_000 },
