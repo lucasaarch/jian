@@ -1,7 +1,7 @@
 import type { UpdateAttempt } from '@jian/contracts';
 
 /** How long a redeploy may take, pulls included, before the panel calls it failed. */
-export const UPDATE_PATIENCE_MS = 10 * 60_000;
+const UPDATE_PATIENCE_MS = 10 * 60_000;
 const EVERY_MS = 5_000;
 
 /**

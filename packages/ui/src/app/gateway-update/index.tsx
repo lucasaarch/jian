@@ -9,8 +9,6 @@ import { updateStatus } from './query';
 import { askToUpdate } from './store';
 import { GatewayUpdateDialog } from './update-dialog';
 
-export { askToUpdate } from './store';
-
 /**
  * Updating a server installation from anywhere in the panel: the dialog, and the palette's
  * "Update gateway to X.Y.Z" while a release is waiting and a way to install it is set up. A
