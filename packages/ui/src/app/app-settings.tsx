@@ -2,6 +2,7 @@
 
 import { panelFeatureOf } from '@jian/contracts';
 import {
+  CloudDownload,
   Cpu,
   Keyboard,
   KeyRound,
@@ -220,6 +221,13 @@ function gatewayPages({ info, actions }: GatewaySettings): SettingsPage[] {
             icon: <Smartphone size={15} />,
             group,
             keywords: ['phone', 'iphone', 'android', 'pair', 'qr', 'notifications'],
+          },
+          {
+            id: 'updates',
+            label: 'Updates',
+            icon: <CloudDownload size={15} />,
+            group,
+            keywords: ['update', 'upgrade', 'version', 'release', 'webhook', 'deploy', 'docker'],
           },
         ]),
     ...(actions

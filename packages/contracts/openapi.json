@@ -53193,6 +53193,7 @@
                         "settings_ssh_keys",
                         "settings_machines",
                         "settings_mobile",
+                        "settings_updates",
                         "settings_connection",
                         "inspector_opened",
                         "inspector_browser",

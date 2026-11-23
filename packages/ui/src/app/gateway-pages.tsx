@@ -1,12 +1,13 @@
 'use client';
 
+import { UpdatesPage, UpdatesWaiting } from './gateway-update/updates-page';
 import { CapabilitiesPage, CapabilitiesWaiting } from './settings/capabilities-page';
 import { MachinesPage, MachinesWaiting, type ThisComputer } from './settings/machines-page';
 import { MobilePage, MobileWaiting } from './settings/mobile-page';
 import { ProvidersPage, ProvidersWaiting } from './settings/providers-page';
 import { SshKeysPage, SshKeysWaiting } from './settings/ssh-keys-page';
 
-export type GatewayPageId = 'providers' | 'models' | 'ssh-keys' | 'machines' | 'mobile';
+export type GatewayPageId = 'providers' | 'models' | 'ssh-keys' | 'machines' | 'mobile' | 'updates';
 
 /** Each page's shape while it is read, so the page lands where its skeleton stood. */
 export function GatewayPageWaiting({ page }: { page: GatewayPageId }) {
@@ -14,6 +15,7 @@ export function GatewayPageWaiting({ page }: { page: GatewayPageId }) {
   if (page === 'models') return <CapabilitiesWaiting />;
   if (page === 'ssh-keys') return <SshKeysWaiting />;
   if (page === 'mobile') return <MobileWaiting />;
+  if (page === 'updates') return <UpdatesWaiting />;
   return <MachinesWaiting />;
 }
 
@@ -33,5 +35,6 @@ export function GatewayPage({
   if (page === 'models') return <CapabilitiesPage />;
   if (page === 'ssh-keys') return <SshKeysPage />;
   if (page === 'mobile') return <MobilePage />;
+  if (page === 'updates') return <UpdatesPage />;
   return <MachinesPage thisComputer={thisComputer} />;
 }

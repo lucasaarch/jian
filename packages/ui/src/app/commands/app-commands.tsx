@@ -1,6 +1,7 @@
 'use client';
 
 import {
+  CloudDownload,
   Cpu,
   Keyboard,
   KeyRound,
@@ -68,6 +69,12 @@ const pages: { id: string; title: string; keywords: string[]; icon: ReactNode }[
     title: 'Mobile',
     keywords: ['phone', 'iphone', 'android', 'pair', 'qr', 'notifications'],
     icon: <Smartphone size={15} />,
+  },
+  {
+    id: 'updates',
+    title: 'Updates',
+    keywords: ['update', 'upgrade', 'version', 'webhook', 'deploy'],
+    icon: <CloudDownload size={15} />,
   },
 ];
 

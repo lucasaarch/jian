@@ -30,6 +30,7 @@ export const keys = {
   builtinSkills: ['built-in-skills'] as const,
   releases: ['releases'] as const,
   repository: ['repository'] as const,
+  updates: ['updates'] as const,
   gateway: ['gateway'] as const,
   settings: ['settings'] as const,
 
