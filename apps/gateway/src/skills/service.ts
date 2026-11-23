@@ -2,6 +2,7 @@ import type { LibrarySkill, SkillOrigin, SkillUpstream } from '@jian/contracts';
 import { MAX_LIBRARY_SKILLS, skillImportSchema } from '@jian/contracts';
 import { type Clock, nowIso } from '../core/clock.js';
 import { GatewayError } from '../core/errors.js';
+import { BodyTooLarge, readCappedText } from '../core/read-capped.js';
 import { parseSkillDocument, type SkillDocument } from './document.js';
 import type { SkillLibrary } from './library.js';
 import { contentsUrl, pageUrl, parseSource, rawUrl, type Source } from './source.js';
@@ -40,13 +41,12 @@ export class Skills {
       throw new GatewayError(502, `The repository answered ${response.status}`);
     }
 
-    const text = await response.text();
-
-    if (text.length > MAX_BYTES) {
-      throw new GatewayError(413, 'The file is too large to be a skill');
-    }
-
-    return text;
+    return readCappedText(response, MAX_BYTES).catch((error: unknown) => {
+      if (error instanceof BodyTooLarge) {
+        throw new GatewayError(413, 'The file is too large to be a skill');
+      }
+      throw error;
+    });
   }
 
   private async listDirectory(source: Source, path: string): Promise<Entry[]> {

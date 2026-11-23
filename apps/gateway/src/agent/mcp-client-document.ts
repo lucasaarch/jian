@@ -1,4 +1,5 @@
 import type { McpClientDocument } from '@jian/contracts';
+import { readCappedJson } from '../core/read-capped.js';
 
 /**
  * A client id metadata document (the MCP spec's Client ID Metadata Documents) is how an
@@ -47,6 +48,9 @@ export function clientDocument(
   };
 }
 
+/** The most an authorization server's metadata may take, in bytes: real ones are a few KB. */
+const MAX_METADATA_BYTES = 1024 * 1024;
+
 /** The two things of an authorization server's metadata that decide how Jian becomes its client. */
 type Registration = {
   registration_endpoint?: unknown;
@@ -88,7 +92,7 @@ export async function wantsClientDocument(
         signal: AbortSignal.timeout(10_000),
       });
       if (!response.ok) continue;
-      const metadata = (await response.json()) as Registration;
+      const metadata = (await readCappedJson(response, MAX_METADATA_BYTES)) as Registration;
       return (
         !metadata.registration_endpoint && metadata.client_id_metadata_document_supported === true
       );

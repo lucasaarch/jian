@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { Run } from '@jian/contracts';
 import { type ToolSet, tool } from 'ai';
 import { z } from 'zod';
+import { BodyTooLarge } from '../../core/read-capped.js';
 import type { Store } from '../../storage/database.js';
 import { mediaAssets } from '../../storage/schema.js';
 import {
@@ -201,19 +202,26 @@ export class XTools {
       }),
       execute: async (input, options) => {
         const account = await actor(input);
-        const { bytes, mimeType } = await this.client.download(account, {
-          method: 'GET',
-          path: `/2/dm_conversations/media/${[input.dm_id, input.media_id, input.resource_id]
-            .map(encodeURIComponent)
-            .join('/')}`,
-          scopes: X_HANDWRITTEN_SCOPES.x_download_dm_media,
-          acts: false,
-          signal: options.abortSignal,
-        });
-
-        if (bytes.length > MAX_DOWNLOAD_BYTES) {
-          throw new XFailure(413, 'This attachment is larger than the 16 MB Jian keeps.');
-        }
+        const { bytes, mimeType } = await this.client
+          .download(
+            account,
+            {
+              method: 'GET',
+              path: `/2/dm_conversations/media/${[input.dm_id, input.media_id, input.resource_id]
+                .map(encodeURIComponent)
+                .join('/')}`,
+              scopes: X_HANDWRITTEN_SCOPES.x_download_dm_media,
+              acts: false,
+              signal: options.abortSignal,
+            },
+            MAX_DOWNLOAD_BYTES,
+          )
+          .catch((error: unknown) => {
+            if (error instanceof BodyTooLarge) {
+              throw new XFailure(413, 'This attachment is larger than the 16 MB Jian keeps.');
+            }
+            throw error;
+          });
 
         const mediaId = randomUUID();
 

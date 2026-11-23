@@ -1,3 +1,4 @@
+import { readCapped } from '../../core/read-capped.js';
 import { reconnect, refusal, unanswered, XFailure } from './failures.js';
 import { X_API } from './oauth.js';
 import type { XTokens } from './tokens.js';
@@ -105,7 +106,7 @@ export class XClient {
   }
 
   /** The bytes X answered with, for the rare call whose answer is a file. */
-  async download(account: XActor, request: XRequest) {
+  async download(account: XActor, request: XRequest, maxBytes: number) {
     const response = await this.exchange(account, request, true);
 
     if (!response.ok) {
@@ -115,7 +116,7 @@ export class XClient {
     }
 
     return {
-      bytes: Buffer.from(await response.arrayBuffer()),
+      bytes: await readCapped(response, maxBytes),
       mimeType: response.headers.get('content-type') ?? 'application/octet-stream',
     };
   }

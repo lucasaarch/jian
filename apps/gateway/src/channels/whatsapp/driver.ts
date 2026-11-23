@@ -14,6 +14,7 @@ import {
   type WAMessage,
   type WASocket,
 } from 'baileys';
+import { readCapped } from '../../core/read-capped.js';
 import { asJpeg } from '../../media/picture.js';
 import type { OutgoingMessage } from '../channel.js';
 import { MAX_DEVICE_SESSION_BYTES } from './connections.js';
@@ -624,11 +625,15 @@ export function createWhatsAppDeviceFactory(): DeviceFactory {
         }
 
         const response = await fetch(url, { signal: AbortSignal.timeout(10_000) });
-        const bytes = Buffer.from(await response.arrayBuffer());
+        if (!response.ok) {
+          await response.body?.cancel().catch(() => {});
+          return undefined;
+        }
 
-        return response.ok && bytes.length <= MAX_AVATAR_BYTES
-          ? { mimeType: 'image/jpeg', data: bytes.toString('base64') }
-          : undefined;
+        // A picture past the limit is no picture, and is not read to find that out.
+        const bytes = await readCapped(response, MAX_AVATAR_BYTES).catch(() => undefined);
+
+        return bytes ? { mimeType: 'image/jpeg', data: bytes.toString('base64') } : undefined;
       },
       typing: async (chatId) => {
         const jid = toDeviceJid(chatId);
