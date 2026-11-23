@@ -41,3 +41,5 @@ minimumReleaseAgeExclude:
   - sharp@0.35.5
   - source-map-js@1.2.2
   - music-metadata@11.16.1
+patchedDependencies:
+  baileys@7.0.0-rc14: patches/baileys@7.0.0-rc14.patch

@@ -8,6 +8,7 @@ ENV HUSKY=0 CI=true NEXT_TELEMETRY_DISABLED=1
 # Manifests and the lockfile first, so the dependency layer survives a source-only change.
 # Only the panel and what it imports are installed: none of the gateway's runtime.
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY patches patches
 COPY .husky/install.mjs .husky/install.mjs
 COPY apps/web/package.json apps/web/package.json
 COPY packages/contracts/package.json packages/contracts/package.json

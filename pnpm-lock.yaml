@@ -18,6 +18,9 @@ overrides:
   '@ai-sdk/provider': 4.0.17
   '@ai-sdk/provider-utils': 5.0.45
 
+patchedDependencies:
+  baileys@7.0.0-rc14: f2e65a87e9b0f5df4a2b749fa40449e560909332aec198b79b4abf14f977016f
+
 importers:
 
   .:
@@ -162,7 +165,7 @@ importers:
         version: 4.0.0(ai@7.0.108(zod@4.6.7))(zod@4.6.7)
       baileys:
         specifier: 7.0.0-rc14
-        version: 7.0.0-rc14(sharp@0.35.5(@types/node@26.6.2))(supports-color@10.2.2)
+        version: 7.0.0-rc14(patch_hash=f2e65a87e9b0f5df4a2b749fa40449e560909332aec198b79b4abf14f977016f)(sharp@0.35.5(@types/node@26.6.2))(supports-color@10.2.2)
       cron-parser:
         specifier: 5.10.1
         version: 5.10.1
@@ -219,7 +222,7 @@ importers:
         version: 8.12.3
       web-push:
         specifier: 3.6.7
-        version: 3.6.7(supports-color@10.2.2)
+        version: 3.6.7
       zod:
         specifier: '>=4.6.6'
         version: 4.6.7
@@ -7472,7 +7475,7 @@ snapshots:
 
   aws4@1.13.2: {}
 
-  baileys@7.0.0-rc14(sharp@0.35.5(@types/node@26.6.2))(supports-color@10.2.2):
+  baileys@7.0.0-rc14(patch_hash=f2e65a87e9b0f5df4a2b749fa40449e560909332aec198b79b4abf14f977016f)(sharp@0.35.5(@types/node@26.6.2))(supports-color@10.2.2):
     dependencies:
       '@cacheable/node-cache': 1.7.6
       '@hapi/boom': 9.1.4
@@ -10595,7 +10598,7 @@ snapshots:
 
   walk-up-path@4.0.0: {}
 
-  web-push@3.6.7(supports-color@10.2.2):
+  web-push@3.6.7:
     dependencies:
       asn1.js: 5.4.1
       http_ece: 1.2.0
