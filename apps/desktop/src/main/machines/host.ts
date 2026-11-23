@@ -3,11 +3,10 @@ import { join } from 'node:path';
 import type { RemoteBrowserParams, RemoteBrowserResult } from '@jian/contracts';
 import { app, powerSaveBlocker, type UtilityProcess, utilityProcess } from 'electron';
 import type { FromWorkers, ToWorkers } from './messages';
+import { RestartBackoff } from './restarts';
 import type { WorkerHost, WorkerTarget } from './sharing';
 import workerEntry from './worker-process?modulePath';
 
-/** How long a machines process that ended on its own waits before it is started again, growing. */
-const RETRY_MS = [1_000, 5_000, 15_000, 60_000];
 /** How long quitting waits for the workers' goodbyes before it ends their process, in ms. */
 const QUIT_WAIT_MS = 5_000;
 
@@ -30,7 +29,7 @@ function helpersDir(): string {
 export class UtilityWorkerHost implements WorkerHost {
   private child?: UtilityProcess;
   private readonly targets = new Map<string, WorkerTarget>();
-  private failures = 0;
+  private readonly backoff = new RestartBackoff();
   private timer?: NodeJS.Timeout;
   private awake?: number;
   private quitting = false;
@@ -108,18 +107,14 @@ export class UtilityWorkerHost implements WorkerHost {
           .then((answer) => child.postMessage({ type: 'browser-answer', id, answer }));
       }
     });
-    child.on('spawn', () => {
-      this.failures = 0;
-    });
+    child.on('spawn', () => this.backoff.started());
     child.on('exit', () => {
       if (this.child !== child) return;
       this.child = undefined;
       // Whatever its workers were doing ended with them.
       for (const gatewayId of this.targets.keys()) this.events.using(gatewayId, null);
       if (this.quitting || this.targets.size === 0) return;
-      const wait = RETRY_MS[Math.min(this.failures, RETRY_MS.length - 1)] ?? 60_000;
-      this.failures += 1;
-      this.timer = setTimeout(() => this.restart(), wait);
+      this.timer = setTimeout(() => this.restart(), this.backoff.next());
     });
     child.postMessage({
       type: 'setup',
