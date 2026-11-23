@@ -7,6 +7,11 @@ const MB = 1024 * 1024;
 const MAX_LINE_BYTES = 64 * MB;
 /** What may wait for a command to read it, in bytes. Past it, the command has stopped reading. */
 const MAX_UNSENT_BYTES = 16 * MB;
+/**
+ * Messages that may wait likewise. A queued message costs far more than its bytes: a flood of
+ * 40-byte pings reached half a gigabyte of heap before the byte limit alone noticed.
+ */
+const MAX_UNSENT_MESSAGES = 4_096;
 
 /**
  * Whole lines out of a stream of bytes, each at most `maxBytes`. A newline byte never occurs inside
@@ -68,6 +73,7 @@ export function stdioTransport(options: {
 }): MCPTransport {
   let child: ReturnType<typeof spawn> | undefined;
   let draining: Promise<void> | undefined;
+  let unsent = 0;
   // Requests sent and not answered: a command given up on still owes each of them a reason.
   const waiting = new Set<string | number>();
 
@@ -164,14 +170,18 @@ export function stdioTransport(options: {
         throw new Error('The MCP command is not running');
       }
 
-      if (stdin.writableLength > MAX_UNSENT_BYTES) {
+      if (stdin.writableLength > MAX_UNSENT_BYTES || unsent >= MAX_UNSENT_MESSAGES) {
         fail('The MCP command stopped reading what it is sent');
         // This message never left, so the call is safe to send again to a new command.
         throw new Error('The MCP command is not running');
       }
 
       if ('method' in message && 'id' in message) waiting.add(message.id);
-      if (!stdin.write(`${JSON.stringify(message)}\n`)) await drained(stdin);
+      unsent += 1;
+      const flowing = stdin.write(`${JSON.stringify(message)}\n`, () => {
+        unsent -= 1;
+      });
+      if (!flowing) await drained(stdin);
     },
 
     async close() {
