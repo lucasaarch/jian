@@ -63,11 +63,11 @@ it('fails every files task left running when the only gateway process starts', a
 });
 
 it('leaves the calls another process may still wait on, sweeping again while it runs', async () => {
-  const every = vi.spyOn(globalThis, 'setInterval');
-  const clear = vi.spyOn(globalThis, 'clearInterval');
+  const after = vi.spyOn(globalThis, 'setTimeout');
+  const clear = vi.spyOn(globalThis, 'clearTimeout');
   const { gateway, ids, status } = await prepared('api');
   await gateway.start();
-  const sweep = every.mock.results[every.mock.calls.findIndex(([, ms]) => ms === 60_000)]?.value;
+  const sweep = after.mock.results[after.mock.calls.findIndex(([, ms]) => ms === 60_000)]?.value;
   try {
     expect(await status(ids.young)).toBe('running');
     expect(await status(ids.old)).toBe('failed');
