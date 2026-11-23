@@ -1,4 +1,5 @@
 import { and, eq, inArray } from 'drizzle-orm';
+import { keepArtifactsOf } from '../artifacts/folders.js';
 import type { Queryable } from '../storage/database.js';
 import { events, memories, runs, sessions } from '../storage/schema.js';
 
@@ -16,14 +17,16 @@ export async function hasActiveRun(db: Queryable, profileId: string): Promise<bo
 /**
  * What the profile lived through, not what it was given. Memories are deleted explicitly: a
  * session going only clears the one it came from. Sessions take their messages, runs, checkpoints,
- * artifacts, mail, media and open questions with them; a contact keeps its approval and opens
- * a fresh conversation with its next message.
+ * stored tool results, mail, media and open questions with them; a contact keeps its approval and
+ * opens a fresh conversation with its next message. The Artifacts made for the owner stay on their
+ * page, as they do when one conversation is deleted.
  */
 export async function forget(db: Queryable, profileId: string) {
   const memoriesGone = await db
     .delete(memories)
     .where(eq(memories.profileId, profileId))
     .returning({ key: memories.key });
+  await keepArtifactsOf(db, profileId);
   const sessionsGone = await db
     .delete(sessions)
     .where(eq(sessions.profileId, profileId))

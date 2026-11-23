@@ -28,6 +28,7 @@ const landing: ProfileArtifact = {
   id: '11111111-1111-4111-8111-111111111111',
   sessionId: chat.id,
   sessionTitle: chat.title ?? null,
+  sessionDeleted: false,
   projectId: site.id,
   pinned: false,
   folderId: null,
@@ -423,6 +424,22 @@ it('offers a card’s menu, with the link only of one that is public', async () 
     'Delete',
   ]);
   expect(await offered(landing)).toContain('Copy link');
+});
+
+it('keeps one whose conversation was deleted, with no conversation to open', async () => {
+  const orphan = { ...notes, sessionTitle: null, sessionDeleted: true };
+  await render(gateway([landing, orphan]));
+
+  await click(button(`Actions for ${orphan.title}`));
+  await settled(() => entries().length > 0);
+
+  expect(entries().map((item) => item.textContent)).toEqual([
+    'Pin',
+    'Rename',
+    'Duplicate',
+    'Move to folder',
+    'Delete',
+  ]);
 });
 
 it('pins one, which then leads the page in a section of its own', async () => {

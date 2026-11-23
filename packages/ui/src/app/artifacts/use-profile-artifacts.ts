@@ -74,7 +74,7 @@ export function useProfileArtifacts(
     initialPageParam: '',
     getNextPageParam: (last) => last.nextCursor ?? undefined,
     placeholderData: keepPreviousData,
-    // No stream says a conversation was deleted with what it held, so it is never taken as fresh.
+    // Never taken as fresh: what changes it is not all told on the stream.
     staleTime: 0,
   });
 }
@@ -90,7 +90,8 @@ export function useArtifactFolders(api: ArtifactsPageApi, profileId: string) {
 
 /**
  * Everything the page shows is read again when the agent makes or updates an Artifact in any
- * conversation, which the gateway tells the panel as a request to show it.
+ * conversation, which the gateway tells the panel as a request to show it, and when a
+ * conversation is deleted, whose Artifacts stay with no conversation to open.
  */
 export function useArtifactsPageFollow(profileId: string) {
   const client = useQueryClient();
@@ -98,8 +99,10 @@ export function useArtifactsPageFollow(profileId: string) {
   useEffect(
     () =>
       subscribe((event) => {
-        if (event.type !== 'conversation.inspector.focus') return;
-        if ((event.data as { kind?: string } | undefined)?.kind !== 'artifact') return;
+        const artifact =
+          event.type === 'conversation.inspector.focus' &&
+          (event.data as { kind?: string } | undefined)?.kind === 'artifact';
+        if (!artifact && event.type !== 'session.deleted') return;
         void client.invalidateQueries({ queryKey: keys.profileArtifacts(profileId) });
         void client.invalidateQueries({ queryKey: keys.artifactFolders(profileId) });
       }),

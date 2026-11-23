@@ -329,8 +329,17 @@ export const profileArtifactsQuerySchema = z.strictObject({
  * it belongs to, and where the owner keeps it on the page.
  */
 export const profileArtifactSchema = sessionArtifactSchema.extend({
+  /** Null for a conversation with no title yet, and once it is deleted. */
   sessionTitle: z.string().nullable(),
-  /** The project of its conversation, which names the folder it is in until it is moved. */
+  /**
+   * Its conversation was deleted: the Artifact stays, read and changed by its own routes, with no
+   * conversation to open and no agent that reaches it.
+   */
+  sessionDeleted: z.boolean(),
+  /**
+   * The project of its conversation, or the one it was in when deleted, which names the folder it
+   * is in until it is moved.
+   */
   projectId: z.uuid().nullable(),
   pinned: z.boolean(),
   /** The owner's folder it was moved to; null while it is where it started. */

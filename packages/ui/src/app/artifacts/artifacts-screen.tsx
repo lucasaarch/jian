@@ -100,7 +100,7 @@ export function ArtifactsScreen({
   const first = pinned.data?.pages.flatMap((page) => page.items);
   const others = rest.data?.pages.flatMap((page) => page.items);
   const narrowed = Boolean(filter.q || filter.type);
-  // One deleted meanwhile, by the agent's conversation going, is no longer listed: the grid.
+  // One deleted meanwhile is no longer listed: the grid. Its conversation going leaves it listed.
   const artifact = opened
     ? [...(first ?? []), ...(others ?? [])].find((item) => item.id === opened)
     : undefined;
@@ -154,19 +154,20 @@ export function ArtifactsScreen({
           page
           onBack={close}
           // Asked in the conversation it was made in, which is where the agent then mends it,
-          // in the Inspector: the page goes there with it.
+          // in the Inspector: the page goes there with it. Once that is deleted, no agent can.
           onFix={
-            send &&
-            ((text) => {
-              sendNow({
-                sessionId: artifact.sessionId,
-                text,
-                mediaIds: [],
-                deliver: (key) => send(profileId, artifact.sessionId, text, [], key),
-                delivered: () => {},
-              });
-              on.go(artifact);
-            })
+            send && !artifact.sessionDeleted
+              ? (text) => {
+                  sendNow({
+                    sessionId: artifact.sessionId,
+                    text,
+                    mediaIds: [],
+                    deliver: (key) => send(profileId, artifact.sessionId, text, [], key),
+                    delivered: () => {},
+                  });
+                  on.go(artifact);
+                }
+              : undefined
           }
         />
       </section>

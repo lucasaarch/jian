@@ -208,6 +208,107 @@ describe('deleting an Artifact', () => {
   });
 });
 
+describe('deleting a conversation', () => {
+  it('keeps its Artifacts on the page, under its project, for its own agent only', async () => {
+    const { services, app, owner, other, plans, theirs, page, one } = await setup();
+    const project = await projectRow(services.store, owner.id, 'git@github.com:example/site.git');
+    const work = await services.sessions.createGatewaySession(owner.id, { projectId: project.id });
+    const site = await services.artifacts.create(owner.id, work.id, {
+      title: 'Site',
+      type: 'html',
+      content: '<!doctype html><html><body>One</body></html>',
+    });
+    await services.artifacts.revise(owner.id, work.id, {
+      artifactId: site.id,
+      content: '<!doctype html><html><body>Two</body></html>',
+    });
+    const { publicPath } = await services.artifacts.update(owner.id, work.id, site.id, {
+      visibility: 'public',
+    });
+    const memo = await services.artifacts.create(owner.id, plans.id, {
+      title: 'Memo',
+      type: 'markdown',
+      content: '# Memo',
+    });
+    const secret = await services.artifacts.create(other.id, theirs.id, {
+      title: 'Secret',
+      type: 'markdown',
+      content: '# Secret',
+    });
+    expect((await page()).items).toMatchObject([
+      { id: memo.id, sessionTitle: 'Plans', sessionDeleted: false },
+      { id: site.id, sessionDeleted: false, projectId: project.id },
+    ]);
+
+    for (const gone of [work.id, plans.id]) {
+      const url = `/v1/profiles/${owner.id}/sessions/${gone}`;
+      expect((await app.inject({ method: 'DELETE', url, headers })).statusCode).toBe(200);
+    }
+
+    expect((await page()).items).toMatchObject([
+      { id: memo.id, sessionTitle: null, sessionDeleted: true, projectId: null },
+      { id: site.id, sessionTitle: null, sessionDeleted: true, projectId: project.id, version: 2 },
+    ]);
+    expect((await page(`?project=${project.id}`)).items.map(({ id }) => id)).toEqual([site.id]);
+    expect((await page('?project=none')).items.map(({ id }) => id)).toEqual([memo.id]);
+    const folders = await app.inject({ url: `/v1/profiles/${owner.id}/artifact-folders`, headers });
+    expect(artifactFoldersSchema.parse(folders.json()).projects).toEqual([
+      { projectId: project.id, name: 'example/site', artifacts: 1 },
+      { projectId: null, name: null, artifacts: 1 },
+    ]);
+    expect((await app.inject({ url: publicPath as string })).statusCode).toBe(200);
+
+    // Its own routes still read and keep it, and a copy stays beside it, under the project.
+    const at = one(site.id, work.id);
+    const read = await app.inject({ url: `${at}/versions/2`, headers });
+    expect(read.json()).toMatchObject({ version: 2, content: expect.stringContaining('Two') });
+    const pinned = await app.inject({
+      method: 'PATCH',
+      url: at,
+      headers,
+      payload: { pinned: true },
+    });
+    expect(pinned.statusCode).toBe(200);
+    const copied = await app.inject({ method: 'POST', url: `${at}/duplicate`, headers });
+    expect(copied.statusCode).toBe(201);
+    expect((await page(`?project=${project.id}`)).items).toMatchObject([
+      { id: copied.json().id, sessionDeleted: true, projectId: project.id },
+      { id: site.id, pinned: true },
+    ]);
+
+    // Nobody else reaches it, and no agent does: its conversation is gone.
+    for (const elsewhere of [one(site.id, work.id, other.id), one(site.id, theirs.id, other.id)]) {
+      expect((await app.inject({ url: `${elsewhere}/versions/2`, headers })).statusCode).toBe(404);
+    }
+    await expect(services.artifacts.list(owner.id, work.id)).rejects.toMatchObject({
+      statusCode: 404,
+    });
+    expect((await page('', other.id)).items.map(({ id }) => id)).toEqual([secret.id]);
+
+    // Deleted by hand, it goes for good, with its link.
+    expect((await app.inject({ method: 'DELETE', url: at, headers })).statusCode).toBe(204);
+    expect((await app.inject({ url: publicPath as string })).statusCode).toBe(404);
+    expect((await page()).items.map(({ id }) => id)).toEqual([copied.json().id, memo.id]);
+  });
+
+  it('keeps them through a reset of the agent too', async () => {
+    const { services, app, owner, plans, page } = await setup();
+    const memo = await services.artifacts.create(owner.id, plans.id, {
+      title: 'Memo',
+      type: 'markdown',
+      content: '# Memo',
+    });
+
+    const url = `/v1/profiles/${owner.id}/reset`;
+    expect((await app.inject({ method: 'POST', url, headers })).statusCode).toBe(200);
+
+    await expect(services.sessions.session(owner.id, plans.id)).rejects.toMatchObject({
+      statusCode: 404,
+    });
+    expect((await page()).items).toMatchObject([{ id: memo.id, sessionDeleted: true }]);
+  });
+});
+
 describe('keeping Artifacts on the page', () => {
   const organising = async () => {
     const made = await setup();

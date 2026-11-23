@@ -205,7 +205,9 @@ const recordOf = (row: typeof sessionArtifacts.$inferSelect): SessionArtifact =>
 
 /**
  * What an agent made for the owner to see drawn beside a conversation, with every version it had.
- * Each belongs to the conversation it was made in, and is read and changed only through it.
+ * Each belongs to the conversation it was made in, and is read and changed only through it. It
+ * outlives that conversation: once that is deleted, the owner's page and the same routes still
+ * reach it, and no agent's tools do.
  */
 export class SessionArtifacts {
   constructor(
@@ -618,6 +620,7 @@ export class SessionArtifacts {
       items: page.items.map((row) => ({
         ...recordOf(row.artifact),
         sessionTitle: row.sessionTitle,
+        sessionDeleted: row.sessionDeleted,
         projectId: row.projectId,
         pinned: row.artifact.pinned,
         folderId: row.artifact.folderId,
@@ -781,6 +784,8 @@ export class SessionArtifacts {
           // A title is at most 120 characters, the copy's too.
           title: `${current.title.slice(0, 120 - COPY.length)}${COPY}`,
           type: current.type,
+          // A copy of one whose conversation is gone stays beside it, under the same project.
+          projectId: current.projectId,
           folderId: current.folderId,
           createdAt: now,
           updatedAt: now,

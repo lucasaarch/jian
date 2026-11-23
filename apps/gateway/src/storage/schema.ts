@@ -584,9 +584,12 @@ export const sessionArtifacts = pgTable(
     profileId: uuid('profile_id')
       .notNull()
       .references(() => profiles.id, { onDelete: 'cascade' }),
-    sessionId: uuid('session_id')
-      .notNull()
-      .references(() => sessions.id, { onDelete: 'cascade' }),
+    // The conversation it was made in, which may be gone: an Artifact outlives it (migration
+    // 0119), so no key holds it, and every route under that conversation still reaches it.
+    sessionId: uuid('session_id').notNull(),
+    // The project that conversation was in, written as the conversation is deleted
+    // (`keepArtifactsOf`); null while it lives, as its own project is read then.
+    projectId: uuid('project_id'),
     title: text('title').notNull(),
     type: text('type').$type<SessionArtifactType>().notNull(),
     // Its latest version, kept here so two updates at once never claim the same number.
