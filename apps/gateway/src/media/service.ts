@@ -497,14 +497,14 @@ export class Media {
             type: 'content' as const,
             value: [
               { type: 'text' as const, text: JSON.stringify(output) },
-              asset.mimeType === 'application/pdf'
-                ? {
-                    type: 'file-data' as const,
-                    data: asset.data,
-                    mediaType: asset.mimeType,
-                    ...(asset.name ? { filename: asset.name } : {}),
-                  }
-                : { type: 'image-data' as const, data: asset.data, mediaType: asset.mimeType },
+              {
+                type: 'file' as const,
+                data: { type: 'data' as const, data: asset.data },
+                mediaType: asset.mimeType,
+                ...(asset.mimeType === 'application/pdf' && asset.name
+                  ? { filename: asset.name }
+                  : {}),
+              },
             ],
           };
         },

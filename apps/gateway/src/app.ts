@@ -119,7 +119,7 @@ export function createApp(
     connectionTimeout: 30000,
     bodyLimit: 256 * 1024,
     // A tool call's id is a path parameter, and a model's may be longer than Fastify's 100.
-    maxParamLength: MAX_PATH_PARAM,
+    routerOptions: { maxParamLength: MAX_PATH_PARAM },
     trustProxy: options.trustedProxies?.length ? options.trustedProxies : false,
     logController: new LogController({ disableRequestLogging: true }),
   });
@@ -155,7 +155,8 @@ export function createApp(
     );
 
     if (operation) {
-      route.schema = operationSchema(operation);
+      const schema = operationSchema(operation);
+      route.schema = { ...schema, response: withoutPropertyNames(schema.response) };
     }
   });
 
@@ -232,4 +233,18 @@ export function createApp(
   });
 
   return app;
+}
+
+/**
+ * A response schema without `propertyNames`: the serializer only writes, never checks keys, and
+ * its strict Ajv warned at every start about the one a keyed record carries.
+ */
+export function withoutPropertyNames<T>(schema: T): T {
+  if (Array.isArray(schema)) return schema.map(withoutPropertyNames) as T;
+  if (!schema || typeof schema !== 'object') return schema;
+  return Object.fromEntries(
+    Object.entries(schema)
+      .filter(([key]) => key !== 'propertyNames')
+      .map(([key, value]) => [key, withoutPropertyNames(value)]),
+  ) as T;
 }

@@ -696,7 +696,11 @@ it('shows an image to the conversation model itself, whatever was once saved for
   expect(looked.attached).toBe(id);
   const shown = await tool.toModelOutput({ output: looked });
   expect(shown.type).toBe('content');
-  expect(shown.value[1]).toEqual({ type: 'image-data', data: png, mediaType: 'image/png' });
+  expect(shown.value[1]).toEqual({
+    type: 'file',
+    data: { type: 'data', data: png },
+    mediaType: 'image/png',
+  });
   expect(called).not.toHaveBeenCalled();
 });
 

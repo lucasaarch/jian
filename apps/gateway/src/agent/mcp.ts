@@ -285,19 +285,55 @@ export function omitEmptyOptionalArguments(input: unknown, schema: unknown): unk
  * server.
  */
 function withoutArguments(remote: ToolSet[string], hidden: readonly string[]): ToolSet[string] {
-  const schema = (remote.inputSchema as { jsonSchema?: JSONSchema7 }).jsonSchema;
-  if (!hidden.length || !schema?.properties) return remote;
+  const given = (remote.inputSchema as { jsonSchema?: JSONSchema7 }).jsonSchema;
+  const schema = given && withoutTopLevelUnion(given);
+  if (!schema || (schema === given && (!hidden.length || !schema.properties))) return remote;
 
   const kept = (name: string) => !hidden.includes(name);
-  const narrowed: JSONSchema7 = {
-    ...schema,
-    properties: Object.fromEntries(
-      Object.entries(schema.properties).filter(([name]) => kept(name)),
-    ),
-    ...(schema.required ? { required: schema.required.filter(kept) } : {}),
-  };
+  const narrowed: JSONSchema7 = schema.properties
+    ? {
+        ...schema,
+        properties: Object.fromEntries(
+          Object.entries(schema.properties).filter(([name]) => kept(name)),
+        ),
+        ...(schema.required ? { required: schema.required.filter(kept) } : {}),
+      }
+    : schema;
 
   return { ...remote, inputSchema: jsonSchema(narrowed) } as ToolSet[string];
+}
+
+/**
+ * The schema as one object, for Anthropic refuses a tool whose input schema has `oneOf`, `anyOf`
+ * or `allOf` at the top level, and then every deferred tool of the run with it. The branches'
+ * properties are merged; a property is required when `allOf` requires it, or every branch of a
+ * `oneOf`/`anyOf` does. The server still checks what it is sent.
+ */
+export function withoutTopLevelUnion(schema: JSONSchema7): JSONSchema7 {
+  const { oneOf, anyOf, allOf, ...rest } = schema;
+  if (!oneOf && !anyOf && !allOf) return schema;
+
+  const objects = (branches: JSONSchema7['oneOf']) =>
+    (branches ?? []).flatMap((branch) =>
+      typeof branch === 'object' ? [withoutTopLevelUnion(branch)] : [],
+    );
+  const all = objects(allOf);
+  const either = [...objects(oneOf), ...objects(anyOf)];
+  const properties: NonNullable<JSONSchema7['properties']> = { ...rest.properties };
+  for (const branch of [...all, ...either]) Object.assign(properties, branch.properties);
+
+  const required = new Set(rest.required ?? []);
+  for (const branch of all) for (const name of branch.required ?? []) required.add(name);
+  for (const name of either[0]?.required ?? []) {
+    if (either.every((branch) => branch.required?.includes(name))) required.add(name);
+  }
+
+  return {
+    ...rest,
+    type: 'object',
+    properties,
+    ...(required.size ? { required: [...required] } : {}),
+  };
 }
 
 function withoutKeys(input: unknown, hidden: readonly string[]): unknown {

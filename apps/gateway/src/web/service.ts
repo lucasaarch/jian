@@ -325,7 +325,11 @@ export class WebSearch {
         type: 'content' as const,
         value: [
           { type: 'text' as const, text: JSON.stringify(output) },
-          { type: 'image-data' as const, data: image.data, mediaType: 'image/jpeg' },
+          {
+            type: 'file' as const,
+            data: { type: 'data' as const, data: image.data },
+            mediaType: 'image/jpeg',
+          },
         ],
       };
     };
