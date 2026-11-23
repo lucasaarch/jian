@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { hiddenArguments } from './github-mcp.js';
 import { connectMcp, type SecretReader } from './mcp-connect.js';
 import { mcpClientDisconnected } from './mcp-errors.js';
+import { listAllTools } from './mcp-list.js';
 import { exposedEnding } from './mcp-names.js';
 import { mcpOauthClient } from './mcp-oauth-client.js';
 import type { McpOAuthProviders } from './types.js';
@@ -142,7 +143,7 @@ const brief = (entry: McpEntry) => ({
   ...(entry.description ? { description: entry.description.slice(0, 300) } : {}),
 });
 
-/** How long one server has to connect and list its tools before the turn goes on without it. */
+/** How long one server has to connect before the turn goes on without it (`mcp-list.ts` lists). */
 const MCP_CONNECT_MS = 20_000;
 /** How many times a dead client may be torn down and reopened for one tool call. */
 const MCP_RECONNECT_ATTEMPTS = 2;
@@ -160,8 +161,10 @@ async function openServer(
   config: McpServer,
   context: McpContext,
 ): Promise<{ live: LiveServer; failure?: undefined } | { live?: undefined; failure: string }> {
+  let client: MCPClient | undefined;
+
   try {
-    const client = await connectMcp({
+    client = await connectMcp({
       server: config,
       vault: context.vault as SecretReader,
       fetcher: context.fetcher,
@@ -176,8 +179,12 @@ async function openServer(
         : {}),
     });
 
-    return { live: { config, client, offered: await client.tools() } };
+    return { live: { config, client, offered: await listAllTools(client, context.signal) } };
   } catch (error) {
+    // Connected but not listed: nothing else holds this client, so nothing else would close it,
+    // and its command or its event stream would outlive the run. Not awaited, as a server that
+    // has stopped answering must not hold the turn up while it is told goodbye.
+    void client?.close().catch(() => {});
     context.signal.throwIfAborted();
 
     return { failure: connectionFailure(error) };
@@ -425,7 +432,14 @@ export async function connectMcpTools(
 
   // All at once, each on its own clock: a turn waits for the slowest server, not for the sum
   // of them, and one that hangs is given up on without holding the others.
-  const reached = await Promise.all(servers.map(async (config) => openServer(config, context)));
+  const settled = await Promise.allSettled(servers.map((config) => openServer(config, context)));
+  const reached = settled.map((item) => (item.status === 'fulfilled' ? item.value : undefined));
+
+  // Cancelled while they opened: the ones that made it are not in `context.clients` yet.
+  if (context.signal.aborted) {
+    for (const item of reached) void item?.live?.client.close().catch(() => {});
+    context.signal.throwIfAborted();
+  }
 
   // Merged in the owner's order, so the catalog reads the same whichever server answered first.
   for (let index = 0; index < reached.length; index++) {
