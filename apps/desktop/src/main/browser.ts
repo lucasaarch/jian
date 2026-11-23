@@ -25,16 +25,9 @@ import { allowed, inspectContents, pageKey } from './browser-inspect';
 import { addressFrom, BrowserPlaces } from './browser-places';
 import { BrowserPointer } from './browser-pointer';
 import { BrowserTabsFile, type SavedConversation } from './browser-tabs';
+import { withinDeadline } from './within-deadline';
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-const rejectOnAbort = (signal: AbortSignal) =>
-  new Promise<never>((_, reject) => {
-    signal.addEventListener(
-      'abort',
-      () => reject(new Error('The browser action was cancelled or timed out')),
-      { once: true },
-    );
-  });
 
 /** A page laid out while no one watches is still a page of the panel's size. */
 const FALLBACK_SIZE = { width: 1280, height: 800 };
@@ -84,12 +77,18 @@ export type BrowserLimits = {
   liveBackground: number;
   /** How long the agent's pointer stands without an action before it dims. */
   pointerIdleMs: number;
+  /**
+   * How long an action waits for a page coming back to finish loading, in ms. One resource that
+   * never answers keeps a page loading for good, while what did arrive can be read and used.
+   */
+  restoreWaitMs: number;
 };
 const LIMITS: BrowserLimits = {
   keepMs: 30_000,
   agentKeepMs: 120_000,
   liveBackground: 3,
   pointerIdleMs: 30_000,
+  restoreWaitMs: 15_000,
 };
 const AWAY = { x: 0, y: 0, width: 0, height: 0 };
 
@@ -770,8 +769,8 @@ export class JianBrowser {
             this.offScreen(page);
           }
           this.live(page);
-          await page.restoring;
-          return await Promise.race([run(page, shown, deadline), rejectOnAbort(deadline)]);
+          await this.restored(page, deadline);
+          return await withinDeadline(run(page, shown, deadline), deadline);
         } finally {
           page.busy -= 1;
           if (page !== this.shownPage() && page.busy === 0) {
@@ -786,6 +785,16 @@ export class JianBrowser {
       });
     page.queue = task;
     return task;
+  }
+
+  /** Waits for a page coming back, within limits: it may never finish loading. */
+  private async restored(page: BrowserPage, deadline: AbortSignal) {
+    const restoring = page.restoring;
+    if (!restoring) return;
+    const waited = AbortSignal.any([deadline, AbortSignal.timeout(this.limits.restoreWaitMs)]);
+    await withinDeadline(restoring, waited).catch(() => {});
+    deadline.throwIfAborted();
+    if (page.restoring === restoring) page.restoring = undefined;
   }
 
   act(
