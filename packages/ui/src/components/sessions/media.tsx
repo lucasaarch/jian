@@ -137,9 +137,12 @@ export function MessageMedia({
       queryFn: (): Promise<Fetched> =>
         api
           .media(profileId, id)
-          .then((media) =>
-            measured({ ...media, url: `data:${media.mimeType};base64,${media.data}` }),
-          )
+          .then((media) => {
+            const url = `data:${media.mimeType};base64,${media.data}`;
+            // The same characters: as a slice of the address the browser engine holds them once,
+            // where two strings doubled the memory of every attachment on screen.
+            return measured({ ...media, url, data: url.slice(url.length - media.data.length) });
+          })
           .catch(() => ({ id, failed: true as const })),
       staleTime: Number.POSITIVE_INFINITY,
     })),

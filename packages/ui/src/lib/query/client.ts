@@ -1,6 +1,7 @@
 import { QueryClient } from '@tanstack/react-query';
 import { type GatewayConnection, gatewayConnection } from '../../platform/gateway';
 import { type GatewayApi, gatewayApi } from '../api';
+import { holdKeptQueries } from './kept';
 
 let made: { api: GatewayApi; for: GatewayConnection } | undefined;
 
@@ -22,20 +23,21 @@ export function panelApi(): GatewayApi {
  * event touched. Refetching on focus would only repeat that work, and would ask every provider
  * for its models again. A kept cache is the exception on reconnecting: no stream was open while
  * the gateway was out of reach, so what is on screen is read again once it answers. It also
- * holds everything it ever read while the window is open, since what it dropped would be gone
- * the next time the gateway cannot be reached.
+ * holds its conversations and lists for good (`kept.ts`).
  */
 export function createQueryClient({ kept = false }: { kept?: boolean } = {}) {
-  return new QueryClient({
+  const client = new QueryClient({
     defaultOptions: {
       queries: {
         staleTime: 30_000,
         refetchOnWindowFocus: false,
         refetchOnReconnect: kept,
-        ...(kept ? { gcTime: Number.POSITIVE_INFINITY } : {}),
         // A failure the gateway explained (401, 409, a validation) will not change on a retry.
         retry: 1,
       },
     },
   });
+  if (kept) holdKeptQueries(client);
+
+  return client;
 }
