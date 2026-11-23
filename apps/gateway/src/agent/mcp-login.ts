@@ -3,6 +3,7 @@ import type { McpClientDocument, McpServer, McpStatus } from '@jian/contracts';
 import { GatewayError } from '../core/errors.js';
 import type { GatewayVault } from '../security/gateway-vault.js';
 import { clientDocument, clientDocumentUrl } from './mcp-client-document.js';
+import { boundedMcpFetch } from './mcp-fetch.js';
 import { McpOAuth } from './mcp-oauth.js';
 import { mcpOauthClient } from './mcp-oauth-client.js';
 import type { McpOAuthProviders } from './types.js';
@@ -55,7 +56,7 @@ export class McpLogins {
     const result = await auth(this.provider(server, mcpOauthClient(configured)), {
       serverUrl: configured.url,
       authorizationCode: code,
-      fetchFn: this.fetcher,
+      fetchFn: boundedMcpFetch(this.fetcher),
       ...(state ? { callbackState: state } : {}),
     });
 
