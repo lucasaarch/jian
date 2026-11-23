@@ -4,8 +4,9 @@ import {
   conversationSubagentInputSchema,
   type InspectorFocusInput,
   type Run,
+  type RunProgress,
 } from '@jian/contracts';
-import { and, asc, eq, inArray, isNull, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { findChannel, findContactBySession } from '../channels/repository.js';
 import { insertArtifact } from '../coordination/repository.js';
 import type { Clock } from '../core/clock.js';
@@ -36,6 +37,9 @@ const WAIT_POLL_MS = 1000;
 const WAIT_QUEUED_MS = 60_000;
 /** What an unwaited report carries inline in the parent's new turn; the rest is stored. */
 const INLINE_REPORT_CHARS = 6000;
+
+/** How many of a conversation's subagents the panel's crew lists, the newest. */
+const SUBAGENTS_LISTED = 200;
 
 const finished = ['completed', 'failed', 'interrupted', 'cancelled'];
 
@@ -150,16 +154,15 @@ export class Work {
     return id;
   }
 
+  /**
+   * The panel reads this every 1.5 s while a subagent works, so it stays the size of what the
+   * crew shows: the newest `SUBAGENTS_LISTED`, each with its whole report for the drawer, and
+   * without the Artifact a subagent is drafting, up to 800 kB each, which only the event stream
+   * tells.
+   */
   async conversationSubagents(profileId: string, sessionId: string) {
     await this.sessions.session(profileId, sessionId);
-    const parents = await this.store.db
-      .select({ id: runs.id })
-      .from(runs)
-      .where(
-        and(eq(runs.profileId, profileId), eq(runs.sessionId, sessionId), isNull(runs.subagent)),
-      );
-    if (!parents.length) return [];
-    const children = await this.store.db
+    const newest = await this.store.db
       .select({
         id: runs.id,
         sessionId: runs.sessionId,
@@ -169,7 +172,7 @@ export class Work {
         output: runs.output,
         error: runs.error,
         modelSelection: runs.modelSelection,
-        progress: runs.progress,
+        progress: sql<RunProgress | null>`${runs.progress} - 'artifact'`,
         createdAt: runs.createdAt,
         updatedAt: runs.updatedAt,
       })
@@ -177,13 +180,18 @@ export class Work {
       .where(
         and(
           eq(runs.profileId, profileId),
-          inArray(
-            sql<string>`${runs.subagent}->>'parentRunId'`,
-            parents.map((parent) => parent.id),
-          ),
+          sql`${runs.subagent}->>'parentRunId' in (
+            select ${runs.id}::text from ${runs}
+            where ${runs.profileId} = ${profileId}
+              and ${runs.sessionId} = ${sessionId}
+              and ${runs.subagent} is null
+          )`,
         ),
       )
-      .orderBy(asc(runs.createdAt));
+      // The id settles a tie, so two polls never swap two cards started in the same millisecond.
+      .orderBy(desc(runs.createdAt), desc(runs.id))
+      .limit(SUBAGENTS_LISTED);
+    const children = newest.reverse();
     return children.map((child) => {
       const subagent = assertFound(child.subagent, 'Subagent');
       return {
