@@ -299,6 +299,33 @@ function reason(error: unknown): string {
   return codes.length ? ` (${[...new Set(codes)].join(' · ')})` : '';
 }
 
+/**
+ * Sockets one origin may hold at once. The client is shared by every run, so this sits well above
+ * what 48 concurrent turns ask of one provider; past it requests wait instead of opening more, and
+ * a server that answers nothing cannot take the gateway's file descriptors with it.
+ */
+const MAX_CONNECTIONS_PER_ORIGIN = 256;
+
+/** How long closing waits for responses still open, in ms, before cutting them. */
+const CLOSE_WAIT_MS = 2_000;
+
+/**
+ * Closes an agent, cutting whatever is still open after `CLOSE_WAIT_MS`. A graceful close alone
+ * waits for every response to end, and an event stream never does: shutdown would hang on it.
+ */
+async function closeAgent(agent: Agent): Promise<void> {
+  let timer: NodeJS.Timeout | undefined;
+  const late = new Promise<'late'>((done) => {
+    timer = setTimeout(() => done('late'), CLOSE_WAIT_MS);
+  });
+  // Caught apart from the race: destroying the agent can reject this after the race is over.
+  const closing = agent.close().catch(() => {});
+  const outcome = await Promise.race([closing, late]);
+
+  clearTimeout(timer);
+  if (outcome === 'late') await agent.destroy().catch(() => {});
+}
+
 export function createSafeFetch(options: SafeFetchOptions = {}): {
   fetch: typeof globalThis.fetch;
   close(): Promise<void>;
@@ -325,6 +352,7 @@ export function createSafeFetch(options: SafeFetchOptions = {}): {
 
     if (!agent) {
       agent = new Agent({
+        connections: MAX_CONNECTIONS_PER_ORIGIN,
         connect: {
           lookup(hostname, lookupOptions, callback) {
             const resolve = async () => {
@@ -403,7 +431,7 @@ export function createSafeFetch(options: SafeFetchOptions = {}): {
     fetch: safeFetch,
     async close() {
       closed = true;
-      await Promise.all([...agents.values()].map((agent) => agent.close()));
+      await Promise.all([...agents.values()].map(closeAgent));
       agents.clear();
     },
   };

@@ -1,4 +1,5 @@
 import { randomBytes } from 'node:crypto';
+import { once } from 'node:events';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -346,4 +347,30 @@ describe('outbound policy', () => {
     expect(failure).toMatchObject({ codes: ['EAI_AGAIN'] });
     expect(failure.cause).toBeUndefined();
   });
+});
+
+it('closes the outbound client even while a response never ends', async () => {
+  const server = createServer((_request, response) => {
+    response.writeHead(200, { 'content-type': 'text/event-stream' });
+    response.write(': open\n\n');
+  });
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  const { port } = server.address() as AddressInfo;
+  const outbound = createSafeFetch({ allowLoopback: true });
+
+  try {
+    const response = await outbound.fetch(`http://127.0.0.1:${port}/stream`);
+    expect(response.ok).toBe(true);
+
+    const closed = await Promise.race([
+      outbound.close().then(() => 'closed'),
+      new Promise((done) => setTimeout(() => done('still waiting'), 5_000)),
+    ]);
+
+    expect(closed).toBe('closed');
+  } finally {
+    server.closeAllConnections();
+    server.close();
+  }
 });
