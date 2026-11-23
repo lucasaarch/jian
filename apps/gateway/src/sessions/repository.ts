@@ -257,9 +257,37 @@ export async function listSessions(db: Queryable, profileId: string): Promise<Se
   return rows.map(toSession);
 }
 
+/** How much of a last message a list reads, in characters: twice the line it shows. */
+const LAST_MESSAGE_CHARS = 400;
+const MEDIA_MARKER = '[Attached media: ';
+
+/**
+ * A last message as one line of a list: media ids and line breaks are not something to read
+ * there. The read stops at `LAST_MESSAGE_CHARS`, which can fall inside a media marker, and half a
+ * marker is still a marker.
+ */
+export function lastMessageLine(content: string) {
+  const open = content.lastIndexOf('[');
+  const tail = open < 0 ? '' : content.slice(open);
+  const halfMarker =
+    content.length >= LAST_MESSAGE_CHARS &&
+    open >= 0 &&
+    !tail.includes(']') &&
+    (MEDIA_MARKER.startsWith(tail) ||
+      (tail.startsWith(MEDIA_MARKER) && /^[0-9a-f-]*$/.test(tail.slice(MEDIA_MARKER.length))));
+
+  return (halfMarker ? `${content.slice(0, open)}📎` : content)
+    .replace(/\[Attached media: [0-9a-f-]{36}\]/g, '📎')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 200);
+}
+
 /**
  * The newest message of each session, one row per session: what a conversation list shows under
- * each name. Newest first per session, read once for the whole profile.
+ * each name. Newest first per session, read once for the whole profile. Only the head of each
+ * leaves the database, past any leading blank lines, since a list shows one line and a last
+ * message can be a whole document.
  */
 export async function lastMessages(
   db: Queryable,
@@ -269,7 +297,7 @@ export async function lastMessages(
     .selectDistinctOn([messages.sessionId], {
       sessionId: messages.sessionId,
       role: messages.role,
-      content: messages.content,
+      content: sql<string>`left(ltrim(${messages.content}, E' \\t\\r\\n'), ${LAST_MESSAGE_CHARS})`,
       createdAt: messages.createdAt,
     })
     .from(messages)
@@ -280,6 +308,28 @@ export async function lastMessages(
     .orderBy(messages.sessionId, desc(messages.createdAt));
 
   return new Map(rows.map(({ sessionId, ...last }) => [sessionId, last]));
+}
+
+/** When this conversation last said something, by the same rule as `lastMessages`. */
+export async function lastMessageAt(
+  db: Queryable,
+  profileId: string,
+  sessionId: string,
+): Promise<Date | undefined> {
+  const [row] = await db
+    .select({ createdAt: messages.createdAt })
+    .from(messages)
+    .where(
+      and(
+        eq(messages.profileId, profileId),
+        eq(messages.sessionId, sessionId),
+        sql`${messages.purpose} IS DISTINCT FROM 'resume'`,
+      ),
+    )
+    .orderBy(desc(messages.createdAt))
+    .limit(1);
+
+  return row?.createdAt;
 }
 
 /** The one session this profile keeps for a peer: a column and an index, never a scan. */
