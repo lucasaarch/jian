@@ -1,16 +1,11 @@
-import { type ChildProcess, spawn, spawnSync } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { existsSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import type { RemoteResult, RemoteTask } from '@jian/contracts';
+import { runBounded, type Spawn } from './bounded-run.ts';
 import { OutputEnds } from './ends.ts';
 import { hostWording } from './host.ts';
 
-/** How a child is started: `spawn`, or a test's stand-in. */
-type Spawn = (
-  command: string,
-  args: string[],
-  options: Parameters<typeof spawn>[2],
-) => ChildProcess;
 /**
  * The PATH a command gets when the worker's own is empty or thin, as under launchd: where the
  * usual tools live, Homebrew's included.
@@ -167,45 +162,24 @@ export function executeShellTask(
       platform === 'win32'
         ? ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', command]
         : ['-lc', command];
-    const child = spawnImpl(shell, commandArgs, {
-      cwd: resolved.cwd,
-      env: { ...workerChildEnv(), ...task.env },
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
     const masked = (text: string) => maskSecrets(text, task.env);
     const stdout = new OutputEnds(STDOUT_CAP);
     const stderr = new OutputEnds(STDERR_CAP);
     if (resolved.note) stderr.push(`${resolved.note}\n`);
-    let timedOut = false;
-    const timeout = setTimeout(() => {
-      timedOut = true;
-      child.kill('SIGTERM');
-      setTimeout(() => {
-        if (platform === 'win32' && child.pid) {
-          spawnSync('taskkill.exe', ['/PID', String(child.pid), '/T', '/F'], {
-            stdio: 'ignore',
-            windowsHide: true,
-          });
-        } else {
-          child.kill('SIGKILL');
-        }
-      }, 2000).unref();
-    }, task.timeoutMs);
-    child.stdout?.on('data', (chunk: Buffer) => stdout.push(chunk));
-    child.stderr?.on('data', (chunk: Buffer) => stderr.push(chunk));
-    child.on('error', (error) => {
-      clearTimeout(timeout);
-      stderr.push(formatShellSpawnError(error, { shell, cwd: resolved.cwd }));
-      resolveResult({
-        taskId: task.id,
-        exitCode: null,
-        stdout: masked(stdout.text()),
-        stderr: masked(stderr.text()),
-        timedOut,
-      });
+    const { done } = runBounded(shell, commandArgs, {
+      spawnOptions: {
+        cwd: resolved.cwd,
+        env: { ...workerChildEnv(), ...task.env },
+        stdio: ['ignore', 'pipe', 'pipe'],
+      },
+      timeoutMs: task.timeoutMs,
+      onStdout: (chunk) => stdout.push(chunk),
+      onStderr: (chunk) => stderr.push(chunk),
+      spawnImpl,
+      platform,
     });
-    child.on('close', (code) => {
-      clearTimeout(timeout);
+    void done.then(({ code, timedOut, error }) => {
+      if (error) stderr.push(formatShellSpawnError(error, { shell, cwd: resolved.cwd }));
       resolveResult({
         taskId: task.id,
         exitCode: code,

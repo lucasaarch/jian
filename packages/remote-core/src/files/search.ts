@@ -1,9 +1,9 @@
-import { spawn } from 'node:child_process';
 import type { Dirent } from 'node:fs';
 import { glob, readdir, stat } from 'node:fs/promises';
 import { join, sep } from 'node:path';
 import { Worker } from 'node:worker_threads';
 import type { RemoteFilesAnswer, RemoteFilesOp } from '@jian/contracts';
+import { runBounded } from '../bounded-run.ts';
 import { MINIMAL_PATH } from '../shell.ts';
 import { MAX_FIND_CHARS, MAX_SEARCH_CHARS } from './limits.ts';
 import { inside, isRefused, realLocation, refusedRoots } from './paths.ts';
@@ -168,65 +168,53 @@ function ripgrep(
   timeoutMs: number,
   roots: string[],
 ): Promise<Found | undefined> {
-  return new Promise((done) => {
-    const child = spawn('rg', ripgrepArgs(op, target), {
+  let stdout = '';
+  let stderr = '';
+  let oversize = false;
+  const run = runBounded('rg', ripgrepArgs(op, target), {
+    spawnOptions: {
       env: { ...env, PATH: env.PATH || MINIMAL_PATH },
       stdio: ['ignore', 'pipe', 'pipe'],
       windowsHide: true,
-    });
-    let stdout = '';
-    let stderr = '';
-    let stopped: 'size' | 'time' | undefined;
-    let settled = false;
-    const finish = (value: Found | undefined) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      done(value);
-    };
-    const timer = setTimeout(() => {
-      stopped ??= 'time';
-      child.kill();
-    }, timeoutMs);
-    child.stdout.setEncoding('utf8').on('data', (chunk: string) => {
+    },
+    timeoutMs,
+    encoding: 'utf8',
+    onStdout: (chunk) => {
+      if (oversize) return;
       stdout += chunk;
-      if (stdout.length > MAX_STDOUT && !stopped) {
-        stopped = 'size';
-        child.kill();
+      if (stdout.length > MAX_STDOUT) {
+        oversize = true;
+        run.stop();
       }
-    });
-    child.stderr.setEncoding('utf8').on('data', (chunk: string) => {
+    },
+    onStderr: (chunk) => {
       stderr = (stderr + chunk).slice(0, 2000);
-    });
-    child.on('error', (error: NodeJS.ErrnoException) =>
-      finish(error.code === 'ENOENT' ? undefined : { problem: error.message }),
-    );
-    child.on('close', (code) => {
-      if (stopped) {
-        // What was printed up to the stop; the line being written when it stopped is not whole.
-        const whole = stdout.endsWith('\n')
-          ? stdout
-          : stdout.slice(0, stdout.lastIndexOf('\n') + 1);
-        finish({
-          lines: whole.split('\n').filter(Boolean),
-          truncated: true,
-          timedOut: stopped === 'time',
-        });
-      } else if (code === 0 || code === 1 || (code === 2 && stdout)) {
-        // 1 is no match, an answer. 2 is an error, but ripgrep still prints what it could read.
-        finish({ lines: stdout.split('\n').filter(Boolean), truncated: false, timedOut: false });
-      } else {
-        // Its complaints name files, which may lie in a refused folder; those lines are dropped.
-        const said = stderr
-          .split('\n')
-          .filter(
-            (line) =>
-              line.trim() && !roots.some((root) => line.toLowerCase().includes(root.toLowerCase())),
-          )
-          .join('\n');
-        finish({ problem: said || `Search failed (${code}).` });
-      }
-    });
+    },
+  });
+  return run.done.then(({ code, timedOut, error }): Found | undefined => {
+    if (error) {
+      return (error as NodeJS.ErrnoException).code === 'ENOENT'
+        ? undefined
+        : { problem: error.message };
+    }
+    if (oversize || timedOut) {
+      // What was printed up to the stop; the line being written when it stopped is not whole.
+      const whole = stdout.endsWith('\n') ? stdout : stdout.slice(0, stdout.lastIndexOf('\n') + 1);
+      return { lines: whole.split('\n').filter(Boolean), truncated: true, timedOut };
+    }
+    // 1 is no match, an answer. 2 is an error, but ripgrep still prints what it could read.
+    if (code === 0 || code === 1 || (code === 2 && stdout)) {
+      return { lines: stdout.split('\n').filter(Boolean), truncated: false, timedOut: false };
+    }
+    // Its complaints name files, which may lie in a refused folder; those lines are dropped.
+    const said = stderr
+      .split('\n')
+      .filter(
+        (line) =>
+          line.trim() && !roots.some((root) => line.toLowerCase().includes(root.toLowerCase())),
+      )
+      .join('\n');
+    return { problem: said || `Search failed (${code}).` };
   });
 }
 
