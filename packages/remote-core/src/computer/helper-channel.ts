@@ -63,6 +63,12 @@ export class HelperChannel {
       onClose();
     };
     child.on('exit', () => ended('Computer-use helper exited unexpectedly.'));
+    // A helper that dies with a request on its way fails the write with EPIPE, which, unheard,
+    // would end the whole worker. One that stopped reading is of no more use, so it goes too.
+    child.stdin.on('error', () => {
+      ended('Computer-use helper stopped reading its requests.');
+      child.kill('SIGKILL');
+    });
     // Without a listener, a helper that cannot start (no python3, no PowerShell) would take
     // the whole worker down with an unhandled 'error' event.
     child.on('error', (error) => ended(`Computer-use helper failed: ${error.message}`));
