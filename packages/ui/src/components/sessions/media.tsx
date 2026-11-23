@@ -153,6 +153,7 @@ export function MessageMedia({
   const entries = ids.map((id, index) => ({
     id,
     item: results[index]?.data,
+    paused: results[index]?.fetchStatus === 'paused',
     retry: () => void results[index]?.refetch(),
   }));
   const loaded = entries.flatMap(({ item }) => (item && !('failed' in item) ? [item] : []));
@@ -197,10 +198,11 @@ export function MessageMedia({
       )}
       {shown.length > 0 && (
         <div className="mosaic" data-count={shown.length}>
-          {shown.map(({ id, item, retry }, index) => {
+          {shown.map(({ id, item, paused, retry }, index) => {
             const media = item && !('failed' in item) ? item : undefined;
             const hidden = index === MOSAIC_TILES - 1 ? tiles.length - MOSAIC_TILES : 0;
-            const status = !item ? 'generating' : media ? 'complete' : 'error';
+            // A read waiting for the gateway to come back is not at work: it resumes by itself.
+            const status = media ? 'complete' : item || paused ? 'error' : 'generating';
 
             return (
               <div key={id} className="mosaic-tile">
