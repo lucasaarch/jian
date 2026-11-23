@@ -27,6 +27,7 @@ import {
 } from '@jian/contracts';
 import { and, eq, inArray } from 'drizzle-orm';
 import { projectCheckout } from '../agent/workspace-home.js';
+import { keepArtifactsOf } from '../artifacts/folders.js';
 import { type Clock, nowIso } from '../core/clock.js';
 import { assertFound, GatewayError } from '../core/errors.js';
 import { recordEvent } from '../core/events.js';
@@ -410,7 +411,10 @@ export class Sessions {
     });
   }
 
-  /** Removes a chat and its transcript while leaving a channel contact ready to reopen it. */
+  /**
+   * Removes a chat and its transcript while leaving a channel contact ready to reopen it. Its
+   * Artifacts stay on the owner's page, under the project it was in.
+   */
   async deleteSession(profileId: string, sessionId: string) {
     return this.store.transaction(profileId, async (tx) => {
       const session = await this.session(profileId, sessionId, tx);
@@ -432,6 +436,7 @@ export class Sessions {
       if (active)
         throw new GatewayError(409, 'Wait for this conversation to finish before deleting it');
 
+      await keepArtifactsOf(tx, profileId, sessionId);
       const deleted = assertFound(await deleteSessionRecord(tx, profileId, sessionId), 'Session');
       await recordEvent(tx, this.clock, profileId, 'session.deleted', {
         sessionId,

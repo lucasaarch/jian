@@ -26386,6 +26386,7 @@ export interface operations {
                             /** Format: date-time */
                             updatedAt: string;
                             sessionTitle: string | null;
+                            sessionDeleted: boolean;
                             /** Format: uuid */
                             projectId: string | null;
                             pinned: boolean;

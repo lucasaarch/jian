@@ -3,11 +3,12 @@ import { and, desc, eq, ilike, inArray, isNull, sql } from 'drizzle-orm';
 import { assertFound } from '../core/errors.js';
 import type { Queryable } from '../storage/database.js';
 import { sessionArtifacts, sessions } from '../storage/schema.js';
+import { artifactProject } from './folders.js';
 
 /**
  * Every Artifact of a profile, across its conversations, the one changed last first, a page at
  * a time: what the panel's Artifacts page lists. Each comes with the stored title and the project
- * of its conversation.
+ * of its conversation, and whether that conversation was deleted, which leaves it listed.
  *
  * `folder` narrows it to one folder of the owner's, and `project` to what nobody moved out of a
  * project's conversations (`none`: of those in no project), which is where each one starts.
@@ -41,9 +42,7 @@ export async function pageProfileArtifacts(
   if (where.project) {
     conditions.push(
       isNull(sessionArtifacts.folderId),
-      where.project === NO_PROJECT
-        ? isNull(sessions.projectId)
-        : eq(sessions.projectId, where.project),
+      where.project === NO_PROJECT ? isNull(artifactProject) : eq(artifactProject, where.project),
     );
   }
   // The words as typed: `%` and `_` are a title's own characters here, not a pattern's.
@@ -68,10 +67,11 @@ export async function pageProfileArtifacts(
     .select({
       artifact: sessionArtifacts,
       sessionTitle: sessions.title,
-      projectId: sessions.projectId,
+      projectId: artifactProject,
+      sessionDeleted: sql<boolean>`${sessions.id} is null`,
     })
     .from(sessionArtifacts)
-    .innerJoin(sessions, eq(sessions.id, sessionArtifacts.sessionId))
+    .leftJoin(sessions, eq(sessions.id, sessionArtifacts.sessionId))
     .where(and(...conditions))
     .orderBy(desc(sessionArtifacts.updatedAt), desc(sessionArtifacts.id))
     .limit(where.limit + 1);

@@ -46402,6 +46402,9 @@
                               "null"
                             ]
                           },
+                          "sessionDeleted": {
+                            "type": "boolean"
+                          },
                           "projectId": {
                             "type": [
                               "string",
@@ -46434,6 +46437,7 @@
                           "createdAt",
                           "updatedAt",
                           "sessionTitle",
+                          "sessionDeleted",
                           "projectId",
                           "pinned",
                           "folderId"

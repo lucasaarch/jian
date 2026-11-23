@@ -111,7 +111,7 @@ function DangerZone({ profile }: { profile: Profile }) {
       <SettingsGroup title="Danger zone">
         <SettingsRow
           title="Reset"
-          description="Forgets its conversations, memories and activity. Who it is, its channels and contacts stay."
+          description="Forgets its conversations, memories and activity. Who it is, its channels, contacts and Artifacts stay."
         >
           {button('reset', <RotateCcw size={13} />, 'Reset')}
         </SettingsRow>
@@ -131,8 +131,8 @@ function DangerZone({ profile }: { profile: Profile }) {
         run={() => void reset()}
         busy={working === 'reset'}
       >
-        It forgets every conversation, memory and bit of activity. Who it is, its channels and its
-        contacts stay. This cannot be undone.
+        It forgets every conversation, memory and bit of activity. Who it is, its channels, its
+        contacts and its Artifacts stay. This cannot be undone.
       </ConfirmDialog>
       <ConfirmDialog
         open={asking === 'delete'}

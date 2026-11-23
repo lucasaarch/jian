@@ -52,7 +52,7 @@ export function ArtifactsGrid({
             keeping: {
               pinned: artifact.pinned,
               pin: () => on.pin(artifact),
-              go: () => on.go(artifact),
+              go: artifact.sessionDeleted ? undefined : () => on.go(artifact),
               folderId: artifact.folderId,
               folders,
               home: home(artifact),

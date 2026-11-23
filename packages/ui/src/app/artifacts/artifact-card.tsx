@@ -60,7 +60,8 @@ export type CardTools = {
   keeping?: {
     pinned: boolean;
     pin: () => void;
-    go: () => void;
+    /** Absent once its conversation is deleted, which leaves the Artifact here. */
+    go?: (() => void) | undefined;
     /** The owner's folder it is in; null where it started, which `home` names. */
     folderId: string | null;
     folders: ArtifactFolder[];
@@ -167,9 +168,11 @@ export function ArtifactCard({
                 )}
                 {keeping && (
                   <>
-                    <MenuEntry icon={<MessageSquare size={14} />} onClick={keeping.go}>
-                      Open conversation
-                    </MenuEntry>
+                    {keeping.go && (
+                      <MenuEntry icon={<MessageSquare size={14} />} onClick={keeping.go}>
+                        Open conversation
+                      </MenuEntry>
+                    )}
                     <MenuSubmenu icon={<FolderInput size={14} />} label="Move to folder">
                       {/* Where it is now is ticked, and is no move to make. */}
                       <MenuEntry

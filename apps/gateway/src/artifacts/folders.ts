@@ -17,6 +17,34 @@ import { artifactFolders, projects, sessionArtifacts, sessions } from '../storag
  * move some into. Each is one profile's, and every read and write names that profile.
  */
 
+/**
+ * The project an Artifact is kept under until it is moved: its conversation's, or, once that
+ * conversation is deleted, the one it was in then. Read with `sessions` left joined on the
+ * Artifact's conversation, which may be gone.
+ */
+export const artifactProject = sql<
+  string | null
+>`coalesce(${sessions.projectId}, ${sessionArtifacts.projectId})`;
+
+/**
+ * Before conversations are deleted: their Artifacts stay, and note the project each conversation
+ * was in, where the owner's page goes on keeping them. `sessionId` is the one conversation
+ * going; absent, every conversation of the profile is. One already gone keeps what it noted.
+ */
+export async function keepArtifactsOf(db: Queryable, profileId: string, sessionId?: string) {
+  await db
+    .update(sessionArtifacts)
+    .set({ projectId: sql`${sessions.projectId}` })
+    .from(sessions)
+    .where(
+      and(
+        eq(sessions.id, sessionArtifacts.sessionId),
+        eq(sessionArtifacts.profileId, profileId),
+        ...(sessionId ? [eq(sessions.id, sessionId)] : []),
+      ),
+    );
+}
+
 const folderOf = (row: typeof artifactFolders.$inferSelect, artifacts: number): ArtifactFolder => ({
   id: row.id,
   name: row.name,
@@ -53,15 +81,15 @@ export async function listFolders(db: Queryable, profileId: string): Promise<Art
     .orderBy(asc(sql`lower(${artifactFolders.name})`), asc(artifactFolders.createdAt));
   const started = await db
     .select({
-      projectId: sessions.projectId,
+      projectId: artifactProject,
       name: projects.name,
       artifacts: sql<number>`count(*)::int`,
     })
     .from(sessionArtifacts)
-    .innerJoin(sessions, eq(sessions.id, sessionArtifacts.sessionId))
-    .leftJoin(projects, eq(projects.id, sessions.projectId))
+    .leftJoin(sessions, eq(sessions.id, sessionArtifacts.sessionId))
+    .leftJoin(projects, eq(projects.id, artifactProject))
     .where(and(eq(sessionArtifacts.profileId, profileId), isNull(sessionArtifacts.folderId)))
-    .groupBy(sessions.projectId, projects.name)
+    .groupBy(artifactProject, projects.name)
     // A null sorts last, which is where the conversations in no project belong.
     .orderBy(asc(sql`lower(${projects.name})`));
 
