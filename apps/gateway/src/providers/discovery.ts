@@ -7,6 +7,7 @@ import {
 import { z } from 'zod';
 import { type Clock, nowIso } from '../core/clock.js';
 import { GatewayError } from '../core/errors.js';
+import { readCappedJson } from '../core/read-capped.js';
 import type { GatewayVault } from '../security/gateway-vault.js';
 import { bareModelId, modelCapabilities } from './capabilities.js';
 import { GROQ_BASE_URL, type ProviderKind, XAI_BASE_URL } from './catalog.js';
@@ -209,6 +210,12 @@ export interface ProviderModelOptions {
 }
 
 /**
+ * The most a provider's model list may take, in bytes. The longest real ones (OpenRouter's) are
+ * a few megabytes, and an address the owner typed can answer with anything.
+ */
+const MAX_LISTING_BYTES = 32 * 1024 * 1024;
+
+/**
  * The model list a provider reports, cached briefly so the panel can render it on every
  * paint without a call per render.
  *
@@ -347,7 +354,7 @@ export class ProviderModels {
 
     await this.catalog?.prime();
 
-    return parse(kind, await response.json(), this.catalog);
+    return parse(kind, await readCappedJson(response, MAX_LISTING_BYTES), this.catalog);
   }
 
   /**

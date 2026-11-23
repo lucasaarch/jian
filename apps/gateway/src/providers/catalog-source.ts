@@ -1,6 +1,7 @@
 import type { ModelCapabilities } from '@jian/contracts';
 import { z } from 'zod';
 import type { Clock } from '../core/clock.js';
+import { readCappedJson } from '../core/read-capped.js';
 import type { ProviderKind } from './catalog.js';
 
 /**
@@ -12,6 +13,9 @@ import type { ProviderKind } from './catalog.js';
  * announced, and being wrong in between.
  */
 const CATALOG_URL = 'https://models.dev/api.json';
+
+/** The most either listing may take, in bytes: several times the size of the real ones. */
+const MAX_CATALOG_BYTES = 32 * 1024 * 1024;
 
 /**
  * OpenRouter's own public listing, every output kind: the only source that says which of its
@@ -284,7 +288,9 @@ export class ModelCatalog {
         this.report(`the OpenRouter listing answered ${response.status}`);
         return routed;
       }
-      const body = z.looseObject({ data: z.array(z.unknown()) }).safeParse(await response.json());
+      const body = z
+        .looseObject({ data: z.array(z.unknown()) })
+        .safeParse(await readCappedJson(response, MAX_CATALOG_BYTES));
       for (const item of body.success ? body.data.data : []) {
         const model = routedModel.safeParse(item);
         const described = model.success ? routedEntry(model.data) : undefined;
@@ -311,7 +317,7 @@ export class ModelCatalog {
         return undefined;
       }
 
-      const parsed = catalog.parse(await response.json());
+      const parsed = catalog.parse(await readCappedJson(response, MAX_CATALOG_BYTES));
       const byProvider = new Map<string, Map<string, CatalogEntry>>();
 
       for (const [provider, body] of Object.entries(parsed)) {
