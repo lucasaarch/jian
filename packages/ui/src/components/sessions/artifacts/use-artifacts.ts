@@ -10,6 +10,7 @@ import { useEffect } from 'react';
 import type { GatewayApi, ProfileArtifact, SessionArtifact } from '../../../lib/api';
 import { subscribe } from '../../../lib/events';
 import { keys } from '../../../lib/query/keys';
+import { refresh } from '../../../lib/query/refresh';
 
 export type ArtifactsApi = Pick<
   GatewayApi,
@@ -111,10 +112,7 @@ export function useArtifactsFollow(profileId: string, sessionId: string | undefi
       const about = event.data as { sessionId?: string; kind?: string } | undefined;
       if (about?.kind !== 'artifact' || about.sessionId !== sessionId) return;
       // The list alone: the versions under its key never change.
-      void client.invalidateQueries({
-        queryKey: keys.sessionArtifacts(profileId, sessionId),
-        exact: true,
-      });
+      void refresh(client, keys.sessionArtifacts(profileId, sessionId), { exact: true });
     });
   }, [client, profileId, sessionId]);
 }

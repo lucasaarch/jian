@@ -11,6 +11,7 @@ import type { ArtifactsApi } from '../../components/sessions/artifacts/use-artif
 import type { GatewayApi, SessionArtifact } from '../../lib/api';
 import { subscribe } from '../../lib/events';
 import { keys } from '../../lib/query/keys';
+import { refresh } from '../../lib/query/refresh';
 
 /** What keeping Artifacts asks of the gateway: renaming, pinning, moving, copying, deleting. */
 export type ArtifactKeepingApi = Pick<
@@ -103,8 +104,8 @@ export function useArtifactsPageFollow(profileId: string) {
           event.type === 'conversation.inspector.focus' &&
           (event.data as { kind?: string } | undefined)?.kind === 'artifact';
         if (!artifact && event.type !== 'session.deleted') return;
-        void client.invalidateQueries({ queryKey: keys.profileArtifacts(profileId) });
-        void client.invalidateQueries({ queryKey: keys.artifactFolders(profileId) });
+        void refresh(client, keys.profileArtifacts(profileId));
+        void refresh(client, keys.artifactFolders(profileId));
       }),
     [client, profileId],
   );

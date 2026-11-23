@@ -11,6 +11,7 @@ import { LOCALE } from '../../lib/format';
 import { useAgent } from '../../lib/query/agent';
 import { panelApi } from '../../lib/query/client';
 import { keys } from '../../lib/query/keys';
+import { refresh } from '../../lib/query/refresh';
 import { Part, Tile, Tiles } from './figures';
 import { duration } from './format';
 import { ActivityHeatmap } from './heatmap';
@@ -44,10 +45,7 @@ function useStats(api: GatewayApi, profileId: string, days: number) {
     const stop = subscribe((event) => {
       if (!event.type.startsWith('run.') && !event.type.startsWith('memory.')) return;
       clearTimeout(timer);
-      timer = setTimeout(
-        () => void client.invalidateQueries({ queryKey: keys.stats(profileId, days) }),
-        1500,
-      );
+      timer = setTimeout(() => void refresh(client, keys.stats(profileId, days)), 1500);
     });
     return () => {
       stop();

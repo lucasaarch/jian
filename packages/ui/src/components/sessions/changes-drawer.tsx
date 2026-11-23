@@ -8,6 +8,7 @@ import type { GatewayApi, SessionChange } from '../../lib/api';
 import { GatewayAnswer } from '../../lib/api/result';
 import { subscribe } from '../../lib/events';
 import { keys } from '../../lib/query/keys';
+import { refresh } from '../../lib/query/refresh';
 import { useCrew } from '../../lib/stores/crew';
 import { useReading } from '../../lib/stores/reading';
 import { ChangedFiles, type ListedFile, useFileDiffs } from './changes-list';
@@ -242,8 +243,8 @@ export function ChangesDrawer({ api, profileId }: { api: DrawerApi; profileId: s
       if (about && about !== sessionId) return;
       clearTimeout(timer);
       timer = setTimeout(() => {
-        void client.invalidateQueries({ queryKey: keys.sessionChanges(profileId, sessionId) });
-        void client.invalidateQueries({ queryKey: keys.sessionTimeline(profileId, sessionId) });
+        void refresh(client, keys.sessionChanges(profileId, sessionId));
+        void refresh(client, keys.sessionTimeline(profileId, sessionId));
       }, GATHER_MS);
     });
 

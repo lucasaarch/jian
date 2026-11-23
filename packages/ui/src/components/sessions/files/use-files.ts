@@ -6,6 +6,7 @@ import type { GatewayApi } from '../../../lib/api';
 import { GatewayAnswer } from '../../../lib/api/result';
 import { subscribe } from '../../../lib/events';
 import { keys } from '../../../lib/query/keys';
+import { refresh } from '../../../lib/query/refresh';
 import { useCrew } from '../../../lib/stores/crew';
 import type { OpenFile } from './store';
 
@@ -104,10 +105,7 @@ export function useFilesFollow(profileId: string, sessionId: string | undefined)
       due = at;
       timer = setTimeout(() => {
         due = Number.POSITIVE_INFINITY;
-        void client.invalidateQueries(
-          { queryKey: keys.sessionFiles(profileId, sessionId) },
-          { cancelRefetch: false },
-        );
+        void refresh(client, keys.sessionFiles(profileId, sessionId));
       }, wait);
     });
 
