@@ -43,12 +43,13 @@ export class BrowserTabsFile {
   /** Pages change a lot while loading, and only where they ended up matters. */
   save(current: () => SavedConversation[]) {
     this.latest = current;
-    clearTimeout(this.timer);
-    this.timer = setTimeout(() => this.flush(), WRITE_AFTER_MS);
+    // Not pushed back by each change: a page that never stops changing would never be saved.
+    this.timer ??= setTimeout(() => this.flush(), WRITE_AFTER_MS);
   }
 
   flush() {
     clearTimeout(this.timer);
+    this.timer = undefined;
     if (!this.latest) return;
     const file = this.file();
     try {

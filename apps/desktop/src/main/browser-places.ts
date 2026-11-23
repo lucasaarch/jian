@@ -7,6 +7,8 @@ type Places = { recents: BrowserPlace[]; favorites: BrowserPlace[] };
 const KEPT_RECENTS = 30;
 const SHOWN_RECENTS = 8;
 const SEARCH = 'https://duckduckgo.com/?q=';
+/** How long a new title waits to be written, in ms, with those that follow it. */
+const TITLE_WRITE_MS = 500;
 
 /** What the owner typed, as an address to open: something that is not one is a search. */
 export function addressFrom(raw: string): string {
@@ -28,6 +30,8 @@ const same = (a: string, b: string) => a.split('#')[0] === b.split('#')[0];
  */
 export class BrowserPlaces {
   private all?: Record<string, Places>;
+  /** A title changed and is not on disk yet. */
+  private titleWrite?: NodeJS.Timeout;
   constructor(private readonly file: () => string) {}
 
   private places(scope: string): Places {
@@ -44,6 +48,8 @@ export class BrowserPlaces {
   }
 
   private save() {
+    clearTimeout(this.titleWrite);
+    this.titleWrite = undefined;
     const file = this.file();
     try {
       mkdirSync(dirname(file), { recursive: true });
@@ -69,7 +75,13 @@ export class BrowserPlaces {
     const place = this.places(scope).recents.find((candidate) => same(candidate.url, url));
     if (!place || !title || place.title === title) return;
     place.title = title;
-    this.save();
+    // Not at once: a page can rewrite its title many times a second, and this blocks the app.
+    this.titleWrite ??= setTimeout(() => this.save(), TITLE_WRITE_MS);
+  }
+
+  /** What is still waiting to be written, before the app ends. */
+  flush() {
+    if (this.titleWrite) this.save();
   }
 
   /** What a new tab offers: favorites, then recents that are not already among them. */
