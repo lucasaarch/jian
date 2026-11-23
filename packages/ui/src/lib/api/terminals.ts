@@ -1,5 +1,6 @@
 import { TERMINALS_MAX, type TerminalInput } from '@jian/contracts';
 import { gatewayConnection } from '../../platform/gateway';
+import { readFrames } from './frames';
 import { type Client, profile } from './params';
 import { GatewayAnswer, result } from './result';
 
@@ -13,11 +14,6 @@ type TerminalStreamHandlers = {
   exit(exitCode: number): void;
 };
 
-/**
- * How long a stream may say nothing before it is given up as dead, in ms. The gateway says
- * something at least every 25 seconds; a connection lost without a word never fails by itself.
- */
-const QUIET_MS = 60_000;
 /**
  * The longest frame a screen takes, in characters: the whole scrollback as JSON, where a control
  * character is six. Past it the stream is not one this panel understands.
@@ -67,9 +63,7 @@ export const terminalCalls = (client: Client) => ({
 
 /**
  * Reads a terminal's output until its stream ends, which it does by itself once the shell has
- * exited. The panel signs in with a cookie and a header, which EventSource cannot send, so the
- * stream is read from a plain response body, as the gateway's events are. A terminal the gateway
- * does not have is a `GatewayAnswer` with status 404.
+ * exited. A terminal the gateway does not have is a `GatewayAnswer` with status 404.
  */
 async function readTerminal(
   profileId: string,
@@ -78,48 +72,21 @@ async function readTerminal(
   signal: AbortSignal,
 ): Promise<void> {
   const { origin, headers, credentials } = gatewayConnection();
-  const quiet = new AbortController();
-  let reader: ReadableStreamDefaultReader<string> | undefined;
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const heard = () => {
-    clearTimeout(timer);
-    timer = setTimeout(() => {
-      quiet.abort();
-      void reader?.cancel().catch(() => {});
-    }, QUIET_MS);
-  };
 
-  heard();
-  try {
-    const response = await fetch(
-      `${origin}/v1/profiles/${profileId}/terminals/${terminalId}/stream`,
-      { headers, credentials, cache: 'no-store', signal: AbortSignal.any([signal, quiet.signal]) },
-    );
-
-    if (!response.ok || !response.body) {
-      // Left unread, the refusal's body would hold its stream on the connection every request
-      // to this gateway shares.
-      await response.body?.cancel().catch(() => {});
-      throw new GatewayAnswer('The terminal is not available.', response.status);
-    }
-
-    handlers.opened();
-    reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
-    let buffer = '';
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) return;
-      heard();
-
-      const blocks = (buffer + value).split('\n\n');
-      buffer = blocks.pop() ?? '';
-      for (const block of blocks) tell(block, handlers);
-      if (buffer.length > FRAME_MAX) buffer = '';
-    }
-  } finally {
-    clearTimeout(timer);
-  }
+  await readFrames({
+    signal,
+    refusal: 'The terminal is not available.',
+    maxFrame: FRAME_MAX,
+    open: (opening) =>
+      fetch(`${origin}/v1/profiles/${profileId}/terminals/${terminalId}/stream`, {
+        headers,
+        credentials,
+        cache: 'no-store',
+        signal: opening,
+      }),
+    opened: handlers.opened,
+    frame: (block) => tell(block, handlers),
+  });
 }
 
 function tell(block: string, handlers: TerminalStreamHandlers) {
