@@ -95,7 +95,8 @@ Load the \`remote\` tool group with \`load_tools\` before calling these tools.
   Coordinates are pixels in your last screenshot image (origin top-left); use the returned
   \`widthPx\` / \`heightPx\`. \`scroll_amount\` is in lines, up to 100. While you use the
   screen a pointer with your name beside it is drawn there, one per conversation; call
-  \`end_session\` when finished so yours disappears.
+  \`end_session\` when finished so yours disappears. After 30 minutes with no action from you
+  it is removed anyway, and your next action is refused until you take a new screenshot.
 - \`pull_remote_file\` — read an absolute remote path into conversation media, up to 300,000 bytes; a
   larger file fails, so split or compress it with \`run_remote_command\` first.
 - \`push_remote_file\` — write UTF-8 or base64 bytes to an absolute remote path, up to 300,000 bytes. A

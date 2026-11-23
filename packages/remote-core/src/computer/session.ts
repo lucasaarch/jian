@@ -20,6 +20,16 @@ import {
 
 /** Without an action for this long, the helper is told to idle a pointer, in ms. */
 const IDLE_MS = 30_000;
+/**
+ * Without an action for this long a seat is over, in ms. Only the agent says `end_session`, and a
+ * run that was cancelled or failed never does: its pointer, the helper and the assertion keeping
+ * the display awake would stay until the worker restarts. Far longer than a model thinks.
+ */
+const SEAT_IDLE_MS = 30 * 60_000;
+/** How long the helper gets to take an idle seat's pointer away before it is stopped, in ms. */
+const LEAVE_WAIT_MS = 5_000;
+/** How many expired seats are remembered, so each is told to look again when it comes back. */
+const EXPIRED_KEPT = 256;
 
 export type ComputerAction = RemoteComputerParams['action'];
 type Coordinate = NonNullable<RemoteComputerParams['coordinate']>;
@@ -69,6 +79,8 @@ type Seat = {
   /** The helper that draws this seat's pointer. A new helper has to be told of the seat again. */
   channel: HelperChannel | null;
   idleTimer: NodeJS.Timeout | null;
+  /** Ends the seat. Outlives the helper: a seat left by a crash must not hold the next one. */
+  expiry: NodeJS.Timeout | null;
   /**
    * The screen was acted on since this seat last looked at it: by another conversation, or by
    * an action of its own that was cut short. Its next screenshot clears it.
@@ -107,14 +119,24 @@ export class ComputerSession {
   private readonly seats = new Map<string, Seat>();
   /** The action in hand and all before it: the next one starts when this settles. */
   private queue: Promise<unknown> = Promise.resolve();
+  /** Actions asked for and not answered yet: while there is one, no seat is idle. */
+  private acting = 0;
+  private readonly expired = new Set<string>();
+  private readonly seatIdleMs: number;
 
-  constructor(platform: ComputerPlatform) {
+  constructor(platform: ComputerPlatform, { seatIdleMs = SEAT_IDLE_MS } = {}) {
     this.platform = platform;
+    this.seatIdleMs = seatIdleMs;
   }
 
   /** Never rejects: every failure is an outcome the agent can read. */
   runAction(computer: RemoteComputerParams): Promise<ActionOutcome> {
-    const outcome = this.queue.then(() => this.act(computer));
+    this.acting += 1;
+    const outcome = this.queue
+      .then(() => this.act(computer))
+      .finally(() => {
+        this.acting -= 1;
+      });
     this.queue = outcome.catch(() => {});
     return outcome;
   }
@@ -139,6 +161,7 @@ export class ComputerSession {
     const { action } = computer;
     const id = computer.session?.id ?? SHARED_SEAT;
     if (action === 'end_session') {
+      this.expired.delete(id);
       await this.leave(id);
       return succeeded();
     }
@@ -147,6 +170,7 @@ export class ComputerSession {
       await new Promise((resolve) => setTimeout(resolve, ms));
       const seat = this.seats.get(id);
       if (seat?.channel) this.bumpIdle(seat, id);
+      if (seat) this.keep(seat, id);
       return succeeded();
     }
 
@@ -166,14 +190,24 @@ export class ComputerSession {
       // on being refused after the owner grants them.
       if (failure.code === 'perm_denied') this.close();
       return failed(preparation.explain(messageOf(error), action, failure), failure);
+    } finally {
+      this.keep(seat, id);
     }
   }
 
   private seat(id: string): Seat {
     let seat = this.seats.get(id);
     if (!seat) {
-      // Whoever arrives at a screen others are using has not seen what they did to it.
-      seat = { shot: null, channel: null, idleTimer: null, stale: this.seats.size > 0 };
+      // Whoever arrives at a screen others are using has not seen what they did to it, and one
+      // coming back after its seat expired no longer knows what is there either.
+      const expired = this.expired.delete(id);
+      seat = {
+        shot: null,
+        channel: null,
+        idleTimer: null,
+        expiry: null,
+        stale: expired || this.seats.size > 0,
+      };
       this.seats.set(id, seat);
     }
     return seat;
@@ -191,10 +225,57 @@ export class ComputerSession {
     if (!seat) return;
     this.seats.delete(id);
     this.clearIdle(seat);
+    if (seat.expiry) clearTimeout(seat.expiry);
+    seat.expiry = null;
     if (this.channel && seat.channel === this.channel) {
       await this.channel.request({ cmd: 'endSession', ...named(id) }).catch(() => {});
     }
     if (this.seats.size === 0) this.close();
+  }
+
+  /** Starts the seat's idle time over. */
+  private keep(seat: Seat, id: string): void {
+    if (this.seats.get(id) !== seat) return;
+    if (seat.expiry) clearTimeout(seat.expiry);
+    seat.expiry = setTimeout(() => this.expire(seat, id), this.seatIdleMs);
+    seat.expiry.unref();
+  }
+
+  /** In the queue, so that it can never land between the steps of an action. */
+  private expire(seat: Seat, id: string): void {
+    if (this.seats.get(id) !== seat) return;
+    if (this.acting > 0) {
+      this.keep(seat, id);
+      return;
+    }
+    this.queue = this.queue.then(() => this.leaveIdle(seat, id)).catch(() => {});
+  }
+
+  private async leaveIdle(seat: Seat, id: string): Promise<void> {
+    if (this.seats.get(id) !== seat) return;
+    // An action arrived while this waited its turn: the seat may be the one it is for.
+    if (this.acting > 0) {
+      this.keep(seat, id);
+      return;
+    }
+    this.expired.add(id);
+    if (this.expired.size > EXPIRED_KEPT) {
+      for (const oldest of this.expired) {
+        this.expired.delete(oldest);
+        break;
+      }
+    }
+    // A helper that does not answer would otherwise hold the queue until the next action.
+    const stuck = setTimeout(
+      () => this.abort('Computer-use helper did not answer.'),
+      LEAVE_WAIT_MS,
+    );
+    stuck.unref();
+    try {
+      await this.leave(id);
+    } finally {
+      clearTimeout(stuck);
+    }
   }
 
   private close(): void {
