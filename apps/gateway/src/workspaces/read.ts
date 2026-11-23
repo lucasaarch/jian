@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process';
-import { readdir, readFile, stat } from 'node:fs/promises';
+import { constants } from 'node:fs';
+import { type FileHandle, open, readdir, stat } from 'node:fs/promises';
 import { join, relative, sep } from 'node:path';
 import { promisify } from 'node:util';
 import type { Skill } from '@jian/contracts';
@@ -84,12 +85,34 @@ export function digest(read: WorkspaceFiles): WorkspaceSnapshot {
   };
 }
 
+/**
+ * A file of a workspace, up to `limit` UTF-16 characters, with a NUL after it when there was more.
+ * The workspace decides what these names point at: a repository can commit `AGENTS.md` as a link
+ * to `/dev/zero`, which reads until a string of half a gigabyte fails, on every turn. So only a
+ * regular file is read and no further than the limit. `O_NONBLOCK` keeps opening a FIFO with no
+ * writer from holding a thread of the pool for good; it means nothing to a regular file.
+ */
 const readIfThere = async (path: string, limit: number) => {
+  let handle: FileHandle | undefined;
   try {
-    const text = await readFile(path, 'utf8');
+    handle = await open(path, constants.O_RDONLY | (constants.O_NONBLOCK ?? 0));
+    const info = await handle.stat();
+    if (!info.isFile()) return undefined;
+    // One UTF-16 unit takes at most three bytes, so this always holds more than `limit` of them
+    // when the file does, and a character cut at the end falls past what is kept.
+    const buffer = Buffer.allocUnsafe(Math.min(info.size, limit * 3 + 3));
+    let length = 0;
+    while (length < buffer.length) {
+      const { bytesRead } = await handle.read(buffer, length, buffer.length - length, length);
+      if (!bytesRead) break;
+      length += bytesRead;
+    }
+    const text = buffer.toString('utf8', 0, length);
     return text.length > limit ? `${text.slice(0, limit)}\u0000` : text;
   } catch {
     return undefined;
+  } finally {
+    await handle?.close().catch(() => {});
   }
 };
 
