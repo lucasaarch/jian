@@ -53,6 +53,7 @@ import { registerTelemetryRoutes } from './telemetry/routes.js';
 import type { SpawnPty } from './terminals/pty.js';
 import { registerTerminalRoutes } from './terminals/routes.js';
 import { Terminals } from './terminals/service.js';
+import { registerUpdateRoutes } from './updates/routes.js';
 import { registerWebRoutes } from './web/routes.js';
 import { registerWorktreeRoutes } from './worktrees/routes.js';
 
@@ -223,6 +224,7 @@ export function createApp(
     registerOpenAiRoutes(routes, options);
     registerWebRoutes(routes, options);
     registerReleaseRoutes(routes, options);
+    registerUpdateRoutes(routes, options);
     registerDecisionRoutes(routes, options);
 
     registerEventRoutes(routes, options);

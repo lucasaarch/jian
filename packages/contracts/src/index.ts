@@ -33,6 +33,7 @@ export * from './skills.js';
 export * from './ssh.js';
 export * from './telemetry.js';
 export * from './terminals.js';
+export * from './updates.js';
 export * from './web.js';
 export * from './work.js';
 export * from './worktrees.js';

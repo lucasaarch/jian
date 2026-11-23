@@ -51,6 +51,9 @@ services:
       # Only the web service reaches the gateway, over the Compose network, so the forwarded
       # client address and scheme it sends are believed from private addresses only.
       JIAN_TRUSTED_PROXIES: ${JIAN_TRUSTED_PROXIES:-uniquelocal}
+      # The updater below, when it runs: set JIAN_UPDATER_URL=http://updater:8080 in .env.
+      JIAN_UPDATER_URL: ${JIAN_UPDATER_URL:-}
+      JIAN_UPDATER_TOKEN: ${JIAN_UPDATER_TOKEN:-}
       # Bound inside the container, with no published port: the web service is the way in.
       HOST: 0.0.0.0
       PORT: 4310
@@ -77,6 +80,27 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+    restart: unless-stopped
+  # Optional: lets Settings → Updates install a release. Off unless .env holds
+  # COMPOSE_PROFILES=updater and JIAN_UPDATER_URL=http://updater:8080 (JIAN_UPDATER_TOKEN comes
+  # from `make setup`). Asked by the gateway, it pulls the gateway and web images of that exact
+  # release, writes JIAN_VERSION to .env and recreates those two services; PostgreSQL is never
+  # recreated.
+  updater:
+    profiles: [updater]
+    image: docker:28-cli
+    # The stock image carries Docker and Compose but not Node, which the one-file updater adds.
+    entrypoint: [sh, -c, 'apk add --no-cache nodejs >/dev/null && exec node scripts/updater.mjs']
+    working_dir: /project
+    environment:
+      JIAN_UPDATER_TOKEN: ${JIAN_UPDATER_TOKEN:-}
+    volumes:
+      # WARNING: access to the Docker socket is root on the host. Anyone who can reach this
+      # service with its token can run any container there; it publishes no port, so only the
+      # services of this project reach it.
+      - /var/run/docker.sock:/var/run/docker.sock
+      # This checkout, for compose.yaml, the .env it updates and the script itself.
+      - .:/project
     restart: unless-stopped
 volumes:
   postgres_data:

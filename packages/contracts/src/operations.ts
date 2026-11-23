@@ -207,6 +207,13 @@ import {
   terminalSizeSchema,
   terminalWriteSchema,
 } from './terminals.js';
+import {
+  updateAttemptSchema,
+  updateComponentSchema,
+  updateInputSchema,
+  updateStatusSchema,
+  updateWebhookInputSchema,
+} from './updates.js';
 import { webSearchInputSchema, webSearchStatusSchema } from './web.js';
 import { conversationSubagentSchema } from './work.js';
 import {
@@ -693,6 +700,38 @@ export const operations: Operation[] = [
     access: 'admin',
     params: z.strictObject({ file: z.string().max(128) }),
     response: releaseMediaSchema,
+  },
+  {
+    method: 'GET',
+    path: '/v1/updates',
+    operationId: 'getUpdateStatus',
+    access: 'admin',
+    response: updateStatusSchema,
+  },
+  {
+    method: 'POST',
+    path: '/v1/updates',
+    operationId: 'startUpdate',
+    access: 'admin',
+    body: updateInputSchema,
+    response: updateAttemptSchema,
+  },
+  {
+    method: 'PUT',
+    path: '/v1/updates/webhooks/:component',
+    operationId: 'saveUpdateWebhook',
+    access: 'admin',
+    params: z.strictObject({ component: updateComponentSchema }),
+    body: updateWebhookInputSchema,
+    response: updateStatusSchema,
+  },
+  {
+    method: 'DELETE',
+    path: '/v1/updates/webhooks/:component',
+    operationId: 'removeUpdateWebhook',
+    access: 'admin',
+    params: z.strictObject({ component: updateComponentSchema }),
+    response: updateStatusSchema,
   },
   {
     method: 'GET',
