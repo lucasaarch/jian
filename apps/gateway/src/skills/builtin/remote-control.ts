@@ -83,6 +83,10 @@ Load the \`remote\` tool group with \`load_tools\` before calling these tools.
   would type. Prefer \`remote_computer\` for GUI and screenshots, and pull/push for files.
   A long output keeps its first and last parts, with a marker saying how many lines were not
   kept; a machine on an older Jian Remote keeps only the start.
+  A command that reaches its \`timeoutMs\` is stopped with everything it started. To leave a job
+  running, make starting it the last thing the command does, with its output in a file:
+  \`nohup my-job > job.log 2>&1 < /dev/null &\` (\`Start-Process\` on Windows). The call then
+  returns and the job goes on; read \`job.log\` with later commands.
   In a conversation that targets the machine, clone, fetch, pull and push GitHub repositories
   there with \`github_git\` (\`github\` skill), which lends the GitHub App's access to it.
 - \`remote_computer\` — Anthropic-style desktop control on **macOS, Linux (X11), and Windows**
