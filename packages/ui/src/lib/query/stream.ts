@@ -6,6 +6,7 @@ import { publish } from '../events';
 import { useReconnect } from '../stores/reconnect';
 import { panelApi } from './client';
 import { keys } from './keys';
+import { refresh } from './refresh';
 
 /** How long to wait before opening a dropped stream again, in ms, try after try. */
 const AGAIN_MS = [1_000, 2_000, 5_000];
@@ -124,7 +125,7 @@ export function useEventStream(profileId: string) {
       for (const key of stale) pending.set(JSON.stringify(key), key);
       clearTimeout(flush);
       flush = setTimeout(() => {
-        for (const key of pending.values()) void client.invalidateQueries({ queryKey: key });
+        for (const key of pending.values()) void refresh(client, key);
         pending.clear();
       }, 200);
     };
