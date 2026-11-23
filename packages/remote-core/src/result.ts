@@ -12,6 +12,7 @@ const RESULT_BODY_BUDGET = 480_000;
 const ENVELOPE_SLACK = 1_000;
 /** Permanent HTTP statuses — retrying forever leaves the task stuck and the machine offline. */
 const PERMANENT_RESULT_STATUS = new Set([400, 401, 403, 404, 413]);
+const BROWSER_TOO_LARGE = 'The page was too large for the gateway to take back.';
 
 /** Shrink stdout/stderr until the JSON body fits under budget (UTF-8 byte length). */
 export function fitResult(
@@ -111,7 +112,12 @@ export async function postResult(
         if (shrinkStage === 'full') {
           log.warn('result post failed: HTTP 413 (payload too large); truncating and retrying');
           shrinkStage = 'half';
-          ({ result: payload, body } = fitResult(payload, Math.floor(RESULT_BODY_BUDGET / 2)));
+          // A browser answer counts on top of the budget, so shrinking the text would resend it
+          // whole: it is the one thing here that can be too large, and it says so instead.
+          const smaller = payload.browser
+            ? { ...payload, browser: { error: BROWSER_TOO_LARGE } }
+            : payload;
+          ({ result: payload, body } = fitResult(smaller, Math.floor(RESULT_BODY_BUDGET / 2)));
           continue;
         }
         if (shrinkStage === 'half') {
