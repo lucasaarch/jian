@@ -160,7 +160,7 @@ export function ChatSidebar({
       aria-label="Chats"
       // A host that draws its title bar over the window's top keeps `--chrome-top` clear here.
       // On a phone it is the screen itself, until something it lists is opened.
-      className="relative flex h-full w-(--sidebar-width) shrink-0 flex-col border-r border-line bg-sidebar pt-(--chrome-top) phone:w-full phone:border-r-0 phone:bg-canvas phone:pb-[env(safe-area-inset-bottom)]"
+      className="relative flex h-full w-(--sidebar-width) shrink-0 flex-col border-r border-line bg-sidebar pt-(--chrome-top) phone:w-full phone:border-r-0 phone:bg-canvas phone:pb-(--home-gap)"
     >
       {profileId ? (
         <Suspense
@@ -186,84 +186,85 @@ export function ChatSidebar({
 }
 
 const action =
-  'flex h-8 w-full items-center gap-2.5 rounded-lg px-2.5 text-[13px] text-ink transition-colors hover:bg-glass-hover aria-[current=page]:bg-glass-press disabled:opacity-50 phone:h-10 phone:text-sm phone:aria-[current=page]:bg-transparent';
+  'flex h-8 w-full items-center gap-2.5 rounded-lg px-2.5 text-[13px] text-ink transition-colors hover:bg-glass-hover aria-[current=page]:bg-glass-press disabled:opacity-50';
+
+/** A place on a phone: one of a row of them, its icon over its name. */
+const tile =
+  'flex h-13 min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-xl text-[11px] text-muted transition-colors active:bg-glass-press disabled:opacity-50';
 
 /**
  * The top of the sidebar: a new chat — an action, never shown as the one open — and the agent's
  * Schedules, then every Artifact it made and the Plugins it can use, each in the chat's place. On
  * a server with GitHub connected, the pull requests, which take the chat's place too: GitHub can
  * only reach a gateway with a public address. Its Activity, also in the chat's place, is always
- * last.
+ * last. On a phone the places are one row, so the chats get the screen; a new chat is in the
+ * bar above (web-app.tsx), where every phone screen keeps it (phone-bar.tsx).
  */
 function NewChat({ profileId }: { profileId?: string }) {
   const router = useRouter();
+  const phone = usePhone();
   const server = useGatewayMode() === 'server';
   const github = useQuery({ ...queries.githubIntegration(), enabled: server });
   const pulls = server && Boolean(github.data?.accounts.length);
   const pathname = usePathname();
-  const go = (path: string) => () => router.push(path);
+  const places = [
+    { name: 'Schedules', icon: AlarmClock, path: schedulesPath, on: onSchedules },
+    { name: 'Artifacts', icon: Shapes, path: artifactsPath, on: onArtifacts },
+    { name: 'Plugins', icon: Blocks, path: pluginsPath, on: onPlugins },
+    ...(pulls && profileId
+      ? [
+          {
+            name: 'Pull requests',
+            short: 'PRs',
+            icon: GitPullRequest,
+            path: pullsPath,
+            on: onPulls,
+          },
+        ]
+      : []),
+    { name: 'Activity', icon: Activity, path: activityPath, on: onActivity },
+  ];
+  const go = (path: (id: string) => string) =>
+    profileId ? () => router.push(path(profileId)) : undefined;
+
+  if (phone)
+    return (
+      <div className="flex gap-1 px-2 pt-1 pb-3">
+        {places.map(({ name, short, icon: Icon, path }) => (
+          <button
+            key={name}
+            type="button"
+            onClick={go(path)}
+            disabled={!profileId}
+            aria-label={short ? name : undefined}
+            className={tile}
+          >
+            <Icon size={18} aria-hidden="true" />
+            <span className="max-w-full truncate">{short ?? name}</span>
+          </button>
+        ))}
+      </div>
+    );
+
   return (
     <div className="grid gap-px px-2 pt-2 pb-5">
-      <button
-        type="button"
-        onClick={profileId ? go(newChatPath(profileId)) : undefined}
-        disabled={!profileId}
-        className={action}
-      >
+      <button type="button" onClick={go(newChatPath)} disabled={!profileId} className={action}>
         <SquarePen size={15} className="text-muted" aria-hidden="true" />
         New chat
       </button>
-      <button
-        type="button"
-        onClick={profileId ? go(schedulesPath(profileId)) : undefined}
-        disabled={!profileId}
-        aria-current={onSchedules(pathname) ? 'page' : undefined}
-        className={action}
-      >
-        <AlarmClock size={15} className="text-muted" aria-hidden="true" />
-        Schedules
-      </button>
-      <button
-        type="button"
-        onClick={profileId ? go(artifactsPath(profileId)) : undefined}
-        disabled={!profileId}
-        aria-current={onArtifacts(pathname) ? 'page' : undefined}
-        className={action}
-      >
-        <Shapes size={15} className="text-muted" aria-hidden="true" />
-        Artifacts
-      </button>
-      <button
-        type="button"
-        onClick={profileId ? go(pluginsPath(profileId)) : undefined}
-        disabled={!profileId}
-        aria-current={onPlugins(pathname) ? 'page' : undefined}
-        className={action}
-      >
-        <Blocks size={15} className="text-muted" aria-hidden="true" />
-        Plugins
-      </button>
-      {pulls && profileId && (
+      {places.map(({ name, icon: Icon, path, on }) => (
         <button
+          key={name}
           type="button"
-          onClick={go(pullsPath(profileId))}
-          aria-current={onPulls(pathname) ? 'page' : undefined}
+          onClick={go(path)}
+          disabled={!profileId}
+          aria-current={on(pathname) ? 'page' : undefined}
           className={action}
         >
-          <GitPullRequest size={15} className="text-muted" aria-hidden="true" />
-          Pull requests
+          <Icon size={15} className="text-muted" aria-hidden="true" />
+          {name}
         </button>
-      )}
-      <button
-        type="button"
-        onClick={profileId ? go(activityPath(profileId)) : undefined}
-        disabled={!profileId}
-        aria-current={onActivity(pathname) ? 'page' : undefined}
-        className={action}
-      >
-        <Activity size={15} className="text-muted" aria-hidden="true" />
-        Activity
-      </button>
+      ))}
     </div>
   );
 }

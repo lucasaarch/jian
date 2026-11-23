@@ -8,7 +8,11 @@ import { explainedTray, trayExplained } from './preferences';
 import { resourcesDir } from './tray';
 import { keepWindowState, savedPlace } from './window-state';
 
-const MINIMUM = { width: 720, height: 520 };
+/**
+ * The width stays above the panel's phone width, 760 px (`phone` in packages/ui's kit.css and
+ * lib/phone.ts): narrower, the window would swap its sidebar and conversation for a phone's layout.
+ */
+const MINIMUM = { width: 800, height: 520 };
 
 /**
  * The one window. Closing it hides it: the app keeps watching its gateways from the tray, and the

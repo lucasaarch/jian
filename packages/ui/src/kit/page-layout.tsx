@@ -74,7 +74,7 @@ export function PageBody({
       ref={scroller}
       aria-label={label}
       aria-labelledby={labelledBy}
-      className={`page-scroller min-h-0 min-w-0 flex-1 overflow-y-auto px-10 phone:mt-(--chrome-top,0px) phone:px-4 ${className}`}
+      className={`page-scroller min-h-0 min-w-0 flex-1 overflow-y-auto px-10 phone:px-4 ${className}`}
     >
       <div className="mx-auto grid max-w-[60rem] grid-cols-1 gap-7 pb-14 pt-[calc(var(--chrome-top,0px)+2.25rem)] phone:gap-5 phone:pt-3">
         {children}

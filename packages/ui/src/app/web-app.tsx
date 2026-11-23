@@ -1,16 +1,17 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import { LogOut, Settings } from 'lucide-react';
+import { LogOut, Settings, SquarePen } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { InspectorOpener } from '../components/sessions/inspector-opener';
 import { Mark } from '../components/ui';
 import { iconButton } from '../kit/icon-button';
 import { useGatewayMode } from '../lib/gateway-mode';
-import { agentPath } from '../lib/navigation';
+import { agentPath, newChatPath } from '../lib/navigation';
+import { usePhone } from '../lib/phone';
 import { queries, useProfiles } from '../lib/query/profile';
 import { useVisibleViewport } from '../lib/viewport';
-import { useSignOut, useWorkingAgentId } from '../lib/workspace';
+import { useProfileId, useSignOut, useWorkingAgentId } from '../lib/workspace';
 import { NavigationAt, usePathname, useRouter, useSearchParams } from '../platform/navigation';
 import { AppSettings } from './app-settings';
 import { ChatsApp } from './chats';
@@ -128,15 +129,18 @@ function SignedIn() {
                 leading={<div className="w-1.5 shrink-0" />}
                 shortcuts={{ search: shortcut }}
                 trailing={
-                  <button
-                    type="button"
-                    className={iconButton}
-                    onClick={() => openSettings()}
-                    aria-label="Settings"
-                    title="Settings"
-                  >
-                    <Settings size={15} />
-                  </button>
+                  <>
+                    <PhoneNewChat />
+                    <button
+                      type="button"
+                      className={iconButton}
+                      onClick={() => openSettings()}
+                      aria-label="Settings"
+                      title="Settings"
+                    >
+                      <Settings size={15} />
+                    </button>
+                  </>
                 }
               />
             </header>
@@ -168,5 +172,27 @@ function SignedIn() {
       />
       <ReleaseNotes />
     </div>
+  );
+}
+
+/**
+ * A new chat at the top of a phone's chats, where the bar over anything they open keeps it too
+ * (phone-bar.tsx): the sidebar's own list of places is one short row there, without it.
+ */
+function PhoneNewChat() {
+  const router = useRouter();
+  const phone = usePhone();
+  const profileId = useProfileId();
+  if (!phone || !profileId) return null;
+  return (
+    <button
+      type="button"
+      className={iconButton}
+      onClick={() => router.push(newChatPath(profileId))}
+      aria-label="New chat"
+      title="New chat"
+    >
+      <SquarePen size={15} />
+    </button>
   );
 }
