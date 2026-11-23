@@ -3,6 +3,12 @@ import { defaultSettingsMiddleware, wrapLanguageModel } from 'ai';
 
 const endpoint = 'https://chatgpt.com/backend-api/codex';
 
+/**
+ * The longest event waited for, in characters. The last one carries the whole response, which is
+ * far below this; the buffer is searched again with each chunk, so it must not grow without end.
+ */
+const MAX_EVENT_CHARS = 32 * 1024 * 1024;
+
 export function accountHeaders(token: string) {
   try {
     const payload = JSON.parse(
@@ -42,6 +48,7 @@ async function completedResponse(response: Response) {
       buffer += decoder.decode(value, { stream: !done });
       const events = buffer.split(/\r?\n\r?\n/);
       buffer = events.pop() ?? '';
+      if (buffer.length > MAX_EVENT_CHARS) throw new Error('Codex sent an event too large to read');
 
       for (const event of events) {
         const data = event
@@ -69,6 +76,9 @@ async function completedResponse(response: Response) {
       }
       if (done) break;
     }
+  } catch (error) {
+    await reader.cancel().catch(() => {});
+    throw error;
   } finally {
     reader.releaseLock();
   }
