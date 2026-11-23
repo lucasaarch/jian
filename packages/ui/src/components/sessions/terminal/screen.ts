@@ -1,3 +1,4 @@
+import { TERMINAL_SCROLLBACK } from '@jian/contracts';
 import type { FitAddon } from '@xterm/addon-fit';
 import type { ITheme, Terminal as XTerm } from '@xterm/xterm';
 import { useCrew } from '../../../lib/stores/crew';
@@ -108,15 +109,21 @@ function createScreen(api: TerminalApi, profileId: string, terminalId: string): 
   element.className = 'terminal-screen';
   let term: XTerm | undefined;
   let fit: FitAddon | undefined;
-  /** What the terminal printed before the library that draws it had loaded. */
-  let early: string[] = [];
+  /**
+   * What the terminal printed before the library that draws it had loaded, in characters no more
+   * than the gateway itself keeps: a busy shell can print for as long as the load takes.
+   */
+  let early = '';
   let disposed = false;
   let fitted = false;
 
   const link = linkTerminal(api, profileId, terminalId, {
-    write: (data) => (term ? term.write(data) : void early.push(data)),
+    write: (data) => {
+      if (term) term.write(data);
+      else early = (early + data).slice(-TERMINAL_SCROLLBACK);
+    },
     reset: () => {
-      early = [];
+      early = '';
       term?.reset();
     },
   });
@@ -157,13 +164,17 @@ function createScreen(api: TerminalApi, profileId: string, terminalId: string): 
         if (text) void navigator.clipboard?.writeText(text).catch(() => {});
         return false;
       });
-      for (const data of early) made.write(data);
-      early = [];
+      if (early) made.write(early);
+      early = '';
       term = made;
       themed.add(retheme);
       themeWatch ??= watchTheme();
     })
     .catch(() => {
+      // Nothing will ever draw what it prints, as when a release replaced the file this panel
+      // would load. The shell goes on, and a reload reads what it kept from the gateway.
+      early = '';
+      link.stop();
       element.textContent = 'The terminal could not be loaded. Reload the panel and open it again.';
     });
 
