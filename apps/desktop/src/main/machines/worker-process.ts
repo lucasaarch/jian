@@ -121,10 +121,16 @@ const browserAnswers = new Map<string, (answer: RemoteBrowserResult) => void>();
 /** The browser lives in the main process: a task for it goes there and its answer comes back. */
 async function askBrowser(gatewayId: string, task: RemoteTask): Promise<RemoteResult> {
   const params = task.browser as RemoteBrowserParams;
+  let limit: NodeJS.Timeout | undefined;
   const browser = await new Promise<RemoteBrowserResult>((resolve) => {
     browserAnswers.set(task.id, resolve);
+    // The main process gives up before this; it only guards an answer that got lost on the way.
+    limit = setTimeout(() => resolve({ error: 'The browser did not answer.' }), task.timeoutMs);
     send({ type: 'browser', id: task.id, gatewayId, params });
-  }).finally(() => browserAnswers.delete(task.id));
+  }).finally(() => {
+    clearTimeout(limit);
+    browserAnswers.delete(task.id);
+  });
 
   return { taskId: task.id, exitCode: 0, stdout: '', stderr: '', timedOut: false, browser };
 }
