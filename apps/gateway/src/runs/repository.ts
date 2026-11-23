@@ -545,7 +545,11 @@ export async function listCheckpoints(
   return rows.map(toCheckpoint);
 }
 
-/** Tool evidence for turns still present in a session's uncompact history. */
+/**
+ * Tool evidence for turns still present in a session's uncompact history. Everything of a step
+ * the history never tells stays in the database: the prompt's breakdown, its usage and what a
+ * compaction kept.
+ */
 export async function listContextToolCheckpoints(
   db: Queryable,
   profileId: string,
@@ -553,7 +557,11 @@ export async function listContextToolCheckpoints(
 ): Promise<Array<{ runId: string; createdAt: Date; data: unknown }>> {
   if (!runIds.length) return [];
   return db
-    .select({ runId: checkpoints.runId, createdAt: checkpoints.createdAt, data: checkpoints.data })
+    .select({
+      runId: checkpoints.runId,
+      createdAt: checkpoints.createdAt,
+      data: sql<unknown>`${checkpoints.data} - array['prompt', 'usage', 'kept', 'finishReason']`,
+    })
     .from(checkpoints)
     .where(
       and(
@@ -570,6 +578,28 @@ export async function listContextToolCheckpoints(
       ),
     )
     .orderBy(asc(checkpoints.createdAt), asc(checkpoints.id));
+}
+
+/**
+ * What each run's checkpoints take on disk, in bytes, compressed as stored. Read from the column
+ * header, so sizing a long conversation does not decompress the results it is sizing.
+ */
+export async function checkpointSizes(
+  db: Queryable,
+  profileId: string,
+  runIds: string[],
+): Promise<Map<string, number>> {
+  if (!runIds.length) return new Map();
+  const rows = await db
+    .select({
+      runId: checkpoints.runId,
+      bytes: sql<string>`sum(pg_column_size(${checkpoints.data}))`,
+    })
+    .from(checkpoints)
+    .where(and(eq(checkpoints.profileId, profileId), inArray(checkpoints.runId, runIds)))
+    .groupBy(checkpoints.runId);
+
+  return new Map(rows.map((row) => [row.runId, Number(row.bytes)]));
 }
 
 /**

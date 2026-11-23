@@ -165,30 +165,50 @@ function trimmed(record: ToolRecord) {
   };
 }
 
-/**
- * Keep tool evidence in the same conversation turn; never treat it as a new request to act.
- * The latest `FULL_TOOL_RUNS` runs keep their results whole; older ones are cut (`trimmed`).
- */
-export function withToolHistory(
-  history: Message[],
-  byRun: Map<string, ToolRecord[]>,
-  currentRunId: string,
-): Message[] {
+/** The runs of this history whose tool results stay whole: its latest `FULL_TOOL_RUNS`. */
+export function wholeToolRuns(history: Message[], currentRunId: string): Set<string> {
   const last = new Map<string, number>();
   history.forEach((message, index) => {
     if (message.runId && message.runId !== currentRunId) last.set(message.runId, index);
   });
-  const recent = new Set(
+  return new Set(
     [...last.entries()]
       .sort((a, b) => b[1] - a[1])
       .slice(0, FULL_TOOL_RUNS)
       .map(([runId]) => runId),
   );
+}
+
+/**
+ * An older run's calls as the history tells them, for a caller that reads a long history a few
+ * runs at a time and lets go of each run's whole results as soon as this is taken from them.
+ */
+export const cutToolEvidence = (records: ToolRecord[]) => JSON.stringify(records.map(trimmed));
+
+/**
+ * Keep tool evidence in the same conversation turn; never treat it as a new request to act.
+ * The latest `FULL_TOOL_RUNS` runs keep their results whole; older ones are cut (`trimmed`).
+ * `cut` holds the evidence of older runs already rendered by `cutToolEvidence`.
+ */
+export function withToolHistory(
+  history: Message[],
+  byRun: Map<string, ToolRecord[]>,
+  currentRunId: string,
+  cut: ReadonlyMap<string, string> = new Map(),
+): Message[] {
+  const last = new Map<string, number>();
+  history.forEach((message, index) => {
+    if (message.runId && message.runId !== currentRunId) last.set(message.runId, index);
+  });
+  const recent = wholeToolRuns(history, currentRunId);
   return history.flatMap((message, index) => {
     const records = message.runId ? byRun.get(message.runId) : undefined;
-    if (!records || last.get(message.runId as string) !== index) return [message];
+    const rendered = message.runId ? cut.get(message.runId) : undefined;
+    if ((!records && rendered === undefined) || last.get(message.runId as string) !== index)
+      return [message];
     const whole = recent.has(message.runId as string);
-    const evidence = JSON.stringify(whole ? records : records.map(trimmed));
+    const evidence =
+      rendered ?? JSON.stringify(whole ? records : (records as ToolRecord[]).map(trimmed));
     const cutNote =
       !whole && evidence.includes('"cut":true')
         ? 'Calls marked cut are shortened: read_artifact with their callId as toolCallId returns the whole result. '
