@@ -9,6 +9,11 @@ const TIMEOUT_MS = 55_000;
  */
 const ARRIVING_MS = 3_000;
 const LOOK_EVERY_MS = 100;
+/**
+ * The most of a page's picture and export sent to a server gateway, in bytes. Its result route
+ * takes 48 MiB, and base64 makes these a third larger, with the snapshot beside them.
+ */
+const MAX_CAPTURE_BYTES = 34 * 1024 * 1024;
 
 type Showing = { gatewayId: string; sessionId?: string | undefined } | null;
 
@@ -48,6 +53,9 @@ export async function browserAnswer(
         params.input as Parameters<JianBrowser['inspect']>[1],
         signal,
       );
+      if (capture.screenshot.length + capture.archive.length > MAX_CAPTURE_BYTES) {
+        return { error: 'This page is too large to bring back from this computer.' };
+      }
       return {
         capture: {
           screenshot: Buffer.from(capture.screenshot).toString('base64'),
