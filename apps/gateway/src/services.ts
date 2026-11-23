@@ -41,6 +41,7 @@ import { SshKeys } from './ssh/service.js';
 import { Stats } from './stats/service.js';
 import type { Store } from './storage/database.js';
 import { Work } from './tasks/service.js';
+import { GatewayUpdates, updaterSidecar } from './updates/service.js';
 import { machineBrowser } from './web/machine-browser.js';
 import { WebSearch } from './web/service.js';
 import { Workspaces } from './workspaces/service.js';
@@ -56,6 +57,7 @@ export type Services = {
   media: Media;
   web: WebSearch;
   releases: ReleaseNotes;
+  updates: GatewayUpdates;
   repository: RepositoryStars;
   decisions: Decisions;
   devices: Devices;
@@ -200,6 +202,13 @@ export function buildServices({
   sessions.useMachineFiles((profileId, machineId, op) =>
     remote.executeFiles(profileId, machineId, op, undefined, MACHINE_CHANGES_TIMEOUT_MS),
   );
+  // Stamped into the image at build time; a gateway run from source has none.
+  const releases = new ReleaseNotes(
+    store,
+    process.env.JIAN_VERSION,
+    undefined,
+    fetcher ?? createSafeFetch().fetch,
+  );
   const services = {
     profiles,
     providers,
@@ -215,13 +224,15 @@ export function buildServices({
       fetcher ?? createSafeFetch().fetch,
       nativeBrowser ?? machineBrowser(remote),
     ),
-    // Stamped into the image at build time; a gateway run from source has none.
-    releases: new ReleaseNotes(
-      store,
-      process.env.JIAN_VERSION,
-      undefined,
-      fetcher ?? createSafeFetch().fetch,
-    ),
+    releases,
+    // The owner's own redeploy hooks may live on the host's private network (a Coolify or
+    // Portainer beside Jian), which the outbound guard for agents would refuse; only the owner
+    // can set them.
+    updates: new GatewayUpdates(store, gatewayVault, releases, fetcher ?? fetch, {
+      local: mode === 'local',
+      clock,
+      ...(mode === 'local' ? {} : updaterSidecar()),
+    }),
     repository: new RepositoryStars(fetcher ?? createSafeFetch().fetch),
     decisions,
     devices,

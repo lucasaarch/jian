@@ -298,7 +298,7 @@ test('old PR automation is removed and CI gate and essential jobs are unchanged'
   assert.ok(manifest.scripts.check.includes('pnpm test:triage'));
   assert.equal(
     manifest.scripts['test:triage'],
-    'node --test .github/scripts/issue-*.test.mjs .github/scripts/translate-*.test.mjs',
+    'node --test .github/scripts/issue-*.test.mjs .github/scripts/translate-*.test.mjs scripts/updater.test.mjs',
   );
 });
 

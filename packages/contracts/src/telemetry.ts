@@ -43,6 +43,7 @@ const FIXED = [
   'settings_ssh_keys',
   'settings_machines',
   'settings_mobile',
+  'settings_updates',
   'settings_connection',
   // The Inspector opened, and a tab of each kind turned to.
   'inspector_opened',

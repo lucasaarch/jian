@@ -3,7 +3,7 @@ import { type Skill, TERMINALS_MAX } from '@jian/contracts';
 export const jianConfiguration: Skill = {
   name: 'jian-configuration',
   description:
-    'Use when asked where to find or change something in Jian: a setting, model, provider, channel, connector, MCP server, machine, schedule, memory or skill.',
+    'Use when asked where to find or change something in Jian: a setting, model, provider, channel, connector, MCP server, machine, schedule, memory or skill, or how to update a server gateway.',
   instructions: `# Where things are in Jian
 
 The owner configures everything in the panel, the same in the desktop app and on the web. Name the
@@ -30,6 +30,8 @@ Shared by the whole installation.
 - **Mobile**: on a server gateway, pairs a phone with the Jian app by QR code (it needs the
   public address), lists paired phones and when each was last seen, sets notification previews
   per phone, and revokes one.
+- **Updates**: on a server gateway, installs a newer release through the compose \`updater\`
+  service or a redeploy webhook per component (\`{version}\` filled in). Owner-only.
 - **Connection**: on a server gateway, how this panel reaches it.
 
 ## Plugins
@@ -98,14 +100,14 @@ whole window, its pages listed where the sidebar was.
   owner renames it; a group keeps the name its members gave it.
 - **A new chat** chooses above its composer what it works on: from scratch, folders, or GitHub
   repositories, and where it runs.
-- **Model, effort and protection** are chosen in the composer, for that chat. Picking one also makes
-  it what new chats start with.
-- **Stopping you**: while you work, the composer's send button becomes a stop button whenever its
-  box is empty. What the owner writes meanwhile still reaches you in the same turn.
-- **Back to the latest message**: scrolled up from the end, the owner gets a round down-arrow
-  button over the end of the conversation; a dot on it means something new arrived below.
-- **Back to the top**: a page scrolled past its heading shows a Scroll to top button at its
-  bottom right.
+- **Model, effort and protection** are chosen in the composer, for that chat. New chats start with
+  the last one picked.
+- **Stopping you**: while you work, the send button becomes Stop when the box is empty; what the
+  owner writes meanwhile still reaches you this turn.
+- **Back to the latest message**: scrolled up, a down-arrow button returns to the end; a
+  dot on it means something new arrived.
+- **Back to the top**: a page scrolled past its heading shows Scroll to top at its bottom
+  right.
 - **Project instructions**: in a conversation that works in folders or repositories, the
   AGENTS.md of each (CLAUDE.md where there is none) is in your instructions, and the skills in
   their .agents/skills and .claude/skills folders are in your catalog. They are read again when
@@ -117,9 +119,8 @@ whole window, its pages listed where the sidebar was.
   every file of the conversation's projects, or of its worktrees, with the changed ones marked;
   the owner filters them and opens one in the conversation's place, with find, for Markdown a
   rendered page or its code, and for a changed file its diff laid into it (View diff). View diff
-  and line wrapping stay as the owner last left them, kept by that browser or app. It only
-  reads: nothing there edits a file, and the files of a conversation on a machine are not shown
-  yet.
+  and line wrapping are remembered per browser or app. It only reads, and does not show the
+  files of a conversation on a machine yet.
   The owner can also open Terminal tabs there, on the web and in the desktop app: each is their
   own shell on the machine the gateway runs on (never on a machine the conversation targets),
   starting in the conversation's worktree or checkout when the gateway has it, and the gateway

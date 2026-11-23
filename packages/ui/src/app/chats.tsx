@@ -37,6 +37,7 @@ import { ChatsLoading } from './chats-loading';
 import { useAgentCommands } from './commands/agent-commands';
 import { ChatCommands } from './commands/chat-commands';
 import { ReadFailed } from './failed';
+import { GatewayUpdate } from './gateway-update';
 import { Onboarding } from './onboarding';
 import { Farewell } from './onboarding/farewell';
 import { StageHandoff } from './onboarding/handoff';
@@ -213,6 +214,8 @@ export function ChatsApp({
                 <AgentOverlays profileId={profileId} />
               </Suspense>
             )}
+            {/* Opened from Settings too, which covers all of this but keeps it mounted. */}
+            <GatewayUpdate />
           </ReadFailed>
         </div>
       </StageHandoff>
