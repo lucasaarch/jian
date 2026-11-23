@@ -34,6 +34,7 @@ const UNKNOWN_OUTCOME = [
   /aborted without reason/i,
   // The server acted and answered; only the answer was too large to take.
   /MCP response too large/i,
+  /The MCP command stopped reading/i,
 ];
 
 /** Walk an error and its causes the same way the runtime does for provider refusals. */
