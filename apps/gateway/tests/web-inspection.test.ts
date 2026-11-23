@@ -176,7 +176,7 @@ describe.runIf(available)('visual website inspection', () => {
       type: 'content',
       value: [
         expect.objectContaining({ type: 'text' }),
-        { type: 'image-data', data: image.data, mediaType: 'image/jpeg' },
+        { type: 'file', data: { type: 'data', data: image.data }, mediaType: 'image/jpeg' },
       ],
     });
     const textOnly = web.tools(run, false).inspect_page;
