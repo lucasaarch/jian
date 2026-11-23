@@ -1,8 +1,15 @@
-import { type GatewayEvent, STREAM_OPENED_EVENT } from '@jian/contracts';
+import { STREAM_OPENED_EVENT } from '@jian/contracts';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { GatewayError } from '../core/errors.js';
-import { EVENTS_PAGE, latestEventId, readEvents, readProgress } from '../core/event-feed.js';
+import {
+  EVENTS_PAGE,
+  latestEventId,
+  readEventHeads,
+  readEvents,
+  readProgressStamps,
+  readRunsProgress,
+} from '../core/event-feed.js';
 import type { Devices } from '../devices/service.js';
 import type { ProfileReader } from '../profiles/port.js';
 import type { Store } from '../storage/database.js';
@@ -19,6 +26,10 @@ interface EventOptions {
   heartbeatMs?: number;
   /** How long one stream lasts before it is ended for the client to open the next, in ms. */
   streamLifetimeMs?: number;
+  /** How long a client may leave what it was sent unread before it is cut off, in ms. */
+  drainMs?: number;
+  /** How long an ended stream may take to finish sending before its socket drops, in ms. */
+  lingerMs?: number;
 }
 
 const HEARTBEAT_MS = 25_000;
@@ -31,29 +42,18 @@ const HEARTBEAT_MS = 25_000;
 const LIFETIME_MS = 30 * 60_000;
 /** How long an ended stream may take to finish sending before its socket is dropped, in ms. */
 const LINGER_MS = 10_000;
-
 /**
- * What a stream says of an event: that it happened and which conversation it concerns, which is
- * what a client needs to read that conversation again. A step's data holds tool inputs and diffs
- * of any size, and a stream shares its HTTP/2 connection with all the client's other requests.
- * The whole event stays in the paged feed. The inspector's focus is the one a client acts on by
- * itself, and its data is a few short fields.
+ * How long a client may take to read what it was sent before the stream is ended, in ms. Nothing
+ * more is written meanwhile, so a stalled client holds one write's worth of memory at most, and
+ * it resumes from the last event it read.
  */
-function toldOf(event: GatewayEvent): GatewayEvent {
-  if (event.type === 'conversation.inspector.focus') return event;
-  const { sessionId, parentSessionId } = (event.data ?? {}) as {
-    sessionId?: unknown;
-    parentSessionId?: unknown;
-  };
-
-  return {
-    ...event,
-    data: {
-      ...(sessionId ? { sessionId } : {}),
-      ...(parentSessionId ? { parentSessionId } : {}),
-    },
-  };
-}
+const DRAIN_MS = 30_000;
+/**
+ * The least time between two reads of the feed by one stream, in ms. Every run's progress wakes
+ * every stream of the profile several times a second; what those wakes announced is read
+ * together. Progress is written every 250 ms, so a screen loses no frame it would have drawn.
+ */
+const READ_GAP_MS = 100;
 
 /** Each connection owns its cursor; durable events survive disconnects and worker restarts. */
 export function registerEventRoutes(app: FastifyInstance, options: EventOptions) {
@@ -113,11 +113,17 @@ export function registerEventRoutes(app: FastifyInstance, options: EventOptions)
         reply.raw.write(`id: ${cursor}\nevent: ${STREAM_OPENED_EVENT}\ndata: {}\n\n`);
       }
 
+      const raw = reply.raw;
       let closed = false;
       // Writing to a response that ended throws from the socket's next tick, and the pump may be
       // between two awaits when the stream's lifetime ends it.
-      const over = () => closed || reply.raw.writableEnded;
-      const send = (text: string) => !over() && reply.raw.write(text);
+      const over = () => closed || raw.writableEnded;
+      let wroteAt = Date.now();
+      const send = (text: string) => {
+        if (over()) return false;
+        wroteAt = Date.now();
+        return raw.write(text);
+      };
       const heartbeatMs = options.heartbeatMs ?? HEARTBEAT_MS;
       // A phone was let in once, when the stream opened; a stream outlives any request, so its
       // token is checked again at least once a heartbeat, and a revoked phone hears no more.
@@ -128,14 +134,16 @@ export function registerEventRoutes(app: FastifyInstance, options: EventOptions)
       const told = new Map<string, string>();
 
       let linger: ReturnType<typeof setTimeout> | undefined;
-      const lifetime = setTimeout(() => {
+      const finish = () => {
         wake.abort();
-        reply.raw.end();
+        if (closed) return;
+        if (!raw.writableEnded) raw.end();
         // A peer that is gone never takes the end, and the stream would stay counted.
-        linger = setTimeout(() => reply.raw.destroy(), LINGER_MS);
-      }, options.streamLifetimeMs ?? LIFETIME_MS);
+        linger ??= setTimeout(() => raw.destroy(), options.lingerMs ?? LINGER_MS);
+      };
+      const lifetime = setTimeout(finish, options.streamLifetimeMs ?? LIFETIME_MS);
 
-      reply.raw.on('close', () => {
+      raw.on('close', () => {
         closed = true;
         streams -= 1;
         clearTimeout(lifetime);
@@ -143,126 +151,165 @@ export function registerEventRoutes(app: FastifyInstance, options: EventOptions)
         wake.abort();
       });
 
-      const pump = async () => {
-        if (over()) {
-          return;
+      /** Whether the client took what it was sent in time, or the stream ended first. */
+      const drained = () =>
+        new Promise<boolean>((resolve) => {
+          const done = (taken: boolean) => {
+            clearTimeout(timer);
+            raw.off('drain', onDrain);
+            wake.signal.removeEventListener('abort', onEnd);
+            resolve(taken);
+          };
+          const onDrain = () => done(true);
+          const onEnd = () => done(false);
+          const timer = setTimeout(onEnd, options.drainMs ?? DRAIN_MS);
+          raw.once('drain', onDrain);
+          wake.signal.addEventListener('abort', onEnd, { once: true });
+        });
+
+      /** Waits `ms`, or less when the stream ends. */
+      const pause = (ms: number) =>
+        new Promise<void>((resolve) => {
+          const done = () => {
+            clearTimeout(timer);
+            wake.signal.removeEventListener('abort', done);
+            resolve();
+          };
+          const timer = setTimeout(done, ms);
+          wake.signal.addEventListener('abort', done, { once: true });
+        });
+
+      const tellProgress = async () => {
+        // Progress is a latest state, so what a slow client misses is simply told newer.
+        const working = await readProgressStamps(options.store.db, profileId);
+        const moved = working.filter((run) => told.get(run.runId) !== run.at);
+        const frames: Array<(typeof working)[number] & { progress?: unknown }> =
+          withText && moved.length
+            ? await readRunsProgress(
+                options.store.db,
+                profileId,
+                moved.map((run) => run.runId),
+              )
+            : moved;
+
+        for (const { progress, ...run } of frames) {
+          if (raw.writableNeedDrain) break;
+          told.set(run.runId, run.at);
+          const frame = progress && withText ? { ...run, progress } : run;
+          send(`event: run.progress\ndata: ${JSON.stringify(frame)}\n\n`);
         }
 
-        let behind = false;
-        let notified: Promise<void> = Promise.resolve();
-        let stop = () => {};
+        const still = new Set(working.map((run) => run.runId));
+        for (const runId of told.keys()) {
+          if (!still.has(runId)) told.delete(runId);
+        }
+      };
 
-        try {
-          // Close slow consumers instead of buffering an unbounded event history.
-          if (reply.raw.writableLength > 256 * 1024) {
-            reply.raw.end();
+      const pump = async () => {
+        let readAt = Number.NEGATIVE_INFINITY;
 
-            return;
-          }
-
-          if (reply.raw.writableNeedDrain) {
-            await new Promise((resolve) => setTimeout(resolve, 1000));
-
-            return pump();
-          }
-
-          if (request.device && (beat || Date.now() - checkedAt >= heartbeatMs)) {
-            beat = false;
-            checkedAt = Date.now();
-            const still = await options.devices.authenticate(request.headers.authorization ?? '');
-            if (still !== request.device) {
-              reply.raw.end();
-
-              return;
-            }
-          }
-
-          // Subscribe before reading. A commit between the read and the wait is otherwise lost until
-          // the heartbeat timeout, which looks like a remote client has stopped syncing.
+        while (!over()) {
           const waiting = new AbortController();
           const stopWaiting = () => waiting.abort();
-          wake.signal.addEventListener('abort', stopWaiting, { once: true });
-          notified = options.store.waitForEvent(profileId, waiting.signal);
-          stop = () => {
+          const stop = () => {
             waiting.abort();
             wake.signal.removeEventListener('abort', stopWaiting);
           };
+          let notified: Promise<void> = Promise.resolve();
+          let behind = false;
 
-          const events = await readEvents(options.store.db, profileId, cursor);
-
-          for (const event of events) {
-            if (over()) {
-              stop();
+          try {
+            // Nothing more is written to a client that has not read the last of it: an unread
+            // history must wait in the database, behind the cursor, and not in this process.
+            if (raw.writableNeedDrain && !(await drained())) {
+              finish();
               return;
             }
 
-            const ready = send(
-              `id: ${event.id}\nevent: ${event.type}\ndata: ${JSON.stringify(toldOf(event))}\n\n`,
-            );
+            const timed = beat;
+            beat = false;
 
-            cursor = event.id;
-
-            if (!ready) {
-              break;
+            if (request.device && (timed || Date.now() - checkedAt >= heartbeatMs)) {
+              checkedAt = Date.now();
+              const still = await options.devices.authenticate(request.headers.authorization ?? '');
+              if (still !== request.device) {
+                finish();
+                return;
+              }
             }
-          }
 
-          // Progress changes many times a second and is not worth a row each time; a stream
-          // hears of it here, without an id, so it never moves the cursor it resumes from. Its
-          // text goes only to a stream that asked: a phone told of every working run's answer
-          // four times a second would spend its data on screens it is not showing.
-          const working = await readProgress(options.store.db, profileId);
+            if (over()) return;
 
-          for (const { progress, ...run } of working) {
-            if (told.get(run.runId) !== run.at) {
-              told.set(run.runId, run.at);
-              const frame = progress && withText ? { ...run, progress } : run;
-              send(`event: run.progress\ndata: ${JSON.stringify(frame)}\n\n`);
+            // Subscribe before reading. A commit between the read and the wait is otherwise lost
+            // until the heartbeat timeout, which looks like a remote client has stopped syncing.
+            wake.signal.addEventListener('abort', stopWaiting, { once: true });
+            notified = options.store.waitForEvent(profileId, waiting.signal);
+            readAt = Date.now();
+
+            const events = await readEventHeads(options.store.db, profileId, cursor);
+            let sent = 0;
+
+            for (const event of events) {
+              if (over()) {
+                stop();
+                return;
+              }
+
+              const ready = send(
+                `id: ${event.id}\nevent: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`,
+              );
+
+              // Only what was handed to the socket moves the cursor, one event at a time.
+              cursor = event.id;
+              sent += 1;
+
+              if (!ready) break;
             }
+
+            await tellProgress();
+
+            // Only when nothing else went out for that long: a wake with nothing to tell is not
+            // news, but a proxy must still see the stream is alive however often those come.
+            if (events.length === 0 && (timed || Date.now() - wroteAt >= heartbeatMs)) {
+              send(': heartbeat\n\n');
+            }
+
+            // More is waiting when a page was full or a full buffer stopped this one: a client
+            // catching up reads on at once, or it would hear of the rest only after a wait.
+            behind = sent < events.length || events.length === EVENTS_PAGE;
+          } catch {
+            stop();
+            finish();
+            return;
           }
 
-          for (const runId of told.keys()) {
-            if (!working.some((run) => run.runId === runId)) told.delete(runId);
+          if (behind) {
+            stop();
+            continue;
           }
 
-          if (events.length === 0) {
-            send(': heartbeat\n\n');
+          let heartbeat: ReturnType<typeof setTimeout> | undefined;
+          try {
+            await Promise.race([
+              notified,
+              new Promise<void>((resolve) => {
+                heartbeat = setTimeout(() => {
+                  beat = true;
+                  resolve();
+                }, heartbeatMs);
+              }),
+            ]);
+          } finally {
+            if (heartbeat) clearTimeout(heartbeat);
+            stop();
           }
 
-          // A full page means more is waiting: a client catching up reads on at once, or it would
-          // hear of new events only after a wake or a wait for every hundred old ones.
-          behind = events.length === EVENTS_PAGE;
-        } catch {
-          stop();
-          reply.raw.end();
-
-          return;
+          const early = READ_GAP_MS - (Date.now() - readAt);
+          if (early > 0 && !over()) await pause(early);
         }
-
-        if (behind) {
-          stop();
-          return pump();
-        }
-
-        let heartbeat: ReturnType<typeof setTimeout> | undefined;
-        try {
-          await Promise.race([
-            notified,
-            new Promise<void>((resolve) => {
-              heartbeat = setTimeout(() => {
-                beat = true;
-                resolve();
-              }, heartbeatMs);
-            }),
-          ]);
-        } finally {
-          if (heartbeat) clearTimeout(heartbeat);
-          stop();
-        }
-        return pump();
       };
 
-      void pump();
+      void pump().catch(finish);
     },
   );
 }
