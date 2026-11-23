@@ -1,6 +1,7 @@
 import { MESSAGES_FIRST_PAGE } from '@jian/contracts';
 import { toast } from 'sonner';
 import type { GatewayApi, Message, ToolStep } from '../../../lib/api';
+import { refusedAnswer } from '../../../lib/api/result';
 import { running } from '../status';
 import { released } from './live-text';
 import type { Asks, ConversationStore } from './store';
@@ -17,11 +18,15 @@ export type Reader = {
   earlier(): Promise<void>;
   /** The tools of these turns of this conversation. Ended ones are final and skipped. */
   turns(runIds: string[]): Promise<void>;
-  subagents(): Promise<void>;
+  /** False when the gateway could not be asked, for a poll to wait longer. */
+  subagents(): Promise<boolean>;
   /** One turn as the gateway has it now, for a stream that told of progress without saying it. */
   run(runId: string): Promise<void>;
-  /** The other agent's turn while it answers the question this profile carried to it. */
-  call(): Promise<void>;
+  /**
+   * The other agent's turn while it answers the question this profile carried to it. False when
+   * the gateway could not be asked: what is known of that turn stays, for a poll to try again.
+   */
+  call(): Promise<boolean>;
   /** Every read under way, and every later one, lands nowhere: another conversation is shown. */
   stop(): void;
 };
@@ -317,13 +322,16 @@ export function createReader(options: {
     }
   };
 
+  let subagentsRead = true;
   const readSubagents = async () => {
     if (!api.conversationSubagents || stopped) return;
     try {
       const children = await api.conversationSubagents(profileId, sessionId);
+      subagentsRead = true;
       if (!stopped) state().subagentsRead(children);
     } catch {
-      // Followed every 1.5 s while one works: the next poll, or the next read, tries again.
+      // Followed while one works: the next poll, or the next read, tries again.
+      subagentsRead = false;
     }
   };
 
@@ -355,19 +363,25 @@ export function createReader(options: {
     if (page) await latest();
   }, isStopped);
 
+  let callRead = true;
   const call = singleFlight<never>(async () => {
     const pending = pendingCall(state().messages);
+    callRead = true;
     if (!pending || !api.run || stopped) return;
     const number = ++sent;
     const [current, steps] = await Promise.all([
-      api.run(pending.profileId, pending.runId).catch(() => undefined),
+      api.run(pending.profileId, pending.runId).catch((failure: unknown) => {
+        // A turn the gateway says it does not have is over; one it could not be asked about is not.
+        if (!refusedAnswer(failure)) callRead = false;
+        return undefined;
+      }),
       api
         .timeline?.(pending.profileId, pending.sessionId, [pending.runId], BRIEF)
         .catch(() => undefined),
     ]);
     // Its answer came back while this was read: the read that saw it holds the final word.
     if (stopped || state().ended.calls.has(pending.runId)) return;
-    state().patch({ callRun: current });
+    if (callRead) state().patch({ callRun: current });
     if (steps) {
       writeCalls(
         newest('calls', [pending.runId], number),
@@ -411,9 +425,15 @@ export function createReader(options: {
       };
     })(),
     turns: (runIds) => turns(runIds),
-    subagents: () => subagents(),
+    subagents: async () => {
+      await subagents();
+      return subagentsRead;
+    },
     run: (runId) => run([runId]),
-    call: () => call(),
+    call: async () => {
+      await call();
+      return callRead;
+    },
     stop: () => {
       stopped = true;
       caughtUp();

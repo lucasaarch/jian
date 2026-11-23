@@ -3,6 +3,7 @@
 import { MESSAGES_FIRST_PAGE } from '@jian/contracts';
 import { useEffect, useRef, useState } from 'react';
 import type { GatewayApi, Message, ToolStep } from '../../lib/api';
+import { poll } from '../../lib/poll';
 import { useCrew } from '../../lib/stores/crew';
 
 /** How long a working agent's drawer waits after one read lands before the next, in ms. */
@@ -71,7 +72,6 @@ export function useAgentRead(
   useEffect(() => {
     if (!runId || !place) return;
     let stopped = false;
-    let timer: ReturnType<typeof setTimeout> | undefined;
 
     /** Whether the read failed, in whole or in part. */
     const fetch = async () => {
@@ -102,17 +102,22 @@ export function useAgentRead(
       });
       return flight;
     };
-    const poll = async (retried = false) => {
-      const failed = await read();
-      if (stopped) return;
-      if (working) timer = setTimeout(() => void poll(), POLL_MS);
-      else if (failed && !retried) timer = setTimeout(() => void poll(true), POLL_MS);
-    };
-    void poll();
+    let retried = false;
+    const stopPolling = poll(
+      async () => {
+        const failed = await read();
+        if (stopped) return 'done';
+        if (working) return failed ? 'failed' : 'again';
+        if (!failed || retried) return 'done';
+        retried = true;
+        return 'failed';
+      },
+      { everyMs: POLL_MS, atOnce: true },
+    );
 
     return () => {
       stopped = true;
-      clearTimeout(timer);
+      stopPolling();
     };
   }, [api, profileId, runId, place, working]);
 

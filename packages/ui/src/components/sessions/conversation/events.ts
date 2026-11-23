@@ -5,6 +5,7 @@ import {
 } from '@jian/contracts';
 import { onlineManager } from '@tanstack/react-query';
 import { subscribe } from '../../../lib/events';
+import { poll } from '../../../lib/poll';
 import { hearArtifactDraft } from '../artifacts/live';
 import { focusInspector } from '../inspector-host';
 import { running } from '../status';
@@ -172,24 +173,29 @@ export function followConversation(options: {
 
   // Subagents at work are read until none is: their own turns reach this stream only as they
   // start and end, not as they go.
-  let crew: ReturnType<typeof setInterval> | undefined;
+  let crew: (() => void) | undefined;
 
   // The other agent's work reaches this profile's stream only when it ends, so it is followed
   // here while it runs; its end reads the conversation again, where the answer lands. Keyed by
   // its ids, not by the message, which is a new object on every read.
   let following = '';
-  let call: ReturnType<typeof setTimeout> | undefined;
+  let call: (() => void) | undefined;
   const followCall = (key: string) => {
     following = key;
-    clearTimeout(call);
+    call?.();
+    call = undefined;
     if (!key) return;
-    const tick = async () => {
-      await reader.call();
-      if (gone || following !== key) return;
-      if (running(store.getState().callRun)) call = setTimeout(tick, FOLLOW_MS);
-      else void reader.latest();
-    };
-    void tick();
+    call = poll(
+      async () => {
+        const read = await reader.call();
+        if (gone || following !== key) return 'done';
+        if (read === false) return 'failed';
+        if (running(store.getState().callRun)) return 'again';
+        void reader.latest();
+        return 'done';
+      },
+      { everyMs: FOLLOW_MS, atOnce: true },
+    );
   };
 
   const sync = (state: ConversationState, previous?: ConversationState) => {
@@ -200,9 +206,12 @@ export function followConversation(options: {
       clearTimeout(quiet);
       quiet = undefined;
     }
-    if (crewWorking(state) && !crew) crew = setInterval(() => void reader.subagents(), FOLLOW_MS);
-    else if (!crewWorking(state) && crew) {
-      clearInterval(crew);
+    if (crewWorking(state) && !crew) {
+      crew = poll(async () => ((await reader.subagents()) === false ? 'failed' : 'again'), {
+        everyMs: FOLLOW_MS,
+      });
+    } else if (!crewWorking(state) && crew) {
+      crew();
       crew = undefined;
     }
     // Only the messages say whether a call is pending, and text under way changes the store
@@ -227,7 +236,7 @@ export function followConversation(options: {
     stopOnline();
     clearTimeout(burst);
     clearTimeout(quiet);
-    clearInterval(crew);
-    clearTimeout(call);
+    crew?.();
+    call?.();
   };
 }
