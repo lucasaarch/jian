@@ -1,6 +1,7 @@
 type ChannelEvent =
   | 'dispatch.failed'
   | 'whatsapp.worker.failed'
+  | 'whatsapp.inbox.failed'
   | 'whatsapp.decrypt.failed'
   | 'whatsapp.decrypt.recovered'
   | 'whatsapp.key.invalid'
@@ -17,6 +18,10 @@ type Details = {
   deliveryId?: string;
   runId?: string;
   status?: 'sent' | 'failed' | 'unknown' | 'pending';
+  /** An inbox item's id, a hash of its channel and request key that says nothing of the text. */
+  inboxId?: string;
+  /** How many times in a row this has failed. */
+  attempts?: number;
 };
 
 const uuid = (value: unknown) =>
@@ -55,6 +60,10 @@ export function channelLog(
       deliveryId: uuid(details.deliveryId),
       runId: uuid(details.runId),
       status,
+      ...(details.inboxId && /^[0-9a-f]{64}$/.test(details.inboxId)
+        ? { inboxId: details.inboxId }
+        : {}),
+      ...(Number.isSafeInteger(details.attempts) ? { attempts: details.attempts } : {}),
       ...(typeof statusCode === 'number' &&
       Number.isInteger(statusCode) &&
       statusCode >= 400 &&

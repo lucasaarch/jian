@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import type { InlineMedia, ReactionDelivery } from '@jian/contracts';
 import { eq } from 'drizzle-orm';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { createApp } from '../src/app.js';
 import type { IncomingMessage } from '../src/channels/channel.js';
 import { ChannelRegistry } from '../src/channels/registry.js';
@@ -673,6 +673,71 @@ describe('WhatsApp linked device', () => {
     } finally {
       await f.whatsapp.stop();
       await f.app.close();
+    }
+  });
+});
+
+describe('the WhatsApp inbox', () => {
+  async function linked() {
+    const f = await setup();
+    await f.channels.update(f.profile.id, f.binding.id, { allowAllContacts: true });
+    await f.whatsapp.connect(f.profile.id, f.binding.id);
+    await f.whatsapp.tick(f.receive);
+    const device = f.devices[0];
+    if (!device) throw new Error('Device missing');
+    await device.callbacks.ready('5511888888888@c.us');
+    return { f, device };
+  }
+  const from = (chat: string, requestKey: string): IncomingMessage => ({
+    ...message,
+    actorId: `55119000000${chat}@c.us`,
+    chatId: `55119000000${chat}@c.us`,
+    requestKey,
+    text: requestKey,
+  });
+
+  it('holds back only the chat of a message that fails, in order, and says so', async () => {
+    const { f, device } = await linked();
+    const log = vi.spyOn(console, 'info').mockImplementation(() => {});
+    try {
+      for (const item of [
+        from('01', 'first-of-a'),
+        from('01', 'second-of-a'),
+        from('02', 'only-of-b'),
+      ]) {
+        await device.callbacks.message(item);
+      }
+      const told: string[] = [];
+      let broken = true;
+      const receive: typeof f.receive = (id, input, generation) => {
+        told.push(input.requestKey);
+        if (broken && input.requestKey === 'first-of-a') throw new Error('storage unavailable');
+        return f.receive(id, input, generation);
+      };
+
+      await f.whatsapp.tick(receive);
+      expect(told).toEqual(['first-of-a', 'only-of-b']);
+      expect((await pendingInbox(f.store)).length).toBe(2);
+      expect(log.mock.calls.flat().join('\n')).toContain('whatsapp.inbox.failed');
+
+      // Inside its wait the failed message is not tried, and nothing passes it.
+      told.length = 0;
+      f.advance(1_000);
+      await f.whatsapp.tick(receive);
+      expect(told).toEqual([]);
+
+      f.advance(1_000);
+      await f.whatsapp.tick(receive);
+      expect(told).toEqual(['first-of-a']);
+
+      told.length = 0;
+      broken = false;
+      f.advance(4_000);
+      await f.whatsapp.tick(receive);
+      expect(told).toEqual(['first-of-a', 'second-of-a']);
+      expect(await pendingInbox(f.store)).toHaveLength(0);
+    } finally {
+      log.mockRestore();
     }
   });
 });

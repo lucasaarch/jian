@@ -6,6 +6,7 @@ import type { Queryable, Store } from '../../storage/database.js';
 import type { DeliveryOutcome, IncomingMessage, OutgoingMessage } from '../channel.js';
 import { channelLog } from '../logging.js';
 import { findChannel, findContactByIdentity, setChannelAddress } from '../repository.js';
+import { InboxRetries } from './inbox-retries.js';
 import {
   claimConnection,
   countPendingInbox,
@@ -14,7 +15,7 @@ import {
   insertInboxItem,
   listConnections,
   listConnectionsOwnedBy,
-  listPendingInbox,
+  listPendingInboxIds,
   readAuthChunks,
   readOwned,
   releaseConnection,
@@ -30,6 +31,8 @@ const LEASE_MS = 30_000;
 const QR_LIFETIME_MS = 45_000;
 const AUTH_CHUNK_BYTES = 512 * 1024;
 const INBOX_CAPACITY = 1000;
+/** Whole inbox items one pass reads, one at a time: each can carry 21 MB of attachments. */
+const INBOX_READS_PER_TICK = 20;
 export const MAX_DEVICE_SESSION_BYTES = 64 * 1024 * 1024;
 
 type Receiver = (id: string, input: IncomingMessage, generation: number) => Promise<unknown>;
@@ -42,13 +45,16 @@ export class WhatsAppConnections {
   private timer?: ReturnType<typeof setTimeout>;
   private pending: Promise<void> = Promise.resolve();
   private stopped = false;
+  private readonly retries: InboxRetries;
 
   constructor(
     private readonly store: Store,
     private readonly box: SecretBox,
     private readonly factory: DeviceFactory,
     private readonly clock = Date.now,
-  ) {}
+  ) {
+    this.retries = new InboxRetries(clock);
+  }
 
   private now() {
     return new Date(this.clock()).toISOString();
@@ -352,6 +358,7 @@ export class WhatsAppConnections {
   async tick(receive: Receiver) {
     const records = await listConnections(this.store.db, 1000);
     const live = new Set(records.map((record) => record.id));
+    this.retries.keepChannels(live);
 
     // Deleting a profile cascades its channel and this row away in one transaction, with no
     // chance to mark `desired: false` where this worker could see it first — the row is simply
@@ -422,31 +429,78 @@ export class WhatsAppConnections {
         });
       }
 
-      for (const item of await listPendingInbox(this.store.db, record.id, 20)) {
-        let status: 'submitted' | 'discarded' = 'submitted';
+      await this.drainInbox(claimed, receive);
+    }
+  }
 
+  /**
+   * Hands what waits to the channel, in order within each chat. A message that fails stays and
+   * holds back only the later messages of its chat, so one that can never go through costs its
+   * own conversation and says so in the log, while every other chat is read as usual.
+   */
+  private async drainInbox(claimed: ConnectionRecord, receive: Receiver) {
+    const ids = await listPendingInboxIds(this.store.db, claimed.id, INBOX_CAPACITY);
+    this.retries.keep(claimed.id, ids);
+    const heldBack = new Set<string>();
+    let read = 0;
+
+    for (const id of ids) {
+      if (this.stopped || read >= INBOX_READS_PER_TICK) return;
+
+      const known = this.retries.chatOf(id);
+      if (known !== undefined && (heldBack.has(known) || this.retries.waiting(id))) {
+        heldBack.add(known);
+        continue;
+      }
+
+      read += 1;
+      const item = await findInboxItem(this.store.db, id);
+      if (item?.status !== 'pending') continue;
+
+      const chat = item.message.chatId;
+      if (heldBack.has(chat)) {
+        this.retries.behind(id, claimed.id, chat);
+        continue;
+      }
+
+      // Without the device nothing may be settled: whoever holds it now reads this item.
+      try {
+        await this.store.transaction(claimed.profileId, (tx) => this.owned(tx, claimed));
+      } catch {
+        return;
+      }
+
+      let status: 'submitted' | 'discarded' = 'submitted';
+
+      if (item.generation !== claimed.generation) {
+        status = 'discarded';
+      } else {
         try {
-          await this.store.transaction(record.profileId, (tx) => this.owned(tx, claimed));
-
-          if (item.generation !== claimed.generation) {
-            status = 'discarded';
-          } else {
-            await receive(record.id, item.message, claimed.generation);
-          }
+          await receive(claimed.id, item.message, claimed.generation);
         } catch (error) {
-          // Session contention is transient; keep the message durable until its previous run finishes.
           if (error instanceof GatewayError && [400, 403, 404].includes(error.statusCode)) {
             status = 'discarded';
           } else {
-            break;
+            heldBack.add(chat);
+            const busy = error instanceof GatewayError && [409, 429].includes(error.statusCode);
+            const { attempts, told } = this.retries.failed(id, claimed.id, chat, busy);
+            if (told) {
+              channelLog(
+                'whatsapp.inbox.failed',
+                { channelId: claimed.id, inboxId: id, attempts },
+                error,
+              );
+            }
+            continue;
           }
         }
-
-        await this.store.transaction(record.profileId, async (tx) => {
-          await this.owned(tx, claimed);
-          await settleInboxItem(tx, item, status);
-        });
       }
+
+      await this.store.transaction(claimed.profileId, async (tx) => {
+        await this.owned(tx, claimed);
+        await settleInboxItem(tx, item, status);
+      });
+      this.retries.passed(id);
     }
   }
 

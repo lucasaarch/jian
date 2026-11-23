@@ -278,20 +278,25 @@ export async function countPendingInbox(db: Queryable, channelId: string): Promi
   return row?.pending ?? 0;
 }
 
-/** Oldest first: what the device received is replayed in the order it arrived. */
-export async function listPendingInbox(
+/**
+ * The ids of what waits, oldest first: what the device received is replayed in the order it
+ * arrived, and two received in one millisecond in the order they were stored. Ids alone, because
+ * an item carries its attachments inline, up to 21 MB each: one is read at a time, when its turn
+ * comes (`findInboxItem`).
+ */
+export async function listPendingInboxIds(
   db: Queryable,
   channelId: string,
   limit: number,
-): Promise<InboxRecord[]> {
+): Promise<string[]> {
   const rows = await db
-    .select()
+    .select({ id: channelInbox.id })
     .from(channelInbox)
     .where(and(eq(channelInbox.channelId, channelId), eq(channelInbox.status, 'pending')))
-    .orderBy(channelInbox.receivedAt)
+    .orderBy(channelInbox.receivedAt, sql`${channelInbox}.ctid`)
     .limit(limit);
 
-  return rows.map(toInbox);
+  return rows.map((row) => row.id);
 }
 
 export async function insertInboxItem(db: Queryable, record: InboxRecord): Promise<void> {
