@@ -96,9 +96,13 @@ export function streamable(text: string): string {
   return text.slice(0, start + at) + text.slice(start + at + marker.length);
 }
 
-/** Every inline token the renderer knows; `streamable` reads the same one. */
+/**
+ * Every inline token the renderer knows; `streamable` reads the same one. A link's label stops at
+ * 500 characters and its address at 4,096: unbounded, each unclosed `[` scanned to the end of
+ * the line, and a long run of them froze the panel for the square of its length.
+ */
 const inlinePattern =
-  /\*\*(.+?)\*\*|`([^`]+)`|\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)|(?<![\w*])[*_]([^*_\s](?:[^*_]*[^*_\s])?)[*_](?![\w*])|(https?:\/\/[^\s<>()]+[^\s<>().,;:!?'"])|!\[([^\]]*)\]\(([^)\s]+)\)/g;
+  /\*\*(.+?)\*\*|`([^`]+)`|\[([^\]]{1,500})\]\((https?:\/\/[^)\s]{1,4096})\)|(?<![\w*])[*_]([^*_\s](?:[^*_]*[^*_\s])?)[*_](?![\w*])|(https?:\/\/[^\s<>()]+[^\s<>().,;:!?'"])|!\[([^\]]{0,500})\]\(([^)\s]{1,4096})\)/g;
 
 function inline(text: string): ReactNode[] {
   const parts: ReactNode[] = [];
