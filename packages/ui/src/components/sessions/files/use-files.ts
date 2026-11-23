@@ -3,7 +3,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import type { GatewayApi } from '../../../lib/api';
-import { GatewayAnswer } from '../../../lib/api/result';
+import { refusedAnswer } from '../../../lib/api/result';
 import { subscribe } from '../../../lib/events';
 import { keys } from '../../../lib/query/keys';
 import { refresh } from '../../../lib/query/refresh';
@@ -32,21 +32,10 @@ const ENDED = new Set([
 /** The longest wait between two tries of a read that keeps failing, in ms. */
 const RETRY_CAP_MS = 15_000;
 
-/**
- * The gateway answered and said no: a conversation on a machine, no project, a file that is
- * gone. Asking again at once would get the same answer, so its sentence is shown until the files
- * are read again. Anything else (the gateway away, a failed read) is tried again by itself.
- */
-const refused = (error: unknown) =>
-  error instanceof GatewayAnswer &&
-  error.status !== undefined &&
-  error.status >= 400 &&
-  error.status < 500 &&
-  error.status !== 408 &&
-  error.status !== 429;
-
 const again = {
-  retry: (_failures: number, error: unknown) => !refused(error),
+  // A refusal (a conversation on a machine, no project, a file that is gone) stays on screen
+  // until the files are read again; anything else is tried again by itself.
+  retry: (_failures: number, error: unknown) => !refusedAnswer(error),
   retryDelay: (attempt: number) => Math.min(1000 * 2 ** attempt, RETRY_CAP_MS),
   refetchOnWindowFocus: true,
 } as const;

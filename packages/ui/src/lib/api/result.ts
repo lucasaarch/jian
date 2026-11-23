@@ -98,6 +98,18 @@ export class GatewayAnswer extends Error {
   }
 }
 
+/**
+ * The gateway answered and said no: asking again would get the same answer. A timeout and a rate
+ * limit are not such an answer, and anything else is the gateway failing or away.
+ */
+export const refusedAnswer = (failure: unknown) =>
+  failure instanceof GatewayAnswer &&
+  failure.status !== undefined &&
+  failure.status >= 400 &&
+  failure.status < 500 &&
+  failure.status !== 408 &&
+  failure.status !== 429;
+
 export async function result<T>(
   request: Promise<{ data?: T; error?: unknown; response: Response }>,
 ): Promise<T> {

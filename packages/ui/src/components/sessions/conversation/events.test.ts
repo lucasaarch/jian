@@ -473,3 +473,73 @@ describe('following a conversation', () => {
     expect(reads).toEqual(before);
   });
 });
+
+describe('following what the stream does not tell', () => {
+  it('backs off from subagents the gateway cannot be asked about', async () => {
+    const child = { runId: 'child-1', status: 'running' } as Subagent;
+    const { api, reads } = counted({ run: turn(RUN, 'completed'), subagents: [child] });
+    const store = createConversationStore();
+    const reader = createReader({
+      api,
+      profileId: 'profile',
+      sessionId: SESSION,
+      group: false,
+      store,
+      reloads: () => 0,
+    });
+    await reader.latest();
+    const unfollow = followConversation({ store, reader, sessionId: SESSION });
+    const before = reads.subagents;
+    api.conversationSubagents = async () => {
+      reads.subagents += 1;
+      throw new TypeError('Failed to fetch');
+    };
+
+    await vi.advanceTimersByTimeAsync(60_000);
+
+    // At a steady 1.5 s this would be forty reads.
+    expect(reads.subagents - before).toBeLessThanOrEqual(7);
+    unfollow();
+  });
+
+  it('keeps following another agent through a failed read of its turn', async () => {
+    const asked: Message = {
+      ...said('asked', RUN),
+      role: 'assistant',
+      call: { profileId: 'other', sessionId: 'their-session', runId: 'their-run' },
+    };
+    let reachable = false;
+    let runReads = 0;
+    const api = {
+      messages: async () => [asked],
+      activities: async () => [turn(RUN, 'completed')],
+      timeline: async () => [],
+      conversationSubagents: async () => [],
+      run: async () => {
+        runReads += 1;
+        if (!reachable) throw new TypeError('Failed to fetch');
+        return { ...turn('their-run'), status: 'running' } as Run;
+      },
+    } as unknown as HistoryApi;
+    const store = createConversationStore();
+    const reader = createReader({
+      api,
+      profileId: 'profile',
+      sessionId: SESSION,
+      group: false,
+      store,
+      reloads: () => 0,
+    });
+    await reader.latest();
+    const unfollow = followConversation({ store, reader, sessionId: SESSION });
+
+    await vi.advanceTimersByTimeAsync(5_000);
+    const during = runReads;
+    expect(during).toBeGreaterThan(1);
+    reachable = true;
+    await vi.advanceTimersByTimeAsync(10_000);
+
+    expect(store.getState().callRun?.id).toBe('their-run');
+    unfollow();
+  });
+});
