@@ -10,6 +10,7 @@ import { Channels } from './channels/service.js';
 import { TelegramChannel } from './channels/telegram.js';
 import type { WhatsAppConnections } from './channels/whatsapp/connections.js';
 import { Coordination } from './coordination/service.js';
+import { everyAfter } from './core/every-after.js';
 import { gatewayRelease } from './core/release.js';
 import { GitHubIntegrations } from './integrations/github.js';
 import { XClient } from './integrations/x/client.js';
@@ -36,13 +37,14 @@ import type { Store } from './storage/database.js';
 import { Telemetry } from './telemetry/service.js';
 
 /**
- * How often due schedules are looked for, in milliseconds. A schedule set for 08:00 starts within
- * this much of it; every worker looks, and a schedule starts once however many do.
+ * How long after one look for due schedules the next starts, in milliseconds. A schedule set for
+ * 08:00 starts within about this much of it; every worker looks, and a schedule starts once
+ * however many do.
  */
 const SCHEDULE_TICK_MS = 15_000;
 /**
- * How often the workers look for pull requests due a look, in ms. Each is looked at once a
- * minute (`WATCH_EVERY_MS`); a tick this short only keeps that minute from slipping much.
+ * How long after one round the workers look for pull requests due a look, in ms. Each is looked
+ * at once a minute (`WATCH_EVERY_MS`); a wait this short only keeps that minute from slipping much.
  */
 const PULL_TICK_MS = 15_000;
 /** How long after start the first telemetry check waits, and how often it runs again, in ms. */
@@ -245,11 +247,9 @@ export async function createGateway(options: GatewayOptions): Promise<Gateway> {
         })
       : undefined;
 
-  let scheduleTimer: ReturnType<typeof setInterval> | undefined;
-  let pullTimer: ReturnType<typeof setInterval> | undefined;
-  let sweepTimer: ReturnType<typeof setInterval> | undefined;
+  // Each is one run at a time: see `everyAfter`.
+  const loops: Array<{ stop(): void }> = [];
   let telemetryTimer: ReturnType<typeof setInterval> | undefined;
-  let receiptsTimer: ReturnType<typeof setInterval> | undefined;
   let stage: StartupStage = 'database';
   let stopping: Promise<void> | undefined;
 
@@ -269,12 +269,13 @@ export async function createGateway(options: GatewayOptions): Promise<Gateway> {
       const shared = options.role !== 'all';
       await services.remote.failLeftoverFiles({ givenUpOnly: shared });
       if (shared) {
-        sweepTimer = setInterval(() => {
-          void services.remote
-            .failLeftoverFiles({ givenUpOnly: true })
-            .catch(() => console.error('jian: files tasks could not be swept; will retry'));
-        }, FILES_SWEEP_MS);
-        sweepTimer.unref();
+        loops.push(
+          everyAfter(
+            () => services.remote.failLeftoverFiles({ givenUpOnly: true }),
+            FILES_SWEEP_MS,
+            () => console.error('jian: files tasks could not be swept; will retry'),
+          ),
+        );
       }
       stage = 'queue';
       await queue?.start();
@@ -282,27 +283,28 @@ export async function createGateway(options: GatewayOptions): Promise<Gateway> {
       if (options.role !== 'api') {
         whatsapp?.start((id, input, generation) => channels.receiveLinked(id, input, generation));
         channels.start();
-        scheduleTimer = setInterval(() => {
-          void services.schedules
-            .fireDue()
-            .catch(() => console.error('jian: schedules could not be started; will retry'));
-        }, SCHEDULE_TICK_MS);
-        scheduleTimer.unref();
-        pullTimer = setInterval(() => {
-          void services.pulls
-            .lookDue()
-            .catch(() => console.error('jian: pull requests could not be looked at; will retry'));
-        }, PULL_TICK_MS);
-        pullTimer.unref();
+        loops.push(
+          everyAfter(
+            () => services.schedules.fireDue(),
+            SCHEDULE_TICK_MS,
+            () => console.error('jian: schedules could not be started; will retry'),
+          ),
+          everyAfter(
+            () => services.pulls.lookDue(),
+            PULL_TICK_MS,
+            () => console.error('jian: pull requests could not be looked at; will retry'),
+          ),
+          everyAfter(
+            () => services.mobilePush.checkReceipts(),
+            RECEIPTS_TICK_MS,
+            () => {},
+          ),
+        );
         // Checked hourly, sent at most daily: a computer asleep at any one hour still reports.
         const report = () => void telemetry.reportIfDue().catch(() => {});
         setTimeout(report, TELEMETRY_FIRST_MS).unref();
         telemetryTimer = setInterval(report, TELEMETRY_TICK_MS);
         telemetryTimer.unref();
-        receiptsTimer = setInterval(() => {
-          void services.mobilePush.checkReceipts().catch(() => {});
-        }, RECEIPTS_TICK_MS);
-        receiptsTimer.unref();
       }
 
       if (!app || !listen) return {};
@@ -313,11 +315,8 @@ export async function createGateway(options: GatewayOptions): Promise<Gateway> {
     stop() {
       stopping ??= (async () => {
         codexLogin.stop();
-        clearInterval(scheduleTimer);
-        clearInterval(pullTimer);
-        clearInterval(sweepTimer);
+        for (const loop of loops) loop.stop();
         clearInterval(telemetryTimer);
-        clearInterval(receiptsTimer);
         // End long-lived event streams before waiting for HTTP shutdown.
         app?.server.closeAllConnections();
         await app?.close();
