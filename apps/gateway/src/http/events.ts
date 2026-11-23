@@ -179,8 +179,14 @@ export function registerEventRoutes(app: FastifyInstance, options: EventOptions)
           wake.signal.addEventListener('abort', done, { once: true });
         });
 
+      /**
+       * Tells what moved, and returns whether a full buffer left some of it untold. Progress
+       * changes many times a second and is not worth a row each time, so it goes out here without
+       * an id and never moves the cursor. Its text goes only to a stream that asked: a phone told
+       * of every working run's answer four times a second would spend its data on screens it is
+       * not showing. It is a latest state, so what a slow client misses is simply told newer.
+       */
       const tellProgress = async () => {
-        // Progress is a latest state, so what a slow client misses is simply told newer.
         const working = await readProgressStamps(options.store.db, profileId);
         const moved = working.filter((run) => told.get(run.runId) !== run.at);
         const frames: Array<(typeof working)[number] & { progress?: unknown }> =
@@ -192,8 +198,12 @@ export function registerEventRoutes(app: FastifyInstance, options: EventOptions)
               )
             : moved;
 
+        let untold = false;
         for (const { progress, ...run } of frames) {
-          if (raw.writableNeedDrain) break;
+          if (raw.writableNeedDrain) {
+            untold = true;
+            break;
+          }
           told.set(run.runId, run.at);
           const frame = progress && withText ? { ...run, progress } : run;
           send(`event: run.progress\ndata: ${JSON.stringify(frame)}\n\n`);
@@ -203,6 +213,7 @@ export function registerEventRoutes(app: FastifyInstance, options: EventOptions)
         for (const runId of told.keys()) {
           if (!still.has(runId)) told.delete(runId);
         }
+        return untold;
       };
 
       const pump = async () => {
@@ -266,7 +277,7 @@ export function registerEventRoutes(app: FastifyInstance, options: EventOptions)
               if (!ready) break;
             }
 
-            await tellProgress();
+            const untold = await tellProgress();
 
             // Only when nothing else went out for that long: a wake with nothing to tell is not
             // news, but a proxy must still see the stream is alive however often those come.
@@ -275,8 +286,9 @@ export function registerEventRoutes(app: FastifyInstance, options: EventOptions)
             }
 
             // More is waiting when a page was full or a full buffer stopped this one: a client
-            // catching up reads on at once, or it would hear of the rest only after a wait.
-            behind = sent < events.length || events.length === EVENTS_PAGE;
+            // catching up reads on as soon as it has room, or it would hear of the rest only
+            // after the next commit or heartbeat.
+            behind = untold || sent < events.length || events.length === EVENTS_PAGE;
           } catch {
             stop();
             finish();
