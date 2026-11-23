@@ -299,6 +299,17 @@ export async function listPendingInboxIds(
   return rows.map((row) => row.id);
 }
 
+/** Whether a message is already in the inbox, without reading what it carries. */
+export async function inboxItemExists(db: Queryable, id: string): Promise<boolean> {
+  const [row] = await db
+    .select({ id: channelInbox.id })
+    .from(channelInbox)
+    .where(eq(channelInbox.id, id))
+    .limit(1);
+
+  return row !== undefined;
+}
+
 export async function insertInboxItem(db: Queryable, record: InboxRecord): Promise<void> {
   await db
     .insert(channelInbox)

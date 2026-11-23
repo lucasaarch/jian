@@ -17,13 +17,17 @@ import {
 import { asJpeg } from '../../media/picture.js';
 import type { OutgoingMessage } from '../channel.js';
 import { MAX_DEVICE_SESSION_BYTES } from './connections.js';
-import { describeWhatsApp, readWhatsAppContent } from './media.js';
+import { DeviceIntake } from './intake.js';
+import { attachmentOf, describeWhatsApp, readWhatsAppContent } from './media.js';
 import { quietLibsignal } from './quiet.js';
-import type { DeviceFactory } from './types.js';
+import type { DeviceFactory, InboxAddress } from './types.js';
 import { DEVICE_SEND_TIMEOUT_MS } from './types.js';
 
 /** Signal rotates keys in bursts; one grouped write per burst instead of one per key. */
 const SESSION_WRITE_DELAY_MS = 1000;
+
+/** The longest message the channel takes, in characters; longer ones are not read. */
+const MAX_TEXT_CHARS = 8000;
 
 /** A thumbnail is a few kilobytes; anything much larger is not what was asked for. */
 const MAX_AVATAR_BYTES = 120_000;
@@ -434,11 +438,40 @@ export function createWhatsAppDeviceFactory(): DeviceFactory {
       if (said.size > REMEMBERED_MESSAGES) said.delete(said.keys().next().value as string);
     };
 
+    /**
+     * Who a message is from and where it belongs. In a room the conversation is the group and the
+     * sender is the participant, so the two identifiers part ways: approval is decided about the
+     * room, delivery goes back to it. A person may be addressed by LID; the authenticated phone
+     * mapping keeps an existing allowlist working after WhatsApp switches identifier formats.
+     * Never read from the message's text, which the sender writes.
+     */
+    const whoSent = async (message: WAMessage): Promise<InboxAddress | undefined> => {
+      const remote = message.key.remoteJid ?? '';
+      const requestKey = message.key.id ?? '';
+
+      if (GROUP_JID.test(remote)) {
+        const from = await personOf(message.key.participantAlt ?? message.key.participant);
+
+        return from ? { actorId: from, chatId: remote, requestKey, scope: 'group' } : undefined;
+      }
+
+      const phone = remote.endsWith('@lid')
+        ? (message.key.remoteJidAlt ??
+          (await socket?.signalRepository.lidMapping.getPNForLID(remote)))
+        : undefined;
+      const sender = toContactJid(phone) ?? toContactJid(remote);
+
+      return sender ? { actorId: sender, chatId: sender, requestKey, scope: 'direct' } : undefined;
+    };
+
+    const intake = new DeviceIntake();
+
     const deliver = async (message: WAMessage) => {
       if (message.key.fromMe || !message.key.id) return;
       const address = message.key.remoteJid ?? '';
       if (!GROUP_JID.test(address) && !toContactJid(address)) return;
       const requestKey = message.key.id;
+      let who: InboxAddress | undefined;
       const reaction = normalizeMessageContent(message.message)?.reactionMessage;
       const context = contextOf(message);
       let text: string;
@@ -461,8 +494,18 @@ export function createWhatsAppDeviceFactory(): DeviceFactory {
           ...(target ? { text: target.text } : {}),
         };
       } else {
-        ({ text, media } = await readWhatsAppContent(message));
         remember(requestKey, describeWhatsApp(message.message), false);
+        const { attachment, caption } = attachmentOf(message.message);
+
+        // Everything that would refuse this message is asked first: a repeat, a paused chat, a
+        // full inbox or a caption too long to take must not cost a download of up to 16 MB.
+        if (attachment) {
+          if ((caption?.length ?? 0) > MAX_TEXT_CHARS) return;
+          who = await whoSent(message);
+          if (!who || !(await callbacks.admit(who))) return;
+        }
+
+        ({ text, media } = await readWhatsAppContent(message));
 
         if (context?.stanzaId) {
           const quoted =
@@ -475,11 +518,13 @@ export function createWhatsAppDeviceFactory(): DeviceFactory {
         }
       }
 
-      if (!text?.trim() || text.length > 8000) {
+      if (!text?.trim() || text.length > MAX_TEXT_CHARS) {
         return;
       }
 
-      const remote = message.key.remoteJid ?? '';
+      who ??= await whoSent(message);
+      if (!who) return;
+
       const own = toContactJid(socket?.user?.id);
       const about = answered
         ? {
@@ -489,13 +534,8 @@ export function createWhatsAppDeviceFactory(): DeviceFactory {
           }
         : {};
 
-      // In a room the conversation is the group and the sender is the participant, so the two
-      // identifiers part ways: approval is decided about the room, delivery goes back to it.
-      if (GROUP_JID.test(remote)) {
-        const from = await personOf(message.key.participantAlt ?? message.key.participant);
-
-        if (!from) return;
-
+      if (who.scope === 'group') {
+        const { actorId: from, chatId: remote } = who;
         const subject = await subjectOf(remote);
         const mentions = (
           await Promise.all((context?.mentionedJid ?? []).map((jid) => personOf(jid)))
@@ -531,15 +571,7 @@ export function createWhatsAppDeviceFactory(): DeviceFactory {
         return;
       }
 
-      // WhatsApp may address a contact by LID. Resolve its authenticated phone mapping so an
-      // existing phone allowlist still works after WhatsApp switches identifier formats.
-      const phone = remote.endsWith('@lid')
-        ? (message.key.remoteJidAlt ??
-          (await socket?.signalRepository.lidMapping.getPNForLID(remote)))
-        : undefined;
-      const sender = toContactJid(phone) ?? toContactJid(remote);
-
-      if (!sender) return;
+      const sender = who.actorId;
 
       // Use the authenticated message's sender, never an actor ID supplied inside its text.
       await callbacks.message({
@@ -592,7 +624,9 @@ export function createWhatsAppDeviceFactory(): DeviceFactory {
         socket.ev.on('messages.upsert', ({ messages }) => {
           // Messages queued while the worker was down arrive as 'append'; the inbox dedupes them.
           for (const message of messages) {
-            handle(() => deliver(message));
+            // Taken in arrival order per chat, with only a few attachments in memory at once.
+            const heavy = Boolean(attachmentOf(message.message).attachment);
+            handle(() => intake.take(message.key.remoteJid ?? '', heavy, () => deliver(message)));
           }
         });
       },
