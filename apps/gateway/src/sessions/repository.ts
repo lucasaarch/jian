@@ -492,13 +492,26 @@ export async function listSessionMessages(
   return rows.map(toMessage).reverse();
 }
 
-/** All turns not yet represented by the session checkpoint, in stable timestamp/id order. */
+/**
+ * The least a turn may load of its transcript, in bytes. Well past what any compaction lets a
+ * history reach, so a normal conversation is always read whole.
+ */
+export const HISTORY_FLOOR_BYTES = 32 * 1024 * 1024;
+/** What a message row costs beyond its text, in bytes: a very long run of short turns adds up. */
+const MESSAGE_ROW_BYTES = 256;
+
+/**
+ * All turns not yet represented by the session checkpoint, in stable timestamp/id order, up to
+ * `maxBytes` counted from the newest: the turn being answered is always there. The sizes come
+ * from the column header, so leaving out an oversized past costs no read of it.
+ */
 export async function listUncompactedMessages(
   db: Queryable,
   sessionId: string,
   afterId?: string,
   /** Pre-cursor installations only stored a timestamp; used when `afterId` is missing. */
   afterAt?: string,
+  maxBytes = HISTORY_FLOOR_BYTES,
 ): Promise<Message[]> {
   const [cursor] = afterId
     ? await db
@@ -507,23 +520,49 @@ export async function listUncompactedMessages(
         .where(and(eq(messages.sessionId, sessionId), eq(messages.id, afterId)))
         .limit(1)
     : [];
+  const uncovered = and(
+    eq(messages.sessionId, sessionId),
+    cursor
+      ? or(
+          gt(messages.createdAt, cursor.createdAt),
+          and(eq(messages.createdAt, cursor.createdAt), gt(messages.id, cursor.id)),
+        )
+      : afterAt
+        ? gt(messages.createdAt, new Date(afterAt))
+        : undefined,
+  );
+  const size = sql`(octet_length(${messages.content}) + ${MESSAGE_ROW_BYTES})`;
   const rows = await db
     .select()
     .from(messages)
     .where(
       and(
-        eq(messages.sessionId, sessionId),
-        cursor
-          ? or(
-              gt(messages.createdAt, cursor.createdAt),
-              and(eq(messages.createdAt, cursor.createdAt), gt(messages.id, cursor.id)),
-            )
-          : afterAt
-            ? gt(messages.createdAt, new Date(afterAt))
-            : undefined,
+        uncovered,
+        // What is newer than a row, summed: the row that crosses the budget is still read.
+        sql`${messages.id} in (
+          select kept.id from (
+            select ${messages.id} as id,
+              coalesce(sum(${size}) over (
+                order by ${messages.createdAt} desc, ${messages.id} desc
+                rows between unbounded preceding and 1 preceding
+              ), 0) as newer
+            from ${messages}
+            where ${uncovered}
+          ) kept
+          where kept.newer <= ${maxBytes}
+        )`,
       ),
     )
     .orderBy(messages.createdAt, messages.id);
+  const read = rows.reduce(
+    (total, row) => total + Buffer.byteLength(row.content) + MESSAGE_ROW_BYTES,
+    0,
+  );
+  if (read >= maxBytes) {
+    console.warn(
+      `jian: conversation ${sessionId} has over ${maxBytes} bytes it never compacted; this turn reads the newest of it`,
+    );
+  }
   return rows.map(toMessage);
 }
 

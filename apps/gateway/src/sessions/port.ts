@@ -16,6 +16,8 @@ export interface SessionReader {
     sessionId: string,
     afterId?: string,
     afterAt?: string,
+    /** The most of it to load, in bytes, counted from the newest turn. */
+    maxBytes?: number,
   ): Promise<Message[]>;
 }
 

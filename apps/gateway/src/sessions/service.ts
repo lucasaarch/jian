@@ -937,9 +937,10 @@ export class Sessions {
     sessionId: string,
     afterId?: string,
     afterAt?: string,
+    maxBytes?: number,
   ) {
     await this.session(profileId, sessionId);
-    return listUncompactedMessages(this.store.db, sessionId, afterId, afterAt);
+    return listUncompactedMessages(this.store.db, sessionId, afterId, afterAt, maxBytes);
   }
 
   /**

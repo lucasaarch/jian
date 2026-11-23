@@ -21,9 +21,10 @@ import {
 } from '../memories/repository.js';
 import { lastPromptScale } from '../runs/context-usage.js';
 import type { RunReader } from '../runs/port.js';
-import { keptBeside, listContextToolCheckpoints } from '../runs/repository.js';
+import { checkpointSizes, keptBeside, listContextToolCheckpoints } from '../runs/repository.js';
 import { listLoads } from '../sessions/loads.js';
 import type { SessionReader } from '../sessions/port.js';
+import { HISTORY_FLOOR_BYTES } from '../sessions/repository.js';
 import { availableSkills } from '../skills/builtin/index.js';
 import { readSkillLibrary } from '../skills/repository.js';
 import type { Store } from '../storage/database.js';
@@ -34,7 +35,12 @@ import { judgeTurn } from './judgments.js';
 import type { ContextSource } from './port.js';
 import { defaultScale } from './scale.js';
 import type { Said } from './survivors.js';
-import { toolRecordsByRun, withToolHistory } from './tool-history.js';
+import {
+  cutToolEvidence,
+  toolRecordsByRun,
+  wholeToolRuns,
+  withToolHistory,
+} from './tool-history.js';
 
 /** What a chat works on beyond one project: told to the agent, since it is why it is here. */
 function workspaceGuidance(
@@ -136,6 +142,38 @@ function worktreeAdvice(worktrees?: { create: boolean; machine: boolean }): stri
 }
 
 /**
+ * How much stored checkpoint data one read of older runs may cover, in bytes as stored. One run
+ * larger than this is still read, alone: the history tells every run it holds.
+ */
+const TOOL_BATCH_BYTES = 8 * 1024 * 1024;
+
+/** `ids` in order, in groups whose sizes add up to at most `budget`. */
+function inBatches(ids: string[], sizes: ReadonlyMap<string, number>, budget: number) {
+  const batches: string[][] = [];
+  let used = 0;
+  for (const id of ids) {
+    const size = sizes.get(id) ?? 0;
+    const current = batches.at(-1);
+    if (current && used + size <= budget) {
+      current.push(id);
+      used += size;
+    } else {
+      batches.push([id]);
+      used = size;
+    }
+  }
+  return batches;
+}
+
+/**
+ * The most of a transcript one turn loads, in bytes. A compaction runs long before a history
+ * reaches this: eight bytes a token is more than any model's window takes, so only a conversation
+ * that has somehow gone uncompacted for many windows is ever cut, at its oldest turns.
+ */
+const historyBytes = (run: Run) =>
+  Math.max(HISTORY_FLOOR_BYTES, (run.contextPolicy ?? run.profile.contextPolicy).inputTokens * 8);
+
+/**
  * Who wrote a message, as the gateway knows it. "The owner" only for the panel's conversation,
  * which only the owner signs in to; anyone on a channel is named by their role and channel
  * before the name they chose, so a contact who calls themself "the owner" still reads as a
@@ -173,6 +211,12 @@ export class Contexts {
     private readonly worktrees?: Pick<Worktrees, 'signals'>,
   ) {}
 
+  /**
+   * The history with what its turns did. Only the two runs told whole need their results in
+   * memory together. An older run is told in a few hundred characters per call, so those are
+   * read a batch at a time and cut before the next, or a long conversation would hold every tool
+   * result it ever had at once, just to keep the first lines of each.
+   */
   private async historyWithTools(
     run: Run,
     history: Awaited<ReturnType<SessionReader['messages']>>,
@@ -185,8 +229,18 @@ export class Contexts {
         ),
       ),
     ];
-    const checkpoints = await listContextToolCheckpoints(this.store.db, run.profileId, runIds);
-    return withToolHistory(history, toolRecordsByRun(checkpoints, summary), run.id);
+    const whole = wholeToolRuns(history, run.id);
+    const older = runIds.filter((id) => !whole.has(id));
+    const sizes = await checkpointSizes(this.store.db, run.profileId, older);
+    const cut = new Map<string, string>();
+    for (const batch of inBatches(older, sizes, TOOL_BATCH_BYTES)) {
+      const rows = await listContextToolCheckpoints(this.store.db, run.profileId, batch);
+      for (const [runId, records] of toolRecordsByRun(rows, summary)) {
+        cut.set(runId, cutToolEvidence(records));
+      }
+    }
+    const checkpoints = await listContextToolCheckpoints(this.store.db, run.profileId, [...whole]);
+    return withToolHistory(history, toolRecordsByRun(checkpoints, summary), run.id, cut);
   }
 
   /**
@@ -262,6 +316,7 @@ export class Contexts {
         // history at 40 turns, a missing through_id reloads the covered transcript beside the
         // summary and blows the model window on long upgraded sessions.
         session.summarizedThroughId ? undefined : session.summarizedUpTo,
+        historyBytes(run),
       ),
       !worker && session.projectId
         ? this.store.db
