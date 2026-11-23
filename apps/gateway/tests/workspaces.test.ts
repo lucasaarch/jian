@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
@@ -65,6 +65,25 @@ it('prefers AGENTS.md, and reads CLAUDE.md where there is none', async () => {
     'CLAUDE.md',
   );
 });
+
+it.skipIf(process.platform === 'win32')(
+  'never reads a device or a pipe a repository names as its instructions',
+  async () => {
+    const root = await folder({ 'CLAUDE.md': 'Use yarn.' });
+    await symlink('/dev/zero', join(root, 'AGENTS.md'));
+    await promisify(execFile)('mkfifo', [join(root, 'pipe')]);
+    const piped = await folder({ 'CLAUDE.md': 'Use npm.' });
+    await symlink(join(root, 'pipe'), join(piped, 'AGENTS.md'));
+
+    expect(digest((await readLocal(root)) ?? { files: [], nested: [] }).instructions?.text).toBe(
+      'Use yarn.',
+    );
+    expect(digest((await readLocal(piped)) ?? { files: [], nested: [] }).instructions?.text).toBe(
+      'Use npm.',
+    );
+  },
+  5_000,
+);
 
 it('offers the skills of both folders once each, and only real ones', async () => {
   const root = await folder({
