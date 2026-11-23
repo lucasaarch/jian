@@ -4,6 +4,33 @@ Every release of Jian, newest first.
 
 <!-- Generated from docs/releases by scripts/changelog.mjs. Edit the release note, then run `make changelog`. -->
 
+## 1.13.1 — 2026-11-23
+
+The web panel makes better use of a phone's screen, the desktop window never switches to the phone layout, and deleting a conversation keeps its Artifacts.
+
+### On a phone
+
+* **More of the conversation in view:** The blurred glass at the top is gone, so the history starts right under the bar. The glass behind the composer is much shorter, and a long draft scrolls inside the composer before the box covers much of the screen.
+* **No empty strip at the bottom:** On iOS 26, Jian added to the home screen left a dead band under the app. It now fills the screen, and the composer and the bars at the bottom sit close to the home indicator, as they do in native apps.
+* **Room for your chats:** In the sidebar, Schedules, Artifacts, Plugins, Pull requests and Activity share one row of tiles, and New chat moved to the bar above the chats.
+* **The keyboard stops hiding what you type:** The app and the sheets that slide up from the bottom (rename, confirm, create a skill, add an MCP server and the others) follow the part of the screen the keyboard leaves. The composer sits right on the keys, and the field you are typing in stays in sight.
+* Pages that open in the chat's place, such as Schedules or Activity, no longer start under an empty band.
+
+### Desktop app
+
+* **The phone layout stays on phones:** The window can no longer be made narrower than 800px (it was 720px), so a narrow window keeps the desktop layout.
+
+### Artifacts
+
+* **Deleting a conversation keeps its Artifacts:** They stay on the Artifacts page, under the conversation's project, with their versions, folder, pin and public link. Resetting an agent keeps them too. An Artifact whose conversation is gone loses **Open conversation** and **Fix**, and no agent can reach it anymore, but you can still open, edit, rename, pin, move, duplicate, download, share or delete it.
+* In a full-screen Inspector, the **Create something new** tiles no longer stretch across the whole width.
+
+### Upgrading
+
+* The desktop app updates itself to this release. Remote workers update themselves as well.
+* **Servers:** Recreate the gateway and web containers with the 1.13.1 images, follow the `latest` tags, or install it from **Settings → Updates**.
+* **Migration:** `0119_artifacts-outlive-conversations` drops the foreign key that deleted an Artifact together with its conversation, and adds a column that keeps the project of an Artifact whose conversation was deleted. It deletes nothing. Artifacts of conversations deleted before this release were already removed and do not come back.
+
 ## 1.13.0 — 2026-11-23
 
 Secrets hold a whole login or key with all its fields, agents can save and share them, a public Artifact can ask for a password, and a server gateway can be updated from the panel.
