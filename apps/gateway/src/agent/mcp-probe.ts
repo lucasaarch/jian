@@ -1,6 +1,7 @@
 import type { McpServer, McpStatus } from '@jian/contracts';
 import { createSafeFetch } from '../security/outbound.js';
 import { connectMcp, MissingMcpValue, type SecretReader, STDIO_START_MS } from './mcp-connect.js';
+import { listAllTools } from './mcp-list.js';
 import { mcpOauthClient } from './mcp-oauth-client.js';
 import type { McpOAuthProviders } from './types.js';
 
@@ -57,7 +58,7 @@ export async function probeMcpServer(
     });
 
     try {
-      const listed = await client.tools();
+      const listed = await listAllTools(client);
       await withTools?.(listed);
       const tools = Object.entries(listed).map(([toolName, definition]) => ({
         name: toolName,
