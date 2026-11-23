@@ -4,6 +4,61 @@ Every release of Jian, newest first.
 
 <!-- Generated from docs/releases by scripts/changelog.mjs. Edit the release note, then run `make changelog`. -->
 
+## 1.13.2 — 2026-11-23
+
+The gateway puts limits on what an MCP server, a WhatsApp burst or an open panel can make it hold, remote machines stop getting stuck on a task, and a dropped WhatsApp download no longer brings the gateway down.
+
+### MCP servers
+
+* **Limits on what a server can send:** One response can be up to 64 MB. Listing a server's tools stops at 30 seconds, 200 pages, 5,000 tools or a 32 MB catalog. A server past any of these is unavailable for that turn, and the agent tells you why.
+* **Slow servers:** A turn gives a server about 50 seconds at most (20 to connect, 30 to list its tools) and then goes on without it.
+* **Oversized answers:** When a tool that changes something answers with more than 64 MB, the run stops and reports the outcome as uncertain, because the action may have happened.
+* A local MCP command that dies mid-request or stops reading is now shut down with an error for that request, and the gateway keeps running.
+
+### WhatsApp
+
+* **Dropped downloads:** A connection that fell in the middle of an attachment could take the whole gateway down. Now only that attachment fails, and the agent asks the person to send it again. A download also gives up after 2 minutes.
+* **Bursts of attachments:** Each linked device downloads up to 3 at a time, and each chat keeps its arrival order. Repeats, paused chats and a full inbox are turned away before anything is downloaded.
+* **A message that keeps failing:** It stays in the inbox and is tried again, after 2 seconds and then up to every 8 seconds if the conversation is busy, or every 5 minutes otherwise. Only its own chat waits behind it.
+
+### Remote machines
+
+* **A stuck task no longer stops the machine:** Every task now answers within its limit, so a command that leaves something running can't keep the worker from its next task.
+* **Time limits reach the whole command:** A command that hits its limit stops with everything it started, `nohup` jobs included. A job left running by a command that ended normally keeps going.
+* **Computer Use:** A session idle for 30 minutes ends, so the pointer goes away and the display can sleep. The agent takes a new screenshot to carry on. If the helper dies mid-request, that request fails and the worker stays up.
+* On a Mac where the worker runs as a service, a background job now survives a worker restart.
+* A page inspection too large for a server gateway now answers with a clear error.
+
+### Panel
+
+* **Lighter on the gateway:** An open panel keeps at most one read of each thing on the way while an agent works. During a turn, the pull request badge and context ring can lag by up to 5 seconds, and both are current right after the turn ends.
+* **Hidden tabs:** Subagent progress pauses in a hidden tab and catches up when you come back.
+* **Attachments while offline:** An attachment the gateway can't send right now shows **Unavailable**, and appears by itself once the gateway is back.
+* A terminal flooding a slow connection reconnects more and more slowly, up to every 10 seconds.
+* A long run of brackets in an answer no longer freezes the pane. A Markdown link with a label over 500 characters no longer shows as a link.
+
+### Desktop app
+
+* **A smaller offline cache:** Conversations and lists still open without the gateway. Attachments, open files, diffs and Artifact versions are no longer kept on your computer.
+* **Stuck pages and crash loops:** A page that never finishes loading can't hold the browser's actions past their deadline, and the machines process waits longer between restarts when it keeps crashing.
+* The local gateway log now rotates at 2 MiB while the app runs, into `local-gateway.old.log`.
+
+### Gateway
+
+* **Reads only what it uses:** Conversation lists, event streams and the start of a turn no longer load whole messages, tool results and Artifact drafts they don't need.
+* **Broken pages and emails:** A web page or HTML email with malformed markup can no longer freeze the gateway while its text is read.
+* **Very long conversations:** Past the history budget (the larger of 32 MiB or 8 bytes per input token), a conversation's oldest turns leave the prompt, and the gateway logs it.
+* The subagent list shows the newest 200.
+* Skill imports count their 256 KB limit in bytes, so a file with many accented characters near the limit can be refused.
+* An event stream client that reads nothing for 30 seconds is disconnected and picks up from its cursor.
+* A schedule can start a little later when the previous check ran long, since checks no longer overlap.
+
+### Upgrading
+
+* The desktop app updates itself to this release. Remote workers update themselves as well, and keep their old behavior until they do.
+* **Servers:** Recreate the gateway and web containers with the 1.13.2 images, follow the `latest` tags, or install it from **Settings → Updates**.
+* **Migration:** None.
+
 ## 1.13.1 — 2026-11-23
 
 The web panel makes better use of a phone's screen, the desktop window never switches to the phone layout, and deleting a conversation keeps its Artifacts.
