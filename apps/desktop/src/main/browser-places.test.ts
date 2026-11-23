@@ -88,6 +88,7 @@ describe('recent pages and favorites', () => {
     const { store, file } = fresh();
     for (let page = 0; page < 40; page += 1) store.visited('one', `https://a.test/${page}`, '');
     store.titled('one', 'https://a.test/39', 'Latest');
+    store.flush();
 
     const again = new BrowserPlaces(() => file);
     expect(again.view('one').recents).toHaveLength(8);

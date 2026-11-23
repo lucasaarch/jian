@@ -90,6 +90,8 @@ const LIMITS: BrowserLimits = {
   pointerIdleMs: 30_000,
   restoreWaitMs: 15_000,
 };
+/** How often a page's changing title reaches the app, at most, in ms. */
+const TITLE_EVERY_MS = 250;
 const AWAY = { x: 0, y: 0, width: 0, height: 0 };
 
 const pageSummary = (page: BrowserPage): BrowserPageSummary => {
@@ -376,7 +378,16 @@ export class JianBrowser {
     contents.on('will-attach-webview', (event) => event.preventDefault());
     contents.on('did-navigate', visited);
     contents.on('did-navigate-in-page', remember);
-    contents.on('page-title-updated', remember);
+    // A page can rewrite its title many times a second, and each one is a message to the window.
+    let titling = false;
+    contents.on('page-title-updated', () => {
+      if (titling) return;
+      titling = true;
+      setTimeout(() => {
+        titling = false;
+        remember();
+      }, TITLE_EVERY_MS);
+    });
     contents.on('did-start-loading', () => this.changedIn(page));
     contents.on('did-stop-loading', () => this.changedIn(page));
     contents.on('did-fail-load', (_event, code, description, _url, mainFrame) => {
@@ -616,7 +627,10 @@ export class JianBrowser {
       this.open();
     });
     this.restoreTabs();
-    app.on('before-quit', () => this.saved.flush());
+    app.on('before-quit', () => {
+      this.saved.flush();
+      this.places.flush();
+    });
     ipcMain.on('browser:adopt', (event, sessionId: unknown) => {
       trusted(event);
       if (typeof sessionId === 'string') this.adopt(sessionId);
