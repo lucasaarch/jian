@@ -33,6 +33,9 @@ export interface InboxRecord {
   receivedAt: string;
 }
 
+/** Who a message is from and where, known before anything it carries is downloaded. */
+export type InboxAddress = Pick<IncomingMessage, 'actorId' | 'chatId' | 'requestKey' | 'scope'>;
+
 export interface DeviceSessionStore {
   load(): Promise<Buffer | undefined>;
   save(data: Buffer): Promise<void>;
@@ -44,6 +47,11 @@ export interface DeviceCallbacks {
   ready(accountId: string): Promise<void>;
   disconnected(loggedOut: boolean): Promise<void>;
   message(message: IncomingMessage): Promise<void>;
+  /**
+   * Whether an attachment of this message is worth downloading: it is new, the chat is not paused
+   * and the inbox has room. A paused message is recorded here, so it is never read again.
+   */
+  admit(message: InboxAddress): Promise<boolean>;
   failed(): Promise<void>;
 }
 

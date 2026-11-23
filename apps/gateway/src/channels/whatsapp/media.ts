@@ -25,11 +25,9 @@ export function describeWhatsApp(message: proto.IMessage | null | undefined): st
   return undefined;
 }
 
-export async function readWhatsAppContent(
-  message: WAMessage,
-  download = downloadAttachment,
-): Promise<{ text: string; media?: InlineMedia[] }> {
-  const content = normalizeMessageContent(message.message);
+/** What a message carries to download, and the words sent with it, from the message alone. */
+export function attachmentOf(message: proto.IMessage | null | undefined) {
+  const content = normalizeMessageContent(message);
   // A document sent with a caption arrives wrapped once more than one without.
   const document =
     content?.documentMessage ?? content?.documentWithCaptionMessage?.message?.documentMessage;
@@ -41,6 +39,15 @@ export async function readWhatsAppContent(
     content?.stickerMessage;
   const caption =
     content?.imageMessage?.caption ?? content?.videoMessage?.caption ?? document?.caption;
+
+  return { content, document, attachment, caption };
+}
+
+export async function readWhatsAppContent(
+  message: WAMessage,
+  download = downloadAttachment,
+): Promise<{ text: string; media?: InlineMedia[] }> {
+  const { content, document, attachment, caption } = attachmentOf(message.message);
   const text = content?.conversation ?? content?.extendedTextMessage?.text ?? caption ?? '';
   if (!attachment) return { text };
   const name = document?.fileName?.trim().slice(0, 200) || undefined;

@@ -740,6 +740,27 @@ describe('the WhatsApp inbox', () => {
       log.mockRestore();
     }
   });
+
+  it('tells a device what not to download: a repeat, or a chat that is paused', async () => {
+    const { f, device } = await linked();
+    const address = from('03', 'with-a-photo');
+
+    expect(await device.callbacks.admit(address)).toBe(true);
+    // Asking stores nothing: only the message itself, once downloaded, enters the inbox.
+    expect(await pendingInbox(f.store)).toHaveLength(0);
+
+    await device.callbacks.message(address);
+    expect(await device.callbacks.admit(address)).toBe(false);
+
+    await f.channels.update(f.profile.id, f.binding.id, { enabled: false });
+    const paused = from('03', 'while-paused');
+    expect(await device.callbacks.admit(paused)).toBe(false);
+    await f.channels.update(f.profile.id, f.binding.id, { enabled: true });
+    // It was received during the pause, so it stays discarded and is not read when it resumes.
+    expect(await device.callbacks.admit(paused)).toBe(false);
+    // Pausing also let go of what was waiting, as it always has.
+    expect(await pendingInbox(f.store)).toHaveLength(0);
+  });
 });
 
 describe('deleting a profile with a live WhatsApp connection', () => {

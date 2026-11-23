@@ -12,6 +12,7 @@ import {
   countPendingInbox,
   findConnection,
   findInboxItem,
+  inboxItemExists,
   insertInboxItem,
   listConnections,
   listConnectionsOwnedBy,
@@ -24,7 +25,13 @@ import {
   writeAuthChunks,
   writeConnection,
 } from './repository.js';
-import type { ConnectionRecord, DeviceFactory, DeviceSessionStore, LinkedDevice } from './types.js';
+import type {
+  ConnectionRecord,
+  DeviceFactory,
+  DeviceSessionStore,
+  InboxAddress,
+  LinkedDevice,
+} from './types.js';
 import { DEVICE_SEND_TIMEOUT_MS } from './types.js';
 
 const LEASE_MS = 30_000;
@@ -226,49 +233,86 @@ export class WhatsAppConnections {
     };
   }
 
+  /**
+   * What the inbox makes of a message: already there, arrived while paused, or new. Read under
+   * the profile lock by both the look before a download and the write after it. A paused message
+   * is not kept, and a full inbox refuses a new one.
+   */
+  private async inboxState(tx: Queryable, record: ConnectionRecord, message: InboxAddress) {
+    await this.owned(tx, record);
+    const channel = assertFound(await findChannel(tx, record.id), 'Channel');
+    const contact = await findContactByIdentity(
+      tx,
+      record.id,
+      message.chatId,
+      message.scope === 'group' ? message.chatId : message.actorId,
+    );
+    const paused = !channel.enabled || contact?.aiEnabled === false;
+    const id = createHash('sha256')
+      .update(JSON.stringify([record.id, message.requestKey]))
+      .digest('hex');
+
+    if (await inboxItemExists(tx, id)) return { id, state: 'seen' as const };
+
+    if (!paused && (await countPendingInbox(tx, record.id)) >= INBOX_CAPACITY) {
+      throw new Error('WhatsApp inbox capacity reached');
+    }
+
+    return { id, state: paused ? ('paused' as const) : ('new' as const) };
+  }
+
+  /** The row of a message received while paused: enough to dedupe it, and nothing it said. */
+  private discarded(record: ConnectionRecord, id: string, message: InboxAddress) {
+    return {
+      id,
+      profileId: record.profileId,
+      channelId: record.id,
+      generation: record.generation,
+      message: {
+        actorId: message.actorId,
+        chatId: message.chatId,
+        requestKey: message.requestKey,
+        text: '',
+        scope: message.scope,
+        mentions: [],
+      },
+      status: 'discarded' as const,
+      receivedAt: this.now(),
+    };
+  }
+
+  /** Decided before a download, so a repeat, a paused chat or a full inbox costs no bytes. */
+  private async admit(record: ConnectionRecord, message: InboxAddress) {
+    return this.store.transaction(record.profileId, async (tx) => {
+      const { id, state } = await this.inboxState(tx, record, message);
+
+      if (state === 'paused') await insertInboxItem(tx, this.discarded(record, id, message));
+
+      return state === 'new';
+    });
+  }
+
   private async enqueue(record: ConnectionRecord, message: IncomingMessage) {
     await this.store.transaction(record.profileId, async (tx) => {
-      await this.owned(tx, record);
       // Preserve deduplication, but never retain messages received while automation is paused.
-      const channel = assertFound(await findChannel(tx, record.id), 'Channel');
-      const contact = await findContactByIdentity(
+      const { id, state } = await this.inboxState(tx, record, message);
+
+      if (state === 'seen') return;
+
+      await insertInboxItem(
         tx,
-        record.id,
-        message.chatId,
-        message.scope === 'group' ? message.chatId : message.actorId,
+        state === 'paused'
+          ? this.discarded(record, id, message)
+          : {
+              id,
+              profileId: record.profileId,
+              channelId: record.id,
+              generation: record.generation,
+              message,
+              status: 'pending',
+              receivedAt: this.now(),
+            },
       );
-      const paused = !channel.enabled || contact?.aiEnabled === false;
-
-      const id = createHash('sha256')
-        .update(JSON.stringify([record.id, message.requestKey]))
-        .digest('hex');
-
-      if (await findInboxItem(tx, id)) {
-        return;
-      }
-
-      if (!paused && (await countPendingInbox(tx, record.id)) >= INBOX_CAPACITY) {
-        throw new Error('WhatsApp inbox capacity reached');
-      }
-
-      await insertInboxItem(tx, {
-        id,
-        profileId: record.profileId,
-        channelId: record.id,
-        generation: record.generation,
-        message: paused
-          ? {
-              actorId: message.actorId,
-              chatId: message.chatId,
-              requestKey: message.requestKey,
-              text: '',
-              scope: message.scope,
-              mentions: [],
-            }
-          : message,
-        status: paused ? 'discarded' : 'pending',
-        receivedAt: this.now(),
-      });
     });
   }
 
@@ -327,6 +371,7 @@ export class WhatsAppConnections {
         });
       },
       message: (message) => this.enqueue(record, message),
+      admit: (message) => this.admit(record, message),
       failed: () =>
         this.update(record, {
           desired: false,
