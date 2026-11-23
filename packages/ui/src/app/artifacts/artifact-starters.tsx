@@ -22,8 +22,10 @@ const STARTERS: { type: SessionArtifact['type']; prompt: string }[] = [
  * Shortcuts, one for each kind the agent makes, all in sight: a grid of tiles at least 9rem wide,
  * six to a row across the page's full width and fewer as it narrows, never a row scrolled
  * sideways. `narrow`, in the Inspector, they are smaller tiles at least 5rem wide that stretch to
- * fill the row: four to a row in its usual width, all of them in one when it is wide. One begins
- * the request where it is sent from (`onStart`); nothing is sent until the owner finishes it.
+ * fill the row: four to a row in its usual width, all of them in one when it is wide. The row
+ * stops at six tiles of 8rem and their gaps (50.5rem), so an Inspector filling the window does
+ * not stretch them into bars. One begins the request where it is sent from (`onStart`); nothing
+ * is sent until the owner finishes it.
  */
 export function ArtifactStarters({
   onStart,
@@ -38,7 +40,7 @@ export function ArtifactStarters({
       <div
         className={
           narrow
-            ? 'grid grid-cols-[repeat(auto-fit,minmax(5rem,1fr))] gap-2'
+            ? 'grid max-w-[50.5rem] grid-cols-[repeat(auto-fit,minmax(5rem,1fr))] gap-2'
             : 'grid grid-cols-[repeat(auto-fill,minmax(9rem,1fr))] gap-3'
         }
       >
