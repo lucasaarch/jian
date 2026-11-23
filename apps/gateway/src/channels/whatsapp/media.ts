@@ -1,3 +1,4 @@
+import type { Readable } from 'node:stream';
 import { type InlineMedia, MAX_MEDIA_BYTES, mediaMimeOf } from '@jian/contracts';
 import { downloadMediaMessage, normalizeMessageContent, type proto, type WAMessage } from 'baileys';
 
@@ -101,20 +102,51 @@ async function downloadAttachment(message: WAMessage): Promise<Buffer> {
     )
       throw new Error('Invalid WhatsApp media URL');
   }
-  const stream = await downloadMediaMessage(message, 'stream', {
-    options: { signal: AbortSignal.timeout(30_000) },
+  return readDownload(() => downloadMediaMessage(message, 'stream', {}));
+}
+
+/**
+ * How long one attachment has to arrive, in ms. Baileys drops any signal it is given for the
+ * download, and a stalled connection never ends the stream it returns, so this is the only limit
+ * there is: past it, a download would hold its chat and one of the intake's few places for good.
+ */
+const DOWNLOAD_MS = 120_000;
+
+/** An attachment's bytes, up to the media limit and within `limitMs`, however its source stalls. */
+export async function readDownload(
+  open: () => Promise<Readable>,
+  limitMs = DOWNLOAD_MS,
+): Promise<Buffer> {
+  let stream: Readable | undefined;
+  let over = false;
+  let timer: NodeJS.Timeout | undefined;
+  const late = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error('The attachment took too long')), limitMs);
   });
-  const chunks: Buffer[] = [];
-  let bytes = 0;
-  try {
-    for await (const part of stream) {
+  const read = async () => {
+    const opened = await open();
+    // Opened only after the limit: nothing is left to read it.
+    if (over) {
+      opened.destroy();
+      return Buffer.alloc(0);
+    }
+    stream = opened;
+    const chunks: Buffer[] = [];
+    let bytes = 0;
+    for await (const part of opened) {
       const buffer = Buffer.from(part);
       bytes += buffer.length;
       if (bytes > MAX_MEDIA_BYTES) throw new Error('Attachment too large');
       chunks.push(buffer);
     }
+    return Buffer.concat(chunks);
+  };
+
+  try {
+    return await Promise.race([read(), late]);
   } finally {
-    stream.destroy();
+    over = true;
+    clearTimeout(timer);
+    stream?.destroy();
   }
-  return Buffer.concat(chunks);
 }
