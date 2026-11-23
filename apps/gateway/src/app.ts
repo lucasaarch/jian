@@ -80,6 +80,10 @@ export function createApp(
     heartbeatMs?: number;
     /** How long one event stream lasts before the client opens the next, in ms; tests shorten it. */
     streamLifetimeMs?: number;
+    /** How long a stream's client may leave what it was sent unread, in ms; tests shorten it. */
+    drainMs?: number;
+    /** How long an ended stream may take to finish sending, in ms; tests shorten it. */
+    lingerMs?: number;
     /** What starts a terminal's shell; tests pass one that starts no process. */
     spawnTerminal?: SpawnPty;
     /**

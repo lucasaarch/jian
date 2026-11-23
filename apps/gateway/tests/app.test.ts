@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
+import { connect } from 'node:net';
 import { runProgressEventSchema } from '@jian/contracts';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -21,7 +22,13 @@ const input = {
 const apps: FastifyInstance[] = [];
 
 async function setup(
-  options: { trustedProxies?: string[]; maxStreams?: number; streamLifetimeMs?: number } = {},
+  options: {
+    trustedProxies?: string[];
+    maxStreams?: number;
+    streamLifetimeMs?: number;
+    drainMs?: number;
+    lingerMs?: number;
+  } = {},
 ) {
   const services = await testServices();
   const app = createApp({ ...services, token, logger: false, ...options });
@@ -1212,3 +1219,83 @@ describe('fixing a pull request’s conflicts from the Inspector', () => {
     ).toHaveLength(1);
   });
 });
+
+it('cuts off a client that stops reading, which then resumes without a gap or a repeat', async () => {
+  const { app, services } = await setup({ maxStreams: 1, drainMs: 150, lingerMs: 150 });
+  const profile = await services.profiles.createProfile(input);
+  const session = await services.sessions.createSession(profile.id, { channel: 'api' });
+  const run = await services.runs.submit(profile.id, session.id, {
+    text: 'Hi',
+    requestKey: 'slow',
+  });
+  await services.lifecycle.claim(run.id, profile.id, 'worker');
+  const url = new URL(await app.listen({ host: '127.0.0.1', port: 0 }));
+
+  // A client that asks for the stream and then reads nothing, so the kernel's buffers fill up.
+  const stalled = connect(Number(url.port), url.hostname);
+  let received = '';
+  stalled.on('data', (chunk) => {
+    received += chunk.toString('latin1');
+  });
+  stalled.on('error', () => {});
+  stalled.pause();
+  stalled.write(
+    `GET /v1/profiles/${profile.id}/events/stream?after=0&progress=1 HTTP/1.1\r\nHost: test\r\nAuthorization: Bearer ${token}\r\n\r\n`,
+  );
+
+  const draft = 'x'.repeat(390_000);
+  const closedAt = Date.now();
+  let refused = true;
+  for (let step = 1; refused && Date.now() - closedAt < 15_000; step += 1) {
+    await services.store.transaction(profile.id, (tx) =>
+      recordEvent(tx, Date.now, profile.id, 'profile.touched', { step }),
+    );
+    await services.lifecycle.progress(run.id, 'worker', {
+      phase: 'tool',
+      text: '',
+      steps: step,
+      artifact: { toolCallId: 'call', content: `${step}${draft}` },
+      updatedAt: new Date(Date.now() + step).toISOString(),
+    });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    // One stream is allowed: another is let in once the stalled one has been let go.
+    const probe = await fetch(`${url.origin}/v1/profiles/${profile.id}/events/stream`, { headers });
+    refused = probe.status === 429;
+    await probe.body?.cancel();
+    if (!refused) break;
+  }
+  expect(refused).toBe(false);
+
+  stalled.resume();
+  await vi.waitFor(() => expect(stalled.readableEnded || stalled.destroyed).toBe(true), 5_000);
+
+  const idsIn = (text: string) =>
+    [...text.matchAll(/^id: (\d+)\r?$/gm)].map((match) => Number(match[1]));
+  const before = idsIn(received.replace(/\r\n[0-9a-f]+\r\n/g, '\r\n'));
+  const all = (await events(services.store, profile.id, 0, 10_000)).map((event) => event.id);
+  const last = before.at(-1) ?? 0;
+
+  const controller = new AbortController();
+  const limit = setTimeout(() => controller.abort(), 5_000);
+  try {
+    const resumed = await fetch(
+      `${url.origin}/v1/profiles/${profile.id}/events/stream?after=${last}`,
+      { headers, signal: controller.signal },
+    );
+    assert.ok(resumed.body, 'SSE response must have a body');
+    const reader = resumed.body.pipeThrough(new TextDecoderStream()).getReader();
+    let data = '';
+    const newest = all.at(-1) as number;
+    while (last < newest && !data.includes(`id: ${newest}\n`)) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      data += value;
+    }
+    await reader.cancel();
+    expect([...before, ...idsIn(data)]).toEqual(all);
+  } finally {
+    clearTimeout(limit);
+    controller.abort();
+    stalled.destroy();
+  }
+}, 30_000);
