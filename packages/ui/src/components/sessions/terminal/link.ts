@@ -1,5 +1,6 @@
 import type { GatewayApi } from '../../../lib/api';
 import { GatewayAnswer } from '../../../lib/api/result';
+import { retryPace } from '../../../lib/api/retry-pace';
 
 export type TerminalApi = Pick<
   GatewayApi,
@@ -29,8 +30,7 @@ const WRITE_MAX = 65_536;
 /** How long a size settles before the shell is told, in ms: dragging a divider tells it once. */
 const RESIZE_MS = 120;
 /** The wait before a lost stream is opened again, in ms: doubled each time, up to the longest. */
-const RETRY_MS = 500;
-const RETRY_MAX_MS = 10_000;
+const RETRY = { firstMs: 500, mostMs: 10_000 };
 
 const dim = (text: string) => `\r\n\u001b[2m${text}\u001b[0m\r\n`;
 
@@ -107,11 +107,15 @@ export function linkTerminal(
   }
 
   async function read() {
-    let wait = RETRY_MS;
+    // Each opening replays the whole scrollback, and a shell printing faster than the link gets
+    // its reader cut: a wait started over on every opening would resend it twice a second.
+    const pace = retryPace(RETRY);
 
     while (!stopped) {
       let exitCode: number | undefined;
+      let failure: unknown;
 
+      pace.began();
       try {
         await api.terminalOutput(
           profileId,
@@ -120,7 +124,6 @@ export function linkTerminal(
             // Every stream starts with all the terminal kept: the screen starts over to take it.
             opened: () => {
               surface.reset();
-              wait = RETRY_MS;
               set({ status: 'open' });
               // A size chosen while the stream was away never reached the shell.
               void tellSize();
@@ -138,6 +141,7 @@ export function linkTerminal(
           set({ status: 'gone' });
           return;
         }
+        failure = error;
       }
 
       if (stopped) return;
@@ -149,8 +153,7 @@ export function linkTerminal(
 
       // Ended with no exit: the connection dropped, or the gateway cut a reader that fell behind.
       set({ status: 'away' });
-      await new Promise((resolve) => setTimeout(resolve, wait));
-      wait = Math.min(wait * 2, RETRY_MAX_MS);
+      await new Promise((resolve) => setTimeout(resolve, pace.lost(failure)));
     }
   }
 

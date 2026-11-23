@@ -130,6 +130,26 @@ it('keeps trying a gateway that cannot be reached, and gives up on a terminal it
   link.stop();
 });
 
+it('slows down when a shell prints faster than the link, each opening resending the scrollback', async () => {
+  const { api, streams } = gateway();
+  const link = linkTerminal(api, 'mia', 'one', surface());
+
+  // The gateway answers each stream, then cuts it for falling behind.
+  for (let at = 0; at < 20_000; at += 100) {
+    const open = streams.at(-1);
+    if (open && !('done' in open)) {
+      open.handlers.opened();
+      open.end();
+      Object.assign(open, { done: true });
+    }
+    await later(100);
+  }
+
+  // At a constant half second this would be forty; doubling up to ten seconds, about seven.
+  expect(streams.length).toBeLessThanOrEqual(9);
+  link.stop();
+});
+
 it('says how the shell ended, and takes no more keys for it', async () => {
   const { api, streams, writes } = gateway();
   const screen = surface();

@@ -188,3 +188,27 @@ it('keeps a stream that goes on saying something, and passes on what it says', a
   expect(ended).toBe(false);
   expect(heard).toEqual(['run.started']);
 });
+
+it('lets go of any refused stream, and says why it was refused', async () => {
+  const cancelled = vi.fn();
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(
+      async () =>
+        new Response(
+          new ReadableStream({
+            start(controller) {
+              controller.enqueue(new TextEncoder().encode('{"error":"Too many event streams"}'));
+            },
+            cancel: cancelled,
+          }),
+          { status: 429 },
+        ),
+    ),
+  );
+
+  await expect(
+    readEvents('profile', 0, () => {}, new AbortController().signal),
+  ).rejects.toMatchObject({ status: 429 });
+  expect(cancelled).toHaveBeenCalled();
+});

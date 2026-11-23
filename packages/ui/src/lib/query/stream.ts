@@ -1,14 +1,16 @@
 import { onlineManager, useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
+import { retryPace } from '../api/retry-pace';
 import { publish } from '../events';
 import { useReconnect } from '../stores/reconnect';
 import { panelApi } from './client';
 import { staleOf, staleReads } from './stale-events';
 
-/** How long to wait before opening a dropped stream again, in ms, try after try. */
-const AGAIN_MS = [1_000, 2_000, 5_000];
-/** A stream that lasted this long, in ms, was working: the next drop starts the waits over. */
-const STEADY_MS = 30_000;
+/**
+ * The wait before a dropped stream is opened again, in ms. Short, because a contact request or an
+ * answer waits on it; a gateway that refuses the stream is asked less often (`retry-pace.ts`).
+ */
+const AGAIN = { firstMs: 1_000, mostMs: 5_000 };
 
 /**
  * Follows the open profile's event stream for as long as its pages are open. A contact request
@@ -31,14 +33,15 @@ export function useEventStream(profileId: string) {
     // Unknown until the stream's first event: an opening is from now, not the whole feed.
     let cursor: number | undefined;
     let reconnect: ReturnType<typeof setTimeout> | undefined;
-    let drops = 0;
+    const pace = retryPace(AGAIN);
 
     const staleFor = staleOf(profileId);
     const reads = staleReads(client);
 
     const listen = async () => {
-      const opened = Date.now();
+      let failure: unknown;
       reconnect = undefined;
+      pace.began();
       try {
         await panelApi().events(
           profileId,
@@ -50,13 +53,13 @@ export function useEventStream(profileId: string) {
           },
           controller.signal,
         );
-      } catch {
+      } catch (error) {
         // A stream ends on shutdown, on a lost network or when the session expires.
+        failure = error;
       }
 
       if (controller.signal.aborted) return;
-      drops = Date.now() - opened >= STEADY_MS ? 0 : drops + 1;
-      reconnect = setTimeout(() => void listen(), AGAIN_MS[Math.min(drops, AGAIN_MS.length - 1)]);
+      reconnect = setTimeout(() => void listen(), pace.lost(failure));
     };
 
     void listen();
