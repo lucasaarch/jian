@@ -53,6 +53,8 @@ import {
   findSession,
   insertMessage,
   insertSession,
+  lastMessageAt,
+  lastMessageLine,
   lastMessages,
   listSessionMessages,
   listSessions,
@@ -222,7 +224,7 @@ export class Sessions {
     return this.store.transaction(profileId, async (tx) => {
       const before = await this.session(profileId, sessionId, tx);
       await markSessionRead(tx, profileId, sessionId, new Date(this.clock()));
-      const latest = (await lastMessages(tx, profileId)).get(sessionId)?.createdAt;
+      const latest = await lastMessageAt(tx, profileId, sessionId);
       if (latest && (!before.readAt || Date.parse(before.readAt) < latest.getTime())) {
         await recordEvent(tx, this.clock, profileId, 'session.read', { sessionId });
       }
@@ -685,12 +687,7 @@ export class Sessions {
                 ...session,
                 lastMessage: {
                   role: message.role,
-                  // One line of it: media ids and line breaks are not something to read in a list.
-                  text: message.content
-                    .replace(/\[Attached media: [0-9a-f-]{36}\]/g, '📎')
-                    .replace(/\s+/g, ' ')
-                    .trim()
-                    .slice(0, 200),
+                  text: lastMessageLine(message.content),
                   at: message.createdAt.toISOString(),
                 },
               }
