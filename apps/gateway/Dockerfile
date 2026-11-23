@@ -56,6 +56,7 @@ ENV HUSKY=0 CI=true
 # Manifests and the lockfile come first so the dependency layer is reused on every commit
 # that only changes source.
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY patches patches
 COPY .husky/install.mjs .husky/install.mjs
 COPY apps/gateway/package.json apps/gateway/package.json
 COPY apps/web/package.json apps/web/package.json

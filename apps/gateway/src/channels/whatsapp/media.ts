@@ -102,21 +102,23 @@ async function downloadAttachment(message: WAMessage): Promise<Buffer> {
     )
       throw new Error('Invalid WhatsApp media URL');
   }
-  return readDownload(() => downloadMediaMessage(message, 'stream', {}));
+  return readDownload((signal) => downloadMediaMessage(message, 'stream', { options: { signal } }));
 }
 
 /**
- * How long one attachment has to arrive, in ms. Baileys drops any signal it is given for the
- * download, and a stalled connection never ends the stream it returns, so this is the only limit
- * there is: past it, a download would hold its chat and one of the intake's few places for good.
+ * How long one attachment has to arrive, in ms. Baileys sets no limit of its own, and past this a
+ * stalled download would hold its chat and one of the intake's few places. Its signal and the
+ * failure of a connection mid-download reach us only through `patches/baileys@7.0.0-rc14.patch`;
+ * without the patch, a dropped connection is an uncaught error that ends the gateway.
  */
 const DOWNLOAD_MS = 120_000;
 
 /** An attachment's bytes, up to the media limit and within `limitMs`, however its source stalls. */
 export async function readDownload(
-  open: () => Promise<Readable>,
+  open: (signal: AbortSignal) => Promise<Readable>,
   limitMs = DOWNLOAD_MS,
 ): Promise<Buffer> {
+  const abandon = new AbortController();
   let stream: Readable | undefined;
   let over = false;
   let timer: NodeJS.Timeout | undefined;
@@ -124,7 +126,7 @@ export async function readDownload(
     timer = setTimeout(() => reject(new Error('The attachment took too long')), limitMs);
   });
   const read = async () => {
-    const opened = await open();
+    const opened = await open(abandon.signal);
     // Opened only after the limit: nothing is left to read it.
     if (over) {
       opened.destroy();
@@ -147,6 +149,7 @@ export async function readDownload(
   } finally {
     over = true;
     clearTimeout(timer);
+    abandon.abort();
     stream?.destroy();
   }
 }
