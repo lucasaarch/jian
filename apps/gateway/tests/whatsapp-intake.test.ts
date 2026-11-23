@@ -1,7 +1,36 @@
+import { PassThrough, Readable } from 'node:stream';
 import { expect, it } from 'vitest';
 import { DeviceIntake } from '../src/channels/whatsapp/intake.js';
+import { readDownload } from '../src/channels/whatsapp/media.js';
 
 const later = () => new Promise((resolve) => setTimeout(resolve, 1));
+
+it('gives up on a download whose connection stalls, and lets go of its stream', async () => {
+  const stalled = new PassThrough();
+  stalled.write('partial');
+
+  await expect(readDownload(async () => stalled, 20)).rejects.toThrow('took too long');
+  expect(stalled.destroyed).toBe(true);
+});
+
+it('gives up on a download that never starts, and closes it if it starts late', async () => {
+  const late = new PassThrough();
+  let start: (stream: Readable) => void = () => {};
+  const opening = new Promise<Readable>((resolve) => {
+    start = resolve;
+  });
+
+  await expect(readDownload(() => opening, 20)).rejects.toThrow('took too long');
+  start(late);
+  await later();
+  expect(late.destroyed).toBe(true);
+});
+
+it('reads a download that arrives whole', async () => {
+  const data = await readDownload(async () => Readable.from([Buffer.from('ab'), Buffer.from('c')]));
+
+  expect(data.toString()).toBe('abc');
+});
 
 it('holds few attachments at once and keeps each chat in the order it arrived', async () => {
   const intake = new DeviceIntake(2);
