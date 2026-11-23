@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { chmod, mkdir, readFile, rename, stat, unlink, writeFile } from 'node:fs/promises';
+import { chmod, constants, mkdir, open, rename, stat, unlink, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import type { RemoteFilesAnswer, RemoteFilesOp } from '@jian/contracts';
 import { MAX_TEXT } from './limits.ts';
@@ -18,6 +18,8 @@ export class FilesProblem extends Error {
 
 /** The largest raw file whose base64 fits a write's or a read's text limit. */
 const MAX_RAW_BYTES = Math.floor((MAX_TEXT / 4) * 3);
+/** What a read asks for at a time when the file does not say its size, in bytes. */
+const READ_CHUNK_BYTES = 64 * 1024;
 
 /** Maps what `fs` throws to what the agent can act on. */
 export function problemOf(error: unknown): FilesProblem {
@@ -44,9 +46,41 @@ async function regularFile(real: string, maxBytes: number) {
   return info;
 }
 
+/**
+ * A regular file, never read past `maxBytes`. The size `stat` gave is no limit: a file under
+ * /proc says 0 and can yield gigabytes. O_NONBLOCK keeps a kernel file with nothing to say yet,
+ * like /proc/kmsg, from holding a worker that runs one task at a time; it does nothing to a file
+ * on disk, and Windows has no such flag.
+ */
+async function readWithin(real: string, maxBytes: number): Promise<Buffer> {
+  const handle = await open(real, constants.O_RDONLY | (constants.O_NONBLOCK ?? 0));
+  try {
+    const info = await handle.stat();
+    if (!info.isFile()) throw new FilesProblem('not-file', 'That path is not a file.');
+    const chunks: Buffer[] = [];
+    let total = 0;
+    while (true) {
+      const wanted = Math.max(READ_CHUNK_BYTES, info.size + 1 - total);
+      const chunk = Buffer.allocUnsafe(Math.min(maxBytes + 1 - total, wanted));
+      const { bytesRead } = await handle.read(chunk, 0, chunk.length, null);
+      if (bytesRead === 0) return Buffer.concat(chunks, total);
+      chunks.push(chunk.subarray(0, bytesRead));
+      total += bytesRead;
+      if (total > maxBytes) {
+        throw new FilesProblem(
+          'too-large',
+          `The file has more than the ${maxBytes} bytes this read allows.`,
+        );
+      }
+    }
+  } finally {
+    await handle.close();
+  }
+}
+
 export async function readText(real: string, op: Op<'read'>): Promise<RemoteFilesAnswer> {
   const info = await regularFile(real, op.maxBytes);
-  const buffer = await readFile(real);
+  const buffer = await readWithin(real, op.maxBytes);
   if (buffer.subarray(0, 8000).includes(0)) {
     throw new FilesProblem('binary', 'The file is binary.');
   }
@@ -68,7 +102,7 @@ export async function readBytes(real: string, op: Op<'read-bytes'>): Promise<Rem
       `The file has ${info.size} bytes, more than a result can carry.`,
     );
   }
-  const buffer = await readFile(real);
+  const buffer = await readWithin(real, Math.min(op.maxBytes, MAX_RAW_BYTES));
   return { ok: true, op: 'read-bytes', base64: buffer.toString('base64'), bytes: buffer.length };
 }
 
