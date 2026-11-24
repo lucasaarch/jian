@@ -7,7 +7,7 @@ import {
   REMOTE_FORWARDS_CAPABILITY,
 } from '@jian/contracts';
 import type { FastifyInstance } from 'fastify';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { forwardTools } from '../src/agent/forward-tools.js';
 import { createApp } from '../src/app.js';
 import { Forwards } from '../src/forwards/service.js';
@@ -77,17 +77,26 @@ async function opened(
   worker: Awaited<ReturnType<Awaited<ReturnType<typeof gateway>>['machine']>>,
   port: number,
 ) {
+  const mine = () =>
+    g.forwards.list(g.profile.id, g.session.id).find((item) => item.remotePort === port);
   const pending = g.forwards.create(
     { profileId: g.profile.id, sessionId: g.session.id },
     { port, machine: worker.id },
   );
-  await new Promise((resolve) => setTimeout(resolve, 20));
-  const [waiting] = g.forwards.list(g.profile.id, g.session.id);
-  await worker.call(`forwards/${waiting?.id}/state`, {
+  // Waited for, not slept on: a loaded CI runner took longer than a fixed 20 ms to list it.
+  const waiting = await vi.waitFor(() => {
+    const forward = mine();
+    if (!forward) throw new Error('not listed yet');
+    return forward;
+  });
+  await worker.call(`forwards/${waiting.id}/state`, {
     method: 'POST',
     body: JSON.stringify({ status: 'open', localPort: 41234 }),
   });
-  return pending;
+  // The forward as it stands once the worker answered: these gateways stop waiting for it after
+  // 50 ms, which a slow answer outlasts.
+  await pending;
+  return mine() ?? waiting;
 }
 
 const decode = (frame: string) => {
