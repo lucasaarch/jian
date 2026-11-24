@@ -19,6 +19,7 @@ vi.mock('../../platform/navigation', () => ({
 }));
 const api = vi.hoisted(() => ({
   replaceMcpServers: vi.fn(async (servers: unknown[]) => servers),
+  renameMcpServer: vi.fn(async () => []),
   checkMcpServer: vi.fn(),
 }));
 vi.mock('../../lib/workspace', () => ({
@@ -224,6 +225,8 @@ it('goes on to the address of its new name when the server is renamed', async ()
   await type(name, 'desk_tickets');
   await press('Save', host);
 
+  // Moved first, so the keys and sign-in kept under the old name go with it.
+  expect(api.renameMcpServer).toHaveBeenCalledWith('harbor_tickets', 'desk_tickets');
   expect(api.replaceMcpServers).toHaveBeenCalledWith([
     docs,
     linear,

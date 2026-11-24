@@ -96,6 +96,8 @@ import {
   gatewaySessionTargetSchema,
   mcpClientDocumentSchema,
   mcpDraftCheckSchema,
+  mcpNameSchema,
+  mcpRenameSchema,
   mcpServerListInputSchema,
   mcpServerListSchema,
   mcpStatusSchema,
@@ -1358,6 +1360,17 @@ export const operations: Operation[] = [
     access: 'admin',
     params: z.strictObject({ name: z.string().regex(/^[a-z0-9_]{1,30}$/) }),
     response: mcpStatusSchema,
+  },
+  {
+    // Its own route, not an edit of the list: a name that left the list would take the server's
+    // sign-in and keys with it, where a rename moves them to the new name.
+    method: 'POST',
+    path: '/v1/mcp-servers/:name/rename',
+    operationId: 'renameMcpServer',
+    access: 'admin',
+    params: z.strictObject({ name: mcpNameSchema }),
+    body: mcpRenameSchema,
+    response: mcpServerListSchema,
   },
   {
     // The authorization server sends the owner's browser here, so it answers HTML and carries

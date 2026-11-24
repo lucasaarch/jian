@@ -126,9 +126,16 @@ export class McpOAuth implements OAuthClientProvider {
   }
 
   async clientInformation(): Promise<OAuthClientInformation | undefined> {
-    const { client, document } = await this.read();
+    const { client, document, tokens } = await this.read();
 
-    if (client) {
+    // A server renamed since it registered has another callback, which the authorization server
+    // would refuse: a new sign-in registers again. Tokens that refresh keep the client they were
+    // issued to, and once they fail the sign-in that follows registers.
+    const uris = (client as { redirect_uris?: unknown } | undefined)?.redirect_uris;
+    const elsewhere = Array.isArray(uris) && !uris.includes(this.callbackUrl);
+    const refreshes = Boolean((tokens as { refresh_token?: unknown } | undefined)?.refresh_token);
+
+    if (client && (!elsewhere || refreshes)) {
       return client as OAuthClientInformation;
     }
 

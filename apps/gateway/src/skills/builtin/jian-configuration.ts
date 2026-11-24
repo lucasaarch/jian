@@ -44,8 +44,8 @@ In the main sidebar, in place of the chat: what every agent is given, in tabs, w
   \`JIAN_PUBLIC_URL\`, is not listed. The others, such as Linear, Notion, Stripe and Supabase,
   are each service's own MCP server: Connect saves it and opens its sign-in. Its page lists its
   accounts, each an MCP server named after the account that signed in ("linear_octo"), or
-  numbered ("linear_2") when the service cannot say who, with Sign in, Remove and Add account;
-  its tools cannot be switched off. A custom one is an MCP server the owner adds by hand, with
+  numbered ("linear_2") when the service cannot say who, with Sign in, Rename, Remove and Add
+  account; its tools cannot be switched off. A custom one is an MCP server the owner adds, with
   Edit, a connection test, sign-in and tool switches.
 - **Skills**: one library shared by every agent. The built-in ones are Jian's, marked verified;
   the others, up to 60, were written by the owner or an agent, or imported from GitHub, as each

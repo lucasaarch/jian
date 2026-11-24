@@ -31,7 +31,7 @@ export function AppConnector({
   back: () => void;
 }) {
   const { api, mutate, busy } = useActions();
-  const { servers, save, remove } = useMcpServers({ api, mutate });
+  const { servers, save, remove, rename } = useMcpServers({ api, mutate });
   const accounts = serversOf(app, servers);
   const checks = useAccountChecks(accounts.map((server) => server.name));
   const tools = toolsOf(accounts, checks);
@@ -87,6 +87,7 @@ export function AppConnector({
           service={app.name}
           accounts={accounts}
           checks={checks}
+          rename={rename}
           remove={(server) => remove(servers.indexOf(server))}
         />
       )}
@@ -99,9 +100,9 @@ export function AppConnector({
       )}
       {app.note && <Note>{app.note}</Note>}
       <Note>
-        Each account is named after who signs in, once {app.name} says who that is. It signs in
-        whichever account your browser is logged into: to connect another one, switch account there
-        first, or open the sign-in in a private window.
+        Each account is named after who signs in, once {app.name} says who that is, and you can
+        rename it. It signs in whichever account your browser is logged into: to connect another
+        one, switch account there first, or open the sign-in in a private window.
       </Note>
       {tools && tools.length > 0 && <ToolList tools={tools} />}
     </ConnectorFrame>

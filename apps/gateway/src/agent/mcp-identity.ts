@@ -6,6 +6,8 @@
  * the account unnamed.
  */
 
+import { mcpNameOf } from '@jian/contracts';
+
 /** A tool as the MCP client lists it: what it is called and what it takes. */
 type ListedTool = {
   inputSchema?: unknown;
@@ -134,15 +136,7 @@ export function accountOf(result: unknown): string | undefined {
  * the letters a server name may use. Undefined when nothing of the account survives.
  */
 export function accountServerName(app: string, account: string): string | undefined {
-  const room = 30 - app.length - 1;
-  const slug = account
-    .normalize('NFKD')
-    .replace(/[̀-ͯ]/g, '')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '_')
-    .replace(/^_+|_+$/g, '')
-    .slice(0, room)
-    .replace(/_+$/, '');
+  const slug = mcpNameOf(account, 30 - app.length - 1);
   return slug ? `${app}_${slug}` : undefined;
 }
 

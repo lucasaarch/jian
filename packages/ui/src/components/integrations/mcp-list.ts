@@ -1,5 +1,6 @@
 'use client';
 
+import { mcpNameOf } from '@jian/contracts';
 import { useSuspenseQuery } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import type { GatewayApi, McpServer } from '../../lib/api';
@@ -63,7 +64,20 @@ export function useMcpServers({ api, mutate }: Pick<SectionActions, 'api' | 'mut
     );
   };
 
-  return { servers, save, remove, toggleTool };
+  /**
+   * Gives a server the name the owner typed, as a server's name can hold it ("Linear Acme" is
+   * `linear_acme`): agents reach it by that name from their next runs.
+   */
+  const rename = (server: McpServer, typed: string) => {
+    const name = mcpNameOf(typed);
+    if (!name) {
+      toast.error('A name needs at least one letter or digit.');
+      return Promise.resolve(false);
+    }
+    return mutate(() => api.renameMcpServer(server.name, name), `Renamed to ${name}.`);
+  };
+
+  return { servers, save, remove, rename, toggleTool };
 }
 
 /**

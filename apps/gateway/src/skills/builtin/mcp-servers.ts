@@ -22,9 +22,10 @@ Before telling someone you cannot do something, search: the server that does it 
 connected.
 
 The owner may connect several accounts of one service: each is its own server, named after the
-account ("linear_octo", "linear_kai"). Act in the account the person means. When they did not
-say, it matters which, and the conversation does not tell, ask before writing anything. A tool the owner switched off is not offered at all; do not look for a way around
-it.
+account ("linear_octo", "linear_kai"), a name the owner can change. Act in the account the
+person means. When they did not say, it matters which, and the conversation does not tell, ask
+before writing anything. A tool the owner switched off is not offered at all; do not look for a
+way around it.
 
 ## When a server fails
 

@@ -154,7 +154,7 @@ function AwsForm({
  */
 export function AwsConnector({ connector, back }: { connector: Connector; back: () => void }) {
   const { api, mutate } = useActions();
-  const { servers, save, remove } = useMcpServers({ api, mutate });
+  const { servers, save, remove, rename } = useMcpServers({ api, mutate });
   const accounts = servers.filter(isAwsServer);
   const checks = useAccountChecks(accounts.map((server) => server.name));
   const tools = toolsOf(accounts, checks);
@@ -190,6 +190,7 @@ export function AwsConnector({ connector, back }: { connector: Connector; back: 
           service="AWS"
           accounts={accounts}
           checks={checks}
+          rename={rename}
           remove={(server) => remove(servers.indexOf(server))}
         />
       )}
