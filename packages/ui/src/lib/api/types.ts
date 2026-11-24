@@ -16,6 +16,7 @@ export type Profile = JsonResponse<'getProfile', 200>;
 export type McpServer = JsonResponse<'listMcpServers', 200>[number];
 export type McpValue = McpServer['headers'][number];
 export type Session = JsonResponse<'listSessions', 200>[number];
+export type AgentProcess = JsonResponse<'listSessionProcesses', 200>[number];
 export type Project = JsonResponse<'listProjects', 200>[number];
 export type ProjectChoice = RequestBody<'ensureProject'>;
 export type Channel = JsonResponse<'listChannels', 200>[number];

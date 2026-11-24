@@ -1173,6 +1173,7 @@ export class AgentRuntime {
               email: 'send_email' in tools,
               links: 'share_file_link' in tools,
               secrets: !secretLending ? 'none' : keepsSecrets ? 'manage' : 'lend',
+              processes: 'process_output' in tools,
               // As load_skill builds it: a skill kept from an earlier turn reads the same.
               ...(session.remoteMachineId ? { machine: { files: Boolean(machineFiles) } } : {}),
             },

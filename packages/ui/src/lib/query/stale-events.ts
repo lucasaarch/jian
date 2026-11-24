@@ -43,6 +43,7 @@ export function affected(event: GatewayEvent, profileId: string): Stale[] {
       keys.sessions(profileId),
       keys.contexts(profileId),
       keys.sessionPulls(profileId),
+      keys.sessionProcesses(profileId),
       keys.releases,
     );
   }
@@ -66,6 +67,8 @@ export function affected(event: GatewayEvent, profileId: string): Stale[] {
       ...(during ? [] : soon(keys.sessionWorktrees(profileId))),
     ];
   }
+  // A command the agent started in the background began or ended.
+  if (type.startsWith('process.')) return soon(keys.sessionProcesses(profileId));
   if (type.startsWith('profile.')) return soon(keys.profiles);
   if (type.startsWith('memory.')) return soon(keys.memories(profileId));
   // The agent writes schedules too, and every run changes when one ran last.

@@ -20,6 +20,14 @@ it('reads the worktrees again when a turn starts or ends, or one changes, not on
   }
 });
 
+it("reads a conversation's background commands again when one starts or ends", () => {
+  for (const type of ['process.started', 'process.ended']) {
+    expect(affected({ id: 1, type }, 'profile').map(({ key }) => key)).toContainEqual(
+      keys.sessionProcesses('profile'),
+    );
+  }
+});
+
 it('reads the release notes again when the stream opens, so a gateway updated meanwhile shows', () => {
   // A desktop app stays open for days; the gateway behind it restarts on an update.
   const opened = affected({ id: 1, type: STREAM_OPENED_EVENT }, 'profile').map(({ key }) =>

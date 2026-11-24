@@ -13,6 +13,8 @@ export type InspectorTab =
   | { key: string; kind: 'github'; item: GitHubItem }
   | { key: string; kind: 'browser'; pageId: string; title: string; url: string }
   | { key: string; kind: 'terminal'; terminalId: string }
+  /** A command the agent runs in the background, read only; `title` is its name on the tab. */
+  | { key: string; kind: 'process'; processId: string; title: string }
   | {
       key: string;
       kind: 'changes';
@@ -83,6 +85,8 @@ type Crew = {
    * takes the place of: an ended shell started again stays where it was.
    */
   openTerminal: (terminalId: string, replaces?: string) => void;
+  /** Brings in the tab of a command the agent runs in the background. */
+  openProcess: (processId: string, title: string) => void;
   /** Takes the host's tabs as they stand: names, new ones and those no longer there. */
   syncBrowser: (pages: BrowserPageTab[]) => void;
   reopen: () => void;
@@ -113,7 +117,7 @@ const KEPT_CONVERSATIONS = 50;
 const isTab = (tab: unknown) =>
   Boolean(tab) &&
   typeof (tab as InspectorTab).key === 'string' &&
-  ['agent', 'github', 'browser', 'changes', 'files', 'terminal', 'artifacts'].includes(
+  ['agent', 'github', 'browser', 'changes', 'files', 'terminal', 'process', 'artifacts'].includes(
     (tab as InspectorTab).kind,
   );
 
@@ -323,6 +327,18 @@ export const useCrew = create<Crew>()((set, get) => ({
         tabs: state.tabs.some((item) => item.key === replaces)
           ? state.tabs.map((item) => (item.key === replaces ? tab : item))
           : [...state.tabs, tab],
+      };
+    }),
+  openProcess: (processId, title) =>
+    set((state) => {
+      const key = `process:${processId}`;
+      return {
+        opened: true,
+        following: key,
+        item: undefined,
+        tabs: state.tabs.some((tab) => tab.key === key)
+          ? state.tabs
+          : [...state.tabs, { key, kind: 'process', processId, title }],
       };
     }),
   syncBrowser: (pages) =>

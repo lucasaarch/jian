@@ -8,7 +8,8 @@ export type PtyProcess = {
   /** Without a signal, a hangup. Windows takes no signal at all. */
   kill(signal?: string): void;
   onData(listener: (data: string) => void): unknown;
-  onExit(listener: (event: { exitCode: number }) => void): unknown;
+  /** A shell a signal ended reports it too, as `node-pty`'s own do. */
+  onExit(listener: (event: { exitCode: number; signal?: number }) => void): unknown;
 };
 
 export type PtyOptions = {

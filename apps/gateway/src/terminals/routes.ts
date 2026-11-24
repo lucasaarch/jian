@@ -1,12 +1,13 @@
 import { terminalInputSchema, terminalSizeSchema, terminalWriteSchema } from '@jian/contracts';
 import type { FastifyInstance } from 'fastify';
 import type { Devices } from '../devices/service.js';
-import type { ProfileParams } from '../http/params.js';
+import type { ProfileParams, SessionParams } from '../http/params.js';
 import type { ProfileReader } from '../profiles/port.js';
 import type { Terminals } from './service.js';
 import { type TerminalPlaces, terminalStart } from './start.js';
 
 type TerminalParams = ProfileParams & { terminalId: string };
+type ProcessParams = SessionParams & { processId: string };
 
 type TerminalRouteServices = TerminalPlaces & {
   profiles: ProfileReader;
@@ -26,6 +27,26 @@ const STREAM_BUFFER = 1024 * 1024;
 
 export function registerTerminalRoutes(app: FastifyInstance, deps: TerminalRouteServices): void {
   const base = '/v1/profiles/:profileId/terminals';
+
+  // The agent's background commands, by conversation. Their output is read from the stream below,
+  // under the same id; the owner's terminal list does not show them.
+  const processes = '/v1/profiles/:profileId/sessions/:sessionId/processes';
+
+  app.get<{ Params: SessionParams }>(processes, async (request) => {
+    const { profileId, sessionId } = request.params;
+
+    await deps.sessions.session(profileId, sessionId);
+
+    return deps.terminals.processes(profileId, sessionId);
+  });
+
+  app.post<{ Params: ProcessParams }>(`${processes}/:processId/stop`, async (request) => {
+    const { profileId, sessionId, processId } = request.params;
+
+    await deps.sessions.session(profileId, sessionId);
+
+    return deps.terminals.stopProcess(profileId, processId, sessionId);
+  });
 
   app.get<{ Params: ProfileParams }>(base, async (request) => {
     await deps.profiles.profile(request.params.profileId);
