@@ -123,3 +123,38 @@ it('creates a new App with its webhook on and keeps the secret GitHub made for i
   );
   expect(await vault.read('github-webhook-secret')).toBe('synthetic-webhook-secret');
 });
+
+it("registers a desktop gateway's App without the webhook GitHub would refuse", async () => {
+  const local = 'http://127.0.0.1:37461';
+  const store = await TestStore.create();
+  const vault = new GatewayVault(
+    store,
+    new SecretBox({ activeKeyId: 'test', keys: { test: randomBytes(32) } }),
+  );
+  const github = async (input: string | URL | Request) =>
+    new URL(input instanceof Request ? input.url : input).pathname ===
+    '/app-manifests/synthetic-code/conversions'
+      ? Response.json({
+          id: 7,
+          slug: 'jian-example',
+          client_id: 'synthetic-client',
+          client_secret: 'synthetic-secret',
+          pem: 'synthetic-pem',
+          webhook_secret: null,
+        })
+      : new Response('not found', { status: 404 });
+  const integrations = new GitHubIntegrations(store, vault, local, github as typeof fetch);
+
+  // GitHub answers "Hook url is not supported because it isn't reachable over the public
+  // Internet" and registers nothing; the sign-in addresses may stay on this computer.
+  const { state, manifest } = await integrations.registration(local, returnPath);
+  expect(manifest).not.toHaveProperty('hook_attributes');
+  expect(manifest).not.toHaveProperty('default_events');
+  expect(manifest.redirect_url).toBe(`${local}/v1/integrations/github/manifest/callback`);
+
+  expect(await integrations.registerFromManifest(state, 'synthetic-code')).toBe(
+    `${local}${returnPath}?github=registered`,
+  );
+  expect(await vault.read('github-webhook-secret')).toBeUndefined();
+  expect(integrations.webhookUrl()).toBeUndefined();
+});

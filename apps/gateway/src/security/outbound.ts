@@ -63,7 +63,7 @@ export function isLoopbackAddress(address: string): boolean {
 }
 
 /** A host that names this computer: `localhost`, or a loopback address. */
-function isLoopbackHost(hostname: string): boolean {
+export function isLoopbackHost(hostname: string): boolean {
   const host = hostname.startsWith('[') ? hostname.slice(1, -1) : hostname;
   return host.toLowerCase() === 'localhost' || (isIP(host) > 0 && isLoopbackAddress(host));
 }

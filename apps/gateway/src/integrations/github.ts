@@ -10,6 +10,7 @@ import { and, asc, eq, gt, inArray, lt } from 'drizzle-orm';
 import { z } from 'zod';
 import { GatewayError } from '../core/errors.js';
 import type { GatewayVault } from '../security/gateway-vault.js';
+import { isLoopbackHost } from '../security/outbound.js';
 import type { Store } from '../storage/database.js';
 import {
   githubInstallationRequests,
@@ -316,6 +317,7 @@ export class GitHubIntegrations {
       '/v1/integrations/github/manifest/callback',
       this.publicUrl,
     ).toString();
+    const hook = this.webhookUrl();
     return {
       state,
       action: `https://github.com/settings/apps/new?state=${encodeURIComponent(state)}`,
@@ -332,9 +334,12 @@ export class GitHubIntegrations {
         request_oauth_on_install: true,
         default_permissions: GITHUB_MCP_PERMISSIONS,
         // Pull requests opened anywhere the App is installed, for automatic agent reviews. GitHub
-        // creates the webhook's secret and hands it over with the App's credentials.
-        hook_attributes: { url: this.webhookUrl(), active: true },
-        default_events: ['pull_request'],
+        // creates the webhook's secret and hands it over with the App's credentials. GitHub
+        // refuses the whole manifest over a hook it cannot reach, so a gateway on this computer
+        // registers its App without one.
+        ...(hook
+          ? { hook_attributes: { url: hook, active: true }, default_events: ['pull_request'] }
+          : {}),
       },
     };
   }
@@ -877,11 +882,14 @@ export class GitHubIntegrations {
     });
   }
 
-  /** Where GitHub delivers the App's webhook, on a gateway with a public address. */
+  /**
+   * Where GitHub delivers the App's webhook, on a gateway with a public address. None on a
+   * loopback address, such as the desktop app's own gateway: GitHub delivers only to the public
+   * internet.
+   */
   webhookUrl(): string | undefined {
-    return this.publicUrl
-      ? new URL('/v1/integrations/github/webhook', this.publicUrl).toString()
-      : undefined;
+    if (!this.publicUrl || isLoopbackHost(new URL(this.publicUrl).hostname)) return undefined;
+    return new URL('/v1/integrations/github/webhook', this.publicUrl).toString();
   }
 
   /** The secret deliveries are signed with, once a webhook was set up through Jian. */
@@ -913,7 +921,12 @@ export class GitHubIntegrations {
   async configureWebhook() {
     const config = await this.requireConfig();
     const url = this.webhookUrl();
-    if (!url) throw new GatewayError(503, 'Set JIAN_PUBLIC_URL before setting up the webhook.');
+    if (!url) {
+      throw new GatewayError(
+        503,
+        'GitHub delivers webhooks only to a public address. Set JIAN_PUBLIC_URL to one first.',
+      );
+    }
     const secret = randomBytes(32).toString('hex');
     const path = new URL(`${API}/app/hook/config`);
     const response = await this.fetcher(path, {
