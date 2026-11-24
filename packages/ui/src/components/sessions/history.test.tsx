@@ -658,6 +658,58 @@ it('a paragraph released mid-run never disappears', async () => {
   }
 });
 
+it('an answer never blanks when a paragraph lands fuller than the stream last told it', async () => {
+  movingFrames();
+  let page = [streamedLine('request', 'user', 'Recite a poem')];
+  const api = {
+    messages: async () => page,
+    activities: async () => [quietTurn()],
+    timeline: async () => [],
+  };
+  const view = await mount(
+    <History
+      api={api}
+      profileId="profile"
+      sessionId={streamed.sessionId}
+      initialRun={quietTurn()}
+    />,
+  );
+  const shown = () => view.element.querySelector('.chat-line.theirs .chat-text')?.textContent ?? '';
+  const seen: string[] = [];
+  const watch = async (ms: number) => {
+    for (let waited = 0; waited < ms; waited += 16) {
+      await act(async () => vi.advanceTimersByTimeAsync(16));
+      seen.push(shown());
+    }
+  };
+
+  try {
+    // The last frame told of the stanza missed its end, then the next stanza began.
+    await act(async () => told('Roses are red,\nViolets', '2026-11-07T10:00:02.000Z'));
+    await watch(600);
+    await act(async () => told('Sugar is sweet,', '2026-11-07T10:00:03.000Z'));
+    await watch(600);
+    expect(shown()).toContain('Sugar is sweet,');
+
+    // The stanza lands whole: what was on screen stays, and only what it lacked is added.
+    seen.length = 0;
+    page = [...page, streamedLine('stanza', 'assistant', 'Roses are red,\nViolets are blue.')];
+    await act(async () => {
+      hear?.({ type: 'session.message', data: { sessionId: streamed.sessionId } });
+    });
+    await watch(1_000);
+
+    expect([...new Set(seen.filter((text) => !text.startsWith('Roses are red,Violets')))]).toEqual(
+      [],
+    );
+    expect(shown()).toContain('Violets are blue.');
+    expect(shown()).toContain('Sugar is sweet,');
+  } finally {
+    await view.done();
+    vi.useRealTimers();
+  }
+});
+
 it('a multi-paragraph answer that lands in one read keeps the live element', async () => {
   stillMotion();
   vi.useFakeTimers();

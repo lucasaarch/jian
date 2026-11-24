@@ -18,12 +18,22 @@ const cutAt = (text: string, from: number) => {
   return from;
 };
 
+/** The longest start two texts share. */
+const shared = (one: string, other: string) => {
+  let at = 0;
+  while (at < one.length && at < other.length && one[at] === other[at]) at++;
+  return one.slice(0, at);
+};
+
 /**
  * Reveals `target` at a steady pace so chunked streaming reads as flowing text. The pace is the
  * base rate, or faster when that would not clear what is waiting within the catch-up window,
  * counted from the target's last growth; the rate rises as that deadline nears, so the tail
  * cannot stretch out. Inactive or reduced motion returns `target` whole and never schedules a
- * frame. Text that stops extending what was shown (a rewrite) restarts from the beginning.
+ * frame. Text that stops extending what was shown keeps the start both share and reveals on from
+ * there: a paragraph that lands fuller than the stream last told it changes in the middle, and
+ * blanking the whole answer to type it again reads as the text being erased. A real rewrite
+ * shares little or nothing, so it starts over.
  */
 export function useSmoothText(target: string, active: boolean): string {
   const [shown, setShown] = useState('');
@@ -42,9 +52,9 @@ export function useSmoothText(target: string, active: boolean): string {
       return;
     }
     if (!target.startsWith(shownRef.current)) {
-      shownRef.current = '';
+      shownRef.current = shared(shownRef.current, target);
       carry.current = 0;
-      setShown('');
+      setShown(shownRef.current);
     }
     if (shownRef.current.length >= target.length) {
       lastFrame.current = null;
@@ -80,5 +90,5 @@ export function useSmoothText(target: string, active: boolean): string {
   }, [target, live]);
 
   if (!live) return target;
-  return target.startsWith(shown) ? shown : '';
+  return target.startsWith(shown) ? shown : shared(shown, target);
 }

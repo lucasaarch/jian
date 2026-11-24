@@ -17,8 +17,8 @@ The tools are in the \`conversations\` group; load it with \`load_tools\`.
 
 A message the owner writes while you are mid-turn joins that turn and is read before your next
 step. If you had already stopped taking steps, it starts a turn of its own right after, so none is
-lost. In the panel each message the owner wrote shows one check once it is sent and two once you
-have read it, which is when it enters your context.
+lost. In the panel, under each message the owner wrote, it says Sent with one check once it is
+sent, and Read with two once you have read it, which is when it enters your context.
 
 ## Finding what was said
 

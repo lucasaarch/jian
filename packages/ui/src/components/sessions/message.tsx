@@ -225,8 +225,10 @@ export function PersonLine({
         {before}
         {text && <PersonText text={text} />}
         {children}
-        {receipt && <MessageReceipt receipt={receipt} />}
-        <MessageReactions message={message} agentName={agent?.name} />
+        <div className="message-foot">
+          <MessageReactions message={message} agentName={agent?.name} />
+          {receipt && <MessageReceipt receipt={receipt} />}
+        </div>
       </article>
     );
   }
