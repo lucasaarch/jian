@@ -768,4 +768,68 @@ describe('the conversation rows', () => {
     expect(layout(rows)).toEqual(['message request', 'message first', 'live look']);
     expect(only(rows, 'message').some((row) => row.liveTail)).toBe(false);
   });
+
+  it('draws a message sent into a running turn after the tools already done, as it will land', () => {
+    const store = createConversationStore();
+    store
+      .getState()
+      .pageRead([said('request', 'run-1', 'user', 'Go', '2026-10-01T10:00:00Z')], false);
+    store.getState().runRead(turn('run-1', 'running', '2026-10-01T10:00:00Z'));
+    store
+      .getState()
+      .turnsRead(
+        ['run-1'],
+        [
+          [
+            'run-1',
+            [
+              tool('one', '2026-10-01T10:00:02Z'),
+              tool('two', '2026-10-01T10:00:03Z'),
+              tool('three', '2026-10-01T10:00:06Z'),
+            ],
+          ],
+        ],
+        [],
+      );
+    const outgoing: Outgoing[] = [
+      {
+        key: 'outbox-2',
+        sessionId: 'session',
+        text: 'Also the tests',
+        mediaIds: [],
+        at: '2026-10-01T10:00:05Z',
+        state: 'sent',
+        runId: 'run-1',
+      },
+    ];
+    const rows = () => buildRows(fromStore(store.getState(), new Set(), outgoing));
+
+    // The tools that began before the message sit above it; the later one stays with the agent.
+    expect(layout(rows())).toEqual([
+      'message request',
+      'work one,two',
+      'outgoing outbox-2',
+      'live three',
+    ]);
+    const pendingKeys = rows().map((row) => row.key);
+
+    store
+      .getState()
+      .pageRead(
+        [
+          said('request', 'run-1', 'user', 'Go', '2026-10-01T10:00:00Z'),
+          said('steer', 'run-1', 'user', 'Also the tests', '2026-10-01T10:00:05Z'),
+        ],
+        false,
+      );
+    store.getState().sent('steer', 'outbox-2');
+
+    // Stored, the same message stands in the same place and the live row keeps its key.
+    expect(layout(rows())).toEqual([
+      'message request',
+      'message steer after one,two',
+      'live three',
+    ]);
+    expect(rows().map((row) => row.key)).toEqual([pendingKeys[0], 'outbox-2', pendingKeys[3]]);
+  });
 });

@@ -15603,6 +15603,8 @@ export interface operations {
                             /** @enum {string} */
                             purpose?: "answer" | "resume" | "compact";
                             /** Format: date-time */
+                            readAt?: string;
+                            /** Format: date-time */
                             createdAt: string;
                         }[];
                         nextCursor: string | null;
@@ -15749,6 +15751,8 @@ export interface operations {
                             };
                             /** @enum {string} */
                             purpose?: "answer" | "resume" | "compact";
+                            /** Format: date-time */
+                            readAt?: string;
                             /** Format: date-time */
                             createdAt: string;
                         }[];
@@ -25116,6 +25120,8 @@ export interface operations {
                         /** @enum {string} */
                         purpose?: "answer" | "resume" | "compact";
                         /** Format: date-time */
+                        readAt?: string;
+                        /** Format: date-time */
                         createdAt: string;
                     }[];
                 };
@@ -29419,6 +29425,8 @@ export interface operations {
                         };
                         /** @enum {string} */
                         purpose?: "answer" | "resume" | "compact";
+                        /** Format: date-time */
+                        readAt?: string;
                         /** Format: date-time */
                         createdAt: string;
                     };

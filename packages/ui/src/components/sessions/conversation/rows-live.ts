@@ -1,5 +1,5 @@
 import type { Message, Run, Subagent, ToolStep } from '../../../lib/api';
-import { landed } from '../../../lib/stores/outbox';
+import { landed, type Outgoing } from '../../../lib/stores/outbox';
 import { running } from '../status';
 import type { Placed, Row, RowsInput } from './rows';
 
@@ -22,6 +22,19 @@ function trailing(turn: Run, known: Map<string, ToolStep[]>, placed: Map<string,
 }
 
 /**
+ * What the owner sent into a turn already at work. The gateway files it among that turn's tools
+ * by its own clock, so the tools that began before it stay above it; the pending bubble is drawn
+ * the same way, or it would sit above work that is about to climb over it once it is stored.
+ */
+function steeredInto(run: Run | undefined, pending: Outgoing[]) {
+  if (!run || !running(run)) return [];
+  const since = Date.parse(run.createdAt);
+
+  // One sent before the turn existed is the message that opened it.
+  return pending.filter((item) => Date.parse(item.at) > since);
+}
+
+/**
  * The end of the conversation: what the owner sent that has not come back, where the stored
  * message will stand, then the turns at work. Sent and not yet seen at work, the agent is drawn
  * starting under the same key it keeps once at work, so the row only changes its label.
@@ -32,9 +45,11 @@ export function liveRows(input: RowsInput, { placed, crew, call, hosted }: Turns
   const pending = input.outgoing.filter(
     (item) => item.sessionId === sessionId && !landed(item, messages),
   );
-  const rows: Row[] = pending
-    // A command is not something said: it is drawn only when it failed, to be sent again.
-    .filter((item) => !item.quiet || item.state === 'failed')
+  // A command is not something said: it is drawn only when it failed, to be sent again.
+  const said = pending.filter((item) => !item.quiet || item.state === 'failed');
+  const steered = hosted ? [] : steeredInto(run, said);
+  const rows: Row[] = said
+    .filter((item) => !steered.includes(item))
     .map((item) => ({ kind: 'outgoing', key: item.key, item }));
   const key = `live:${input.liveSerial}`;
 
@@ -72,6 +87,26 @@ export function liveRows(input: RowsInput, { placed, crew, call, hosted }: Turns
   }
 
   if (run && isRunning && !hosted) {
+    let { steps, startedAt } = trailing(run, input.tools, placed);
+
+    for (const item of steered) {
+      const before = steps.filter((step) => Date.parse(step.startedAt) < Date.parse(item.at));
+      steps = steps.slice(before.length);
+      if (before.length) {
+        // Keyed as the stored message's own row will be (see `buildRows`), so landing is no jump.
+        rows.push({
+          kind: 'work',
+          key: `head:${item.key}`,
+          runId: run.id,
+          steps: before,
+          startedAt: before[0]?.startedAt ?? startedAt,
+          finishedAt: before.at(-1)?.finishedAt,
+        });
+      }
+      rows.push({ kind: 'outgoing', key: item.key, item });
+      startedAt = item.at;
+    }
+
     rows.push({
       kind: 'live',
       key,
@@ -79,7 +114,8 @@ export function liveRows(input: RowsInput, { placed, crew, call, hosted }: Turns
       side: 'self',
       status: run.status,
       createdAt: run.createdAt,
-      ...trailing(run, input.tools, placed),
+      steps,
+      startedAt,
       crew: crew.tail.get(run.id) ?? [],
     });
   }

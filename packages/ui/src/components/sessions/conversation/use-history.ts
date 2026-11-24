@@ -107,7 +107,32 @@ export function useReader(
  * the agent is drawn starting until a read says more.
  */
 export function useLanding(store: ConversationStore, sessionId: string) {
+  // Each turn is awaited once: one a read already accounted for is not awaited again when the
+  // outbox changes for another message.
+  const taken = useRef(new Set<string>());
   useEffect(() => {
+    // Timed from when the gateway was seen to take each turn, not from the click: a read that
+    // began in between may not hold the turn yet. Awaited in the change that says it was taken,
+    // not a render later: for that render the message was neither sending nor awaited, the
+    // agent starting under it was gone, and the end of the conversation came up and went back
+    // down. Sending reads that shorter end, and left the view above the agent.
+    const awaitTaken = () => {
+      const fresh = useOutbox
+        .getState()
+        .items.flatMap((item) =>
+          item.sessionId === sessionId &&
+          item.state === 'sent' &&
+          item.runId &&
+          !taken.current.has(item.runId)
+            ? [item.runId]
+            : [],
+        );
+      if (!fresh.length) return;
+      const at = new Date().toISOString();
+      for (const runId of fresh) taken.current.add(runId);
+      const { awaited, patch } = store.getState();
+      patch({ awaited: new Map([...awaited, ...fresh.map((runId) => [runId, at] as const)]) });
+    };
     const land = () => {
       const { messages, sent } = store.getState();
       const gone: string[] = [];
@@ -120,37 +145,21 @@ export function useLanding(store: ConversationStore, sessionId: string) {
       }
       forgetLanded(gone);
     };
-    land();
+    // Landed first: a message the conversation already holds leaves the outbox unawaited.
+    const track = () => {
+      land();
+      awaitTaken();
+    };
+    track();
     const stopStore = store.subscribe((state, previous) => {
       if (state.messages !== previous.messages) land();
     });
-    const stopOutbox = useOutbox.subscribe(land);
+    const stopOutbox = useOutbox.subscribe(track);
     return () => {
       stopStore();
       stopOutbox();
     };
   }, [store, sessionId]);
-
-  // Timed from when the gateway was seen to take each turn, not from the click: a read that
-  // began in between may not hold the turn yet. Each turn is awaited once: one a read already
-  // accounted for is not awaited again when the outbox changes for another message.
-  const outbox = useOutbox((state) => state.items);
-  const taken = useRef(new Set<string>());
-  useEffect(() => {
-    const fresh = outbox.flatMap((item) =>
-      item.sessionId === sessionId &&
-      item.state === 'sent' &&
-      item.runId &&
-      !taken.current.has(item.runId)
-        ? [item.runId]
-        : [],
-    );
-    if (!fresh.length) return;
-    const at = new Date().toISOString();
-    for (const runId of fresh) taken.current.add(runId);
-    const { awaited, patch } = store.getState();
-    patch({ awaited: new Map([...awaited, ...fresh.map((runId) => [runId, at] as const)]) });
-  }, [outbox, sessionId, store]);
 }
 
 const pick = (state: ConversationState) => ({

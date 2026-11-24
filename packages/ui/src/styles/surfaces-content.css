@@ -309,6 +309,17 @@
     @apply mt-1.5 flex max-w-full items-center justify-end gap-2 self-end text-xs;
     color: var(--muted);
   }
+  /* The read receipt: muted, on the last line's row at the bubble's right edge, as a chat app
+     draws it, so the bubble is no taller for it. The line keeps a strip on the right that the
+     words never enter; `bottom` is the bubble's padding (py-3) plus half of what a 28px line
+     has over the 14px icon. */
+  .chat-line.mine:has(> .message-receipt) {
+    @apply pr-6;
+  }
+  .message-receipt {
+    @apply absolute right-0 bottom-[1.1875rem] inline-flex cursor-default items-center;
+    color: var(--muted);
+  }
   .chat-line[data-outgoing="failed"] .outgoing-state {
     color: var(--bad);
   }

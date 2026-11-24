@@ -8,7 +8,7 @@ import {
   type SessionObjective,
   TASK_SESSION_CHANNEL,
 } from '@jian/contracts';
-import { and, desc, eq, gt, lt, or, sql } from 'drizzle-orm';
+import { and, desc, eq, gt, isNull, lt, or, sql } from 'drizzle-orm';
 import type { Queryable } from '../storage/database.js';
 import { messages, type SessionWorkspace, sessions } from '../storage/schema.js';
 import { sanitizeObjectiveText } from './objective.js';
@@ -64,6 +64,7 @@ function toMessage(row: MessageRow): Message {
       : {}),
     ...(row.call ? { call: row.call } : {}),
     ...(row.purpose ? { purpose: row.purpose } : {}),
+    ...(row.readAt ? { readAt: row.readAt.toISOString() } : {}),
     createdAt: row.createdAt.toISOString(),
   };
 }
@@ -111,6 +112,34 @@ export async function markSessionRead(
     .update(sessions)
     .set({ readAt: sql`greatest(${sessions.readAt}, ${at})` })
     .where(and(eq(sessions.id, sessionId), eq(sessions.profileId, profileId)));
+}
+
+/**
+ * Stamps what the person wrote as read by the agent, once. `runId` narrows it to what one turn
+ * took in as steers; without it, to everything the conversation holds so far, which is what a
+ * turn that starts working has in its context. Returns whether anything changed, so callers
+ * announce only a real change.
+ */
+export async function markMessagesRead(
+  db: Queryable,
+  sessionId: string,
+  at: Date,
+  runId?: string,
+): Promise<boolean> {
+  const read = await db
+    .update(messages)
+    .set({ readAt: at })
+    .where(
+      and(
+        eq(messages.sessionId, sessionId),
+        eq(messages.role, 'user'),
+        isNull(messages.readAt),
+        runId ? eq(messages.runId, runId) : undefined,
+      ),
+    )
+    .returning({ id: messages.id });
+
+  return read.length > 0;
 }
 
 /** Ownership is part of the lookup, so another profile's session comes back as nothing at all. */
@@ -370,10 +399,11 @@ export async function findOwnSession(
 
 /** What a message row holds; one mapping for every insert so they cannot drift apart. */
 function messageValues(message: Message, requestKey?: string) {
-  const { author, ...rest } = message;
+  const { author, readAt, ...rest } = message;
 
   return {
     ...rest,
+    readAt: readAt ? new Date(readAt) : null,
     ...(requestKey ? { requestKey } : {}),
     authorId: author?.id ?? null,
     authorName: author?.name ?? null,

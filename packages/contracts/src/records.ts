@@ -109,6 +109,9 @@ export const messageRecordSchema = z.strictObject({
    * agent reads all three as written; a reader of the conversation needs none of them.
    */
   purpose: messagePurposeSchema.optional(),
+  // When the agent took the message into its context. Absent while it is only sent, and on
+  // messages from before the gateway kept it.
+  readAt: timestamp.optional(),
   createdAt: timestamp,
 });
 

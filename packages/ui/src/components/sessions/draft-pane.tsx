@@ -3,10 +3,19 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { motion } from 'motion/react';
 import { useEffect, useRef, useState } from 'react';
-import type { GatewayApi, Message, Profile, Project, ProtectionMode, Session } from '../../lib/api';
+import type {
+  GatewayApi,
+  MediaUpload,
+  Message,
+  Profile,
+  Project,
+  ProtectionMode,
+  Session,
+} from '../../lib/api';
 import { useAppearance } from '../../lib/appearance';
 import { keys } from '../../lib/query/keys';
-import { draftKey, useDrafts } from '../../lib/stores/drafts';
+import { type Attachment, draftKey, useAttached, useDrafts } from '../../lib/stores/drafts';
+import { releaseFiles, uploadOnce } from '../../lib/stores/outbox';
 import {
   FROM_SCRATCH,
   useWorkspaces,
@@ -20,6 +29,7 @@ import { ContextRing } from './context-ring';
 import { adoptInspector } from './inspector-host';
 import { ChatMessage } from './message';
 import { SessionModel } from './model-picker';
+import { OutgoingFiles } from './outgoing';
 import { SessionProtection } from './protection-menu';
 import { ThoughtLine } from './thought-line';
 import { TroubleCard } from './trouble';
@@ -35,7 +45,8 @@ const openingTitle = (text: string, hasMedia: boolean) => {
 /** A first message on its way: on screen at once, while the chat is made behind it. */
 type Sending = {
   text: string;
-  mediaIds: string[];
+  /** Uploaded behind the message, in the chat once it exists; their ids are known only then. */
+  files: Attachment[];
   /** One press is one message, however many times it has to be tried. */
   requestKey: string;
   startedAt: string;
@@ -131,6 +142,10 @@ export function DraftPane({
     created.current = { made, workspace };
     return made;
   };
+  const uploadFile = async (file: MediaUpload) => {
+    const session = await ensure();
+    return api.upload(profile.id, session.id, file);
+  };
   const [sending, setSending] = useState<Sending>();
   const [composerRound, setComposerRound] = useState(0);
   const here = useRef(true);
@@ -146,7 +161,16 @@ export function DraftPane({
   const start = async (message: Sending) => {
     try {
       const session = await ensure();
-      const title = openingTitle(message.text, message.mediaIds.length > 0);
+      // Uploaded once however many tries it takes: a file that went up keeps its id.
+      const mediaIds = await Promise.all(
+        message.files.map((file) =>
+          uploadOnce(file, uploadFile).catch((failure) => {
+            const why = failure instanceof Error ? ` ${failure.message}` : '';
+            throw new Error(`Could not upload ${file.name}.${why}`);
+          }),
+        ),
+      );
+      const title = openingTitle(message.text, message.files.length > 0);
       // The sidebar shows the chat as soon as it exists, under its opening for now; the rest
       // follows behind it. The opening is never saved as the name: a chat already named is one
       // the agent leaves alone, so saving it would keep the agent from titling the chat.
@@ -167,10 +191,11 @@ export function DraftPane({
         profile.id,
         session.id,
         message.text,
-        message.mediaIds,
+        mediaIds,
         message.requestKey,
       );
       created.current = null;
+      releaseFiles(message.files);
       useDrafts.getState().write(words, '');
       // Left already: the message is delivered, and the owner's place is theirs.
       if (!here.current) return;
@@ -227,7 +252,9 @@ export function DraftPane({
               people={NO_PEOPLE}
               opensRun
               agent={profile}
-            />
+            >
+              {sending.files.length > 0 && <OutgoingFiles files={sending.files} />}
+            </ChatMessage>
             {!sending.failed && (
               <div className="chat-line theirs work">
                 <ThoughtLine working startedAt={sending.startedAt} />
@@ -258,6 +285,7 @@ export function DraftPane({
           onClose={() => {
             // Back in the field to be changed, as it was before it was sent.
             useDrafts.getState().write(words, sending.text);
+            useAttached.getState().change(words, () => sending.files);
             setSending(undefined);
             setComposerRound((round) => round + 1);
           }}
@@ -304,16 +332,13 @@ export function DraftPane({
             </>
           }
           name={profile.name}
-          upload={async (file) => {
-            const session = await ensure();
-            return api.upload(profile.id, session.id, file);
-          }}
+          upload={uploadFile}
           // Done as far as the owner can tell: the words are in the conversation already, and the
           // field empties. What is still to happen happens under them.
-          send={async (text, mediaIds) => {
+          send={async (text, files) => {
             const message: Sending = {
               text,
-              mediaIds,
+              files,
               requestKey: crypto.randomUUID(),
               startedAt: new Date().toISOString(),
             };

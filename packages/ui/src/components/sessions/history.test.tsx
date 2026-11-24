@@ -1538,10 +1538,14 @@ it('shows the agent starting as soon as a message is sent, before the gateway an
     );
     // Still on its way: the agent is already there, starting.
     expect(working()).toContain('Starting');
+    const starting = element.querySelector('.thought-line[data-working]');
 
     // Taken: the turn the gateway made is what shows from the next read on.
     started = true;
     await act(async () => deliver({ id: queued.id }));
+    // The same line all along. Gone for one render, it took the end of the conversation up with
+    // it just as sending took the view there, and left the agent below the view.
+    expect(element.querySelector('.thought-line[data-working]')).toBe(starting);
     await act(async () =>
       root.render(<History api={api} profileId="profile" sessionId="session" revision={1} />),
     );

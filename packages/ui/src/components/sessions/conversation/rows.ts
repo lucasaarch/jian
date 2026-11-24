@@ -337,7 +337,7 @@ export function buildRows(input: RowsInput): Row[] {
       if (steered && head)
         rows.push({
           kind: 'work',
-          key: `head:${message.id}`,
+          key: `head:${keys.get(message.id) ?? message.id}`,
           runId: answering,
           steps: head,
           ...headSpan,

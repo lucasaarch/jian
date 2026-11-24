@@ -1,7 +1,7 @@
 import { LEARNING_SESSION_CHANNEL, type Run, TASK_SESSION_CHANNEL } from '@jian/contracts';
 import type { Clock } from '../core/clock.js';
 import { nowIso } from '../core/clock.js';
-import { awaitsSubagentReport } from '../runs/repository.js';
+import { awaitsSubagentReport, takeLeftoverSteer } from '../runs/repository.js';
 import type { Runs } from '../runs/service.js';
 import type { Store } from '../storage/database.js';
 import { MAX_OBJECTIVE_CONTINUATIONS, objectiveAt, objectiveContinuePrompt } from './objective.js';
@@ -31,6 +31,39 @@ export class ObjectiveContinuation {
 
   useDeliveries(deliveries: NonNullable<ObjectiveContinuation['deliveries']>) {
     this.deliveries = deliveries;
+  }
+
+  /**
+   * A message sent while a turn was already finishing lands in `runs.steer`, which only a model
+   * step reads; when the answer came without another step it would sit there for good, read by
+   * nobody. Once the turn is over, whatever is still waiting starts a turn of its own, so no
+   * message is lost. The take and the new turn share one transaction under the profile lock that
+   * `appendSteer` also holds, and the key makes a repeat of this call the same turn.
+   */
+  async followSteer(run: Run): Promise<Run | null> {
+    if (run.subagent || run.call) return null;
+
+    return this.store.transaction(run.profileId, async (tx) => {
+      const left = await takeLeftoverSteer(tx, run.id);
+      if (!left) return null;
+
+      const followUp = await this.runs.submit(
+        run.profileId,
+        run.sessionId,
+        {
+          requestKey: `steer-leftover:${run.id}`,
+          text: [
+            'While you were writing your last answer, the person sent this. You had not read it yet,',
+            `so answer it now:\n\n${left}`,
+          ].join(' '),
+        },
+        // The person's words are already in the conversation; this only tells the agent to read them.
+        { transaction: tx, purpose: 'resume' },
+      );
+
+      await this.deliveries?.deliverRun(run.profileId, run.sessionId, followUp.id, tx);
+      return followUp;
+    });
   }
 
   async continueAfter(run: Run): Promise<Run | null> {

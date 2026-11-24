@@ -277,8 +277,10 @@ it('takes a message sent mid-run as a correction to that run', async () => {
   const history = await services.sessions.messages(profile.id, session.id);
 
   expect(history.map((message) => message.content)).toContain('Actually, never mind Omar');
-  expect(await services.lifecycle.steer(first.id, 'worker')).toBe('Actually, never mind Omar');
-  expect(await services.lifecycle.steer(first.id, 'worker')).toBeNull();
+  expect(await services.lifecycle.steer(profile.id, first.id, 'worker')).toBe(
+    'Actually, never mind Omar',
+  );
+  expect(await services.lifecycle.steer(profile.id, first.id, 'worker')).toBeNull();
 });
 
 async function running(setupResult: Awaited<ReturnType<typeof setup>>) {
@@ -312,8 +314,8 @@ it('a retried message into a running turn is stored and steered once', async () 
   expect(first.id).toBe(run.id);
   expect(retry.id).toBe(run.id);
   expect(await userTexts(fixture, body.text)).toHaveLength(1);
-  expect(await services.lifecycle.steer(run.id, 'worker')).toBe(body.text);
-  expect(await services.lifecycle.steer(run.id, 'worker')).toBeNull();
+  expect(await services.lifecycle.steer(profile.id, run.id, 'worker')).toBe(body.text);
+  expect(await services.lifecycle.steer(profile.id, run.id, 'worker')).toBeNull();
 });
 
 it('a retry after the steered turn ended does not start a new turn', async () => {
@@ -345,7 +347,7 @@ it('two identical steered sends at once store one message', async () => {
   expect(a.id).toBe(run.id);
   expect(b.id).toBe(run.id);
   expect(await userTexts(fixture, body.text)).toHaveLength(1);
-  expect(await services.lifecycle.steer(run.id, 'worker')).toBe(body.text);
+  expect(await services.lifecycle.steer(profile.id, run.id, 'worker')).toBe(body.text);
 });
 
 async function parkedOn(fixture: Awaited<ReturnType<typeof setup>>, parking: Partial<Run>) {
@@ -377,7 +379,7 @@ it('a retried answer to a parked question is stored and continued once', async (
   expect(first.id).not.toBe(parked.id);
   expect(retry.id).toBe(parked.id);
   expect(await userTexts(fixture, body.text)).toHaveLength(1);
-  expect(await services.lifecycle.steer(first.id, 'worker')).toBeNull();
+  expect(await services.lifecycle.steer(profile.id, first.id, 'worker')).toBeNull();
 });
 
 it('a retried reject note on a parked approval is stored and continued once', async () => {
@@ -431,7 +433,7 @@ it('keeps every correction when two arrive before the run reads them', async () 
   await services.runs.submit(profile.id, session.id, { text: 'First', requestKey: 'a' });
   await services.runs.submit(profile.id, session.id, { text: 'Second', requestKey: 'b' });
 
-  expect(await services.lifecycle.steer(run.id, 'worker')).toBe('First\n\nSecond');
+  expect(await services.lifecycle.steer(profile.id, run.id, 'worker')).toBe('First\n\nSecond');
 });
 
 it('pins model configuration for queued runs', async () => {
@@ -570,4 +572,95 @@ it('continues only reconciled stopped runs and preserves checkpoints without rep
   expect(note?.purpose).toBe('resume');
   expect(await services.lifecycle.checkpoints(profile.id, run.id)).toHaveLength(1);
   expect((await services.runs.run(profile.id, run.id)).status).toBe('interrupted');
+});
+
+async function messageOf(
+  services: Awaited<ReturnType<typeof testServices>>,
+  profileId: string,
+  sessionId: string,
+  text: string,
+) {
+  return (await services.sessions.messages(profileId, sessionId)).find((m) => m.content === text);
+}
+
+it('stamps a message read when the turn starts, and a steer when a step takes it', async () => {
+  const { services, profile, session } = await setup();
+  const first = await services.runs.submit(profile.id, session.id, {
+    text: 'Check the files',
+    requestKey: 'read-1',
+  });
+
+  expect(
+    (await messageOf(services, profile.id, session.id, 'Check the files'))?.readAt,
+  ).toBeUndefined();
+  await services.lifecycle.claim(first.id, profile.id, 'worker');
+  expect(
+    (await messageOf(services, profile.id, session.id, 'Check the files'))?.readAt,
+  ).toBeDefined();
+
+  await services.runs.submit(profile.id, session.id, {
+    text: 'Also the tests',
+    requestKey: 'read-2',
+  });
+  expect(
+    (await messageOf(services, profile.id, session.id, 'Also the tests'))?.readAt,
+  ).toBeUndefined();
+
+  await services.lifecycle.steer(profile.id, first.id, 'worker');
+  expect(
+    (await messageOf(services, profile.id, session.id, 'Also the tests'))?.readAt,
+  ).toBeDefined();
+});
+
+it('answers a message sent after the last step instead of leaving it unread', async () => {
+  const { services, profile, session } = await setup();
+  const first = await services.runs.submit(profile.id, session.id, {
+    text: 'Check the files',
+    requestKey: 'late-1',
+  });
+  await services.lifecycle.claim(first.id, profile.id, 'worker');
+
+  // Sent while the model writes its answer: no step is left to take it.
+  await services.runs.submit(profile.id, session.id, { text: 'Add MFA too', requestKey: 'late-2' });
+  const done = await services.lifecycle.finish(
+    profile.id,
+    first.id,
+    'worker',
+    'completed',
+    'Done.',
+  );
+
+  const followUp = await services.objectives.followSteer(done);
+  expect(followUp?.id).not.toBe(first.id);
+  expect(followUp?.status).toBe('queued');
+  expect(followUp?.input).toContain('Add MFA too');
+  // Once: a repeat finds nothing waiting, and the turn it started is the same one.
+  expect(await services.objectives.followSteer(done)).toBeNull();
+  expect(await services.runs.activities(profile.id)).toHaveLength(1);
+
+  // The person's message stays where it was sent, unread until the new turn starts.
+  expect(
+    (await messageOf(services, profile.id, session.id, 'Add MFA too'))?.readAt,
+  ).toBeUndefined();
+  await services.lifecycle.claim(followUp?.id ?? '', profile.id, 'worker');
+  expect((await messageOf(services, profile.id, session.id, 'Add MFA too'))?.readAt).toBeDefined();
+});
+
+it('leaves a finished turn with nothing waiting alone', async () => {
+  const { services, profile, session } = await setup();
+  const first = await services.runs.submit(profile.id, session.id, {
+    text: 'Check the files',
+    requestKey: 'quiet-1',
+  });
+  await services.lifecycle.claim(first.id, profile.id, 'worker');
+  const done = await services.lifecycle.finish(
+    profile.id,
+    first.id,
+    'worker',
+    'completed',
+    'Done.',
+  );
+
+  expect(await services.objectives.followSteer(done)).toBeNull();
+  expect(await services.runs.activities(profile.id)).toHaveLength(0);
 });

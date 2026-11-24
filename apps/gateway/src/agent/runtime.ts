@@ -276,7 +276,7 @@ export type RuntimeServices = ToolServices & {
   media?: Pick<Media, 'prepare' | 'tools'>;
   web?: Pick<WebSearch, 'tools' | 'browserFor' | 'access'>;
   learning?: Pick<Learning, 'consider'>;
-  objectives?: Pick<ObjectiveContinuation, 'continueAfter'>;
+  objectives?: Pick<ObjectiveContinuation, 'continueAfter' | 'followSteer'>;
   workspaces?: Pick<Workspaces, 'forRun' | 'cloned' | 'touched'>;
   worktrees?: WorktreeService;
   /**
@@ -1949,7 +1949,7 @@ export class AgentRuntime {
           // point the loop reached, so the agent answers what they are asking now rather than
           // finishing an errand they have already moved on from.
           const { said: steer, compact } = withoutCompactCommands(
-            (await this.services.lifecycle.steer(runId, owner)) ?? '',
+            (await this.services.lifecycle.steer(profileId, runId, owner)) ?? '',
           );
           // A turn that is itself `/compact` has just compacted: another click asks for nothing.
           if (compact && !compactCommand) compactionRequested = true;
@@ -2756,8 +2756,19 @@ export class AgentRuntime {
       // Addressed only when the agent that asked gave up waiting; otherwise it already has it.
       await this.services.peers.deliverLate(profileId, runId).catch(() => {});
 
+      // A message that arrived after the last step had no step to read it: it gets its own turn
+      // rather than waiting for the owner to notice it was ignored.
+      const followed = learning
+        ? null
+        : await this.services.objectives?.followSteer(run).catch((error) => {
+            console.error(
+              `jian: run ${runId} could not answer a late message — ${describe(error)}`,
+            );
+            return null;
+          });
+
       // Open objectives must not wait for the owner to say continue after a partial slice.
-      if (!learning) {
+      if (!learning && !followed) {
         await this.services.objectives
           ?.continueAfter(run)
           .catch((error) =>

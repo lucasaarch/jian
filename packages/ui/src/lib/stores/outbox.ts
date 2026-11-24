@@ -1,4 +1,7 @@
 import { create } from 'zustand';
+import type { MediaUpload } from '../api';
+import { base64 } from '../attachments';
+import type { Attachment } from './drafts';
 
 /**
  * A message the owner sent that the conversation does not hold yet: drawn at once, as a
@@ -10,6 +13,11 @@ export type Outgoing = {
   sessionId: string;
   text: string;
   mediaIds: string[];
+  /**
+   * Files the message carries that may not be uploaded yet, drawn from their local previews
+   * until the stored message brings them back. Their ids join `mediaIds` only on the wire.
+   */
+  files?: Attachment[];
   replyTo?: { id: string; content: string };
   at: string;
   state: 'sending' | 'failed' | 'sent';
@@ -35,8 +43,49 @@ const update = (key: string, change: (item: Outgoing) => Outgoing) =>
     items: state.items.map((item) => (item.key === key ? change(item) : item)),
   }));
 
+/**
+ * Each file's upload, by the attachment's key, so that the composer's eager upload, the first
+ * attempt and every retry share one: a file that went up is never sent again, and one that
+ * failed is tried again from the file the browser still holds.
+ */
+const uploads = new Map<string, Promise<string>>();
+
+export function uploadOnce(
+  file: Attachment,
+  upload: (file: MediaUpload) => Promise<{ id: string }>,
+): Promise<string> {
+  const known = uploads.get(file.key);
+  if (known) return known;
+  const { file: blob, mimeType } = file;
+  const started = (async () => {
+    if (file.id) return file.id;
+    if (!blob || !mimeType) throw new Error(`Could not upload ${file.name}.`);
+    return (
+      await upload({
+        mimeType,
+        data: await base64(blob),
+        name: file.name,
+        ...(file.voice ? { voice: true } : {}),
+      })
+    ).id;
+  })();
+  uploads.set(file.key, started);
+  // A failure is not remembered: the next attempt uploads again.
+  started.catch(() => uploads.delete(file.key));
+  return started;
+}
+
+/** Lets files go for good: their upload record, and the memory their previews hold. */
+export function releaseFiles(files: Attachment[] = []) {
+  for (const file of files) {
+    uploads.delete(file.key);
+    if (file.preview) URL.revokeObjectURL(file.preview);
+  }
+}
+
 const remove = (keys: Set<string>) => {
   for (const key of keys) senders.delete(key);
+  for (const item of useOutbox.getState().items) if (keys.has(item.key)) releaseFiles(item.files);
   useOutbox.setState((state) => ({ items: state.items.filter((item) => !keys.has(item.key)) }));
 };
 
@@ -49,15 +98,26 @@ export function sendNow(message: {
   sessionId: string;
   text: string;
   mediaIds: string[];
+  /** Files to upload with `upload` behind the bubble, or already up; sent once all are. */
+  attached?: { files: Attachment[]; upload: (file: MediaUpload) => Promise<{ id: string }> };
   replyTo?: { id: string; content: string };
-  deliver: (key: string) => Promise<{ id: string }>;
+  deliver: (key: string, mediaIds: string[]) => Promise<{ id: string }>;
   delivered: () => void;
 }): void {
   const key = crypto.randomUUID();
   const attempt = async () => {
     update(key, ({ error: _was, ...item }) => ({ ...item, state: 'sending' }));
     try {
-      const run = await message.deliver(key);
+      const { files = [], upload } = message.attached ?? {};
+      const uploaded = await Promise.all(
+        files.map((file) =>
+          uploadOnce(file, upload as NonNullable<typeof upload>).catch((failure) => {
+            const why = failure instanceof Error ? ` ${failure.message}` : '';
+            throw new Error(`Could not upload ${file.name}.${why}`);
+          }),
+        ),
+      );
+      const run = await message.deliver(key, [...message.mediaIds, ...uploaded]);
       update(key, (item) => ({ ...item, state: 'sent', runId: run.id }));
       message.delivered();
     } catch (failure) {
@@ -74,8 +134,11 @@ export function sendNow(message: {
         sessionId: message.sessionId,
         text: message.text,
         mediaIds: message.mediaIds,
+        ...(message.attached?.files.length ? { files: message.attached.files } : {}),
         ...(message.replyTo ? { replyTo: message.replyTo } : {}),
-        ...(!message.mediaIds.length && message.text.trim() === COMPACT_COMMAND
+        ...(!message.mediaIds.length &&
+        !message.attached?.files.length &&
+        message.text.trim() === COMPACT_COMMAND
           ? { quiet: true }
           : {}),
         at: new Date().toISOString(),

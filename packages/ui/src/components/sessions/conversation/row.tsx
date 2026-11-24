@@ -8,7 +8,7 @@ import { ApprovalCard, QuestionCard } from '../decision-cards';
 import { MessageMedia } from '../media';
 import { authored, cleanText, mine, PersonLine } from '../message';
 import { MessageActions, MessageReactions } from '../message-actions';
-import { OutgoingState, sentMessage } from '../outgoing';
+import { OutgoingFiles, OutgoingState, receiptOf, sentMessage } from '../outgoing';
 import { AgentLine } from './agent-line';
 import { LiveAnswer, LiveWork } from './live-answer';
 import { spentOf } from './live-text';
@@ -141,6 +141,7 @@ function draw(
           people={people}
           opensRun={false}
           outgoing={row.item.state}
+          receipt={row.item.state === 'sent' ? 'sent' : undefined}
         >
           {env.media && row.item.mediaIds.length > 0 ? (
             <MessageMedia
@@ -149,6 +150,7 @@ function draw(
               content={message.content}
             />
           ) : null}
+          {row.item.files?.length ? <OutgoingFiles files={row.item.files} /> : null}
           <OutgoingState item={row.item} />
         </PersonLine>,
       ];
@@ -218,6 +220,7 @@ function drawMessage(
         people={people}
         opensRun={!previous || who(previous) !== who(message)}
         agent={agent}
+        receipt={receiptOf(message)}
       >
         {media}
         {null}

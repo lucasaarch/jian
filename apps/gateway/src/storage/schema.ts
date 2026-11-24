@@ -737,6 +737,9 @@ export const messages = pgTable(
     // Set on a message sent into a turn already running, which has no run of its own to carry the
     // key: a retry of that send finds this row instead of storing and steering it again.
     requestKey: text('request_key'),
+    // When the message entered the model's context: the turn it opens began working, or the step
+    // that took it as a steer ran. Null until then, and on rows from before this was kept.
+    readAt: timestamp('read_at', { withTimezone: true }),
     createdAt,
     // The order they were written in. Two lines of one turn can share a millisecond, and an id
     // is random: without this they could swap places in the conversation.
