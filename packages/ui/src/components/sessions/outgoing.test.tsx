@@ -36,7 +36,7 @@ const show = (item: Outgoing) =>
     ),
   );
 
-it('draws the message at once without a sending footer', async () => {
+it('draws the message at once, with nothing in its bubble while it goes', async () => {
   await show({
     key: 'one',
     sessionId: 'session',
@@ -47,7 +47,6 @@ it('draws the message at once without a sending footer', async () => {
   });
 
   expect(element.querySelector('.chat-line.mine')?.textContent).toContain('Ship it');
-  expect(element.textContent).not.toContain('Sending…');
   expect(element.querySelector('.outgoing-state')).toBeNull();
   expect(element.querySelector('[role="alert"]')).toBeNull();
 });

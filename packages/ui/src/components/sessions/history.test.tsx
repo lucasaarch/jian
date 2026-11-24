@@ -1656,6 +1656,59 @@ it('shows the agent starting on /compact at once, without the command, unless it
   }
 });
 
+it('says Sending until the gateway holds a message, and Sent only once it does', async () => {
+  Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+  const api = {
+    messages: async () => [],
+    activities: async () => [],
+    timeline: async () => [],
+  };
+  const element = document.createElement('div');
+  document.body.append(element);
+  const root = createRoot(element);
+  const receipt = () =>
+    element.querySelector('.chat-line.mine > .message-foot > .message-receipt')?.textContent;
+  let take: (run: { id: string }) => void = () => {};
+  let refuse: (error: Error) => void = () => {};
+
+  try {
+    await act(async () =>
+      root.render(<History api={api} profileId="profile" sessionId="session" />),
+    );
+    await act(async () =>
+      sendNow({
+        sessionId: 'session',
+        text: 'Ship it',
+        mediaIds: [],
+        deliver: () => new Promise((resolve) => (take = resolve)),
+        delivered: () => {},
+      }),
+    );
+    // The gateway has not answered: it may still refuse it, so it is not Sent yet.
+    expect(receipt()).toBe('Sending');
+    await act(async () => take({ id: 'run' }));
+    expect(receipt()).toBe('Sent');
+
+    await act(async () =>
+      sendNow({
+        sessionId: 'session',
+        text: 'And this',
+        mediaIds: [],
+        deliver: () => new Promise((_, reject) => (refuse = reject)),
+        delivered: () => {},
+      }),
+    );
+    await act(async () => refuse(new Error('The gateway is unreachable.')));
+    const failed = element.querySelector('.chat-line.mine[data-outgoing="failed"]');
+    expect(failed?.querySelector('.message-receipt')).toBeNull();
+    expect(failed?.textContent).toContain('Not sent');
+  } finally {
+    await act(async () => root.unmount());
+    element.remove();
+    useOutbox.setState({ items: [] });
+  }
+});
+
 it('reads a turn at work again when the event stream falls silent', async () => {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
   vi.useFakeTimers();

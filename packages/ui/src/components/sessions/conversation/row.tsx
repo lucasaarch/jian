@@ -141,7 +141,7 @@ function draw(
           people={people}
           opensRun={false}
           outgoing={row.item.state}
-          receipt={row.item.state === 'sent' ? 'sent' : undefined}
+          receipt={row.item.state === 'failed' ? undefined : row.item.state}
         >
           {env.media && row.item.mediaIds.length > 0 ? (
             <MessageMedia

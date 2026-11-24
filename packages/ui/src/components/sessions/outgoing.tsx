@@ -1,6 +1,6 @@
 'use client';
 
-import { Check, CheckCheck, FileText, RotateCcw, X } from 'lucide-react';
+import { Check, CheckCheck, Clock3, FileText, RotateCcw, X } from 'lucide-react';
 import type { Message } from '../../lib/api';
 import type { Attachment } from '../../lib/stores/drafts';
 import { discard, type Outgoing, resend } from '../../lib/stores/outbox';
@@ -98,24 +98,34 @@ export function OutgoingFiles({ files }: { files: Attachment[] }) {
   );
 }
 
-/** How far a message the owner wrote has got: stored by the gateway, or in the agent's context. */
-export type Receipt = 'sent' | 'read';
+/**
+ * How far a message the owner wrote has got: on its way (its files uploading, or the gateway not
+ * answered yet), stored by the gateway, or in the agent's context.
+ */
+export type Receipt = 'sending' | 'sent' | 'read';
 
 /** Only what the agent is asked to answer: a message from the other side has no one to read it. */
 export const receiptOf = (message: Message): Receipt | undefined =>
   message.role !== 'user' || message.call ? undefined : message.readAt ? 'read' : 'sent';
 
+const receipts = {
+  sending: { Icon: Clock3, word: 'Sending' },
+  sent: { Icon: Check, word: 'Sent' },
+  read: { Icon: CheckCheck, word: 'Read' },
+} as const;
+
 /**
- * Under the bubble: one check and Sent once the gateway has the message, two and Read once the
- * agent has read it. The word is on screen, so it needs no tooltip.
+ * Under the bubble: a clock and Sending until the gateway answers that it has the message, so
+ * Sent never shows for one that may still fail; one check and Sent once it has it, two and Read
+ * once the agent has read it. The word is on screen, so it needs no tooltip.
  */
 export function MessageReceipt({ receipt }: { receipt: Receipt }) {
-  const Icon = receipt === 'read' ? CheckCheck : Check;
+  const { Icon, word } = receipts[receipt];
 
   return (
     <span className="message-receipt" data-receipt={receipt}>
       <Icon size={13} aria-hidden="true" />
-      {receipt === 'read' ? 'Read' : 'Sent'}
+      {word}
     </span>
   );
 }

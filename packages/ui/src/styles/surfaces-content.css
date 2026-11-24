@@ -310,15 +310,15 @@
     color: var(--muted);
   }
   /* Under the bubble, on its right edge: the agent's reactions, then the receipt. Out of the
-     bubble, so its words keep the whole width; the line's margin holds the strip (top gap plus
-     the 24px of a reaction badge) on every line of the owner's, so a receipt or a reaction that
-     appears later moves nothing. */
-  .chat-line.mine:not(.member) {
-    @apply mb-10;
-  }
+     bubble, so its words keep the whole width. The strip is exactly the 24px margin every line
+     already has, so the space between messages stays as it was and a receipt or a reaction that
+     appears later moves nothing; a badge in it is 20px, clear of the bubble and of the next line. */
   .message-foot {
-    @apply absolute top-[calc(100%+0.25rem)] flex h-6 items-center gap-2;
+    @apply absolute top-full flex h-6 items-center gap-2;
     right: calc(0.25rem - var(--chat-gutter));
+  }
+  .message-foot .reaction-badge {
+    @apply min-h-5;
   }
   .message-foot:empty {
     @apply hidden;
