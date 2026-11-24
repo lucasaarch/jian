@@ -8,6 +8,7 @@ import { Face } from '../ui';
 import { Markdown, MarkdownLink } from '../ui/markdown';
 import { AgentLine, ChatSpeaker } from './conversation/agent-line';
 import { MessageActions, MessageReactions } from './message-actions';
+import { MessageReceipt, type Receipt } from './outgoing';
 
 const GITHUB_LINK =
   /https:\/\/github\.com\/[^\s/]+\/[^\s/]+\/(?:pull|issues)\/\d+(?:[^\s<>()]*[^\s<>().,;:!?'"])?/g;
@@ -164,6 +165,7 @@ export function PersonLine({
   children,
   agent,
   outgoing,
+  receipt,
 }: {
   message: Message;
   group: boolean;
@@ -174,6 +176,8 @@ export function PersonLine({
   agent?: Pick<Profile, 'name' | 'avatar'>;
   /** Still in the outbox: how its sending goes. */
   outgoing?: Outgoing['state'];
+  /** How far the message has got, drawn small under the bubble. Kept out of a group's lines. */
+  receipt?: Receipt;
 }) {
   // Written by a schedule at its time, not by anyone in the conversation: shown as what it is.
   const scheduled =
@@ -221,6 +225,7 @@ export function PersonLine({
         {before}
         {text && <PersonText text={text} />}
         {children}
+        {receipt && <MessageReceipt receipt={receipt} />}
         <MessageReactions message={message} agentName={agent?.name} />
       </article>
     );

@@ -12,7 +12,7 @@ import { approvalText } from '../agent/guard.js';
 import { type Clock, nowIso } from '../core/clock.js';
 import { GatewayError } from '../core/errors.js';
 import { recordEvent } from '../core/events.js';
-import { insertMessage } from '../sessions/repository.js';
+import { insertMessage, markMessagesRead } from '../sessions/repository.js';
 import type { Store } from '../storage/database.js';
 import type { RunAction } from './action.js';
 import type { RunReader } from './port.js';
@@ -80,6 +80,9 @@ export class RunLifecycle {
       };
 
       await updateRun(tx, claimed);
+      // The turn is about to read the conversation, so what opened it, or was left unread by
+      // the turn before it, is read from here on.
+      await markMessagesRead(tx, run.sessionId, new Date(this.clock()));
 
       await recordEvent(
         tx,
@@ -116,9 +119,25 @@ export class RunLifecycle {
     await writeProgress(this.store.db, runId, owner, progress);
   }
 
-  /** What the person said while this run was already going, taken once and left empty. */
-  async steer(runId: string, owner: string): Promise<string | null> {
-    return takeSteer(this.store.db, runId, owner);
+  /**
+   * What the person said while this run was already going, taken once and left empty. Taking
+   * it is the agent reading it, so the messages are stamped in the same transaction; under the
+   * profile lock no send can land between the take and the stamp and be marked unread.
+   */
+  async steer(profileId: string, runId: string, owner: string): Promise<string | null> {
+    return this.store.transaction(profileId, async (tx) => {
+      const taken = await takeSteer(tx, runId, owner);
+      if (!taken) return null;
+
+      const run = await this.runs.run(profileId, runId, tx);
+      if (await markMessagesRead(tx, run.sessionId, new Date(this.clock()), runId)) {
+        await recordEvent(tx, this.clock, profileId, 'session.message', {
+          sessionId: run.sessionId,
+        });
+      }
+
+      return taken;
+    });
   }
 
   async checkpoint(profileId: string, runId: string, owner: string, data: unknown) {

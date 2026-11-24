@@ -153,7 +153,9 @@ describe('worktree routes', () => {
     expect(response.statusCode).toBe(202);
     expect(response.json().id).toBe(first.id);
     expect(await services.runs.activities(profile.id)).toHaveLength(1);
-    expect(await services.lifecycle.steer(first.id, 'worker')).toContain('update_worktree');
+    expect(await services.lifecycle.steer(profile.id, first.id, 'worker')).toContain(
+      'update_worktree',
+    );
   });
 
   it('discard is refused while a run is open, then removes the folder', async () => {

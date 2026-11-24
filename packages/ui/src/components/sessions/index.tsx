@@ -3,7 +3,7 @@
 import { AGENT_SESSION_CHANNEL, GATEWAY_SESSION_CHANNEL } from '@jian/contracts';
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
-import type { Message, Run, Session } from '../../lib/api';
+import type { MediaUpload, Message, Run, Session } from '../../lib/api';
 import { conversationName } from '../../lib/conversation-name';
 import { agentPath } from '../../lib/navigation';
 import {
@@ -208,6 +208,7 @@ export function Sessions({ api, mutate, busy }: SectionActions) {
       {active.objective && <SessionObjective objective={active.objective} />}
     </span>
   );
+  const upload = (file: MediaUpload) => api.upload(profile.id, active.id, file);
   const waits = activities.find((run) => run.sessionId === active.id && run.status === 'waiting');
 
   return (
@@ -319,18 +320,20 @@ export function Sessions({ api, mutate, busy }: SectionActions) {
                                   ? 'Answer to continue…'
                                   : undefined
                             }
-                            upload={(file) => api.upload(profile.id, active.id, file)}
+                            upload={upload}
                             // Shown in the conversation at once and sent behind it, as a messenger
-                            // does: one that fails stays there to be sent again.
-                            send={async (text, mediaIds, replyToId) =>
+                            // does, the files still uploading included: one that fails stays
+                            // there to be sent again.
+                            send={async (text, files, replyToId) =>
                               sendNow({
                                 sessionId: active.id,
                                 text,
-                                mediaIds,
+                                mediaIds: [],
+                                attached: { files, upload },
                                 ...(replyTo
                                   ? { replyTo: { id: replyTo.id, content: replyTo.content } }
                                   : {}),
-                                deliver: (key) =>
+                                deliver: (key, mediaIds) =>
                                   api.send(profile.id, active.id, text, mediaIds, key, replyToId),
                                 delivered: answered,
                               })

@@ -5,11 +5,13 @@ import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { HoverTip } from '../../kit/info-tip';
 import type { MediaUpload } from '../../lib/api';
-import { base64, classify, MAX_MESSAGE_MEDIA, PASTE_AS_FILE_CHARS } from '../../lib/attachments';
+import { classify, MAX_MESSAGE_MEDIA, PASTE_AS_FILE_CHARS } from '../../lib/attachments';
 import { useRecorder } from '../../lib/recorder';
 import { type Attachment, useAttached, useDrafts } from '../../lib/stores/drafts';
+import { releaseFiles, uploadOnce } from '../../lib/stores/outbox';
 import { countUsage } from '../../lib/usage';
 import { AudioPlayer } from '../ui';
+import { revealCaret } from './caret';
 import { listBreak } from './list-break';
 import { size } from './media';
 import { VoicePill } from './voice-pill';
@@ -19,8 +21,9 @@ const NONE: Attachment[] = [];
 
 /**
  * The owner's side of the gateway conversation. Each file uploads the moment it is attached,
- * so sending only names what is already there. Enter sends and Shift+Enter breaks the line; the
- * text and the files stay until the gateway accepts the message, so a failed send loses nothing.
+ * unless it is a new chat's, and sending hands the words and the files, uploaded or not, to
+ * `send`, which draws the message at once and finishes the upload behind it. Enter sends and
+ * Shift+Enter breaks the line.
  */
 export function Composer({
   draftKey,
@@ -41,7 +44,8 @@ export function Composer({
   upload: (file: MediaUpload) => Promise<{ id: string }>;
   /** Where what is being written is kept until it is sent, across pages and restarts. */
   draftKey?: string;
-  send: (text: string, mediaIds: string[], replyToId?: string) => Promise<unknown>;
+  /** Takes the files as they are, still uploading or not yet uploaded, and owns them from then. */
+  send: (text: string, files: Attachment[], replyToId?: string) => Promise<unknown>;
   replyTo?: { id: string; content: string };
   onCancelReply?: () => void;
   onSent: () => void;
@@ -97,6 +101,7 @@ export function Composer({
       if (!field) return;
       field.focus();
       field.setSelectionRange(field.value.length, field.value.length);
+      revealCaret(field);
     });
   }, [begun]);
   const recorder = useRecorder();
@@ -140,27 +145,16 @@ export function Composer({
         bytes: file.size,
         state: draft ? 'ready' : 'uploading',
         ...(preview ? { preview } : {}),
-        ...(draft
-          ? {
-              file,
-              mimeType: verdict.mimeType as MediaUpload['mimeType'],
-              ...(voice ? { voice: true } : {}),
-            }
-          : {}),
+        // Kept in both modes: the message that takes the file may have to upload it again.
+        file,
+        mimeType: verdict.mimeType as MediaUpload['mimeType'],
+        ...(voice ? { voice: true } : {}),
       };
 
       if (preview) previews.current.add(preview);
       if (!draft) {
-        void base64(file)
-          .then((data) =>
-            upload({
-              mimeType: verdict.mimeType as MediaUpload['mimeType'],
-              data,
-              name: file.name,
-              ...(voice ? { voice: true } : {}),
-            }),
-          )
-          .then((media) => patch(item.key, { state: 'ready', id: media.id }))
+        uploadOnce(item, upload)
+          .then((id) => patch(item.key, { state: 'ready', id }))
           .catch(() => patch(item.key, { state: 'failed' }));
       }
 
@@ -176,45 +170,26 @@ export function Composer({
     setAttachments((list) =>
       list.filter((item) => {
         if (item.key !== key) return true;
-        if (item.preview) {
-          URL.revokeObjectURL(item.preview);
-          previews.current.delete(item.preview);
-        }
+        releaseFiles([item]);
+        if (item.preview) previews.current.delete(item.preview);
         return false;
       }),
     );
 
-  const ready = attachments.filter((item) => item.state === 'ready');
-  const uploading = attachments.some((item) => item.state === 'uploading');
-  const canSend =
-    !sending && !uploading && !recorder.recording && Boolean(text.trim() || ready.length);
+  // Every file goes, the uploading and the failed too: the upload ends, or is tried again,
+  // behind the message's bubble, where a failure can be seen and retried.
+  const canSend = !sending && !recorder.recording && Boolean(text.trim() || attachments.length);
 
   const submit = async () => {
     if (!canSend) return;
     setSending(true);
     setError('');
     try {
-      const mediaIds = await Promise.all(
-        ready.map(async (item) => {
-          if (item.id) return item.id;
-          if (!draft || !item.file || !item.mimeType) {
-            throw new Error(`Could not upload ${item.name}. Remove it and try again.`);
-          }
-          const media = await upload({
-            mimeType: item.mimeType,
-            data: await base64(item.file),
-            name: item.name,
-            ...(item.voice ? { voice: true } : {}),
-          });
-          patch(item.key, { state: 'ready', id: media.id, file: undefined });
-          return media.id;
-        }),
-      );
-      if (replyTo) await send(text.trim(), mediaIds, replyTo.id);
-      else await send(text.trim(), mediaIds);
+      if (replyTo) await send(text.trim(), attachments, replyTo.id);
+      else await send(text.trim(), attachments);
       onCancelReply?.();
       countUsage('message_sent');
-      for (const item of attachments) if (item.preview) URL.revokeObjectURL(item.preview);
+      // The files are the message's now, previews included.
       previews.current.clear();
       write('');
       setAttachments(() => []);
@@ -398,7 +373,12 @@ export function Composer({
                 if (next && next.text.length <= field.maxLength) {
                   event.preventDefault();
                   write(next.text);
-                  requestAnimationFrame(() => field.setSelectionRange(next.caret, next.caret));
+                  // After the render has grown the field, and the caret moved by code is not
+                  // scrolled to by the browser.
+                  requestAnimationFrame(() => {
+                    field.setSelectionRange(next.caret, next.caret);
+                    revealCaret(field);
+                  });
                 }
                 return;
               }

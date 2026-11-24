@@ -5,7 +5,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { GatewayApi, Profile } from '../../lib/api';
 import { keys } from '../../lib/query/keys';
 import { useCrew } from '../../lib/stores/crew';
-import { useDrafts } from '../../lib/stores/drafts';
+import { useAttached, useDrafts } from '../../lib/stores/drafts';
 import { DraftPane } from './draft-pane';
 
 // What the composer's controls read from the gateway has no part in sending.
@@ -211,6 +211,48 @@ it('does not send twice a message whose answer got lost', async () => {
 
   // The same key both times: the gateway takes a repeat as the message it already has.
   expect(send.mock.calls[0]?.[4]).toBe(send.mock.calls[1]?.[4]);
+});
+
+it('shows a file at once, uploads it once the chat exists, and keeps it when that fails', async () => {
+  vi.stubGlobal(
+    'URL',
+    Object.assign(URL, { createObjectURL: () => 'blob:pic', revokeObjectURL: () => {} }),
+  );
+  const uploading = deferred<{ id: string }>();
+  const upload = vi.fn<(...args: unknown[]) => Promise<{ id: string }>>(() => uploading.promise);
+  const send = vi.fn(async () => ({ id: 'run' }));
+  await render({
+    createGatewaySession: vi.fn(async () => session) as never,
+    renameSession: vi.fn(async () => session) as never,
+    upload: upload as never,
+    send: send as never,
+  });
+  const picker = element.querySelector('input[type="file"]') as HTMLInputElement;
+  await act(async () => {
+    Object.defineProperty(picker, 'files', {
+      configurable: true,
+      value: [new File(['x'], 'plan.png', { type: 'image/png' })],
+    });
+    picker.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  await press();
+  await flush();
+
+  // The upload has not ended, and the picture is already in the conversation.
+  expect(upload).toHaveBeenCalledOnce();
+  expect(send).not.toHaveBeenCalled();
+  expect(element.querySelector('.message-media img')?.getAttribute('src')).toBe('blob:pic');
+
+  await act(async () => uploading.reject(new Error('Too big.')));
+  await flush();
+  expect(element.textContent).toContain('Could not upload plan.png. Too big.');
+
+  // Closing hands the file back to the composer instead of losing it.
+  await act(async () => element.querySelector<HTMLButtonElement>('.trouble-close')?.click());
+  expect(element.querySelector('.composer-attachments img')?.getAttribute('alt')).toBe('plan.png');
+  expect(opened).not.toHaveBeenCalled();
+  await act(async () => useAttached.getState().forgetAll());
+  vi.unstubAllGlobals();
 });
 
 it('gives the message back to change it, and opens no chat', async () => {

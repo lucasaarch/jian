@@ -12,6 +12,7 @@ import {
   isNull,
   lte,
   ne,
+  notInArray,
   or,
   sql,
 } from 'drizzle-orm';
@@ -253,6 +254,24 @@ export async function appendSteer(
   await db.update(runs).set({ steer }).where(eq(runs.id, runId));
 
   return steer;
+}
+
+/**
+ * What was steered into a run that has ended, taken and cleared. Only a finished run: while one
+ * is going, `takeSteer` is how its steps read it.
+ */
+export async function takeLeftoverSteer(db: Queryable, runId: string): Promise<string | null> {
+  const [current] = await db
+    .select({ steer: runs.steer })
+    .from(runs)
+    .where(and(eq(runs.id, runId), notInArray(runs.status, activeStatuses), isNotNull(runs.steer)))
+    .limit(1);
+
+  if (!current?.steer) return null;
+
+  await db.update(runs).set({ steer: null }).where(eq(runs.id, runId));
+
+  return current.steer;
 }
 
 /** Takes what is waiting and leaves the slot empty, so a step reads each message once. */

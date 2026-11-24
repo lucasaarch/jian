@@ -183,7 +183,9 @@ it('keeps each conversation’s files when the page changes, and sends them from
   expect(attached()).toEqual([expect.stringContaining('brief.pdf')]);
   await type('See the brief');
   await submit();
-  expect(send).toHaveBeenCalledWith('See the brief', ['media-brief']);
+  expect(send).toHaveBeenCalledWith('See the brief', [
+    expect.objectContaining({ name: 'brief.pdf', id: 'media-brief', state: 'ready' }),
+  ]);
   expect(attached()).toEqual([]);
 
   await show('agent:two', send, upload);
