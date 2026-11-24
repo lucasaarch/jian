@@ -4,6 +4,37 @@ Every release of Jian, newest first.
 
 <!-- Generated from docs/releases by scripts/changelog.mjs. Edit the release note, then run `make changelog`. -->
 
+## 1.15.0 — 2026-11-24
+
+Agents can leave commands running and forward a server's port to your computer, connector accounts can be renamed, and a server gateway checks for updates when you ask.
+
+### Agents
+
+* **Commands that keep running:** An agent can start a command in the background, such as a dev server or a long build, and read its output while it works on something else. A badge above the composer lists what's running. Click one to follow its output as a terminal in the Inspector, and stop it there or from the badge. Each agent runs up to 8 at once, on the gateway's own machine only, and they all stop when the gateway restarts.
+* **Port forwarding to your computer:** An agent on a server gateway can forward a port of that server to your computer through the desktop app or Jian Remote, so you open what it's running at `localhost` in your browser. Your computer gets a free port between 41000 and 41999, listening on 127.0.0.1 only, and opens it without asking. A badge above the composer shows each forwarded port, with a link to open it and a button to stop it. An agent can keep 10 forwards open, and a gateway restart closes them all.
+
+### Plugins
+
+* **Rename a connector account:** Each account on the page of an app such as Linear or Notion, and of AWS, now has a **⋯** menu with **Rename** and **Remove**. It helps when an account got a name that doesn't tell it apart, like a Linear account named after you rather than its workspace. What you type becomes the name agents call it by (`Linear Acme` becomes `linear_acme`), and its sign-in and keys move with it. A name another server already has is refused.
+* Changing a custom connector's name under **Edit** used to delete its keys and sign-in. They now stay.
+* A renamed server that signs in with OAuth can sign in again, since the gateway registers anew for the new name when it has to. Some services, such as ElevenLabs, may still ask you to sign in again after a rename.
+
+### Updates
+
+* **Check for updates:** On a server gateway, **Settings → Updates** has a **Check for updates** button that asks GitHub right away. A new release used to take up to an hour to show, and the gateway now keeps GitHub's answer for 15 minutes.
+* **When GitHub can't be read:** The page used to say "Up to date" even when it had read nothing. Now it keeps the last release it saw and says why it couldn't check, for example when GitHub's hourly limit for the server's address is used up. When you are up to date, it says when GitHub last answered.
+
+### Chat
+
+* A message on its way, with files still uploading or the gateway yet to answer, shows **Sending** with a clock under it until it turns into Sent.
+* Your messages are 24px apart again. 1.14.0 had pushed them to about 40px.
+
+### Upgrading
+
+* The desktop app updates itself to this release. Remote workers update themselves as well. Port forwarding needs the updated desktop app or Jian Remote on your computer: an older one is refused, and the agent asks you to update it.
+* **Servers:** Recreate the gateway and web containers with the 1.15.0 images, follow the `latest` tags, or install it from **Settings → Updates**. This release has no migration.
+* Background commands and port forwarding need the gateway's API and runs in one process, `JIAN_ROLE=all`, which is the default. A gateway split into `api` and `worker` roles doesn't offer them.
+
 ## 1.14.0 — 2026-11-24
 
 The chat follows the agent and marks your messages Sent and Read, GitHub connects from the desktop app on Linux and from its own gateway, and the gateway holds MCP servers, WhatsApp bursts and open panels to limits.
