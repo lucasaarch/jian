@@ -22,6 +22,7 @@ vi.mock('../../platform/navigation', () => ({
 }));
 const api = vi.hoisted(() => ({
   replaceMcpServers: vi.fn(async (servers: unknown[]) => servers),
+  renameMcpServer: vi.fn(async () => []),
   checkMcpServer: vi.fn(),
   saveXApp: vi.fn(),
   startGithubInstallation: vi.fn(),
@@ -142,6 +143,12 @@ const press = async (name: string, within?: ParentNode) => {
   if (!found) throw new Error(`no ${name}`);
   await act(async () => found.click());
 };
+/** Opens an account's menu and picks one of its entries. */
+async function choose(account: string, entry: string) {
+  await press(`Actions for ${account}`, host);
+  await vi.waitFor(() => expect(button(entry)).toBeDefined());
+  await press(entry);
+}
 /** What the details column says under one of its labels. */
 const detail = (label: string) =>
   [...host.querySelectorAll('dl[aria-label="Details"] dt')].find(
@@ -320,7 +327,7 @@ it('lists an app’s accounts and tools, and connects another account', async ()
 
   await show('linear');
   await vi.waitFor(() => expect(detail('Status')).toBe('Connected'));
-  expect(button('Remove linear_octo', host)).toBeDefined();
+  expect(button('Actions for linear_octo', host)).toBeDefined();
   expect(button('Connect Linear', host)).toBeUndefined();
   // What it gives, read from the account that answered; an app's tools are not switched here.
   expect(host.textContent).toContain('list_issues');
@@ -344,7 +351,7 @@ it('removes an account only once the owner confirms it', async () => {
   read.mcpServers.mockResolvedValue([account('linear_octo'), account('linear_kai')]);
 
   await show('linear');
-  await press('Remove linear_kai', host);
+  await choose('linear_kai', 'Remove');
   expect(api.replaceMcpServers).not.toHaveBeenCalled();
 
   await press('Remove account');
@@ -366,7 +373,24 @@ it('shows an account under the name its sign-in gave it, once the gateway rename
 
   await show('linear');
 
-  await vi.waitFor(() => expect(button('Remove linear_kai', host)).toBeDefined());
+  await vi.waitFor(() => expect(button('Actions for linear_kai', host)).toBeDefined());
+});
+
+it('renames an account to what the owner types, as a name agents can call', async () => {
+  read.mcpServers.mockResolvedValue([
+    { name: 'linear_octo', transport: 'http', url: 'https://mcp.linear.app/mcp', auth: 'oauth' },
+  ]);
+  api.renameMcpServer.mockClear();
+
+  await show('linear');
+  await choose('linear_octo', 'Rename');
+  await fill('Name', 'Linear Acme');
+  await press('Save');
+
+  expect(api.renameMcpServer).toHaveBeenCalledWith('linear_octo', 'linear_acme');
+  // Renamed in place: the list, and the sign-in and keys the gateway keeps under the name, are
+  // never saved again whole.
+  expect(api.replaceMcpServers).not.toHaveBeenCalled();
 });
 
 it('connects an AWS account as its own command server, keys kept as secret values', async () => {
@@ -380,7 +404,7 @@ it('connects an AWS account as its own command server, keys kept as secret value
   read.mcpServers.mockResolvedValue([first]);
 
   await show('aws');
-  expect(button('Remove aws_prod', host)).toBeDefined();
+  expect(button('Actions for aws_prod', host)).toBeDefined();
   // With an account in, the form waits behind the header's button.
   expect(host.querySelector('form')).toBeNull();
 

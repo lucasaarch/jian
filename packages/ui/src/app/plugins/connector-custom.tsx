@@ -46,7 +46,7 @@ export function CustomConnector({
   leave: Leave;
 }) {
   const { api, mutate, busy } = useActions();
-  const { servers, save, remove, toggleTool } = useMcpServers({ api, mutate });
+  const { servers, save, remove, rename, toggleTool } = useMcpServers({ api, mutate });
   const checks = useAccountChecks([server.name]);
   const check = checks.of(server.name);
   const off = server.disabledTools ?? [];
@@ -95,10 +95,15 @@ export function CustomConnector({
             onSave={async (next) => {
               const at = place();
               if (at < 0) return false;
+              // A new name is moved first, with the sign-in and keys a list saved under it would
+              // have dropped; the rest of the edit is then saved under it.
               const ok =
                 next.name === server.name
                   ? await save(next, at)
-                  : await leave(() => save(next, at), next.name);
+                  : await leave(
+                      async () => (await rename(server, next.name)) && save(next, at),
+                      next.name,
+                    );
               if (ok) {
                 setEditing(false);
                 void checks.check(next.name);

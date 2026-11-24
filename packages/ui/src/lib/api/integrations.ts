@@ -110,6 +110,14 @@ export const integrationCalls = (client: Client) => ({
     result(client.POST('/v1/mcp-servers/check', { body: { server } })),
   checkMcpServer: (name: string) =>
     result(client.POST('/v1/mcp-servers/{name}/check', { params: { path: { name } } })),
+  // Its sign-in and keys go with it, which saving the list under another name would drop.
+  renameMcpServer: (name: string, to: string) =>
+    result(
+      client.POST('/v1/mcp-servers/{name}/rename', {
+        params: { path: { name } },
+        body: { name: to },
+      }),
+    ),
 });
 
 /**

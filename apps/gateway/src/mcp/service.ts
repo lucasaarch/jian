@@ -3,6 +3,7 @@ import {
   type McpStatus,
   mcpAppOf,
   mcpDraftCheckSchema,
+  mcpRenameSchema,
   mcpServerListInputSchema,
 } from '@jian/contracts';
 import {
@@ -161,15 +162,32 @@ export class McpServers {
     const wanted = app && account ? accountServerName(app, account) : undefined;
     if (!status.reachable || !wanted || wanted === name) return status;
 
-    const renamed = await this.rename(name, wanted);
+    const renamed = await this.renameFree(name, wanted);
     return { ...status, name: renamed };
   }
 
   /**
-   * Gives a server a new name, the first free one from \`to\`, and moves its secrets and sign-in
-   * with it. Returns the name it took.
+   * The owner's new name for a server, which agents reach it by from their next runs. Refused
+   * when another server holds it, rather than numbered: the owner chose that name.
    */
-  async rename(from: string, to: string): Promise<string> {
+  async rename(from: string, input: unknown): Promise<McpServer[]> {
+    const { name } = mcpRenameSchema.parse(input);
+
+    return this.store.transaction(GATEWAY_SCOPE, async (tx) => {
+      const servers = await this.list(tx);
+      if (!servers.some((server) => server.name === from)) {
+        throw new GatewayError(404, 'MCP server not found');
+      }
+      if (name !== from && servers.some((server) => server.name === name)) {
+        throw new GatewayError(409, `Another MCP server is already named ${name}`);
+      }
+
+      return this.move(servers, from, name, tx);
+    });
+  }
+
+  /** Gives a server the first free name from \`to\`, and returns the name it took. */
+  private async renameFree(from: string, to: string): Promise<string> {
     return this.store.transaction(GATEWAY_SCOPE, async (tx) => {
       const servers = await this.list(tx);
       const taken = new Set(servers.map((server) => server.name).filter((item) => item !== from));
@@ -177,16 +195,24 @@ export class McpServers {
       for (let count = 2; taken.has(name); count++) {
         name = `${to.slice(0, 30 - String(count).length - 1)}_${count}`;
       }
-      if (name === from) return from;
-
-      await this.vault.move(mcpSecret(from), mcpSecret(name), tx);
-      await replaceMcpServers(
-        tx,
-        servers.map((server) => (server.name === from ? { ...server, name } : server)),
-        new Date(this.clock()),
-      );
+      await this.move(servers, from, name, tx);
       return name;
     });
+  }
+
+  /** Moves a server's secrets and sign-in to its new name, along with the server. */
+  private async move(
+    servers: McpServer[],
+    from: string,
+    name: string,
+    tx: Queryable,
+  ): Promise<McpServer[]> {
+    if (name === from) return servers;
+
+    const renamed = servers.map((server) => (server.name === from ? { ...server, name } : server));
+    await this.vault.move(mcpSecret(from), mcpSecret(name), tx);
+    await replaceMcpServers(tx, renamed, new Date(this.clock()));
+    return renamed;
   }
 
   /**

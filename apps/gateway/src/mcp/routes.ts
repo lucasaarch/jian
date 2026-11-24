@@ -41,6 +41,10 @@ export function registerMcpRoutes(app: FastifyInstance, deps: McpRouteServices):
     return deps.mcpLogins?.withAuthorization(status) ?? status;
   });
 
+  app.post<{ Params: ServerParams }>('/v1/mcp-servers/:name/rename', async (request) =>
+    deps.mcp.rename(request.params.name, request.body),
+  );
+
   // Read by an authorization server, not by the owner. It names a server whether or not one is
   // saved under that name: telling which exist would be the only thing it gave away.
   app.get<{ Params: ServerParams }>(

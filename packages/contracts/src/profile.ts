@@ -99,9 +99,30 @@ export const mcpOauthClientSecretSchema = z.strictObject({
     .optional(),
 });
 
+/** A server's name: how agents address it, and the start of each of its tools' names. */
+export const mcpNameSchema = z.string().regex(/^[a-z0-9_]{1,30}$/);
+
+/**
+ * What a server's name can keep of any text, within `room` characters: lowercase letters without
+ * accents, digits, and one underscore for each run of anything else. Empty when nothing is left.
+ */
+export function mcpNameOf(text: string, room = 30): string {
+  return text
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, room)
+    .replace(/_+$/, '');
+}
+
+/** The owner's new name for a server: its sign-in and keys go with it. */
+export const mcpRenameSchema = z.strictObject({ name: mcpNameSchema });
+
 export const mcpSchema = z
   .strictObject({
-    name: z.string().regex(/^[a-z0-9_]{1,30}$/),
+    name: mcpNameSchema,
     /** `http` talks to a URL; `stdio` runs a command on this machine and speaks over its pipes. */
     transport: z.enum(['http', 'stdio']).default('http'),
     url: endpointSchema.optional(),

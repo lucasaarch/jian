@@ -1,11 +1,17 @@
 'use client';
 
+import { Menu } from '@base-ui/react/menu';
 import { useQueryClient } from '@tanstack/react-query';
+import { Ellipsis, Pencil, Trash2 } from 'lucide-react';
 import { useEffect, useEffectEvent, useState } from 'react';
 import { mcpHealth } from '../../components/integrations/mcp-health';
 import {
   Action,
   ConfirmDialog,
+  iconButton,
+  MenuEntry,
+  menuPopup,
+  RenameDialog,
   SettingsGroup,
   SettingsRow,
   StatusPill,
@@ -75,18 +81,21 @@ export const toolsOf = (accounts: McpServer[], checks: Checks) =>
 /**
  * The accounts of one of Jian's connectors that is an MCP server underneath, a card of them:
  * each by the name agents reach it by, with how it stands, its sign-in when it asks for one,
- * and its removal, which asks first since its sign-in or keys go with it.
+ * and a menu to rename it, when the name the service gave does not tell it apart, or remove it,
+ * which asks first since its sign-in or keys go with it.
  */
 export function AccountList({
   service,
   accounts,
   checks,
+  rename,
   remove,
 }: {
   /** What the accounts are of, as the question before a removal names it: \"Linear\". */
   service: string;
   accounts: McpServer[];
   checks: Checks;
+  rename: (server: McpServer, name: string) => Promise<boolean>;
   remove: (server: McpServer) => Promise<boolean>;
 }) {
   return (
@@ -97,6 +106,7 @@ export function AccountList({
           service={service}
           server={server}
           check={checks.of(server.name)}
+          rename={(name) => rename(server, name)}
           remove={() => remove(server)}
         />
       ))}
@@ -108,15 +118,18 @@ function AccountRow({
   service,
   server,
   check,
+  rename,
   remove,
 }: {
   service: string;
   server: McpServer;
   check: Check;
+  rename: (name: string) => Promise<boolean>;
   remove: () => Promise<boolean>;
 }) {
   const { busy } = useActions();
   const [asking, setAsking] = useState(false);
+  const [renaming, setRenaming] = useState(false);
   const health = mcpHealth(check, server.disabledTools ?? []);
   const signIn = check.status?.authorizationUrl;
 
@@ -140,14 +153,38 @@ function AccountRow({
           Sign in
         </Action>
       )}
-      <Action
-        tone="danger"
-        size="small"
-        aria-label={`Remove ${server.name}`}
-        onClick={() => setAsking(true)}
-      >
-        Remove
-      </Action>
+      <Menu.Root>
+        <Menu.Trigger
+          aria-label={`Actions for ${server.name}`}
+          className={iconButton}
+          disabled={busy}
+        >
+          <Ellipsis size={15} aria-hidden="true" />
+        </Menu.Trigger>
+        <Menu.Portal>
+          <Menu.Positioner side="bottom" align="end" sideOffset={6} className="z-50">
+            <Menu.Popup className={menuPopup}>
+              <MenuEntry icon={<Pencil size={14} />} onClick={() => setRenaming(true)}>
+                Rename
+              </MenuEntry>
+              <MenuEntry icon={<Trash2 size={14} />} danger onClick={() => setAsking(true)}>
+                Remove
+              </MenuEntry>
+            </Menu.Popup>
+          </Menu.Positioner>
+        </Menu.Portal>
+      </Menu.Root>
+      <RenameDialog
+        open={renaming}
+        onOpenChange={setRenaming}
+        name={server.name}
+        renaming={{
+          what: 'account',
+          maxLength: 30,
+          hint: 'Agents reach the account by this name. Lowercase letters, digits and underscores; anything else becomes an underscore.',
+          rename,
+        }}
+      />
       <ConfirmDialog
         open={asking}
         onOpenChange={setAsking}

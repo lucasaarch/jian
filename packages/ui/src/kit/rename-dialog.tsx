@@ -15,6 +15,8 @@ export type Renaming = {
   heading?: string;
   /** The longest name the gateway keeps for it. */
   maxLength: number;
+  /** What the name is for, or what becomes of it, under the field. */
+  hint?: string;
   /** Whether the name was saved. */
   rename: (title: string) => Promise<boolean>;
 };
@@ -49,7 +51,7 @@ export function RenameDialog({
 
 function RenameForm({
   name,
-  renaming: { what, heading = `Rename ${what}`, maxLength, rename },
+  renaming: { what, heading = `Rename ${what}`, maxLength, hint, rename },
   close,
 }: {
   name: string;
@@ -81,6 +83,7 @@ function RenameForm({
         label="Name"
         value={title}
         maxLength={maxLength}
+        {...(hint ? { hint } : {})}
         autoComplete="off"
         onChange={(event) => setTitle(event.target.value)}
       />
