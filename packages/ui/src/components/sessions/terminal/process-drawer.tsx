@@ -1,6 +1,7 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
+import { Square } from 'lucide-react';
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { toast } from 'sonner';
 import { Action } from '../../../kit';
@@ -79,7 +80,7 @@ function ProcessView({
         {running && process && (
           <Action
             size="small"
-            tone="outline"
+            tone="danger"
             busy={stopping}
             onClick={async () => {
               setStopping(true);
@@ -87,6 +88,7 @@ function ProcessView({
               setStopping(false);
             }}
           >
+            <Square size={11} aria-hidden="true" fill="currentColor" />
             Stop
           </Action>
         )}
