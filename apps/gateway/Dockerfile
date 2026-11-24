@@ -88,6 +88,10 @@ FROM node:24-bookworm-slim
 # are drawn rather than boxes. Debian's ImageMagick policy keeps it off the network (no URL
 # coders) and caps its memory and disk, and without recommended packages no Ghostscript stands
 # behind it to run PostScript or PDF. Nothing here downloads from a third-party site.
+# Debian gives ping and mtr-packet the file capability cap_net_raw. Hosts such as Cubeship drop
+# NET_RAW and set no-new-privileges, and the kernel then refuses to exec such a binary at all
+# ("Operation not permitted"). Without the capability both fall back to ICMP datagram sockets,
+# which the runtime's ping_group_range allows to any user; `make image-test-network` holds it.
 RUN apt-get update && apt-get install -y --no-install-recommends \
       bash ffmpeg ca-certificates gnupg \
       imagemagick mediainfo sox libsox-fmt-mp3 \
@@ -99,10 +103,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       jq ripgrep fd-find gawk sed grep diffutils patch file tree less nano vim-tiny \
       zip unzip xz-utils bzip2 zstd \
       procps psmisc lsof iproute2 iputils-ping dnsutils netcat-openbsd \
+      traceroute mtr-tiny whois libcap2-bin \
       build-essential pkg-config libfontconfig1-dev \
       python3 python3-pip python3-venv python3-dev \
       sqlite3 postgresql-client \
  && ln -s /usr/bin/fdfind /usr/local/bin/fd \
+ && for f in /usr/bin/ping /usr/bin/mtr-packet; do \
+      if [ -n "$(getcap "$f")" ]; then setcap -r "$f"; fi; chmod u-s "$f"; \
+    done \
  && rm -rf /var/lib/apt/lists/*
 # Rust projects such as Lemon need a current toolchain plus rustfmt and clippy. Keep the
 # toolchain in the image, but leave CARGO_HOME unset so each workspace user gets a writable

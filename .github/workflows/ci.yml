@@ -253,6 +253,7 @@ jobs:
       - run: docker build -f apps/gateway/Dockerfile -t jian:ci .
       - run: make image-test-display IMAGE=jian VERSION=ci
       - run: make image-test-inspection IMAGE=jian VERSION=ci
+      - run: make image-test-network IMAGE=jian VERSION=ci
   image-web:
     needs: changes
     if: needs.changes.outputs.imageWeb == 'true'
