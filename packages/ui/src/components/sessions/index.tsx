@@ -42,6 +42,7 @@ import { SessionModel } from './model-picker';
 import { SessionObjective } from './objective';
 import { SessionProtection } from './protection-menu';
 import { SessionAgents } from './session-agents';
+import { SessionForwards } from './session-forwards';
 import { SessionProcesses } from './session-processes';
 import { SessionPulls } from './session-pulls';
 import { SessionWorktrees, useChangesFlag } from './session-worktrees';
@@ -208,6 +209,7 @@ export function Sessions({ api, mutate, busy }: SectionActions) {
       />
       <SessionProcesses api={api} profileId={profile.id} sessionId={active.id} />
       <SessionPulls api={api} profileId={profile.id} sessionId={active.id} />
+      <SessionForwards api={api} profileId={profile.id} sessionId={active.id} />
       {active.objective && <SessionObjective objective={active.objective} />}
     </span>
   );

@@ -1,6 +1,8 @@
 import type { RemoteResult, RemoteTask } from '@jian/contracts';
 import { executeFilesTask } from './files/index.ts';
 import { FILES_CAPABILITY } from './files/limits.ts';
+import { FORWARDS_CAPABILITY } from './forwards/limits.ts';
+import { createForwards, type ForwardAssignment } from './forwards/manager.ts';
 import { hostWording } from './host.ts';
 import type { Logger } from './log.ts';
 import { postResult } from './result.ts';
@@ -56,11 +58,17 @@ export async function detectCapabilities(): Promise<string[]> {
       await import('./computer/index.ts');
     const name = computerCapabilityName();
     return name && (await probeComputerCapability())
-      ? [SECRET_ENV_CAPABILITY, FILES_CAPABILITY, name, ...COMPUTER_PROTOCOL_CAPABILITIES]
-      : [SECRET_ENV_CAPABILITY, FILES_CAPABILITY];
+      ? [
+          SECRET_ENV_CAPABILITY,
+          FILES_CAPABILITY,
+          FORWARDS_CAPABILITY,
+          name,
+          ...COMPUTER_PROTOCOL_CAPABILITIES,
+        ]
+      : [SECRET_ENV_CAPABILITY, FILES_CAPABILITY, FORWARDS_CAPABILITY];
   } catch {
     // Computer Use unavailable until its helper is ready; shell tasks still work.
-    return [SECRET_ENV_CAPABILITY, FILES_CAPABILITY];
+    return [SECRET_ENV_CAPABILITY, FILES_CAPABILITY, FORWARDS_CAPABILITY];
   }
 }
 
@@ -169,6 +177,8 @@ export async function runWorker({
   const mismatch = compatibilityError(version, gatewayVersion);
   if (mismatch) log.warn(`${mismatch} Until then agents cannot use this machine.`);
   let failures = 0;
+  const forwards = createForwards({ base, headers, log });
+  signal?.addEventListener('abort', () => forwards.stop(), { once: true });
 
   while (!signal?.aborted) {
     try {
@@ -183,13 +193,20 @@ export async function runWorker({
       if (response.status === 401 && onUnauthorized) {
         log.warn('The gateway refused this worker token', { gateway: config.gateway });
         onUnauthorized();
+        forwards.stop();
         return;
       }
       if (!response.ok) throw new Error(`poll failed: HTTP ${response.status}`);
       if (failures > 0) log.info('Reconnected', { gateway: config.gateway });
       failures = 0;
       state.contact();
-      const { task } = (await response.json()) as { task: RemoteTask | null };
+      const polled = (await response.json()) as {
+        task: RemoteTask | null;
+        forwards?: ForwardAssignment[];
+      };
+      const { task } = polled;
+      // A gateway that predates forwards sends none: nothing stays open on this computer.
+      forwards.sync(polled.forwards ?? []);
       if (!task) {
         await pause(IDLE_MS);
         continue;
@@ -218,6 +235,7 @@ export async function runWorker({
       // Only once the gateway knows how the update went: the new release takes over from here.
       if (restart) {
         log.info('Restarting on the new release');
+        forwards.stop();
         await restart();
         return;
       }
@@ -231,6 +249,7 @@ export async function runWorker({
       await pause(wait);
     }
   }
+  forwards.stop();
 }
 
 /** An update task, on a host that has no way to update itself, fails with what to do instead. */

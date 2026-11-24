@@ -143,6 +143,7 @@ export async function createGateway(options: GatewayOptions): Promise<Gateway> {
       github,
       nativeBrowser: options.nativeBrowser,
       mode: options.mode,
+      role: options.role,
       ...(options.publicUrl ? { publicUrl: options.publicUrl } : {}),
       ...(options.timeZone ? { timeZone: options.timeZone } : {}),
     }),

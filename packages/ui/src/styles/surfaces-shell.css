@@ -171,6 +171,13 @@
   .session-pull:focus-visible {
     background: var(--glass-press);
   }
+  /* A forwarded port: its row, and the button that stops it at the end. */
+  .session-forward {
+    @apply flex items-center gap-1;
+  }
+  .session-forward > .session-pull {
+    @apply flex-1;
+  }
   .session-pull-mark {
     @apply mt-0.5 shrink-0;
     color: var(--good);

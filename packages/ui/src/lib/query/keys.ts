@@ -52,6 +52,8 @@ export const keys = {
     ['profile', profileId, 'pulls', ...(sessionId ? [sessionId] : [])] as const,
   sessionProcesses: (profileId: string, sessionId?: string) =>
     ['profile', profileId, 'processes', ...(sessionId ? [sessionId] : [])] as const,
+  sessionForwards: (profileId: string, sessionId?: string) =>
+    ['profile', profileId, 'forwards', ...(sessionId ? [sessionId] : [])] as const,
   sessionWorktrees: (profileId: string, sessionId?: string) =>
     ['profile', profileId, 'worktrees', ...(sessionId ? [sessionId] : [])] as const,
   sessionChanges: (profileId: string, sessionId: string, path?: string, worktree?: string) =>

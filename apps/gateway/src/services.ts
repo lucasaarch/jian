@@ -8,6 +8,7 @@ import { Decisions } from './decisions/service.js';
 import { Devices } from './devices/service.js';
 import { Errands } from './errands/service.js';
 import { FileLinks } from './file-links/service.js';
+import { Forwards } from './forwards/service.js';
 import type { GitHubIntegrations } from './integrations/github.js';
 import { Learning } from './learning/service.js';
 import { McpServers } from './mcp/service.js';
@@ -87,6 +88,12 @@ export type Services = {
   mobilePush: MobilePush;
   /** Absent unless this is a server gateway the internet reaches at an https:// address. */
   fileLinks?: FileLinks;
+  /**
+   * Absent unless this is a server gateway whose process serves the API and runs the agents:
+   * the tunnel's state is in memory, so the tool that opens a forward and the routes that carry
+   * it must share one process, and a computer's own gateway has no other computer to reach.
+   */
+  forwards?: Forwards;
 };
 
 /**
@@ -108,6 +115,7 @@ export function buildServices({
   publicUrl,
   nativeBrowser,
   mode,
+  role,
 }: {
   store: Store;
   vault: Vault;
@@ -120,6 +128,8 @@ export function buildServices({
   nativeBrowser?: import('./web/native.js').NativeBrowser;
   /** A desktop app's own gateway is on the owner's computer, which a server is not. */
   mode?: 'server' | 'local';
+  /** What this process does: forwards are held only where `all` serves and runs. */
+  role?: 'all' | 'api' | 'worker';
   /** Where the panel is served, which push services are given as the sender. */
   publicUrl?: string;
 }): Services {
@@ -277,6 +287,9 @@ export function buildServices({
     // desktop app's own gateway listens on loopback, and its agents send files instead.
     ...(mode !== 'local' && publicUrl?.startsWith('https://')
       ? { fileLinks: new FileLinks(store, publicUrl, clock) }
+      : {}),
+    ...(mode === 'server' && role === 'all'
+      ? { forwards: new Forwards(store, remote, clock) }
       : {}),
   };
 

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { forwardAssignmentSchema } from './forwards.js';
 
 /** macOS session posture from the worker (lock ≠ offline). */
 export const remoteUiStateSchema = z.enum(['unlocked', 'locked', 'display_asleep', 'unknown']);
@@ -532,7 +533,11 @@ export const remoteMachineUpdateSchema = z.strictObject({
   message: z.string(),
 });
 
-export const remoteWorkerPollSchema = z.strictObject({ task: remoteTaskSchema.nullable() });
+export const remoteWorkerPollSchema = z.strictObject({
+  task: remoteTaskSchema.nullable(),
+  /** The forwards this machine opens on its computer; a worker without `forwards-v1` ignores it. */
+  forwards: z.array(forwardAssignmentSchema),
+});
 export const remoteWorkerResultSchema = z.strictObject({ ok: z.literal(true) });
 export const remoteMachineDeleteSchema = z.strictObject({ id: z.uuid() });
 export type RemoteMachine = z.infer<typeof remoteMachineSchema>;

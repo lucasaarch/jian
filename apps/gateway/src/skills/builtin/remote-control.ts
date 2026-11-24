@@ -49,18 +49,29 @@ folder and its credentials.
 `;
 }
 
-export function remoteControlFor(machine?: { files: boolean }): Skill {
+export function remoteControlFor(machine?: { files: boolean }, forwards = false): Skill {
   return {
     name: 'remote-control',
     description: DESCRIPTION,
-    instructions: body(machine),
+    instructions: body(machine, forwards),
   };
 }
 
-/** As the panel lists it, for a conversation that targets no machine. */
-export const remoteControl: Skill = remoteControlFor();
+/** As the panel lists it: no machine targeted, every tool of a server gateway named. */
+export const remoteControl: Skill = remoteControlFor(undefined, true);
 
-function body(machine?: { files: boolean }): string {
+/** Only a run that has `forward_port` is told about it. */
+function forwardTools(forwards: boolean): string {
+  if (!forwards) return '';
+  return `- \`forward_port\` / \`close_forward\` — make a port this gateway's machine listens on (a dev server,
+  a preview) open on \`localhost\` of the owner's computer running the Jian app or Jian Remote, and
+  stop it. Give \`port\` and, with several computers, \`machine\`. The answer carries the address to
+  give the owner. It follows the conversation's protection mode, needs no approval on the computer,
+  and ends when the owner stops it or the gateway restarts.
+`;
+}
+
+function body(machine?: { files: boolean }, forwards = false): string {
   return `# Machines
 
 The owner connects computers in the panel under **Machines**. A desktop app connected to this
@@ -101,7 +112,7 @@ Load the \`remote\` tool group with \`load_tools\` before calling these tools.
   larger file fails, so split or compress it with \`run_remote_command\` first.
 - \`push_remote_file\` — write UTF-8 or base64 bytes to an absolute remote path, up to 300,000 bytes. A
   machine with an older Jian Remote takes only a few KB (the error names the size): update it first.
-
+${forwardTools(forwards)}
 ${whereTools(machine)} Do not claim a remote action
 succeeded unless the tool result confirms it (exit code, stdout, or \`ok: true\`).
 ${machineFiles(machine)}
