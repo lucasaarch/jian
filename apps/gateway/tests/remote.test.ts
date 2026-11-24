@@ -394,7 +394,7 @@ it('rotates the worker token and rejects the previous one', async () => {
       headers: { authorization: `Bearer ${body.token}` },
     });
     expect(fresh.statusCode).toBe(200);
-    expect(fresh.json()).toEqual({ task: null });
+    expect(fresh.json()).toEqual({ task: null, forwards: [] });
   } finally {
     await app.close();
   }
@@ -416,7 +416,7 @@ it('authenticates the worker API with its machine token, not the gateway admin t
       headers: { authorization: `Bearer ${created.token}` },
     });
     expect(accepted.statusCode).toBe(200);
-    expect(accepted.json()).toEqual({ task: null });
+    expect(accepted.json()).toEqual({ task: null, forwards: [] });
   } finally {
     await app.close();
   }
