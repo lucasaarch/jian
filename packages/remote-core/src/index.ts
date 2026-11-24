@@ -16,6 +16,7 @@ export {
   refusedFolders,
   setRefusedFolders,
 } from './files/index.ts';
+export { FORWARDS_CAPABILITY } from './forwards/limits.ts';
 export * from './host.ts';
 export * from './log.ts';
 export * from './result.ts';

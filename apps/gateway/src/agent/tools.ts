@@ -41,6 +41,7 @@ import {
 } from '../errands/email-parts.js';
 import type { Outreach } from '../errands/port.js';
 import type { FileLinks } from '../file-links/service.js';
+import type { Forwards } from '../forwards/service.js';
 import { X_TOOL_GROUPS } from '../integrations/x/catalog/index.js';
 import type { Media } from '../media/service.js';
 import { sameSubject } from '../memories/duplicates.js';
@@ -80,6 +81,7 @@ import { TIER_AT_ONCE } from '../tasks/tier.js';
 import { AskUserPause } from './ask-user.js';
 import { fileLinkTools } from './file-link-tools.js';
 import { type FileBackend, fileTools } from './files.js';
+import { forwardTools } from './forward-tools.js';
 import { remoteTools } from './remote-tools.js';
 import { artifactPage } from './results.js';
 import { type SecretAccess, shellTools } from './shell.js';
@@ -159,6 +161,8 @@ export type ToolServices = {
     Remote,
     'list' | 'execute' | 'executeComputer' | 'update' | 'executeFiles' | 'offersFiles'
   >;
+  /** Absent unless this process serves the API and runs the agents on a server: see `forwardTools`. */
+  forwards?: Pick<Forwards, 'create' | 'closePort'>;
   /** Absent on a gateway no link from outside reaches: see `fileLinkTools`. */
   fileLinks?: Pick<FileLinks, 'create' | 'revoke'>;
 };
@@ -210,6 +214,8 @@ export function skillFor(
     machine?: { files: boolean };
     /** The run has `send_email`. */
     email?: boolean;
+    /** The run has `forward_port`. */
+    forwards?: boolean;
     /** The run has `share_file_link`. */
     links?: boolean;
     /** What the run has of Secrets: a `run_command` that lends them, and tools to keep them. */
@@ -236,7 +242,7 @@ export function skillFor(
       subagent: Boolean(run.subagent),
     });
   }
-  if (skill === remoteControl) return remoteControlFor(can.machine);
+  if (skill === remoteControl) return remoteControlFor(can.machine, Boolean(can.forwards));
   if (skill === videoProduction) return videoProductionFor(can.machine);
   if (skill === ownerAndContacts) return ownerAndContactsFor(Boolean(can.email));
   if (skill === media) return mediaFor(Boolean(can.links));
@@ -807,6 +813,7 @@ export function profileTools(
             xConnected,
             worktrees,
             email,
+            forwards: Boolean(services.forwards),
             links: !remoteTarget && Boolean(services.fileLinks),
             secrets: !secrets ? 'none' : keepsSecrets ? 'manage' : 'lend',
             ...(remoteTarget ? { machine: { files: Boolean(machineFiles) } } : {}),
@@ -1249,6 +1256,9 @@ export function profileTools(
   if (services.remote) {
     Object.assign(tools, remoteTools(run, services.remote, services.store, remoteTarget));
   }
+  if (services.forwards) {
+    Object.assign(tools, forwardTools(run, services.forwards, remoteTarget));
+  }
 
   // Writing skills is part of every agent's work, not of managing itself: what it writes joins
   // the library every agent is offered, marked as its own, and only it and the owner change it.
@@ -1383,6 +1393,8 @@ export const TOOL_GROUPS = {
       'pull_remote_file',
       'push_remote_file',
       'update_remote_machine',
+      'forward_port',
+      'close_forward',
     ],
   },
   web: {

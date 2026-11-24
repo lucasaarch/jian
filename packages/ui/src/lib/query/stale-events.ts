@@ -43,6 +43,7 @@ export function affected(event: GatewayEvent, profileId: string): Stale[] {
       keys.sessions(profileId),
       keys.contexts(profileId),
       keys.sessionPulls(profileId),
+      keys.sessionForwards(profileId),
       keys.releases,
     );
   }
@@ -66,6 +67,8 @@ export function affected(event: GatewayEvent, profileId: string): Stale[] {
       ...(during ? [] : soon(keys.sessionWorktrees(profileId))),
     ];
   }
+  // A port opened, moved or stopped, by the agent, the computer or another window.
+  if (type.startsWith('forward.')) return soon(keys.sessionForwards(profileId));
   if (type.startsWith('profile.')) return soon(keys.profiles);
   if (type.startsWith('memory.')) return soon(keys.memories(profileId));
   // The agent writes schedules too, and every run changes when one ran last.
