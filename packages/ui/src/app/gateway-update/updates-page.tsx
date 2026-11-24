@@ -160,13 +160,28 @@ export function UpdatesPage() {
 }
 
 function Version({ status }: { status: UpdateStatus }) {
+  const client = useQueryClient();
+  const check = useMutation({
+    mutationFn: () => panelApi().checkForUpdates(),
+    onSuccess: (next) => {
+      client.setQueryData(keys.updates, next);
+      // The release notes' "behind" comes from the same read of GitHub.
+      void client.invalidateQueries({ queryKey: keys.releases });
+    },
+    onError: (failure) => notifyError(failure, 'Could not check for updates.'),
+  });
   const last = status.attempts[0];
+  const checked = status.checkedAt ? ` Checked ${date(status.checkedAt)}.` : '';
   return (
     <SettingsGroup title="Version">
       <SettingsRow
         title="This gateway"
         description={status.current ? `Jian ${status.current}` : 'A build with no release version'}
-      />
+      >
+        <Action tone="outline" size="small" busy={check.isPending} onClick={() => check.mutate()}>
+          Check for updates
+        </Action>
+      </SettingsRow>
       {status.latest ? (
         <SettingsRow
           title={`Jian ${status.latest.version} is available`}
@@ -185,8 +200,17 @@ function Version({ status }: { status: UpdateStatus }) {
             Update
           </Action>
         </SettingsRow>
+      ) : status.checkError ? (
+        <SettingsRow
+          title="Could not check for updates"
+          description={
+            <span role="alert" className="text-bad">
+              {status.checkError}.
+            </span>
+          }
+        />
       ) : (
-        <SettingsRow title="Up to date" description="No newer release on GitHub." />
+        <SettingsRow title="Up to date" description={`No newer release on GitHub.${checked}`} />
       )}
       {last && (
         <SettingsRow

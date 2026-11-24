@@ -24,21 +24,22 @@ async function setup({
   updates = [note('1.13.0')],
   respond = () => new Response(null, { status: 200 }),
   sidecar,
+  check = {},
 }: {
   updates?: ReleaseNote[];
   respond?: (url: string) => Response | Promise<Response>;
   sidecar?: UpdaterSidecar;
+  check?: { checkedAt?: string; error?: string };
 } = {}) {
   const services = await testServices();
   const sent: Sent[] = [];
+  const reads: boolean[] = [];
   const releases = {
-    releases: async (): Promise<Releases> => ({
-      version: '1.12.3',
-      notes: [],
-      unseen: [],
-      updates,
-      behind: updates.length,
-    }),
+    releases: async (fresh = false): Promise<Releases> => {
+      reads.push(fresh);
+      return { version: '1.12.3', notes: [], unseen: [], updates, behind: updates.length };
+    },
+    lastCheck: () => check,
   };
   const fetcher = (async (input: string | URL | Request, init?: RequestInit) => {
     const url = String(input);
@@ -55,7 +56,7 @@ async function setup({
     ...(sidecar ? { sidecar } : {}),
   });
   const app = createApp({ ...services, updates: updater, token, logger: false });
-  return { app, sent };
+  return { app, sent, reads };
 }
 
 const hook = (component: 'gateway' | 'web') => ({
@@ -77,6 +78,7 @@ describe('updating the gateway', () => {
     try {
       for (const [method, url] of [
         ['GET', '/v1/updates'],
+        ['POST', '/v1/updates/check'],
         ['POST', '/v1/updates'],
         ['PUT', '/v1/updates/webhooks/gateway'],
         ['DELETE', '/v1/updates/webhooks/web'],
@@ -124,6 +126,43 @@ describe('updating the gateway', () => {
       });
     } finally {
       await app.close();
+    }
+  });
+
+  it('reads GitHub now on a check, and says when it answered or why it did not', async () => {
+    const checkedAt = '2026-11-24T17:00:00.000Z';
+    const { app, reads } = await setup({ updates: [], check: { checkedAt } });
+    try {
+      const kept = await app.inject({ url: '/v1/updates', headers: admin });
+      const checked = await app.inject({
+        method: 'POST',
+        url: '/v1/updates/check',
+        headers: admin,
+      });
+      expect(checked.statusCode, checked.body).toBe(200);
+      expect(reads).toEqual([false, true]);
+      expect(kept.json()).toMatchObject({ checkedAt });
+      expect(checked.json()).toMatchObject({ checkedAt });
+      expect(checked.json()).not.toHaveProperty('latest');
+      expect(checked.json()).not.toHaveProperty('checkError');
+    } finally {
+      await app.close();
+    }
+
+    const refused = await setup({ check: { checkedAt, error: 'GitHub answered HTTP 502' } });
+    try {
+      const checked = await refused.app.inject({
+        method: 'POST',
+        url: '/v1/updates/check',
+        headers: admin,
+      });
+      // What GitHub listed before stays offered beside the reason.
+      expect(checked.json()).toMatchObject({
+        latest: { version: '1.13.0' },
+        checkError: 'GitHub answered HTTP 502',
+      });
+    } finally {
+      await refused.app.close();
     }
   });
 
@@ -295,7 +334,10 @@ describe('building a webhook request', () => {
     const updater = new GatewayUpdates(
       services.store,
       services.gatewayVault,
-      { releases: async () => ({ notes: [], unseen: [], updates: [], behind: 0 }) },
+      {
+        releases: async () => ({ notes: [], unseen: [], updates: [], behind: 0 }),
+        lastCheck: () => ({}),
+      },
       fetch,
       { local: false },
     );

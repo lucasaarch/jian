@@ -11,6 +11,12 @@ const OWNER = 'owner-relaunch';
 
 const VERSION = /^v?(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?$/;
 const RELEASES_API = 'https://api.github.com/repos/lucasaarch/jian/releases?per_page=100';
+/**
+ * GitHub allows sixty unauthenticated reads an hour per address: four an hour leaves room for
+ * the stars and for "Check for updates", which reads at once. A failed read is asked again sooner.
+ */
+const FRESH_MS = 15 * 60_000;
+const RETRY_MS = 5 * 60_000;
 
 /**
  * Where this build's notes are: copied next to the compiled server by the build, or read from
@@ -156,7 +162,8 @@ export class ReleaseNotes {
     throw new GatewayError(404, 'Release picture not found');
   }
 
-  async releases(): Promise<Releases> {
+  /** `fresh` reads GitHub now rather than its answer kept from earlier. */
+  async releases(fresh = false): Promise<Releases> {
     const running = this.version;
     // A stable installation reads stable releases; the candidates it never ran are noise.
     const candidate = Boolean(running && VERSION.exec(running)?.[4]);
@@ -169,7 +176,7 @@ export class ReleaseNotes {
         this.notes.filter((note) => !note.prerelease).slice(0, 1);
     const seen = await this.seen();
 
-    const updates = running ? await this.updates(running, candidate) : [];
+    const updates = running ? await this.updates(running, candidate, fresh) : [];
 
     return {
       ...(running ? { version: running } : {}),
@@ -217,47 +224,66 @@ export class ReleaseNotes {
     return row?.version;
   }
 
-  private remote?: { notes: ReleaseNote[]; until: number };
+  private remote?: { notes: ReleaseNote[]; until: number; checkedAt?: string; error?: string };
 
-  private async updates(running: string, candidate: boolean): Promise<ReleaseNote[]> {
+  /** When GitHub last answered, and why the latest read failed, if it did. */
+  lastCheck(): { checkedAt?: string; error?: string } {
+    const { checkedAt, error } = this.remote ?? {};
+    return { ...(checkedAt ? { checkedAt } : {}), ...(error ? { error } : {}) };
+  }
+
+  private async updates(
+    running: string,
+    candidate: boolean,
+    fresh: boolean,
+  ): Promise<ReleaseNote[]> {
     if (!this.fetcher) return [];
     const now = Date.now();
-    if (this.remote && this.remote.until > now) {
+    if (!fresh && this.remote && this.remote.until > now) {
       return this.filterUpdates(this.remote.notes, running, candidate);
     }
 
-    const notes = await this.fetcher(RELEASES_API, {
-      headers: { accept: 'application/vnd.github+json', 'user-agent': 'jian-gateway' },
-      signal: AbortSignal.timeout(5_000),
-    })
-      .then(async (response) => (response.ok ? ((await response.json()) as unknown) : []))
-      .then((body) =>
-        Array.isArray(body)
-          ? body.flatMap((release) => {
-              if (!release || typeof release !== 'object') return [];
-              const item = release as Record<string, unknown>;
-              const tag = typeof item.tag_name === 'string' ? item.tag_name : '';
-              const body = typeof item.body === 'string' ? item.body.trim() : '';
-              const date =
-                typeof item.published_at === 'string' ? item.published_at.slice(0, 10) : '';
-              const match = VERSION.exec(tag);
-              return match && body && /^\d{4}-\d{2}-\d{2}$/.test(date)
-                ? [
-                    {
-                      version: tag.replace(/^v/, ''),
-                      date,
-                      body,
-                      prerelease: Boolean(item.prerelease),
-                    },
-                  ]
-                : [];
-            })
-          : [],
-      )
-      .catch(() => [] as ReleaseNote[]);
+    const read = await this.readGitHub(this.fetcher);
+    this.remote =
+      'notes' in read
+        ? { notes: read.notes, until: now + FRESH_MS, checkedAt: new Date(now).toISOString() }
+        : // A failed read keeps what GitHub said before, so a release it listed stays offered,
+          // and says why: "up to date" is never what a refused read shows.
+          {
+            notes: this.remote?.notes ?? [],
+            until: now + RETRY_MS,
+            ...(this.remote?.checkedAt ? { checkedAt: this.remote.checkedAt } : {}),
+            error: read.error,
+          };
+    return this.filterUpdates(this.remote.notes, running, candidate);
+  }
 
-    this.remote = { notes, until: now + (notes.length ? 60 * 60_000 : 10 * 60_000) };
-    return this.filterUpdates(notes, running, candidate);
+  private async readGitHub(
+    fetcher: typeof fetch,
+  ): Promise<{ notes: ReleaseNote[] } | { error: string }> {
+    try {
+      const response = await fetcher(RELEASES_API, {
+        headers: { accept: 'application/vnd.github+json', 'user-agent': 'jian-gateway' },
+        signal: AbortSignal.timeout(10_000),
+      });
+      if (!response.ok) {
+        await response.body?.cancel().catch(() => {});
+        return {
+          error:
+            response.headers.get('x-ratelimit-remaining') === '0'
+              ? 'GitHub’s hourly limit for this server’s address is used up; try again later'
+              : `GitHub answered HTTP ${response.status}`,
+        };
+      }
+      return { notes: parseReleases(await response.json()) };
+    } catch (error) {
+      return {
+        error:
+          error instanceof Error && error.name === 'TimeoutError'
+            ? 'GitHub did not answer in time'
+            : 'GitHub could not be reached',
+      };
+    }
   }
 
   private filterUpdates(notes: ReleaseNote[], running: string, candidate: boolean) {
@@ -267,4 +293,28 @@ export class ReleaseNotes {
       )
       .sort((a, b) => compareVersions(b.version, a.version));
   }
+}
+
+/** GitHub's releases list, kept to the published ones with a version tag, a date and notes. */
+function parseReleases(body: unknown): ReleaseNote[] {
+  return Array.isArray(body)
+    ? body.flatMap((release) => {
+        if (!release || typeof release !== 'object') return [];
+        const item = release as Record<string, unknown>;
+        const tag = typeof item.tag_name === 'string' ? item.tag_name : '';
+        const body = typeof item.body === 'string' ? item.body.trim() : '';
+        const date = typeof item.published_at === 'string' ? item.published_at.slice(0, 10) : '';
+        const match = VERSION.exec(tag);
+        return match && body && /^\d{4}-\d{2}-\d{2}$/.test(date)
+          ? [
+              {
+                version: tag.replace(/^v/, ''),
+                date,
+                body,
+                prerelease: Boolean(item.prerelease),
+              },
+            ]
+          : [];
+      })
+    : [];
 }

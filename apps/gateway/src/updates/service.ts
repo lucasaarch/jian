@@ -90,13 +90,15 @@ export class GatewayUpdates {
   constructor(
     private readonly store: Store,
     private readonly vault: GatewayVault,
-    private readonly releases: Pick<ReleaseNotes, 'releases'>,
+    private readonly releases: Pick<ReleaseNotes, 'releases' | 'lastCheck'>,
     private readonly fetcher: typeof fetch,
     private readonly options: { local: boolean; sidecar?: UpdaterSidecar; clock?: Clock },
   ) {}
 
-  async status(): Promise<UpdateStatus> {
-    const { version, updates } = await this.releases.releases();
+  /** `fresh` asks GitHub now: "Check for updates", right after a release went out. */
+  async status(fresh = false): Promise<UpdateStatus> {
+    const { version, updates } = await this.releases.releases(fresh);
+    const { checkedAt, error } = this.releases.lastCheck();
     const latest = updates[0];
     const [gateway, web] = await Promise.all([this.saved('gateway'), this.saved('web')]);
 
@@ -105,6 +107,8 @@ export class GatewayUpdates {
       ...(latest
         ? { latest: { version: latest.version, date: latest.date, body: latest.body } }
         : {}),
+      ...(checkedAt ? { checkedAt } : {}),
+      ...(error ? { checkError: error } : {}),
       // Every release between the running one and the newest: skipping one skips no warning.
       backup: updates.some((note) => needsBackup(note.body)),
       method: this.method(Boolean(gateway)),

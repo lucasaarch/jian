@@ -12,6 +12,8 @@ export function registerUpdateRoutes(
   // status names only its origin, its method and the names of its parameters and headers.
   app.get('/v1/updates', async () => deps.updates.status());
 
+  app.post('/v1/updates/check', async () => deps.updates.status(true));
+
   app.post('/v1/updates', async (request) => deps.updates.update(request.body));
 
   app.put<{ Params: { component: UpdateComponent } }>(

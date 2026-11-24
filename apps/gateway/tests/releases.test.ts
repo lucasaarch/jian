@@ -105,6 +105,51 @@ describe('the release notes the panel announces', () => {
     expect(candidate.updates.map((item) => item.version)).toEqual(['2.3.0', '2.2.0-rc.2']);
   });
 
+  it('reads GitHub again when asked, and keeps what it said through a refused read', async () => {
+    const { store } = await testServices();
+    const release = (tag: string) => ({
+      tag_name: tag,
+      body: 'Notes',
+      published_at: '2026-11-24T00:00:00Z',
+    });
+    const answers: Response[] = [
+      Response.json([release('v2.1.0')]),
+      Response.json([release('v2.2.0'), release('v2.1.0')]),
+      new Response('{}', { status: 403, headers: { 'x-ratelimit-remaining': '0' } }),
+      new Response('{}', { status: 502 }),
+    ];
+    let reads = 0;
+    const fetcher = (async () => {
+      reads += 1;
+      const answer = answers.shift();
+      if (!answer) throw new TypeError('fetch failed');
+      return answer;
+    }) as typeof fetch;
+    const notes = new ReleaseNotes(store, '2.0.0', [], fetcher);
+    const newest = async (fresh?: boolean) => (await notes.releases(fresh)).updates[0]?.version;
+
+    expect(await newest()).toBe('2.1.0');
+    const checkedAt = notes.lastCheck().checkedAt;
+    expect(checkedAt).toMatch(/^\d{4}-/);
+    // Kept: a page load does not ask GitHub again.
+    expect(await newest()).toBe('2.1.0');
+    expect(reads).toBe(1);
+
+    // A release just went out: a check reads it at once.
+    expect(await newest(true)).toBe('2.2.0');
+    expect(reads).toBe(2);
+    expect(notes.lastCheck().error).toBeUndefined();
+
+    // GitHub refuses: the release it listed stays, and the reason is said.
+    expect(await newest(true)).toBe('2.2.0');
+    expect(notes.lastCheck().error).toMatch(/hourly limit/);
+    expect(await newest(true)).toBe('2.2.0');
+    expect(notes.lastCheck().error).toBe('GitHub answered HTTP 502');
+    expect(await newest(true)).toBe('2.2.0');
+    expect(notes.lastCheck()).toMatchObject({ error: 'GitHub could not be reached' });
+    expect(notes.lastCheck().checkedAt).toBeDefined();
+  });
+
   it("serves a note's pictures to the owner, and nothing outside their folder", async () => {
     const directory = mkdtempSync(join(tmpdir(), 'jian-release-media-'));
     mkdirSync(join(directory, 'media'));

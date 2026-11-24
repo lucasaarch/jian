@@ -686,6 +686,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/updates/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Required permission: admin. */
+        post: operations["checkForUpdates"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/updates/webhooks/{component}": {
         parameters: {
             query?: never;
@@ -8639,6 +8656,9 @@ export interface operations {
                             date: string;
                             body: string;
                         };
+                        /** Format: date-time */
+                        checkedAt?: string;
+                        checkError?: string;
                         backup: boolean;
                         /** @enum {string} */
                         method: "none" | "webhook" | "sidecar";
@@ -8889,6 +8909,159 @@ export interface operations {
             };
         };
     };
+    checkForUpdates: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        current?: string;
+                        /** @description The newest stable release above the running one, when GitHub could be reached. */
+                        latest?: {
+                            version: string;
+                            date: string;
+                            body: string;
+                        };
+                        /** Format: date-time */
+                        checkedAt?: string;
+                        checkError?: string;
+                        backup: boolean;
+                        /** @enum {string} */
+                        method: "none" | "webhook" | "sidecar";
+                        webhooks: {
+                            gateway?: {
+                                origin: string;
+                                /** @enum {string} */
+                                method: "POST" | "PUT" | "PATCH" | "GET";
+                                params: string[];
+                                headers: string[];
+                                body: boolean;
+                                /** Format: date-time */
+                                updatedAt: string;
+                            };
+                            web?: {
+                                origin: string;
+                                /** @enum {string} */
+                                method: "POST" | "PUT" | "PATCH" | "GET";
+                                params: string[];
+                                headers: string[];
+                                body: boolean;
+                                /** Format: date-time */
+                                updatedAt: string;
+                            };
+                        };
+                        attempts: {
+                            /** Format: date-time */
+                            at: string;
+                            from?: string;
+                            version: string;
+                            /** @enum {string} */
+                            method: "webhook" | "sidecar";
+                            ok: boolean;
+                            results: {
+                                /** @enum {string} */
+                                component: "gateway" | "web";
+                                ok: boolean;
+                                status?: number;
+                                error?: string;
+                            }[];
+                        }[];
+                    };
+                };
+            };
+            /** @description Error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
     saveUpdateWebhook: {
         parameters: {
             query?: never;
@@ -8940,6 +9113,9 @@ export interface operations {
                             date: string;
                             body: string;
                         };
+                        /** Format: date-time */
+                        checkedAt?: string;
+                        checkError?: string;
                         backup: boolean;
                         /** @enum {string} */
                         method: "none" | "webhook" | "sidecar";
@@ -9092,6 +9268,9 @@ export interface operations {
                             date: string;
                             body: string;
                         };
+                        /** Format: date-time */
+                        checkedAt?: string;
+                        checkError?: string;
                         backup: boolean;
                         /** @enum {string} */
                         method: "none" | "webhook" | "sidecar";
