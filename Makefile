@@ -17,7 +17,7 @@ COMPOSE_DEV := docker compose -f compose.dev.yaml
 
 .PHONY: help install setup up pull down logs ps dev db-up db-stop db-reset changelog check-rust \
         check test test-integration lint format build image image-push \
-        release rollback test-display image-test-display image-test-inspection \
+        release rollback test-display image-test-display image-test-inspection image-test-network \
         preview-up preview-down preview-status preview-token
 
 ##@ General
@@ -122,6 +122,11 @@ image-test-inspection: ## Real image page inspection, confined as in production;
 	docker run --rm --security-opt=no-new-privileges --cap-drop=ALL \
 		-v "$(CURDIR)/apps/gateway/test-inspection.mjs:/app/test-inspection.mjs:ro" \
 		--entrypoint node $(IMAGE):$(VERSION) /app/test-inspection.mjs
+
+image-test-network: ## Network tools run without NET_RAW, as on hosts that drop it
+	docker run --rm --security-opt=no-new-privileges --cap-drop=ALL --entrypoint sh \
+		$(IMAGE):$(VERSION) -c 'ping -c1 -W2 127.0.0.1 && mtr -r -n -c1 127.0.0.1 \
+		&& traceroute -n -m1 127.0.0.1 && dig -v && command -v whois'
 
 image-push: ## Push the locally built images; the multi-architecture indexes come from CI
 	docker push $(IMAGE):$(VERSION)
