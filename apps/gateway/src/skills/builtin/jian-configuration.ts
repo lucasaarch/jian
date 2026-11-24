@@ -31,7 +31,8 @@ Shared by the whole installation.
   public address), lists paired phones and when each was last seen, sets notification previews
   per phone, and revokes one.
 - **Updates**: on a server gateway, installs a newer release through the compose \`updater\`
-  service or a redeploy webhook per component (\`{version}\` filled in). Owner-only.
+  service or a redeploy webhook per component (\`{version}\` filled in). Owner-only. GitHub is
+  read every 15 minutes; Check for updates reads it at once.
 - **Connection**: on a server gateway, how this panel reaches it.
 
 ## Plugins

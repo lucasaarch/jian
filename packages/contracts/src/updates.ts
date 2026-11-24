@@ -78,6 +78,10 @@ export const updateStatusSchema = z.strictObject({
     .strictObject({ version: z.string(), date: z.string(), body: z.string() })
     .optional()
     .describe('The newest stable release above the running one, when GitHub could be reached.'),
+  /** When GitHub last answered the releases read; absent before the first one. */
+  checkedAt: z.iso.datetime().optional(),
+  /** Why the latest read of GitHub failed; `latest` still holds what it said before. */
+  checkError: z.string().optional(),
   /** A release on the way says to back up first, or that it drops data. */
   backup: z.boolean(),
   /** How an update is carried out: the compose updater wins over webhooks when both exist. */

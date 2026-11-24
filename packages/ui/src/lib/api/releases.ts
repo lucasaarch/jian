@@ -12,6 +12,8 @@ export const releaseCalls = (client: Client) => ({
   health: () => result(client.GET('/health')),
   /** How this server installation updates itself, and what it last tried. */
   updateStatus: () => result(client.GET('/v1/updates')),
+  /** The same, with GitHub read now rather than its answer kept from earlier. */
+  checkForUpdates: () => result(client.POST('/v1/updates/check')),
   startUpdate: (version: string, confirmBackup: boolean) =>
     result(client.POST('/v1/updates', { body: { version, confirmBackup } })),
   saveUpdateWebhook: (component: UpdateComponent, body: UpdateWebhookInput) =>

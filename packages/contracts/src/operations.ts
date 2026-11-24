@@ -710,6 +710,13 @@ export const operations: Operation[] = [
   },
   {
     method: 'POST',
+    path: '/v1/updates/check',
+    operationId: 'checkForUpdates',
+    access: 'admin',
+    response: updateStatusSchema,
+  },
+  {
+    method: 'POST',
     path: '/v1/updates',
     operationId: 'startUpdate',
     access: 'admin',
