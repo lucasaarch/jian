@@ -12,6 +12,7 @@ import { GatewayError } from '../core/errors.js';
 import type { ProfileParams, SessionParams } from '../http/params.js';
 import { conflictsBrief } from '../integrations/github-items.js';
 import type { RunWriter } from '../runs/port.js';
+import type { Terminals } from '../terminals/service.js';
 import type { Worktrees } from '../worktrees/service.js';
 import type { SessionWriter } from './port.js';
 import type { Sessions } from './service.js';
@@ -41,6 +42,8 @@ type SessionRouteServices = {
     >;
   runs: RunWriter;
   worktrees: Pick<Worktrees, 'conversationSessions' | 'recorded' | 'clear'>;
+  /** Absent on a gateway whose runs are elsewhere: it holds no commands of the agent. */
+  terminals?: Pick<Terminals, 'forgetSession'>;
   // History spans every message of a profile or a session, so it comes from coordination.
   coordination: Pick<Coordination, 'history'>;
 };
@@ -85,6 +88,8 @@ export function registerSessionRoutes(app: FastifyInstance, deps: SessionRouteSe
         records.push(...(await deps.worktrees.recorded(profileId, holder)));
       }
       const deleted = await deps.sessions.deleteSession(profileId, sessionId);
+      // What the agent still ran in this conversation ends with it.
+      await deps.terminals?.forgetSession(profileId, sessionId);
       // The conversation is gone either way; a folder that could not be removed is logged.
       await deps.worktrees
         .clear(profileId, records)

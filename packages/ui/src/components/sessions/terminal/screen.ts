@@ -104,7 +104,12 @@ const screens = new Map<string, TerminalScreen>();
 const themed = new Set<() => void>();
 let themeWatch: MutationObserver | undefined;
 
-function createScreen(api: TerminalApi, profileId: string, terminalId: string): TerminalScreen {
+function createScreen(
+  api: TerminalApi,
+  profileId: string,
+  terminalId: string,
+  readOnly: boolean,
+): TerminalScreen {
   const element = document.createElement('div');
   element.className = 'terminal-screen';
   let term: XTerm | undefined;
@@ -137,7 +142,11 @@ function createScreen(api: TerminalApi, profileId: string, terminalId: string): 
       if (disposed) return;
       const made = new xterm.Terminal({
         allowTransparency: true,
-        cursorBlink: true,
+        cursorBlink: !readOnly,
+        // A command the agent runs is only watched: nothing typed here reaches it.
+        disableStdin: readOnly,
+        cursorStyle: readOnly ? 'underline' : 'block',
+        cursorInactiveStyle: readOnly ? 'none' : 'outline',
         fontFamily: FONT_FAMILY,
         fontSize: FONT_SIZE,
         lineHeight: LINE_HEIGHT,
@@ -146,8 +155,10 @@ function createScreen(api: TerminalApi, profileId: string, terminalId: string): 
       });
       fit = new addon.FitAddon();
       made.loadAddon(fit);
-      made.onData(link.send);
-      made.onResize(link.resize);
+      if (!readOnly) {
+        made.onData(link.send);
+        made.onResize(link.resize);
+      }
       // Ctrl+C belongs to the shell, so copying takes Shift as well, as terminals do outside
       // macOS, where Cmd+C is the browser's own and needs nothing here.
       made.attachCustomKeyEventHandler((event) => {
@@ -187,7 +198,7 @@ function createScreen(api: TerminalApi, profileId: string, terminalId: string): 
         fit.fit();
         fitted = true;
         // Told even when nothing changed here: the shell may have been started at another size.
-        link.resize({ cols: term.cols, rows: term.rows });
+        if (!readOnly) link.resize({ cols: term.cols, rows: term.rows });
       };
 
       container.append(element);
@@ -196,7 +207,7 @@ function createScreen(api: TerminalApi, profileId: string, terminalId: string): 
         // Opened where it can be measured: a terminal opened off the page has no letter size.
         if (!term.element) term.open(element);
         refit();
-        if (mayTakeFocus()) term.focus();
+        if (!readOnly && mayTakeFocus()) term.focus();
       });
       const unwatch = watchSize(refit, container);
 
@@ -240,10 +251,12 @@ export function terminalScreen(
   api: TerminalApi,
   profileId: string,
   terminalId: string,
+  /** A command the agent runs, which the owner reads and does not type into. */
+  readOnly = false,
 ): TerminalScreen {
   let screen = screens.get(terminalId);
   if (!screen) {
-    screen = createScreen(api, profileId, terminalId);
+    screen = createScreen(api, profileId, terminalId, readOnly);
     screens.set(terminalId, screen);
   }
 
@@ -256,7 +269,11 @@ export const shownTerminal = (terminalId: string) => screens.get(terminalId);
 // shell goes on behind a conversation's saved tab, and what it printed is read again on return.
 useCrew.subscribe((state, previous) => {
   if (state.tabs === previous.tabs || !screens.size) return;
-  const open = new Set(state.tabs.map((tab) => (tab.kind === 'terminal' ? tab.terminalId : '')));
+  const open = new Set(
+    state.tabs.map((tab) =>
+      tab.kind === 'terminal' ? tab.terminalId : tab.kind === 'process' ? tab.processId : '',
+    ),
+  );
 
   for (const [terminalId, screen] of [...screens]) {
     if (open.has(terminalId)) continue;

@@ -187,6 +187,19 @@ export const sessionCalls = (client: Client, origin = '') => ({
         params: { path: { profileId, sessionId } },
       }),
     ),
+  /** The commands the agent runs in the background for a conversation, running and ended. */
+  sessionProcesses: (profileId: string, sessionId: string) =>
+    result(
+      client.GET('/v1/profiles/{profileId}/sessions/{sessionId}/processes', {
+        params: { path: { profileId, sessionId } },
+      }),
+    ),
+  stopSessionProcess: (profileId: string, sessionId: string, processId: string) =>
+    result(
+      client.POST('/v1/profiles/{profileId}/sessions/{sessionId}/processes/{processId}/stop', {
+        params: { path: { profileId, sessionId, processId } },
+      }),
+    ),
   /** The conversation's isolated checkouts, and where each stands against the folder it came from. */
   sessionWorktrees: (profileId: string, sessionId: string) =>
     result(

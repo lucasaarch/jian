@@ -16,6 +16,7 @@ export * from './message-actions.js';
 export * from './openai.js';
 export * from './operations.js';
 export * from './peers.js';
+export * from './processes.js';
 export * from './profile.js';
 export * from './projects.js';
 export * from './providers.js';

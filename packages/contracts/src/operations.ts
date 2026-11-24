@@ -81,6 +81,7 @@ import {
   openAiErrorSchema,
   openAiModelListSchema,
 } from './openai.js';
+import { agentProcessParamsSchema, agentProcessSchema } from './processes.js';
 import {
   gatewaySessionInputSchema,
   gatewaySessionTargetSchema,
@@ -1589,6 +1590,21 @@ export const operations: Operation[] = [
     body: githubFixConflictsInputSchema,
     response: runRecordSchema,
     status: 202,
+  },
+  {
+    method: 'GET',
+    path: `${session}/processes`,
+    operationId: 'listSessionProcesses',
+    access: 'admin',
+    response: z.array(agentProcessSchema),
+  },
+  {
+    method: 'POST',
+    path: `${session}/processes/:processId/stop`,
+    operationId: 'stopSessionProcess',
+    access: 'admin',
+    params: agentProcessParamsSchema,
+    response: agentProcessSchema,
   },
   {
     method: 'GET',

@@ -150,9 +150,10 @@ whole window, its pages listed where the sidebar was.
   you created in it through GitHub's MCP server, your subagents' included; one you only linked or
   read is not counted. That one opens the list of them with how each stands — Watching while the
   gateway watches it for you, or Not watched with the reason — and each opens in the Inspector.
-- **The subagents badge**, at the start of that row, shows while any of your subagents in this
-  conversation is queued or running ("2 agents working"). It lists each one with what it is doing
-  and for how long, and opens it in the Inspector; it goes away when the last one ends.
+- **The subagents and processes badges**, at the start of that row, show while a subagent
+  is queued or running ("2 agents working") or a background command runs ("1 process").
+  Each lists them with their time and opens in the Inspector; a process is a read-only terminal
+  with Stop.
 - **The worktree badge**, left of the pull request badge when you have a worktree, is named after
   it (with several it counts them). It offers Merge into the base branch, Update from the base
   branch and Discard, plus Open pull request when the source's origin is a GitHub repository the

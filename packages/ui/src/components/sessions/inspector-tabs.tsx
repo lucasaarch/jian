@@ -19,7 +19,7 @@ function TabIcon({ tab }: { tab: InspectorTab }) {
   if (tab.kind === 'changes') return <FileCode2 size={13} />;
   if (tab.kind === 'files') return <FolderTree size={13} />;
   if (tab.kind === 'artifacts') return <Shapes size={13} />;
-  if (tab.kind === 'terminal') return <SquareTerminal size={13} />;
+  if (tab.kind === 'terminal' || tab.kind === 'process') return <SquareTerminal size={13} />;
   return <Bot size={13} />;
 }
 

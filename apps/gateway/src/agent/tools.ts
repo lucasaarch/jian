@@ -80,6 +80,7 @@ import { TIER_AT_ONCE } from '../tasks/tier.js';
 import { AskUserPause } from './ask-user.js';
 import { fileLinkTools } from './file-link-tools.js';
 import { type FileBackend, fileTools } from './files.js';
+import type { ProcessAccess } from './process-tools.js';
 import { remoteTools } from './remote-tools.js';
 import { artifactPage } from './results.js';
 import { type SecretAccess, shellTools } from './shell.js';
@@ -161,6 +162,8 @@ export type ToolServices = {
   >;
   /** Absent on a gateway no link from outside reaches: see `fileLinkTools`. */
   fileLinks?: Pick<FileLinks, 'create' | 'revoke'>;
+  /** The agent's background commands: only on a gateway whose runs and panel share a process. */
+  processes?: ProcessAccess['processes'];
 };
 
 /**
@@ -214,6 +217,8 @@ export function skillFor(
     links?: boolean;
     /** What the run has of Secrets: a `run_command` that lends them, and tools to keep them. */
     secrets?: SecretsRun;
+    /** The run can start commands in the background and read and stop them. */
+    processes?: boolean;
   },
   /** The skills of the conversation's workspaces, named apart from the library's already. */
   projectSkills: readonly Skill[] = [],
@@ -241,7 +246,7 @@ export function skillFor(
   if (skill === ownerAndContacts) return ownerAndContactsFor(Boolean(can.email));
   if (skill === media) return mediaFor(Boolean(can.links));
   if (skill && isMachineTools(skill))
-    return machineToolsFor(onOwnerComputer(), can.secrets ?? 'none');
+    return machineToolsFor(onOwnerComputer(), can.secrets ?? 'none', Boolean(can.processes));
   return skill;
 }
 
@@ -809,6 +814,7 @@ export function profileTools(
             email,
             links: !remoteTarget && Boolean(services.fileLinks),
             secrets: !secrets ? 'none' : keepsSecrets ? 'manage' : 'lend',
+            processes: !remoteTarget && Boolean(services.processes),
             ...(remoteTarget ? { machine: { files: Boolean(machineFiles) } } : {}),
           },
           projectSkills,
@@ -1240,8 +1246,18 @@ export function profileTools(
   // The shell and the file tools are always available, and so is every connected
   // machine; a conversation aimed at one machine works there instead of locally: its commands
   // through run_remote_command, its files through the same file tools when its worker has them.
-  if (!remoteTarget) Object.assign(tools, shellTools(gitAccess, secrets));
-  else if (machineFiles) Object.assign(tools, fileTools(machineFiles));
+  if (!remoteTarget) {
+    Object.assign(
+      tools,
+      shellTools(
+        gitAccess,
+        secrets,
+        services.processes
+          ? { processes: services.processes, profileId: run.profileId, sessionId: run.sessionId }
+          : undefined,
+      ),
+    );
+  } else if (machineFiles) Object.assign(tools, fileTools(machineFiles));
   // A link reads the gateway's own files, so only a run whose files are here gets one.
   if (!remoteTarget && services.fileLinks) {
     Object.assign(tools, fileLinkTools(services.fileLinks, run));
@@ -1367,7 +1383,7 @@ export const TOOL_GROUPS = {
   },
   shell: {
     summary: 'run commands on the machine this gateway runs on',
-    tools: ['run_command'],
+    tools: ['run_command', 'process_output', 'stop_process'],
   },
   secrets: {
     summary: 'list, save, delete and share the Secrets your commands use',
