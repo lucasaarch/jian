@@ -204,14 +204,22 @@ anywhere the owner did not ask.
 
 `;
 
-const LIMITS = `## Limits of a command
+const LIMITS = (processes: boolean) => `## Limits of a command
 
 - A command stops after at most two minutes (\`timeoutMs\`, 30 seconds unless you raise it).
 - Output past about 60,000 characters keeps its first and last 30,000; the middle is not kept,
   and a command that prints more than 8 MB is stopped. Send a long output to a file and read the
   part you need.
-- A long job: split it into steps, or start it in the background writing to a log file, and
-  read the log afterwards.
+${
+  processes
+    ? `- A server, a watcher or a long job: start it with \`background: true\`. It answers at once
+  with a \`processId\` and what it printed first, and runs with no time limit. Read it with
+  \`process_output\` (no id lists this conversation's), end it with \`stop_process\`, which also
+  ends what it started. The owner sees it above the composer and can stop it too. At most 8 run
+  at once, and they all end when the gateway restarts.`
+    : `- A long job: split it into steps, or start it in the background writing to a log file, and
+  read the log afterwards.`
+}
 
 ## Before you run something
 
@@ -224,11 +232,11 @@ here may approve, say what you would run and do not try to reach the same effect
 
 For reading and changing code, load the \`coding-work\` skill.`;
 
-const composed = (owner: boolean, secrets: SecretsRun): string => {
+const composed = (owner: boolean, secrets: SecretsRun, processes: boolean): string => {
   const named = secrets === 'none' ? '' : NAMED;
   return owner
-    ? `# The computer you run commands on\n\n${ownerFiles(named)}${OWNER_LOGINS}${secretsSection(secrets)}${LIMITS}`
-    : `# The machine you run commands on\n\n${serverFiles(named)}${IMAGE}${SERVER_INSTALLS}${SERVER_LOGINS}${secretsSection(secrets)}${LIMITS}`;
+    ? `# The computer you run commands on\n\n${ownerFiles(named)}${OWNER_LOGINS}${secretsSection(secrets)}${LIMITS(processes)}`
+    : `# The machine you run commands on\n\n${serverFiles(named)}${IMAGE}${SERVER_INSTALLS}${SERVER_LOGINS}${secretsSection(secrets)}${LIMITS(processes)}`;
 };
 
 /** What is true where the run is: the two hosts share neither the files nor the rules on them. */
@@ -236,22 +244,29 @@ export const machineTools: Skill = {
   name: 'machine-tools',
   description:
     'Use before running commands or installing anything: what the machine has, how to install more without root, logins and keys, Secrets, and the limits of a command.',
-  instructions: composed(false, 'manage'),
+  instructions: composed(false, 'manage', true),
 };
 
 const onOwnerComputer: Skill = {
   ...machineTools,
-  instructions: composed(true, 'manage'),
+  instructions: composed(true, 'manage', true),
 };
 
 /**
  * `secrets` is what the run has: none, a command that may lend them, or the tools to keep them
- * too. Taught only where the run has them, or the agent would look for tools it was not given.
- * Left out, the fullest, as the owner reads it in the panel.
+ * too; `processes`, whether it can start commands in the background. Taught only where the run
+ * has them, or the agent would look for tools it was not given. Left out, the fullest, as the
+ * owner reads it in the panel.
  */
-export const machineToolsFor = (owner: boolean, secrets: SecretsRun = 'manage'): Skill => {
+export const machineToolsFor = (
+  owner: boolean,
+  secrets: SecretsRun = 'manage',
+  processes = true,
+): Skill => {
   const base = owner ? onOwnerComputer : machineTools;
-  return secrets === 'manage' ? base : { ...base, instructions: composed(owner, secrets) };
+  return secrets === 'manage' && processes
+    ? base
+    : { ...base, instructions: composed(owner, secrets, processes) };
 };
 
 /** Either of the two this file hands out, whatever the host: the run's own is built from them. */

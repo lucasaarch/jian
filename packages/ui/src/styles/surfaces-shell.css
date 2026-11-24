@@ -171,6 +171,13 @@
   .session-pull:focus-visible {
     background: var(--glass-press);
   }
+  /* A forwarded port: its row, and the button that stops it at the end. */
+  .session-forward {
+    @apply flex items-center gap-1;
+  }
+  .session-forward > .session-pull {
+    @apply flex-1;
+  }
   .session-pull-mark {
     @apply mt-0.5 shrink-0;
     color: var(--good);
@@ -236,6 +243,32 @@
     @apply truncate;
   }
   .session-agent-time {
+    @apply shrink-0 font-mono tabular-nums;
+  }
+  /* The agent's background commands in the badge's list: the command in mono with how long it has
+     run, and a Stop beside it that is not part of the row's own button. */
+  .model-menu.session-processes-popup {
+    @apply gap-1 p-3 leading-snug;
+  }
+  .model-menu > .session-processes {
+    @apply -mx-1.5 -mb-1.5 grid max-h-80 grid-cols-[minmax(0,1fr)] list-none gap-0.5 overflow-y-auto p-0 text-xs;
+    color: var(--muted);
+  }
+  .session-process {
+    @apply flex min-w-0 items-center gap-1 rounded-lg pr-1 transition-colors;
+  }
+  .session-process:hover,
+  .session-process:focus-within {
+    background: var(--glass-press);
+  }
+  .session-process-open {
+    @apply flex min-w-0 flex-1 items-center gap-2 rounded-lg p-1.5 text-left;
+  }
+  .session-process-command {
+    @apply min-w-0 flex-1 truncate font-mono;
+    color: var(--ink);
+  }
+  .session-process-time {
     @apply shrink-0 font-mono tabular-nums;
   }
   /* A worktree in the badge's list: what it is above, what can be done with it below. The grid has

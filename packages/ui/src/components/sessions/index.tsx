@@ -42,9 +42,12 @@ import { SessionModel } from './model-picker';
 import { SessionObjective } from './objective';
 import { SessionProtection } from './protection-menu';
 import { SessionAgents } from './session-agents';
+import { SessionForwards } from './session-forwards';
+import { SessionProcesses } from './session-processes';
 import { SessionPulls } from './session-pulls';
 import { SessionWorktrees, useChangesFlag } from './session-worktrees';
 import { TerminalDrawer } from './terminal/drawer';
+import { ProcessDrawer } from './terminal/process-drawer';
 
 const isGateway = (session: Session) => session.channel === GATEWAY_SESSION_CHANNEL;
 /**
@@ -204,7 +207,9 @@ export function Sessions({ api, mutate, busy }: SectionActions) {
         busy={working?.sessionId === active.id}
         onAction={answered}
       />
+      <SessionProcesses api={api} profileId={profile.id} sessionId={active.id} />
       <SessionPulls api={api} profileId={profile.id} sessionId={active.id} />
+      <SessionForwards api={api} profileId={profile.id} sessionId={active.id} />
       {active.objective && <SessionObjective objective={active.objective} />}
     </span>
   );
@@ -390,6 +395,7 @@ export function Sessions({ api, mutate, busy }: SectionActions) {
                   }
                 />
                 <TerminalDrawer api={api} profileId={profile.id} />
+                <ProcessDrawer api={api} profileId={profile.id} />
                 {/* Any conversation can have its agent settle a pull request's conflicts, and the
                   owner merges from it whichever channel it came on. */}
                 <GitHubDrawer

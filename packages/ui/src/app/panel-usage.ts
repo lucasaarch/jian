@@ -18,6 +18,7 @@ const INSPECTOR_TABS: Record<InspectorTab['kind'], PanelFeature> = {
   changes: 'inspector_changes',
   artifacts: 'inspector_artifacts',
   terminal: 'inspector_terminal',
+  process: 'inspector_terminal',
   github: 'inspector_github',
   agent: 'inspector_subagent',
 };

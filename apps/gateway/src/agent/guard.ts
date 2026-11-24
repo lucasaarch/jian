@@ -18,6 +18,9 @@ const ACTION_KINDS: Partial<Record<string, ActionKind>> = {
   pull_remote_file: 'machine',
   push_remote_file: 'machine',
   update_remote_machine: 'machine',
+  // Opens a port on the owner's computer, which is a change there like a command is.
+  forward_port: 'machine',
+  close_forward: 'machine',
   write_file: 'machine',
   edit_file: 'machine',
   // Each changes a checkout on disk, and a merge changes the owner's own folder.
@@ -229,6 +232,16 @@ const PLAIN: Record<
     title: 'Copy a file to a connected machine',
     detail: field(input, 'path'),
     confirm: 'Copy',
+  }),
+  forward_port: (input) => ({
+    title: 'Forward a port of the server to a connected computer',
+    detail: `Port ${(input as { port?: unknown } | null)?.port ?? ''}`.trim(),
+    confirm: 'Forward',
+  }),
+  close_forward: (input) => ({
+    title: 'Stop forwarding a port to a connected computer',
+    detail: `Port ${(input as { port?: unknown } | null)?.port ?? ''}`.trim(),
+    confirm: 'Stop',
   }),
   update_remote_machine: () => ({
     title: "Update Jian Remote on a connected machine to this gateway's release",

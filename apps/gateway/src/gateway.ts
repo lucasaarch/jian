@@ -10,6 +10,7 @@ import { Channels } from './channels/service.js';
 import { TelegramChannel } from './channels/telegram.js';
 import type { WhatsAppConnections } from './channels/whatsapp/connections.js';
 import { Coordination } from './coordination/service.js';
+import { recordEvent } from './core/events.js';
 import { everyAfter } from './core/every-after.js';
 import { gatewayRelease } from './core/release.js';
 import { GitHubIntegrations } from './integrations/github.js';
@@ -35,6 +36,7 @@ import { importWorkspaceSshKeys } from './ssh/import.js';
 import type { StartupStage } from './startup.js';
 import type { Store } from './storage/database.js';
 import { Telemetry } from './telemetry/service.js';
+import { Terminals } from './terminals/service.js';
 
 /**
  * How long after one look for due schedules the next starts, in milliseconds. A schedule set for
@@ -94,6 +96,13 @@ export type Gateway = {
   stage(): StartupStage;
 };
 
+/** The agent's background commands, which tell the panel when one starts or ends. */
+const processesOf = (store: Store) =>
+  new Terminals(undefined, Date.now, (profileId, { type, ...data }) => {
+    // Only a nudge to read the list again: a missed one is caught by the next.
+    void recordEvent(store.db, Date.now, profileId, type, data).catch(() => {});
+  });
+
 /**
  * Everything a gateway is, from its store and keys: services, agents, channels, the HTTP API and
  * the run queue. The server image and the desktop app build it the same way; they differ in the
@@ -134,10 +143,15 @@ export async function createGateway(options: GatewayOptions): Promise<Gateway> {
       github,
       nativeBrowser: options.nativeBrowser,
       mode: options.mode,
+      role: options.role,
       ...(options.publicUrl ? { publicUrl: options.publicUrl } : {}),
       ...(options.timeZone ? { timeZone: options.timeZone } : {}),
     }),
     store,
+    // A command in the background is a process of this gateway, which only a gateway that serves
+    // the panel and runs the turns together can both show and let the agent stop. Split in two,
+    // neither side could reach the other's processes, so none are offered.
+    ...(options.role === 'all' ? { processes: processesOf(store) } : {}),
   };
   const telemetry = new Telemetry(store, {
     env: process.env,
@@ -147,6 +161,10 @@ export async function createGateway(options: GatewayOptions): Promise<Gateway> {
     role: options.role,
   });
   services.settings.useTelemetry(telemetry);
+  // Deleting a profile ends what its agent still runs.
+  services.profiles.useBeforeDelete(async (profileId) => {
+    void services.processes?.forgetProfile(profileId);
+  });
   const codexLogin = new CodexLogin(services, gatewayVault);
   services.media.useCodexLogin(codexLogin);
   services.subscriptionUsage.useCodexLogin(codexLogin);
@@ -244,6 +262,7 @@ export async function createGateway(options: GatewayOptions): Promise<Gateway> {
           ...(options.publicUrl ? { publicUrl: options.publicUrl } : {}),
           mode: options.mode,
           trustedProxies: options.trustedProxies,
+          ...(services.processes ? { terminals: services.processes } : {}),
         })
       : undefined;
 

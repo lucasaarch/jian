@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import type { Forwards } from '../forwards/service.js';
 import type { Remote } from './service.js';
 
 /**
@@ -8,7 +9,10 @@ import type { Remote } from './service.js';
  */
 const REMOTE_RESULT_BODY_LIMIT = 48 * 1024 * 1024;
 
-export function registerRemoteRoutes(app: FastifyInstance, deps: { remote: Remote }): void {
+export function registerRemoteRoutes(
+  app: FastifyInstance,
+  deps: { remote: Remote; forwards?: Forwards },
+): void {
   app.get('/v1/remote/machines', async () => deps.remote.list());
 
   app.post('/v1/remote/machines', async (request, reply) =>
@@ -32,8 +36,8 @@ export function registerRemoteRoutes(app: FastifyInstance, deps: { remote: Remot
 
   app.get<{ Params: { machineId: string } }>(
     '/v1/remote/worker/:machineId/tasks/next',
-    async (request) =>
-      deps.remote.poll(
+    async (request) => {
+      const polled = await deps.remote.poll(
         request.params.machineId,
         request.headers.authorization ?? '',
         typeof request.headers['x-jian-platform'] === 'string'
@@ -51,7 +55,10 @@ export function registerRemoteRoutes(app: FastifyInstance, deps: { remote: Remot
         typeof request.headers['x-jian-system'] === 'string'
           ? request.headers['x-jian-system']
           : undefined,
-      ),
+      );
+      // Beside the task: what this computer keeps open for the agents, as the worker last asks.
+      return { ...polled, forwards: deps.forwards?.assigned(request.params.machineId) ?? [] };
+    },
   );
 
   // A worker that stops says so, so the panel shows it offline at once instead of after the

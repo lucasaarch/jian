@@ -187,6 +187,33 @@ export const sessionCalls = (client: Client, origin = '') => ({
         params: { path: { profileId, sessionId } },
       }),
     ),
+  /** The commands the agent runs in the background for a conversation, running and ended. */
+  sessionProcesses: (profileId: string, sessionId: string) =>
+    result(
+      client.GET('/v1/profiles/{profileId}/sessions/{sessionId}/processes', {
+        params: { path: { profileId, sessionId } },
+      }),
+    ),
+  stopSessionProcess: (profileId: string, sessionId: string, processId: string) =>
+    result(
+      client.POST('/v1/profiles/{profileId}/sessions/{sessionId}/processes/{processId}/stop', {
+        params: { path: { profileId, sessionId, processId } },
+      }),
+    ),
+  /** The ports of the server open on a computer for this conversation, as of now. */
+  sessionForwards: (profileId: string, sessionId: string) =>
+    result(
+      client.GET('/v1/profiles/{profileId}/sessions/{sessionId}/forwards', {
+        params: { path: { profileId, sessionId } },
+      }),
+    ),
+  /** Stops a forward: its connections close and the computer frees the port. */
+  closeForward: (profileId: string, forwardId: string) =>
+    result(
+      client.DELETE('/v1/profiles/{profileId}/forwards/{forwardId}', {
+        params: { path: { profileId, forwardId } },
+      }),
+    ),
   /** The conversation's isolated checkouts, and where each stands against the folder it came from. */
   sessionWorktrees: (profileId: string, sessionId: string) =>
     result(

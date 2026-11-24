@@ -308,7 +308,9 @@ export function InspectorHost({
               ? 'Artifacts'
               : tab.kind === 'terminal'
                 ? terminalLabel(tabs, tab)
-                : (agents.find((agent) => agent.runId === tab.runId)?.name ?? 'Subagent');
+                : tab.kind === 'process'
+                  ? tab.title
+                  : (agents.find((agent) => agent.runId === tab.runId)?.name ?? 'Subagent');
   const close = () => useCrew.getState().close();
   const closeTab = (tab: InspectorTab) => {
     if (tab.kind === 'browser') closeBrowser?.(tab.pageId);

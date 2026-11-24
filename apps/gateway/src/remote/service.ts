@@ -1000,7 +1000,8 @@ export class Remote {
     return machine;
   }
 
-  private async authenticate(machineId: string, authorization: string) {
+  /** The machine a worker token belongs to; a forward is held to the same proof as a poll. */
+  async authenticate(machineId: string, authorization: string) {
     const match = /^Bearer ([A-Za-z0-9_-]{40,100})$/.exec(authorization);
     const token = match?.[1];
     const [machine] = await this.store.db

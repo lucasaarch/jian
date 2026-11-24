@@ -6,7 +6,9 @@ import { type ToolSet, tool } from 'ai';
 import { z } from 'zod';
 import { secretForms } from '../secrets/forms.js';
 import type { LentValue, OfferedSecret } from '../secrets/service.js';
+import { clip, MAX_OUTPUT } from './clip.js';
 import { fileTools } from './files.js';
+import { type ProcessAccess, processTools, startBackground } from './process-tools.js';
 import { redactText } from './results.js';
 import { confine, confined, reachableFolders } from './workspace.js';
 import { onOwnerComputer, workspaceHome, workspaceTemp } from './workspace-home.js';
@@ -33,11 +35,6 @@ import { onOwnerComputer, workspaceHome, workspaceTemp } from './workspace-home.
 
 /** Long enough for a build, short enough that a run does not die waiting on a hung command. */
 const TIMEOUT_MS = 120_000;
-/**
- * Characters kept of each stream, its first and last halves; a command that prints a megabyte
- * would cost the run its context. The result's own budget then cuts what is kept further.
- */
-const MAX_OUTPUT = 60_000;
 /** What a command may print before it is stopped, in bytes: well past MAX_OUTPUT. */
 const READ_OUTPUT = 8 * 1024 * 1024;
 
@@ -132,27 +129,6 @@ export function commandEnvironment(
 }
 
 /**
- * Its first and last halves within `limit`: a build or a test run says what failed at the end,
- * and the start says what ran. What is cut here is gone, not stored, and the marker says so, in
- * the form Jian Remote writes (its `ends.ts`), which `results.ts` reads for the real size.
- */
-function clip(text: string, limit: number): string {
-  if (text.length <= limit) return text;
-  const half = Math.floor(limit / 2);
-  const end = whole(text, half);
-  const start = whole(text, text.length - half);
-  const dropped = text.slice(end, start);
-  const lines = dropped.split('\n').length - 1;
-  return `${text.slice(0, end)}\n[… ${lines.toLocaleString('en')} lines (${dropped.length.toLocaleString('en')} characters) of this output were not kept]\n${text.slice(start)}`;
-}
-
-/** An index moved off the middle of a surrogate pair, so no half of a character is kept. */
-function whole(text: string, index: number): number {
-  const code = text.charCodeAt(index);
-  return index > 0 && index < text.length && code >= 0xdc00 && code <= 0xdfff ? index + 1 : index;
-}
-
-/**
  * On Linux, a command is the first the kernel kills when memory runs out, and what it starts
  * inherits that: a test suite that fills a container's memory is ended (exit 137) instead of
  * the gateway, with every turn it is running. Raising a process's own score needs no privilege;
@@ -169,6 +145,10 @@ const RUN_COMMAND = {
   owner:
     "Run a command on the owner's computer, as the owner, and read what it printed. It starts in this chat's first folder, or in their home, which is also $HOME. Nothing confines it, so it can change anything of theirs: touch only what the task needs. Prefer a single command over a shell pipeline you cannot inspect. Anything destructive needs the owner to have asked for it in this conversation.",
 };
+
+/** Said only where the run can start one: elsewhere the agent would look for what it lacks. */
+const BACKGROUND =
+  ' `background: true` starts it in the background instead and answers at once with its processId and what it printed in its first seconds: for a server, a watcher or a job that outlives this call, with no time limit. Read it with process_output, end it with stop_process. It ends when the gateway restarts.';
 
 /**
  * The owner's Secrets this run may hand a command: what the agent is told of them, and how their
@@ -219,12 +199,15 @@ export function shellTools(
     writable: [],
   },
   secrets?: SecretAccess,
+  /** Where the run may start commands in the background: only where this gateway can keep them. */
+  processes?: ProcessAccess,
 ): ToolSet {
-  const base = z.object({
+  const plain = z.object({
     command: z.string().trim().min(1).max(4000),
     cwd: absolute.optional(),
     timeoutMs: z.number().int().min(1000).max(TIMEOUT_MS).default(30_000),
   });
+  const base = processes ? plain.extend({ background: z.boolean().optional() }) : plain;
   // Offered only to a run with Secrets to use. Any well-formed name passes: a Secret saved after
   // the run began is lendable at once, and `reveal` refuses what this agent may not use.
   const inputSchema = secrets
@@ -236,9 +219,12 @@ export function shellTools(
       tool({
         description:
           (onOwnerComputer() ? RUN_COMMAND.owner : RUN_COMMAND.server) +
+          (processes ? BACKGROUND : '') +
           (secrets ? secretsDescription(secrets.offered) : ''),
         inputSchema,
-        execute: async (input: z.infer<typeof base> & { secrets?: string[] }) => {
+        execute: async (
+          input: z.infer<typeof base> & { secrets?: string[]; background?: boolean },
+        ) => {
           const { command, cwd, timeoutMs } = input;
           if (/(?:^|[;&|\s])ssh-keygen(?:\s|$)/.test(command)) {
             return refused('SSH keys must be managed with the SSH key tools, not ssh-keygen.');
@@ -268,6 +254,33 @@ export function shellTools(
           const temp = await workspaceTemp();
           const directory = cwd ? await confine(cwd, 'read') : (reachableFolders()[0] ?? home);
           const shell = await confined(home, '/bin/sh', ['-c', command], gitAccess);
+          // The secrets reach the command as its environment alone: never its text, which
+          // the owner's timeline and the approval card show.
+          const env = {
+            ...commandEnvironment({ home, temp }, process.env, gitAccess.sshCommand),
+            ...Object.fromEntries(Object.entries(lent).map(([name, field]) => [name, field.value])),
+          };
+
+          if (input.background) {
+            // Checked here too: an approved call is run from what was stored, not the schema.
+            if (!processes) return refused('Not run: this run cannot start background commands.');
+
+            try {
+              // The same line as a command that waits, then kept: its output is masked as it
+              // arrives, before anything of it is stored or shown.
+              return await startBackground(processes, {
+                command,
+                cwd: directory,
+                file: shell.file,
+                args: shell.args,
+                env,
+                secrets: masks,
+                spawned: surrenderFirst,
+              });
+            } catch (error) {
+              return refusal(error);
+            }
+          }
 
           return new Promise((resolvePromise) => {
             const child = execFile(
@@ -275,14 +288,7 @@ export function shellTools(
               shell.args,
               {
                 cwd: directory,
-                // The secrets reach the command as its environment alone: never its text, which
-                // the owner's timeline and the approval card show.
-                env: {
-                  ...commandEnvironment({ home, temp }, process.env, gitAccess.sshCommand),
-                  ...Object.fromEntries(
-                    Object.entries(lent).map(([name, field]) => [name, field.value]),
-                  ),
-                },
+                env,
                 timeout: timeoutMs,
                 // Read past what is kept, so the end that is kept is the command's real end: a
                 // command stopped at this size ends with whatever it printed by then.
@@ -328,5 +334,6 @@ export function shellTools(
     ),
 
     ...fileTools(),
+    ...(processes ? processTools(processes) : {}),
   };
 }

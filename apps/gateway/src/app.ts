@@ -13,6 +13,7 @@ import { Coordination } from './coordination/service.js';
 import { registerDecisionRoutes } from './decisions/routes.js';
 import { registerDeviceRoutes } from './devices/routes.js';
 import { registerFileLinkRoutes } from './file-links/routes.js';
+import { registerForwardRoutes } from './forwards/routes.js';
 import { registerEventRoutes } from './http/events.js';
 import { registerMetaRoutes } from './http/meta.js';
 import { registerReturnPages } from './http/returned.js';
@@ -87,6 +88,11 @@ export function createApp(
     /** What starts a terminal's shell; tests pass one that starts no process. */
     spawnTerminal?: SpawnPty;
     /**
+     * The terminals this gateway keeps, when its runs are in this process too: the agent's
+     * background commands live in them, so the runs and these routes must hold the same ones.
+     */
+    terminals?: Terminals;
+    /**
      * Who may set X-Forwarded-For and -Proto. The rate limits key on the address they name, and
      * the panel cookie is marked Secure from the scheme; trusting anyone else would let a client
      * pick both.
@@ -105,7 +111,7 @@ export function createApp(
   }
 
   const coordination = new Coordination(options);
-  const terminals = new Terminals(options.spawnTerminal);
+  const terminals = options.terminals ?? new Terminals(options.spawnTerminal);
 
   const app = Fastify({
     logger:
@@ -170,7 +176,10 @@ export function createApp(
   // A shell belongs to the gateway that shows it: none is left running behind a closed one.
   // Before the server stops taking requests, not after: a terminal's open stream is a request
   // in flight, and ending the shells is what ends it.
-  app.addHook('preClose', async () => terminals.closeAll());
+  app.addHook('preClose', async () => {
+    options.forwards?.stop();
+    await terminals.closeAll();
+  });
 
   // The limiter attaches itself to each route as the route is added, and a plugin only loads
   // once the queue reaches it. Routes declared directly on `app` here would all be added before
@@ -206,11 +215,12 @@ export function createApp(
     registerSecretRoutes(routes, options);
     registerPushRoutes(routes, options);
     registerRemoteRoutes(routes, options);
+    registerForwardRoutes(routes, options);
     registerSkillRoutes(routes, options);
     registerMcpRoutes(routes, options);
     registerProfileRoutes(routes, options);
     registerProjectRoutes(routes, options.projects);
-    registerSessionRoutes(routes, { ...options, coordination });
+    registerSessionRoutes(routes, { ...options, coordination, terminals });
     registerArtifactRoutes(routes, options);
     registerFileLinkRoutes(routes, options);
     registerWorktreeRoutes(routes, options);
