@@ -2524,7 +2524,10 @@ export class AgentRuntime {
       // Streamed rather than generated so the run can say what it is doing while it does it.
       // Nothing read here is kept: the answer is `result.text`, written once, below.
       const narrator = new Narrator(async (paragraph) => {
-        await this.services.lifecycle.say(profileId, runId, owner, redactText(paragraph, secrets));
+        const said = redactText(paragraph, secrets);
+        // The panel is told the paragraph as the message will hold it before it lands.
+        progress.said(said);
+        await this.services.lifecycle.say(profileId, runId, owner, said);
       });
 
       // A continuation an approval queued runs that action first, exactly as the agent called

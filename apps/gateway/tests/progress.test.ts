@@ -227,6 +227,25 @@ describe('what a run reports while it runs', () => {
     expect(written.at(-1)?.text).toBe('All good.');
   });
 
+  it('tells a released paragraph whole before the draft moves past it', async () => {
+    const { subject, written, advance } = reporter(250);
+    const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+    // Wired as the runtime wires them: the paragraph is told as it goes out as a message.
+    const narrator = new Narrator(async (paragraph) => subject.said(paragraph));
+
+    for (const part of ['Roses are red,\n', 'Violets', ' are blue.\n\nSugar']) {
+      await narrator.delta(part);
+      subject.draft(narrator.draft);
+      await settle();
+      advance(10);
+    }
+    await subject.flush();
+
+    const texts = written.map((snapshot) => snapshot.text);
+    // Inside one interval, so the frames in between were held back; the whole stanza was not.
+    expect(texts).toEqual(['Roses are red,\n', 'Roses are red,\nViolets are blue.', 'Sugar']);
+  });
+
   it('leaves out of the draft a paragraph already sent as a message', async () => {
     const { subject, written } = reporter(0);
     const narrator = new Narrator(async () => {});

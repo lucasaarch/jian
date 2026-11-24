@@ -2,7 +2,7 @@ import { act, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { Message } from '../../lib/api';
-import { ChatMessage } from './message';
+import { ChatMessage, PersonLine } from './message';
 
 vi.mock('sonner', () => ({ toast: { error: vi.fn() } }));
 let element: HTMLDivElement;
@@ -99,7 +99,29 @@ it('anchors agent reactions to the user bubble without adding user header action
   expect(element.querySelector('.message-tools')).toBeNull();
   expect(
     element
-      .querySelector('.chat-line.mine > .message-reactions [role="img"]')
+      .querySelector('.chat-line.mine > .message-foot > .message-reactions [role="img"]')
       ?.getAttribute('aria-label'),
   ).toBe('Nova reacted 🎉');
+});
+
+it('puts the receipt under the bubble, after the agent reactions, never inside the words', async () => {
+  await act(async () =>
+    root.render(
+      <PersonLine
+        message={{ ...message, role: 'user', reactions: [{ actor: 'agent', emoji: '👍' }] }}
+        agent={{ name: 'Nova', avatar: null }}
+        people={new Map()}
+        group={false}
+        opensRun
+        receipt="read"
+      />,
+    ),
+  );
+  const foot = element.querySelector('.chat-line.mine > .message-foot');
+  expect([...(foot?.children ?? [])].map((child) => child.className)).toEqual([
+    'message-reactions',
+    'message-receipt',
+  ]);
+  expect(foot?.querySelector('.message-receipt')?.textContent).toBe('Read');
+  expect(element.querySelector('.chat-text .message-receipt')).toBeNull();
 });

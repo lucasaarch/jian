@@ -1,7 +1,6 @@
 'use client';
 
 import { Check, CheckCheck, FileText, RotateCcw, X } from 'lucide-react';
-import { HoverTip } from '../../kit';
 import type { Message } from '../../lib/api';
 import type { Attachment } from '../../lib/stores/drafts';
 import { discard, type Outgoing, resend } from '../../lib/stores/outbox';
@@ -106,16 +105,17 @@ export type Receipt = 'sent' | 'read';
 export const receiptOf = (message: Message): Receipt | undefined =>
   message.role !== 'user' || message.call ? undefined : message.readAt ? 'read' : 'sent';
 
-/** One check once the gateway has the message, two once the agent has read it, as in a chat app. */
+/**
+ * Under the bubble: one check and Sent once the gateway has the message, two and Read once the
+ * agent has read it. The word is on screen, so it needs no tooltip.
+ */
 export function MessageReceipt({ receipt }: { receipt: Receipt }) {
-  const label = receipt === 'read' ? 'Read' : 'Sent';
   const Icon = receipt === 'read' ? CheckCheck : Check;
 
   return (
-    <HoverTip tip={label} side="bottom" align="end">
-      <span className="message-receipt" role="img" aria-label={label} data-receipt={receipt}>
-        <Icon size={14} aria-hidden="true" />
-      </span>
-    </HoverTip>
+    <span className="message-receipt" data-receipt={receipt}>
+      <Icon size={13} aria-hidden="true" />
+      {receipt === 'read' ? 'Read' : 'Sent'}
+    </span>
   );
 }

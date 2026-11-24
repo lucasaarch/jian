@@ -97,6 +97,19 @@ export class ProgressReporter {
   }
 
   /**
+   * A paragraph is going out as a message: told whole, at once, before the draft moves past it.
+   * Tokens are written at most every interval, so the last frame told of it may lack its end;
+   * the panel holds what it was told until the message lands, and a message fuller than that
+   * changes the answer in the middle as it lands.
+   */
+  said(paragraph: string): void {
+    this.text = paragraph;
+    this.phase = 'writing';
+    this.tool = undefined;
+    this.mark(true);
+  }
+
+  /**
    * The Artifact being written, as far as it is. Tokens of it are coalesced like the answer's; its
    * start and its end are not, so the panel opens on it and lets go of it at once.
    */
