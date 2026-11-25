@@ -25,15 +25,21 @@ const OPENAI: &str = "sk-test-synthetic-0001";
 const TELEGRAM: &str = "123456:synthetic-bot-token";
 const GROQ_ID: &str = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const GROQ: &str = "gsk-test-synthetic-0002";
+const CODEX_ID: &str = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+const CODEX: &str =
+    r#"{"access_token":"cx-access-synthetic-0003","refresh_token":"cx-refresh-synthetic-0004"}"#;
+const CLAUDE_ID: &str = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+const CLAUDE: &str = "sk-ant-oat01-synthetic-0005";
 
-/// What each domain writes from the fixture: the secrets are the OpenAI key, the Groq key and the
-/// Telegram token; the providers are a Groq account (a ChatGPT sign-in is left behind).
+/// What each domain writes from the fixture: the secrets are the OpenAI key, the Groq key, the
+/// ChatGPT tokens, the Claude token and the Telegram token; the providers are a Groq account, a
+/// ChatGPT sign-in and a Claude subscription.
 fn rows(which: Domain) -> u32 {
     match which {
-        Domain::Secrets => 3,
-        // Two sessions with a person (the one between two agents is left); five messages.
+        Domain::Secrets | Domain::Messages => 5,
+        Domain::Providers => 3,
+        // Two sessions with a person (the one between two agents is left).
         Domain::Threads => 2,
-        Domain::Messages => 5,
         _ => 1,
     }
 }
@@ -125,21 +131,33 @@ async fn a_dump_of_the_old_desktop_database_comes_over_once() {
         .unwrap()
         .unwrap();
     assert_eq!(telegram.expose(), TELEGRAM);
-    // The Groq account came with its key, active; the ChatGPT sign-in did not come, and says why.
+    // The Groq account came with its key, active; so did the two subscriptions, each with the
+    // token the old one held, sealed again under this tenant's key.
     let accounts = new.db.provider_accounts(&ctx).await.unwrap();
-    assert_eq!(accounts.len(), 1);
+    let seen: Vec<(&str, &str, &str, bool)> = accounts
+        .iter()
+        .map(|a| {
+            (
+                a.id.as_str(),
+                a.label.as_str(),
+                a.mode.as_str(),
+                a.active && a.has_key,
+            )
+        })
+        .collect();
     assert_eq!(
-        (accounts[0].id.as_str(), accounts[0].label.as_str()),
-        (GROQ_ID, "Groq work")
+        seen,
+        [
+            (GROQ_ID, "Groq work", "api", true),
+            (CODEX_ID, "ChatGPT", "subscription", true),
+            (CLAUDE_ID, "Claude Max", "subscription", true),
+        ]
     );
-    assert!(accounts[0].active && accounts[0].has_key);
-    let groq = new.db.provider_key(&ctx, GROQ_ID).await.unwrap().unwrap();
-    assert_eq!(groq.expose(), GROQ);
-    let detail = domain(&first, Domain::Providers).detail.clone().unwrap();
-    assert!(
-        detail.contains("subscription not supported yet"),
-        "{detail}"
-    );
+    for (id, token) in [(GROQ_ID, GROQ), (CODEX_ID, CODEX), (CLAUDE_ID, CLAUDE)] {
+        let key = new.db.provider_key(&ctx, id).await.unwrap().unwrap();
+        assert_eq!(key.expose(), token);
+    }
+    assert!(domain(&first, Domain::Providers).detail.is_none());
     let machines = new.db.list_machines(&ctx, None, 10).await.unwrap().items;
     assert_eq!(machines.len(), 1);
     assert_eq!(machines[0].name, "Studio Mac");
@@ -222,8 +240,8 @@ async fn reading_a_live_old_database_changes_nothing_in_it() {
     assert!(!report.source.contains('@'));
     assert_eq!(domain(&report, Domain::Machines).imported, 1);
     assert_eq!(domain(&report, Domain::Devices).imported, 1);
-    assert_eq!(domain(&report, Domain::Secrets).imported, 3);
-    assert_eq!(domain(&report, Domain::Providers).imported, 1);
+    assert_eq!(domain(&report, Domain::Secrets).imported, 5);
+    assert_eq!(domain(&report, Domain::Providers).imported, 3);
     // No address was given: the owner is skipped, and a later run with one takes it.
     assert_eq!(domain(&report, Domain::Owner).status, ImportStatus::Skipped);
     for which in [Domain::Agents, Domain::Threads, Domain::Messages] {
@@ -261,10 +279,11 @@ async fn a_run_that_stopped_or_lacked_a_key_is_finished_by_the_next() {
     let secrets = domain(&first, Domain::Secrets);
     assert_eq!(
         (secrets.status, secrets.failed, secrets.imported),
-        (ImportStatus::Failed, 3, 0)
+        (ImportStatus::Failed, 5, 0)
     );
     let markers = format!("{:?}", new.db.imports(&ctx).await.unwrap());
     assert!(!markers.contains(OPENAI) && !markers.contains(TELEGRAM));
+    assert!(!markers.contains("synthetic-0003") && !markers.contains(CLAUDE));
     assert_eq!(domain(&first, Domain::Machines).imported, 1);
 
     // The right key: only what is not done runs, and the failed secrets come over.
@@ -289,7 +308,7 @@ async fn a_run_that_stopped_or_lacked_a_key_is_finished_by_the_next() {
     for which in [Domain::Agents, Domain::Threads, Domain::Messages] {
         assert_eq!(domain(&second, which).status, ImportStatus::Skipped);
     }
-    assert_eq!(domain(&second, Domain::Secrets).imported, 3);
+    assert_eq!(domain(&second, Domain::Secrets).imported, 5);
     assert_eq!(
         new.db
             .list_machines(&ctx, None, 10)

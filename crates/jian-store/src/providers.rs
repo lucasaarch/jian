@@ -383,7 +383,7 @@ impl ProviderImport {
         &self.id
     }
 
-    /// How it signs in. A subscription is read and not written: nothing speaks it yet.
+    /// How it signs in.
     pub fn mode(&self) -> AccountMode {
         self.mode
     }
