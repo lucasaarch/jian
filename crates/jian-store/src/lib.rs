@@ -132,6 +132,7 @@ mod invites;
 mod jobs;
 mod legacy;
 mod legacy_memories;
+mod legacy_schedules;
 mod legacy_threads;
 mod machines;
 mod members;
@@ -144,6 +145,7 @@ mod orphan;
 mod platform;
 mod projects;
 mod providers;
+mod schedules;
 mod schema_version;
 pub mod secrets;
 mod sessions;
@@ -178,6 +180,7 @@ pub use jobs::{
 };
 pub use legacy::{DeviceImport, ImportOutcome, LegacyDevice, LegacyMachine, MachineImport};
 pub use legacy_memories::{LegacyMemory, LegacyMemoryLink, LegacyProject};
+pub use legacy_schedules::LegacySchedule;
 pub use legacy_threads::{LegacyAgent, LegacyChat, LegacyMessage, LegacyThread};
 pub use machines::{MAX_PAGE, Machine, MachineReport, Page};
 pub use members::{AddedMember, Member, NewMember, Role};
@@ -197,6 +200,11 @@ pub use projects::{
 pub use providers::{
     LegacyProvider, MAX_ACCOUNTS, MAX_LABEL_CHARS, NewProviderAccount, ProviderAccount,
     ProviderImport, provider_secret_owner,
+};
+pub use schedules::{
+    Due, Fired, InboxEvent, MAX_SCHEDULE_INSTRUCTION_CHARS, MAX_SCHEDULE_NAME_CHARS,
+    MAX_SCHEDULES_PER_AGENT, NewSchedule, SCHEDULE_EVENT, Schedule, ScheduleId, SchedulePatch,
+    When,
 };
 pub use schema_version::{SchemaState, TenantVersion};
 pub use sessions::{LoginCandidate, NewSession};

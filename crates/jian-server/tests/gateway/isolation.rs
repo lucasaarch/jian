@@ -32,6 +32,7 @@ const CODEX_FILE: &str = include_str!("codex.rs");
 const INVITES_FILE: &str = include_str!("invites.rs");
 const PROVIDERS_FILE: &str = include_str!("providers.rs");
 const MEMORIES_FILE: &str = include_str!("memories.rs");
+const SCHEDULES_FILE: &str = include_str!("schedules.rs");
 const THREADS_FILE: &str = include_str!("threads.rs");
 
 async fn start() -> (Gateway, TwoTenants) {
@@ -45,6 +46,7 @@ fn is_a_test_here(name: &str) -> bool {
         || INVITES_FILE.contains(&declared)
         || PROVIDERS_FILE.contains(&declared)
         || MEMORIES_FILE.contains(&declared)
+        || SCHEDULES_FILE.contains(&declared)
         || THREADS_FILE.contains(&declared)
 }
 
@@ -102,6 +104,18 @@ const ROUTE_TESTS: &[(&str, &str)] = &[
     ("DELETE /v1/projects/{id}", MEMORIES_TEST),
     ("GET /v1/threads/{id}/project", MEMORIES_TEST),
     ("PUT /v1/threads/{id}/project", MEMORIES_TEST),
+    ("GET /v1/agents/{id}/schedules", SCHEDULES_TEST),
+    ("POST /v1/agents/{id}/schedules", SCHEDULES_TEST),
+    ("GET /v1/agents/{id}/schedules/{scheduleId}", SCHEDULES_TEST),
+    (
+        "PATCH /v1/agents/{id}/schedules/{scheduleId}",
+        SCHEDULES_TEST,
+    ),
+    (
+        "DELETE /v1/agents/{id}/schedules/{scheduleId}",
+        SCHEDULES_TEST,
+    ),
+    ("GET /v1/agents/{id}/inbox", SCHEDULES_TEST),
     ("GET /v1/grants", THREADS_TEST),
     ("POST /v1/grants", THREADS_TEST),
     ("POST /v1/grants/revoke", THREADS_TEST),
@@ -138,6 +152,10 @@ const INVITES_TEST: &str =
 
 /// The test that shows tenant B reaches no memory, project or thread-project link of tenant A.
 const MEMORIES_TEST: &str = "memories_and_projects_of_the_other_tenant_are_out_of_reach";
+
+/// The test that shows tenant B reaches no schedule or inbox event of tenant A.
+const SCHEDULES_TEST: &str =
+    "a_schedule_fires_into_its_agents_inbox_once_and_never_into_another_tenants";
 
 /// The test that shows tenant B reaches no agent, thread or message of tenant A.
 const THREADS_TEST: &str = "agents_threads_and_messages_of_the_other_tenant_are_out_of_reach";

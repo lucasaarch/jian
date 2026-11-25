@@ -68,6 +68,42 @@ pub(crate) async fn memories(
     Ok(tally.finish(None))
 }
 
+pub(crate) async fn schedules(
+    db: &Database,
+    ctx: &TenantCtx,
+    reader: &mut LegacyReader,
+    email: Option<&str>,
+) -> Result<ImportResult, ImportError> {
+    let owner = match owner(db, ctx, email).await? {
+        Ok(owner) => owner,
+        Err(result) => return Ok(result),
+    };
+    let agents_done = db
+        .imports(ctx)
+        .await?
+        .iter()
+        .any(|m| m.domain == "agents" && m.status == ImportStatus::Done);
+    if !agents_done {
+        return Ok(skipped(
+            "the agents are not imported yet: a schedule goes to the agent of its profile",
+        ));
+    }
+    if !reader.has_table("schedules").await? {
+        return Ok(Tally::default().finish(Some(NO_TABLE)));
+    }
+    let mut tally = Tally::default();
+    for schedule in reader.schedules().await? {
+        let id = schedule.id.clone();
+        count(
+            &mut tally,
+            "schedule",
+            &id,
+            db.import_schedule(ctx, &owner, &schedule).await,
+        );
+    }
+    Ok(tally.finish(None))
+}
+
 pub(crate) async fn projects(
     db: &Database,
     ctx: &TenantCtx,

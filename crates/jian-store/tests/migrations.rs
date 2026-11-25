@@ -296,7 +296,7 @@ async fn the_embedded_migrations_apply_to_the_platform_and_to_each_tenant() {
             "SELECT version::text FROM _sqlx_migrations ORDER BY version"
         )
         .await,
-        ["1", "2", "3", "4", "5", "6"]
+        ["1", "2", "3", "4", "5", "6", "7"]
     );
     // After a restart the tenant is migrated again with nothing to do.
     let report = db.migrate().await.unwrap();

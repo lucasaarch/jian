@@ -33,11 +33,14 @@ pub enum Domain {
     Memories,
     /// The old projects, as the workspace's. Needs the owner.
     Projects,
+    /// The old schedules, into the agents made from their profiles. Needs the owner and the
+    /// agents.
+    Schedules,
 }
 
 impl Domain {
     /// Every domain, in the order a run takes them.
-    pub const ALL: [Self; 10] = [
+    pub const ALL: [Self; 11] = [
         Self::Owner,
         Self::Secrets,
         Self::Providers,
@@ -48,6 +51,7 @@ impl Domain {
         Self::Messages,
         Self::Memories,
         Self::Projects,
+        Self::Schedules,
     ];
 
     /// The name in a marker and in the report.
@@ -63,6 +67,7 @@ impl Domain {
             Self::Messages => "messages",
             Self::Memories => "memories",
             Self::Projects => "projects",
+            Self::Schedules => "schedules",
         }
     }
 
@@ -81,6 +86,7 @@ impl Domain {
             // core, so it stays in the report of what was not imported.
             Self::Memories => &["memories", "memory_links"],
             Self::Projects => &["projects"],
+            Self::Schedules => &["schedules"],
         }
     }
 }
@@ -252,6 +258,10 @@ impl<'a> Importer<'a> {
                 conversations::messages(self.db, self.ctx, reader, email).await
             }
             Domain::Memories => memories::memories(self.db, self.ctx, reader).await,
+            Domain::Schedules => {
+                let email = self.options.owner_email.as_deref();
+                memories::schedules(self.db, self.ctx, reader, email).await
+            }
             Domain::Projects => {
                 let email = self.options.owner_email.as_deref();
                 memories::projects(self.db, self.ctx, reader, email).await

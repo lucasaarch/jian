@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use jian_store::embedded::EmbeddedPostgres;
 use jian_store::{
     LegacyAgent, LegacyChat, LegacyDevice, LegacyMachine, LegacyMemory, LegacyMemoryLink,
-    LegacyMessage, LegacyProject, LegacyProvider, LegacyThread,
+    LegacyMessage, LegacyProject, LegacyProvider, LegacySchedule, LegacyThread,
 };
 use sqlx::{AssertSqlSafe, Connection as _, PgConnection};
 
@@ -233,6 +233,49 @@ impl LegacyReader {
                 name,
                 repository_url,
                 created_at,
+            })
+            .collect())
+    }
+
+    pub(crate) async fn schedules(&mut self) -> Result<Vec<LegacySchedule>, ImportError> {
+        #[derive(sqlx::FromRow)]
+        struct Row {
+            id: String,
+            profile_id: String,
+            session_id: Option<String>,
+            name: String,
+            instruction: String,
+            at: Option<String>,
+            cron: Option<String>,
+            time_zone: String,
+            enabled: bool,
+            last_run_at: Option<String>,
+            last_error: Option<String>,
+            created_at: String,
+        }
+        let rows: Vec<Row> = sqlx::query_as(
+            "SELECT id::text, profile_id::text, session_id::text, name, instruction, \
+                \"at\"::text AS at, cron, time_zone, enabled, last_run_at::text, last_error, \
+                created_at::text FROM schedules ORDER BY created_at, id",
+        )
+        .fetch_all(&mut self.connection)
+        .await
+        .map_err(ImportError::Source)?;
+        Ok(rows
+            .into_iter()
+            .map(|r| LegacySchedule {
+                id: r.id,
+                profile_id: r.profile_id,
+                session_id: r.session_id,
+                name: r.name,
+                instruction: r.instruction,
+                at: r.at,
+                cron: r.cron,
+                time_zone: r.time_zone,
+                enabled: r.enabled,
+                last_run_at: r.last_run_at,
+                last_error: r.last_error,
+                created_at: r.created_at,
             })
             .collect())
     }

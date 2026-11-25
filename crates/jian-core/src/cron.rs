@@ -190,6 +190,15 @@ impl Cron {
     }
 }
 
+/// Reads an ISO 8601 instant that carries an offset (`2027-01-05T09:00:00-03:00`, or `Z`) as
+/// Unix milliseconds. A time with no offset is refused: it would mean the server's zone.
+#[must_use]
+pub fn parse_instant_ms(text: &str) -> Option<i64> {
+    text.parse::<jiff::Timestamp>()
+        .ok()
+        .map(jiff::Timestamp::as_millisecond)
+}
+
 /// Whether `zone` is a name the bundled database knows.
 #[must_use]
 pub fn is_time_zone(zone: &str) -> bool {

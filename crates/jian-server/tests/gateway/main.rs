@@ -10,6 +10,7 @@ mod invites;
 mod isolation;
 mod memories;
 mod providers;
+mod schedules;
 mod slots;
 mod support;
 mod threads;

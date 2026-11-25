@@ -1494,6 +1494,10 @@ INSERT INTO public.memories (profile_id, key, content, version, updated_at, expi
 INSERT INTO public.memories (profile_id, key, content, version, updated_at) VALUES ('11111111-1111-4111-8111-111111111111', 'Bad Key!', 'Not a key the core accepts.', 1, '2026-11-25 18:10:00+00');
 INSERT INTO public.memory_links (profile_id, a_key, b_key) VALUES ('11111111-1111-4111-8111-111111111111', 'likes-tea', 'trip');
 INSERT INTO public.projects (id, profile_id, name, repository_url, created_at) VALUES ('91111111-1111-4111-8111-111111111111', '11111111-1111-4111-8111-111111111111', 'Synthetic site', 'https://example.test/synthetic/site', '2026-11-25 18:20:00+00');
+INSERT INTO public.schedules (id, profile_id, session_id, name, instruction, cron, time_zone, created_by, created_at) VALUES ('a1111111-1111-4111-8111-111111111111', '11111111-1111-4111-8111-111111111111', '51111111-1111-4111-8111-111111111111', 'Morning note', 'Say good morning.', '0 9 * * *', 'America/Sao_Paulo', 'user', '2026-11-25 18:30:00+00');
+INSERT INTO public.schedules (id, profile_id, name, instruction, at, time_zone, next_run_at, created_by, created_at) VALUES ('a2222222-2222-4222-8222-222222222222', '11111111-1111-4111-8111-111111111111', 'Far ahead', 'Check the synthetic site.', '2126-11-25 18:30:00+00', 'UTC', '2126-11-25 18:30:00+00', 'agent', '2026-11-25 18:30:00+00');
+INSERT INTO public.schedules (id, profile_id, name, instruction, at, time_zone, enabled, last_run_at, created_by, created_at) VALUES ('a3333333-3333-4333-8333-333333333333', '11111111-1111-4111-8111-111111111111', 'Already done', 'Long past.', '2020-01-01 10:00:00+00', 'UTC', false, '2020-01-01 10:00:00+00', 'user', '2019-12-31 10:00:00+00');
+INSERT INTO public.schedules (id, profile_id, name, instruction, cron, time_zone, created_by, created_at) VALUES ('a4444444-4444-4444-8444-444444444444', '11111111-1111-4111-8111-111111111111', 'Too often', 'Every minute.', '* * * * *', 'UTC', 'user', '2026-11-25 18:30:00+00');
 INSERT INTO public.memory_projects (profile_id, memory_key, project_id) VALUES ('11111111-1111-4111-8111-111111111111', 'likes-tea', '91111111-1111-4111-8111-111111111111');
 
 --

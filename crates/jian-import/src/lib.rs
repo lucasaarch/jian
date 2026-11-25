@@ -51,7 +51,7 @@
 //! ([`ImportReport::not_imported`]); the issue that creates a domain's table adds its import
 //! here. (Profiles, sessions, contacts and messages do have one: the `agents`, `threads` and
 //! `messages` domains, which need the owner imported first; memories and projects, in the
-//! `memories` and `projects` domains.)
+//! `memories` and `projects` domains, and schedules in `schedules`.)
 
 mod conversations;
 mod error;

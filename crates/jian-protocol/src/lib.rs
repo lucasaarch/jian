@@ -14,4 +14,5 @@ pub mod machine;
 pub mod memories;
 pub mod projects;
 pub mod providers;
+pub mod schedules;
 pub mod threads;

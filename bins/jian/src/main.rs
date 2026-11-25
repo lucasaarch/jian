@@ -26,7 +26,7 @@ use anyhow::Context as _;
 use clap::{Parser, Subcommand};
 use jian_server::{
     AppState, INVITE_SEND_KIND, InviteSender, JobOptions, JobRegistry, JobRequeue, JobRunner,
-    PublicUrl, Settings, SlotKeeper,
+    PublicUrl, SCHEDULE_FIRE_KIND, ScheduleFirer, Settings, SlotKeeper,
 };
 use jian_store::embedded::EmbeddedConfig;
 use jian_store::secrets::{LocalKeyring, MasterKeys as _};
@@ -440,7 +440,9 @@ async fn import_command(database: &Database, cli: &Cli, args: ImportArgs) -> any
 
 /// Every job kind this binary runs.
 fn job_registry(settings: &Settings) -> JobRegistry {
-    debug_jobs::registry().register(INVITE_SEND_KIND, Arc::new(InviteSender::new(settings)))
+    debug_jobs::registry()
+        .register(INVITE_SEND_KIND, Arc::new(InviteSender::new(settings)))
+        .register(SCHEDULE_FIRE_KIND, Arc::new(ScheduleFirer))
 }
 
 /// Serves until a stop signal, then drains: it stops serving tenants (every open socket is told
@@ -499,6 +501,10 @@ async fn serve(
     )
     .await;
     let closing = CancellationToken::new();
+    // Time-keeping for schedules; it holds nothing a restart loses, and is joined below because it
+    // holds the database, which must be closable after the drain.
+    let ticking = CancellationToken::new();
+    let ticker = tokio::spawn(jian_server::run_ticker(database.clone(), ticking.clone()));
     let state = AppState::new(database.clone(), slots, closing.clone(), settings);
     let (stop, stopped) = oneshot::channel::<()>();
     let mut server = tokio::spawn(
@@ -544,6 +550,8 @@ async fn serve(
                 .and_then(|ended| ended.context("the server stopped"))
         }
     };
+    ticking.cancel();
+    let _ = ticker.await;
     // No new job is taken (the slots are no longer served); the ones running get until the
     // deadline, and what is left is stopped and handed back to the queue below.
     let stopped = runner.shutdown(jobs_until).await;

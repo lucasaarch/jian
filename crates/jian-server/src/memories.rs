@@ -51,7 +51,7 @@ fn view(memory: Memory, links: Vec<String>) -> MemoryView {
 }
 
 /// The agent's id, once the caller is known to see it.
-async fn seen_agent(
+pub(crate) async fn seen_agent(
     app: &AppState,
     ctx: &TenantCtx,
     viewer: &Viewer,
@@ -67,7 +67,7 @@ async fn seen_agent(
 }
 
 /// A thread the caller sees, or the 404 of one that does not exist.
-async fn seen_thread(
+pub(crate) async fn seen_thread(
     app: &AppState,
     ctx: &TenantCtx,
     viewer: &Viewer,

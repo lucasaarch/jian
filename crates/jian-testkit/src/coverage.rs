@@ -15,6 +15,10 @@ pub const JOB_KINDS: &[(&str, &str)] = &[
         "jian-server/tests/jobs.rs: a_job_runs_as_its_own_tenant_and_a_handler_sees_nothing_of_another",
     ),
     (
+        "schedule.fire",
+        "jian-server/tests/gateway/schedules.rs: a_schedule_fires_into_its_agents_inbox_once_and_never_into_another_tenants",
+    ),
+    (
         "invite.send",
         "jian-server/tests/gateway/invites.rs: an_invitation_is_sent_with_its_own_workspaces_mail_account_and_nobody_elses",
     ),

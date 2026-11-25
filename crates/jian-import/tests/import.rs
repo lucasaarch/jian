@@ -37,7 +37,8 @@ const CLAUDE: &str = "sk-ant-oat01-synthetic-0005";
 fn rows(which: Domain) -> u32 {
     match which {
         // Two memories and the link between them (the ended one and the bad key are left out).
-        Domain::Secrets | Domain::Providers | Domain::Memories => 3,
+        // Three schedules (the one every minute is left out).
+        Domain::Secrets | Domain::Providers | Domain::Memories | Domain::Schedules => 3,
         Domain::Messages => 5,
         // Two sessions with a person (the one between two agents is left).
         Domain::Threads => 2,
@@ -213,7 +214,7 @@ async fn a_dump_of_the_old_desktop_database_comes_over_once() {
         .unwrap();
     assert!(pending.domains.is_empty());
     let markers = new.db.imports(&ctx).await.unwrap();
-    assert_eq!(markers.len(), 10);
+    assert_eq!(markers.len(), 11);
     assert!(markers.iter().all(|m| m.status == ImportStatus::Done));
     new.stop().await;
 }
@@ -306,7 +307,8 @@ async fn a_run_that_stopped_or_lacked_a_key_is_finished_by_the_next() {
             Domain::Threads,
             Domain::Messages,
             Domain::Memories,
-            Domain::Projects
+            Domain::Projects,
+            Domain::Schedules
         ]
     );
     // No owner address was given, so the chats wait for one and say so.
@@ -316,6 +318,7 @@ async fn a_run_that_stopped_or_lacked_a_key_is_finished_by_the_next() {
         Domain::Messages,
         Domain::Memories,
         Domain::Projects,
+        Domain::Schedules,
     ] {
         assert_eq!(domain(&second, which).status, ImportStatus::Skipped);
     }
@@ -626,4 +629,25 @@ async fn memories_and_projects_came_over(
         Some("https://example.test/synthetic/site")
     );
     assert_eq!(&projects[0].created_by, owner);
+
+    // Schedules: the daily one is worked out from now and keeps its chat; the one far ahead stays
+    // on; the one that already ran comes over off; the one every minute is left out, and says why.
+    let schedules = db
+        .list_schedules(ctx, &agent, None, 10)
+        .await
+        .unwrap()
+        .items;
+    let names: Vec<&str> = schedules.iter().map(|s| s.name.as_str()).collect();
+    assert_eq!(names, ["Already done", "Morning note", "Far ahead"]);
+    assert!(schedules[1].enabled && schedules[1].next_run_at.is_some());
+    assert_eq!(schedules[1].time_zone, "America/Sao_Paulo");
+    assert!(schedules[1].thread_id.is_some() && &schedules[1].created_by == owner);
+    assert!(schedules[2].enabled && schedules[2].next_run_at.is_some());
+    assert!(!schedules[0].enabled && schedules[0].next_run_at.is_none());
+    assert!(schedules[0].last_run_at.is_some());
+    let detail = domain(report, Domain::Schedules).detail.clone().unwrap();
+    assert!(
+        detail.contains("1 left out") && detail.contains("too frequent"),
+        "{detail}"
+    );
 }

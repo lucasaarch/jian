@@ -72,6 +72,8 @@ mod projects;
 mod providers;
 mod public_url;
 mod rate;
+mod schedule_job;
+mod schedules;
 mod slots;
 mod summary;
 mod thread_messages;
@@ -101,6 +103,7 @@ pub use llm_access::{LlmAccess, PendingLogins};
 pub use mail::{DeployMail, MailConfig};
 pub use public_url::{InvalidPublicUrl, PublicUrl};
 pub use rate::{Clock, Limit, ManualClock, MemoryRateLimiter, RateLimiter, SystemClock, Verdict};
+pub use schedule_job::{SCHEDULE_FIRE_KIND, ScheduleFirer, run_ticker, tick};
 pub use slots::{DrainReport, NoRunQueue, RunRequeue, SlotKeeper, SlotOwnership};
 
 /// The routes `router` serves, for the binary to print at start-up: there is no panel yet to
@@ -151,6 +154,12 @@ pub const ROUTES: &[&str] = &[
     "DELETE /v1/projects/{id} (its creator or an admin)",
     "GET /v1/threads/{id}/project (a member who sees it)",
     "PUT /v1/threads/{id}/project (a member in it)",
+    "GET /v1/agents/{id}/schedules (a member who sees the agent)",
+    "POST /v1/agents/{id}/schedules (a member who sees the agent)",
+    "GET /v1/agents/{id}/schedules/{scheduleId} (a member who sees the agent)",
+    "PATCH /v1/agents/{id}/schedules/{scheduleId} (a member who sees the agent)",
+    "DELETE /v1/agents/{id}/schedules/{scheduleId} (a member who sees the agent)",
+    "GET /v1/agents/{id}/inbox (a member who sees the agent)",
     "GET /v1/grants (an admin)",
     "POST /v1/grants (an admin)",
     "POST /v1/grants/revoke (an admin)",
@@ -336,6 +345,17 @@ pub fn router_with(state: AppState, extra: Router<AppState>) -> Router {
             "/v1/agents/{id}/memories/{key}/links/{other}",
             put(memories::link).delete(memories::unlink),
         )
+        .route(
+            "/v1/agents/{id}/schedules",
+            get(schedules::list).post(schedules::create),
+        )
+        .route(
+            "/v1/agents/{id}/schedules/{scheduleId}",
+            get(schedules::get)
+                .patch(schedules::update)
+                .delete(schedules::delete),
+        )
+        .route("/v1/agents/{id}/inbox", get(schedules::inbox))
         .route("/v1/projects", get(projects::list).post(projects::create))
         .route(
             "/v1/projects/{id}",
