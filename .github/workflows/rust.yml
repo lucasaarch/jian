@@ -35,6 +35,9 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
+  # jian-store bundles Postgres: its build script lists and downloads the release from GitHub,
+  # which rate limits anonymous callers (shared runner IPs hit it). The token only reads public data.
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
 jobs:
   # Checks that do not depend on the OS: formatting, docs, dependency rules, unused dependencies.

@@ -5,6 +5,14 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+postgresql_embedded.workspace = true
+sqlx.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["time"] }
+tracing.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
 
 [lints]
 workspace = true

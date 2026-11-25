@@ -2,3 +2,9 @@
 # Relative to the repository root, not to the crate, so every cargo command agrees.
 [env]
 TS_RS_EXPORT_DIR = { value = "packages/protocol/src/generated", relative = true }
+
+# The Postgres that `postgresql_embedded` bundles into the gateway. Exact, so every build ships the
+# same server and the archive is cached in ~/.theseus; the major (18) is also in
+# `jian_store::embedded::MAJOR_VERSION`, and a data directory of another major is refused. To take a
+# minor, change it here. `force` so a stray variable in the shell cannot bundle another major.
+POSTGRESQL_VERSION = { value = "=18.7.0", force = true }

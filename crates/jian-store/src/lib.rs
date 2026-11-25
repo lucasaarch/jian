@@ -1,6 +1,16 @@
-//! Persistence through sqlx: SQLite when self-hosted, Postgres on the Cloud.
+//! Persistence through sqlx on Postgres: one the gateway embeds and runs itself, or an external
+//! one named by a connection URL.
 //!
-//! It owns the schema, the migrations and every query, and hands the rest of the workspace
-//! `jian-core` types, never rows. Every row carries a `tenant_id`, and no query runs without one.
-//! It does not decide anything about the domain (that is `jian-core`), call a model or run a
-//! command. `jian-runtime` and `jian-server` talk to it.
+//! It owns the connection pool and the embedded server's life (data directory, credentials, start
+//! and stop). The schema, the migrations and every query, with a schema and a role per tenant,
+//! come next; this crate will hand the rest of the workspace `jian-core` types, never rows. It
+//! does not decide anything about the domain (that is `jian-core`), call a model or run a command,
+//! and it reads no environment: the binary passes the data directory and the URL in.
+//! `jian-runtime` and `jian-server` talk to it.
+
+mod database;
+pub mod embedded;
+mod error;
+
+pub use database::{Database, DatabaseHealth, DatabaseSource, DatabaseUrl};
+pub use error::StoreError;

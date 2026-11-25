@@ -28,6 +28,9 @@ allow = [
   "MPL-2.0",
   "IJG",
   "CDLA-Permissive-2.0",
+  # postgresql_embedded and its siblings: "(Apache-2.0 OR MIT) AND PostgreSQL". The PostgreSQL
+  # license is a short permissive one, like MIT, and covers the bundled server too.
+  "PostgreSQL",
 ]
 confidence-threshold = 0.9
 

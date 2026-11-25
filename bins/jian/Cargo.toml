@@ -8,8 +8,15 @@ license.workspace = true
 axum.workspace = true
 anyhow.workspace = true
 clap.workspace = true
+directories.workspace = true
 jian-server.workspace = true
-tokio.workspace = true
+jian-store.workspace = true
+tokio = { workspace = true, features = ["signal", "sync", "time"] }
+tracing.workspace = true
+tracing-subscriber.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
 
 [lints]
 workspace = true
