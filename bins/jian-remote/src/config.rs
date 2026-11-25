@@ -86,21 +86,22 @@ fn prompt_secret(prompt: &str) -> Result<String, String> {
 /// ends. Windows has no termios: there the prompt echoes, and `--token-stdin` is the way.
 struct EchoOff {
     #[cfg(unix)]
-    saved: Option<libc::termios>,
+    saved: Option<rustix::termios::Termios>,
 }
 
 impl EchoOff {
     fn new() -> Self {
         #[cfg(unix)]
         {
-            // SAFETY: termios is plain data; tcgetattr fills it, and stdin is a terminal here.
-            let mut current: libc::termios = unsafe { std::mem::zeroed() };
-            if unsafe { libc::tcgetattr(libc::STDIN_FILENO, &mut current) } != 0 {
+            use rustix::termios::{LocalModes, OptionalActions, tcgetattr, tcsetattr};
+            let stdin = std::io::stdin();
+            // Not a terminal (a pipe): there is no echo to turn off.
+            let Ok(saved) = tcgetattr(&stdin) else {
                 return Self { saved: None };
-            }
-            let saved = current;
-            current.c_lflag &= !libc::ECHO;
-            unsafe { libc::tcsetattr(libc::STDIN_FILENO, libc::TCSANOW, &current) };
+            };
+            let mut quiet = saved.clone();
+            quiet.local_modes.remove(LocalModes::ECHO);
+            let _ = tcsetattr(&stdin, OptionalActions::Now, &quiet);
             Self { saved: Some(saved) }
         }
         #[cfg(not(unix))]
@@ -112,8 +113,11 @@ impl Drop for EchoOff {
     fn drop(&mut self) {
         #[cfg(unix)]
         if let Some(saved) = &self.saved {
-            // SAFETY: restores the settings tcgetattr read.
-            unsafe { libc::tcsetattr(libc::STDIN_FILENO, libc::TCSANOW, saved) };
+            let _ = rustix::termios::tcsetattr(
+                std::io::stdin(),
+                rustix::termios::OptionalActions::Now,
+                saved,
+            );
         }
     }
 }

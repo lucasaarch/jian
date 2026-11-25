@@ -84,6 +84,10 @@ pub fn stop() -> Result<(), String> {
     Ok(())
 }
 
+#[allow(
+    clippy::unnecessary_wraps,
+    reason = "every command returns the same result"
+)]
 pub fn uninstall(args: &Args) -> Result<(), String> {
     let purge = args.flag(&["--purge"]);
     let removed = service::uninstall(purge);

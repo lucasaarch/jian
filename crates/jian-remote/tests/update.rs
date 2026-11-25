@@ -1,11 +1,14 @@
 //! Self-update against a fake GitHub on loopback: a binary is replaced only by bytes that match
 //! the release's SHA-256, and nothing half-downloaded is ever left in its place.
 #![cfg(unix)]
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use std::collections::HashMap;
+use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use jian_remote::error::UpdateError;
 use jian_remote::update::{UpdateConfig, asset_name, update};
 use sha2::{Digest, Sha256};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -50,10 +53,13 @@ async fn serve(routes: HashMap<String, Vec<u8>>) -> String {
 }
 
 fn hex(bytes: &[u8]) -> String {
+    use std::fmt::Write as _;
     Sha256::digest(bytes)
         .iter()
-        .map(|byte| format!("{byte:02x}"))
-        .collect()
+        .fold(String::new(), |mut hex, byte| {
+            let _ = write!(hex, "{byte:02x}");
+            hex
+        })
 }
 
 /// A fake release `v2.0.0` whose checksum file claims `claimed`.
@@ -109,12 +115,13 @@ fn config(api: String, binary: PathBuf, current: &str) -> UpdateConfig {
 /// The version the hook last saw, so a test can tell it ran and with what.
 static HOOK_SAW: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
 
-fn record(version: &str) -> Result<(), String> {
+#[allow(clippy::unnecessary_wraps, reason = "the signature the updater calls")]
+fn record(version: &str) -> Result<(), UpdateError> {
     *HOOK_SAW.lock().unwrap() = Some(version.to_owned());
     Ok(())
 }
 
-fn refuse(_: &str) -> Result<(), String> {
+fn refuse(_: &str) -> Result<(), UpdateError> {
     Err("codesign failed".into())
 }
 
@@ -133,7 +140,7 @@ async fn the_host_finishes_every_install_and_its_failure_is_reported() {
     std::fs::write(&binary, b"old build").unwrap();
     hooked.after_install = Some(refuse);
     let error = update("2.0.0", &hooked).await.unwrap_err();
-    assert!(error.contains("codesign failed"), "{error}");
+    assert!(error.0.contains("codesign failed"), "{error}");
     let _ = std::fs::remove_dir_all(&dir);
 }
 
@@ -144,7 +151,7 @@ async fn a_binary_that_does_not_match_its_checksum_is_never_installed() {
     let error = update("2.0.0", &config(api, binary.clone(), "1.0.0"))
         .await
         .unwrap_err();
-    assert!(error.contains("does not match its checksum"), "{error}");
+    assert!(error.0.contains("does not match its checksum"), "{error}");
     assert_eq!(std::fs::read(&binary).unwrap(), b"old build");
     // The staged download is gone too.
     assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 1);
@@ -164,7 +171,6 @@ async fn a_matching_release_replaces_the_binary() {
         ("1.0.0", "2.0.0")
     );
     assert_eq!(std::fs::read(&binary).unwrap(), new);
-    use std::os::unix::fs::PermissionsExt;
     assert_eq!(
         std::fs::metadata(&binary).unwrap().permissions().mode() & 0o111,
         0o111

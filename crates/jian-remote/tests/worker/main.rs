@@ -2,9 +2,11 @@
 //! machine promises the gateway (who may connect, that a result arrives exactly when it should,
 //! that limits hold, that nothing leaves loopback).
 #![cfg(unix)]
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 mod support;
 
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::atomic::Ordering;
 use std::time::{Duration, Instant};
@@ -25,7 +27,7 @@ fn shell(id: &str, command: &str, timeout_ms: u64) -> GatewayMessage {
         spec: TaskSpec::Shell(ShellTask {
             command: command.into(),
             cwd: None,
-            env: Default::default(),
+            env: BTreeMap::default(),
         }),
     })
 }
@@ -299,7 +301,7 @@ async fn a_forward_listens_on_loopback_only() {
         },
     ];
     peer.send(&GatewayMessage::Forwards { forwards }).await;
-    let mut states = std::collections::BTreeMap::new();
+    let mut states = BTreeMap::new();
     while states.len() < 3 {
         let state = peer
             .recv_until(|message| match message {
@@ -335,7 +337,7 @@ async fn a_forward_listens_on_loopback_only() {
     let read =
         tokio::time::timeout(WAIT, tokio::io::AsyncReadExt::read(&mut local, &mut buffer)).await;
     assert!(
-        matches!(read, Ok(Ok(0)) | Ok(Err(_))),
+        matches!(read, Ok(Ok(0) | Err(_))),
         "the local side is closed with the channel"
     );
     assert_eq!(worker.stop().await, Exit::Stopped);

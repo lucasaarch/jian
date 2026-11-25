@@ -78,7 +78,9 @@ pub fn ui_state(helper: Option<&HelperCommand>, force: bool) -> UiState {
     let Some(helper) = helper.filter(|_| MAC) else {
         return UiState::Unknown;
     };
-    let mut cache = CACHE.lock().unwrap_or_else(|poison| poison.into_inner());
+    let mut cache = CACHE
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     if let Some((at, state)) = *cache
         && !force
         && at.elapsed() < UI_STATE_CACHE
@@ -94,9 +96,11 @@ pub fn ui_state(helper: Option<&HelperCommand>, force: bool) -> UiState {
 /// outcome is worded with what that means.
 #[derive(Debug, Default, Clone)]
 pub struct Preparation {
+    /// The screen was locked when the action was prepared, even after the wake.
     pub locked: bool,
 }
 
+/// Wakes a locked or sleeping display before an action; does nothing off a Mac.
 pub fn prepare(helper: Option<&HelperCommand>) -> Preparation {
     if !MAC {
         return Preparation::default();
@@ -112,6 +116,7 @@ pub fn prepare(helper: Option<&HelperCommand>) -> Preparation {
 }
 
 impl Preparation {
+    /// The sentence to add to a screenshot taken while the screen is locked, or nothing.
     pub fn note(&self) -> &'static str {
         if self.locked {
             LOCKED_SCREENSHOT_NOTE
@@ -146,6 +151,8 @@ impl Preparation {
             _ => String::new(),
         };
         let locked = if self.locked { LOCKED_ACTION_HINT } else { "" };
-        error.message = format!("{}{hint}{locked}", error.message).trim().to_owned();
+        format!("{}{hint}{locked}", error.message)
+            .trim()
+            .clone_into(&mut error.message);
     }
 }

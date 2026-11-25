@@ -408,7 +408,7 @@ impl Canvas {
     }
 }
 
-/// A TrueColor visual of `depth` on the helper's screen.
+/// A `TrueColor` visual of `depth` on the helper's screen.
 fn true_color(display: &Display, depth: u8) -> Option<Visualid> {
     display
         .screen()

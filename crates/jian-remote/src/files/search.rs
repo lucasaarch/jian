@@ -12,6 +12,7 @@ use super::Problem;
 use super::find::{SKIPPED, Shower};
 use super::paths::inside;
 use super::walk::{WalkJob, Walked, walk_search};
+use crate::error::SearchError;
 use crate::process::{Pipe, run_bounded};
 use crate::shell::MINIMAL_PATH;
 
@@ -74,7 +75,7 @@ async fn ripgrep(
     target: &Path,
     timeout: Duration,
     roots: &[String],
-) -> Option<Result<Walked, String>> {
+) -> Option<Result<Walked, SearchError>> {
     let mut command = Command::new("rg");
     command.args(ripgrep_args(search, target));
     if std::env::var("PATH").map_or(true, |path| path.is_empty()) {
@@ -97,7 +98,8 @@ async fn ripgrep(
     })
     .await;
     if let Some(error) = outcome.spawn_error {
-        return (error.kind() != std::io::ErrorKind::NotFound).then(|| Err(error.to_string()));
+        return (error.kind() != std::io::ErrorKind::NotFound)
+            .then(|| Err(error.to_string().into()));
     }
     let text = String::from_utf8_lossy(&stdout);
     let lines = |text: &str| {
@@ -131,14 +133,14 @@ async fn ripgrep(
                 })
                 .map(String::from)
                 .collect();
-            return Some(Err(if said.is_empty() {
+            return Some(Err(SearchError(if said.is_empty() {
                 format!(
                     "Search failed ({}).",
                     code.map_or("signal".into(), |code| code.to_string())
                 )
             } else {
                 said.join("\n")
-            }));
+            })));
         }
     }
     Some(Ok(Walked {
@@ -156,39 +158,38 @@ pub async fn search(
     timeout: Duration,
 ) -> Result<FilesDone, Problem> {
     tokio::fs::metadata(real).await?;
-    let found = match ripgrep(search, real, timeout, roots).await {
-        Some(found) => found,
-        None => {
-            let real = real.to_path_buf();
-            let pattern = search.pattern.to_owned();
-            let glob = search.glob.map(String::from);
-            let (ignore_case, context_lines, output, limit) = (
-                search.ignore_case,
-                search.context_lines,
-                search.output,
-                search.limit,
-            );
-            let roots = roots.to_vec();
-            let deadline = Instant::now() + timeout;
-            tokio::task::spawn_blocking(move || {
-                walk_search(
-                    &real,
-                    &WalkJob {
-                        pattern: &pattern,
-                        ignore_case,
-                        glob: glob.as_deref(),
-                        context_lines,
-                        output,
-                        limit,
-                        chars: FILES_MAX_SEARCH_CHARS,
-                        roots: &roots,
-                        deadline,
-                    },
-                )
-            })
-            .await
-            .unwrap_or_else(|error| Err(error.to_string()))
-        }
+    let found = if let Some(found) = ripgrep(search, real, timeout, roots).await {
+        found
+    } else {
+        let real = real.to_path_buf();
+        let pattern = search.pattern.to_owned();
+        let glob = search.glob.map(String::from);
+        let (ignore_case, context_lines, output, limit) = (
+            search.ignore_case,
+            search.context_lines,
+            search.output,
+            search.limit,
+        );
+        let roots = roots.to_vec();
+        let deadline = Instant::now() + timeout;
+        tokio::task::spawn_blocking(move || {
+            walk_search(
+                &real,
+                &WalkJob {
+                    pattern: &pattern,
+                    ignore_case,
+                    glob: glob.as_deref(),
+                    context_lines,
+                    output,
+                    limit,
+                    chars: FILES_MAX_SEARCH_CHARS,
+                    roots: &roots,
+                    deadline,
+                },
+            )
+        })
+        .await
+        .unwrap_or_else(|error| Err(error.to_string().into()))
     };
     let found = found.map_err(|message| Problem::new(FilesProblem::Failed, message))?;
     // Every line starts with the path it came from, so what came from a refused folder goes by

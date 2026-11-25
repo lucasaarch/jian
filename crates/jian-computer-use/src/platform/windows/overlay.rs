@@ -29,6 +29,7 @@ pub struct Overlay {
 impl Overlay {
     /// Must run on the thread that pumps the window's messages; the window belongs to it.
     pub fn new() -> Result<Self, String> {
+        // SAFETY: a null name asks for this process's own module.
         let instance = unsafe { GetModuleHandleW(null()) };
         let class = WNDCLASSEXW {
             cbSize: size_of::<WNDCLASSEXW>() as u32,
@@ -38,7 +39,9 @@ impl Overlay {
             ..Default::default()
         };
         // Zero also when the class exists already, which CreateWindowExW then uses.
-        unsafe { RegisterClassExW(&class) };
+        // SAFETY: `class` is fully initialised and outlives the call.
+        unsafe { RegisterClassExW(&raw const class) };
+        // SAFETY: `class` was registered above; a null window is handled after the call.
         let window = unsafe {
             CreateWindowExW(
                 WS_EX_LAYERED
@@ -70,6 +73,7 @@ impl Overlay {
 
     /// Puts `pixels` — premultiplied BGRA rows of `size`, width by height — on screen with
     /// its top-left at `origin`, in physical pixels, at `opacity` over all.
+    #[allow(clippy::expect_used, reason = "the surface was set just above")]
     pub fn present(
         &mut self,
         pixels: &[u8],
@@ -97,6 +101,7 @@ impl Overlay {
             // Per-pixel alpha, which ULW_ALPHA wants premultiplied.
             AlphaFormat: AC_SRC_ALPHA as u8,
         };
+        // SAFETY: `self.window` is a live layered window, and every pointer refers to a value that outlives the call.
         let updated = unsafe {
             UpdateLayeredWindow(
                 self.window,
@@ -112,7 +117,7 @@ impl Overlay {
                 surface.dc(),
                 &POINT { x: 0, y: 0 },
                 0,
-                &blend,
+                &raw const blend,
                 ULW_ALPHA,
             )
         };
@@ -123,6 +128,7 @@ impl Overlay {
     }
 
     pub fn show(&self) {
+        // SAFETY: `self.window` is a live window of this thread.
         unsafe {
             ShowWindow(self.window, SW_SHOWNOACTIVATE);
             // Again on every show: another topmost window may have come above it since.
@@ -139,6 +145,7 @@ impl Overlay {
     }
 
     pub fn hide(&self) {
+        // SAFETY: `self.window` is a live window of this thread.
         unsafe { ShowWindow(self.window, SW_HIDE) };
     }
 
@@ -150,11 +157,12 @@ impl Overlay {
 impl Drop for Overlay {
     fn drop(&mut self) {
         self.surface = None;
+        // SAFETY: `self.window` was created by this thread and is destroyed once, here.
         unsafe { DestroyWindow(self.window) };
     }
 }
 
-/// WS_EX_TRANSPARENT already lets the mouse through; these hold if a message reaches it
+/// `WS_EX_TRANSPARENT` already lets the mouse through; these hold if a message reaches it
 /// anyway, so it never activates and never claims a click.
 unsafe extern "system" fn window_proc(
     window: HWND,
@@ -165,6 +173,7 @@ unsafe extern "system" fn window_proc(
     match message {
         WM_MOUSEACTIVATE => MA_NOACTIVATE as LRESULT,
         WM_NCHITTEST => HTTRANSPARENT as LRESULT,
+        // SAFETY: the arguments are the ones the system passed to this window procedure.
         _ => unsafe { DefWindowProcW(window, message, wparam, lparam) },
     }
 }

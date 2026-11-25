@@ -18,11 +18,13 @@ pub const WAKE: u32 = WM_APP;
 /// asks for a message: a wake posted to a thread without one is lost.
 pub fn create_queue() {
     let mut message = MSG::default();
-    unsafe { PeekMessageW(&mut message, null_mut(), 0, 0, PM_NOREMOVE) };
+    // SAFETY: `message` is a local the call fills in; `PM_NOREMOVE` leaves the queue as it was.
+    unsafe { PeekMessageW(&raw mut message, null_mut(), 0, 0, PM_NOREMOVE) };
 }
 
 /// Wakes `thread`; false when it is gone.
 pub fn wake(thread: u32) -> bool {
+    // SAFETY: `PostThreadMessageW` takes plain values; a thread that is gone makes it return zero.
     unsafe { PostThreadMessageW(thread, WAKE, 0, 0) != 0 }
 }
 
@@ -35,6 +37,7 @@ pub fn sleep_until_message(timeout: Option<Duration>, queued: bool) {
         u32::try_from(timeout.as_millis()).unwrap_or(INFINITE - 1)
     });
     let flags = if queued { MWMO_INPUTAVAILABLE } else { 0 };
+    // SAFETY: no handles are waited on, so the null pointer and zero count are what the call expects.
     unsafe { MsgWaitForMultipleObjectsEx(0, null(), milliseconds, QS_ALLINPUT, flags) };
 }
 
@@ -42,10 +45,12 @@ pub fn sleep_until_message(timeout: Option<Duration>, queued: bool) {
 /// includes the messages posted to the thread itself.
 pub fn next(window: HWND) -> Option<MSG> {
     let mut message = MSG::default();
-    (unsafe { PeekMessageW(&mut message, window, 0, 0, PM_REMOVE) } != 0).then_some(message)
+    // SAFETY: `message` is a local the call fills in.
+    (unsafe { PeekMessageW(&raw mut message, window, 0, 0, PM_REMOVE) } != 0).then_some(message)
 }
 
 pub fn dispatch(message: &MSG) {
+    // SAFETY: `message` is a message this thread got from the queue.
     unsafe {
         TranslateMessage(message);
         DispatchMessageW(message);

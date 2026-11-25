@@ -69,6 +69,10 @@ impl MacPointer {
 }
 
 impl Pointer for MacPointer {
+    #[allow(
+        clippy::expect_used,
+        reason = "the helper answers every request on the main thread; anything else is a bug that must stop the helper"
+    )]
     fn new(look: &Look) -> Self {
         Self {
             // The helper answers every request on the main thread, where AppKit lives.
@@ -142,6 +146,10 @@ impl Drop for MacPointer {
 }
 
 impl Overlay {
+    #[allow(
+        clippy::expect_used,
+        reason = "a view made with `wantsLayer` always has a layer"
+    )]
     fn new(mtm: MainThreadMarker, look: &Look) -> Self {
         let art = Art::draw(look.color, None, DART_SCALE);
         let dart = CGSize::new(
@@ -160,8 +168,11 @@ impl Overlay {
         // The name first: how wide it sets decides how wide the pill and the window are.
         let label = (!look.label.is_empty()).then(|| {
             let text = CATextLayer::new();
+            // SAFETY: `NSFontWeightMedium` is an immutable constant that AppKit defines for the life of the process.
             let font =
                 NSFont::systemFontOfSize_weight(LABEL_FONT_POINTS, unsafe { NSFontWeightMedium });
+            // SAFETY: `text` and `font` are live objects of the classes these setters belong to, and an `NSFont`
+            // is toll-free bridged to the `CTFont` that `setFont` takes.
             unsafe {
                 text.setString(Some(as_object(&*NSString::from_str(&look.label))));
                 // An NSFont is a CTFont, which is what the layer reads.
@@ -171,6 +182,7 @@ impl Overlay {
             text.setForegroundColor(Some(&NSColor::whiteColor().CGColor()));
             text.setContentsScale(pixels_per_point);
             // A name wider than the pill ends in an ellipsis.
+            // SAFETY: `kCATruncationEnd` is an immutable constant that Core Animation defines for the life of the process.
             text.setTruncationMode(unsafe { kCATruncationEnd });
             let wanted = text.preferredFrameSize();
             let size = CGSize::new(
@@ -195,6 +207,7 @@ impl Overlay {
         let frame = CGRect::new(CGPoint::new(0.0, 0.0), size);
 
         // Borderless windows never become key or main, so the pointer cannot take focus.
+        // SAFETY: `mtm` proves this is the main thread, which `NSWindow` requires, and `frame` is a plain value.
         let window = unsafe {
             NSWindow::initWithContentRect_styleMask_backing_defer(
                 NSWindow::alloc(mtm),
@@ -205,6 +218,7 @@ impl Overlay {
             )
         };
         // Owned by Rust: AppKit must not release it again on close.
+        // SAFETY: this `Retained` owns the window, so AppKit must not release it a second time when it closes.
         unsafe { window.setReleasedWhenClosed(false) };
         window.setOpaque(false);
         window.setBackgroundColor(Some(&NSColor::clearColor()));
@@ -267,6 +281,7 @@ impl Overlay {
         sprite.setFrame(CGRect::new(CGPoint::new(0.0, from_top(dart.height)), dart));
         match art.png() {
             Ok(png) => match NSImage::initWithData(NSImage::alloc(), &NSData::with_bytes(&png)) {
+                // SAFETY: `sprite` is a live layer and `image` a live object; `contents` takes any object.
                 Some(image) => unsafe { sprite.setContents(Some(as_object(&*image))) },
                 None => eprintln!("computer-helper: the pointer's image did not decode"),
             },
@@ -287,6 +302,7 @@ impl Overlay {
 
 fn animation(key_path: &str, from: f64, to: f64, seconds: f64) -> Retained<CABasicAnimation> {
     let animation = CABasicAnimation::animationWithKeyPath(Some(&NSString::from_str(key_path)));
+    // SAFETY: `animation` is a live object and `NSNumber` is a valid value for these properties.
     unsafe {
         animation.setFromValue(Some(as_object(&*NSNumber::new_f64(from))));
         animation.setToValue(Some(as_object(&*NSNumber::new_f64(to))));
@@ -297,5 +313,6 @@ fn animation(key_path: &str, from: f64, to: f64, seconds: f64) -> Retained<CABas
 
 fn as_object<T: objc2::Message>(value: &T) -> &AnyObject {
     // Every Objective-C object is an AnyObject; the cast only forgets its class.
-    unsafe { &*(value as *const T).cast::<AnyObject>() }
+    // SAFETY: every Objective-C object starts with the layout of `AnyObject`, so the reference stays valid.
+    unsafe { &*std::ptr::from_ref::<T>(value).cast::<AnyObject>() }
 }

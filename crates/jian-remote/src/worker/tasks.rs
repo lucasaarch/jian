@@ -6,7 +6,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use jian_protocol::machine::{
-    TASK_TIMEOUT_MAX_MS, Task, TaskOutput, TaskResult, TaskSpec, WorkerMessage,
+    TASK_TIMEOUT_MAX_MS, Task, TaskId, TaskOutput, TaskResult, TaskSpec, WorkerMessage,
 };
 use tokio::sync::Notify;
 use tokio_util::sync::CancellationToken;
@@ -28,19 +28,24 @@ const OUTBOX_MAX: usize = 100;
 
 /// What tasks need from the worker.
 pub struct Context {
+    /// The limits and refusals for file tasks.
     pub files: FilesConfig,
+    /// The Computer Use session.
     pub computer: Arc<ComputerSession>,
+    /// Where the worker records its state.
     pub state: StateFile,
+    /// Where the worker logs.
     pub log: Arc<Logger>,
+    /// How to update, or nothing when this build cannot.
     pub update: Option<UpdateConfig>,
     /// How long after an update's result the worker exits even if it was never acknowledged.
     pub update_grace: Duration,
 }
 
 pub struct Tasks {
-    running: Mutex<HashMap<String, CancellationToken>>,
+    running: Mutex<HashMap<TaskId, CancellationToken>>,
     /// Results in the order they finished, as the frames that carry them.
-    outbox: Mutex<Vec<(String, String)>>,
+    outbox: Mutex<Vec<(TaskId, String)>>,
     /// The update whose acknowledgement lets the worker restart.
     update: Mutex<Option<String>>,
     /// Signalled once the worker should exit for its new binary.
@@ -50,7 +55,9 @@ pub struct Tasks {
 }
 
 fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
-    mutex.lock().unwrap_or_else(|poison| poison.into_inner())
+    mutex
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
 impl Tasks {

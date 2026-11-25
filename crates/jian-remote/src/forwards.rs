@@ -8,7 +8,7 @@ use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
 use jian_protocol::machine::{
-    FORWARD_CHUNK_MAX, FORWARD_CONNECTIONS_MAX, FORWARD_LOCAL_PORTS, ForwardAssignment,
+    FORWARD_CHUNK_MAX, FORWARD_CONNECTIONS_MAX, FORWARD_LOCAL_PORTS, ForwardAssignment, ForwardId,
     ForwardState, ForwardStatus, WorkerMessage, encode_channel_frame,
 };
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -16,6 +16,7 @@ use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
+use crate::error::ForwardError;
 use crate::log::Logger;
 use crate::outgoing::{Outgoing, Sender};
 use crate::random;
@@ -27,7 +28,7 @@ const CHANNEL_BUFFER: usize = 64;
 
 /// Where a forward may listen: loopback only. Anything else would hand the gateway's service to
 /// whoever else can reach this machine.
-pub fn loopback_bind(bind: &str) -> Result<IpAddr, String> {
+pub fn loopback_bind(bind: &str) -> Result<IpAddr, ForwardError> {
     if bind.eq_ignore_ascii_case("localhost") {
         return Ok(IpAddr::V4(Ipv4Addr::LOCALHOST));
     }
@@ -35,14 +36,15 @@ pub fn loopback_bind(bind: &str) -> Result<IpAddr, String> {
         Ok(ip) if ip.is_loopback() => Ok(ip),
         _ => Err(format!(
             "Refused to listen on {bind}: a forward only listens on this machine's loopback."
-        )),
+        )
+        .into()),
     }
 }
 
 /// A free port in the forward range. The search starts at a random port so two workers on one
 /// machine (or a restart racing the old listener) rarely collide; ports in use or reserved are
 /// skipped, any other failure is the answer.
-async fn listen(ip: IpAddr) -> Result<TcpListener, String> {
+async fn listen(ip: IpAddr) -> Result<TcpListener, ForwardError> {
     let (first, last) = FORWARD_LOCAL_PORTS;
     let span = u64::from(last - first) + 1;
     let start = random::next_u64() % span;
@@ -55,10 +57,12 @@ async fn listen(ip: IpAddr) -> Result<TcpListener, String> {
                     error.kind(),
                     std::io::ErrorKind::AddrInUse | std::io::ErrorKind::PermissionDenied
                 ) => {}
-            Err(error) => return Err(format!("Could not open a local port: {error}")),
+            Err(error) => {
+                return Err(format!("Could not open a local port: {error}").into());
+            }
         }
     }
-    Err(format!("No free port between {first} and {last}."))
+    Err(format!("No free port between {first} and {last}.").into())
 }
 
 struct Channel {
@@ -76,7 +80,7 @@ impl Shared {
     fn take(&self, channel: u32) -> Option<Channel> {
         self.channels
             .lock()
-            .unwrap_or_else(|poison| poison.into_inner())
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .remove(&channel)
     }
 }
@@ -87,14 +91,16 @@ struct Listener {
     stop: CancellationToken,
 }
 
+/// The port forwards this worker holds open: one loopback listener each, carrying connections to the gateway.
 pub struct Forwards {
-    listeners: HashMap<String, Listener>,
+    listeners: HashMap<ForwardId, Listener>,
     shared: Arc<Shared>,
     events: Sender,
     log: Arc<Logger>,
 }
 
 impl Forwards {
+    /// No forwards yet; `events` is where their messages go.
     pub fn new(events: Sender, log: Arc<Logger>) -> Self {
         Self {
             listeners: HashMap::new(),
@@ -164,9 +170,14 @@ impl Forwards {
             Err(error) => {
                 self.log.warn(
                     "Forward failed",
-                    &[("port", &assignment.port.to_string()), ("error", &error)],
+                    &[
+                        ("port", &assignment.port.to_string()),
+                        ("error", &error.to_string()),
+                    ],
                 );
-                ForwardStatus::Failed { error }
+                ForwardStatus::Failed {
+                    error: error.into(),
+                }
             }
         };
         Listener {
@@ -183,7 +194,7 @@ impl Forwards {
             .shared
             .channels
             .lock()
-            .unwrap_or_else(|poison| poison.into_inner());
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let open = channels.get(&channel)?;
         if open.to_socket.try_send(bytes.to_vec()).is_err() {
             // Overflowed (or its socket is gone): closed here, and since it is removed from the
@@ -211,7 +222,7 @@ impl Forwards {
             .shared
             .channels
             .lock()
-            .unwrap_or_else(|poison| poison.into_inner())
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .drain()
             .map(|(_, open)| open)
             .collect();
@@ -220,6 +231,7 @@ impl Forwards {
         }
     }
 
+    /// Closes every listener and connection, for a worker on its way out.
     pub fn close_all(&mut self) {
         for listener in self.listeners.values() {
             listener.stop.cancel();
@@ -231,7 +243,7 @@ impl Forwards {
 
 async fn accept(
     listener: TcpListener,
-    forward: String,
+    forward: ForwardId,
     shared: Arc<Shared>,
     events: Sender,
     stop: CancellationToken,
@@ -257,7 +269,7 @@ async fn accept(
         shared
             .channels
             .lock()
-            .unwrap_or_else(|poison| poison.into_inner())
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .insert(
                 channel,
                 Channel {

@@ -28,7 +28,7 @@ pub fn display() -> Result<&'static Display, String> {
     DISPLAY.get_or_init(connect).as_ref().map_err(Clone::clone)
 }
 
-/// Throws away what the server sent unasked. Nothing here selects events, but MappingNotify
+/// Throws away what the server sent unasked. Nothing here selects events, but `MappingNotify`
 /// reaches every client after `type` borrows a keycode, and errors of unchecked requests land
 /// here too: logged, so a failed draw is visible without failing the action.
 pub fn drain() {

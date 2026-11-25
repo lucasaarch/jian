@@ -4,7 +4,7 @@
 //! `protocol` for the messages.
 //!
 //! A library so the worker carries it: `jian-remote computer-helper` runs [`helper_main`] in a
-//! child process of its own. A child, not a thread, because macOS wants AppKit on a process's
+//! child process of its own. A child, not a thread, because macOS wants `AppKit` on a process's
 //! main thread, and because a helper stuck in a system call has to be killable without taking
 //! the worker with it. One binary also means one identity for the OS's privacy permissions.
 
@@ -156,10 +156,13 @@ impl<P: Platform, Q: Pointer> Helper<P, Q> {
                 self.platform.preflight(Need::Mouse(from))?;
                 self.glide(session, from)?;
                 self.pointer(session).flash();
-                let (_, pointer) = self.pointers.get_mut(session).expect("made by the glide");
+                let Some((_, pointer)) = self.pointers.get_mut(session) else {
+                    // `glide` made it a moment ago; only a platform that drops it can get here.
+                    return Err(Failure::invalid("the session's pointer is gone"));
+                };
                 self.platform
                     .drag(from, &motion::drag_path(from, to), &mut |at| {
-                        pointer.place(at)
+                        pointer.place(at);
                     })?;
             }
             Request::Type { text } => {

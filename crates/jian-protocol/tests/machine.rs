@@ -1,6 +1,13 @@
+//! The messages as the gateway writes and reads them: the JSON a peer of this version must keep
+//! accepting and producing.
+
+// clippy.toml excuses `#[test]` bodies, not the helpers they call.
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
 use serde_json::{Value, json};
 
-use super::*;
+use jian_protocol::machine::*;
+use serde::Serialize;
 
 fn wire<T: Serialize>(value: &T) -> Value {
     serde_json::to_value(value).unwrap()
@@ -112,4 +119,11 @@ fn channel_frames_carry_their_channel() {
     );
     assert_eq!(decode_channel_frame(&[1, 2, 3]), None);
     assert_eq!(decode_channel_frame(&[0, 0, 0, 7]), Some((7, &[][..])));
+}
+
+#[test]
+fn ids_travel_as_the_plain_strings_the_gateway_wrote() {
+    let id = TaskId::from("t-1");
+    assert_eq!(serde_json::to_string(&id).unwrap(), "\"t-1\"");
+    assert_eq!(serde_json::from_str::<ForwardId>("\"f-9\"").unwrap(), "f-9");
 }

@@ -31,13 +31,16 @@ pub fn alive(pid: u32) -> bool {
         {
             return false;
         }
-        let Ok(pid) = libc::pid_t::try_from(pid) else {
+        let Some(pid) = i32::try_from(pid)
+            .ok()
+            .and_then(rustix::process::Pid::from_raw)
+        else {
             return false;
         };
-        // SAFETY: signal 0 only asks whether the process exists. EPERM means it does.
-        unsafe {
-            libc::kill(pid, 0) == 0
-                || std::io::Error::last_os_error().raw_os_error() == Some(libc::EPERM)
+        // Signal 0 only asks whether the process exists. EPERM means it does.
+        match rustix::process::test_kill_process(pid) {
+            Ok(()) => true,
+            Err(error) => error == rustix::io::Errno::PERM,
         }
     }
     #[cfg(windows)]
@@ -69,9 +72,17 @@ pub fn terminate(pid: u32) -> bool {
 
 fn signal(pid: u32, kill: bool) {
     #[cfg(unix)]
-    if let Ok(pid) = libc::pid_t::try_from(pid) {
-        // SAFETY: a plain signal to a pid read from the lock file.
-        unsafe { libc::kill(pid, if kill { libc::SIGKILL } else { libc::SIGTERM }) };
+    if let Some(pid) = i32::try_from(pid)
+        .ok()
+        .and_then(rustix::process::Pid::from_raw)
+    {
+        let signal = if kill {
+            rustix::process::Signal::KILL
+        } else {
+            rustix::process::Signal::TERM
+        };
+        // The process may be gone already; there is nothing to do about it.
+        let _ = rustix::process::kill_process(pid, signal);
     }
     #[cfg(windows)]
     {

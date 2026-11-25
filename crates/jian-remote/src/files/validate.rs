@@ -28,7 +28,7 @@ fn plain(value: &str, max: usize) -> bool {
     text(value, max)
         && !value.is_empty()
         && !value.starts_with('-')
-        && !value.chars().any(|c| c.is_control())
+        && !value.chars().any(char::is_control)
         && value == value.trim()
 }
 

@@ -203,7 +203,7 @@ mod tests {
         assert!(matches!(
             request,
             Request::ClickAt { point_x, point_y, button: Button::Right, count: Some(2) }
-                if point_x == 10.5 && point_y == 20.0
+                if (point_x - 10.5).abs() < f64::EPSILON && (point_y - 20.0).abs() < f64::EPSILON
         ));
         let request: Request = serde_json::from_str(r#"{"cmd":"screenshot"}"#).unwrap();
         assert!(matches!(request, Request::Screenshot { max_bytes: None }));
@@ -234,7 +234,7 @@ mod tests {
                 .unwrap();
         assert!(matches!(
             moved.request,
-            Request::Move { point_x, point_y } if point_x == 3.0 && point_y == 4.5
+            Request::Move { point_x, point_y } if (point_x - 3.0).abs() < f64::EPSILON && (point_y - 4.5).abs() < f64::EPSILON
         ));
     }
 

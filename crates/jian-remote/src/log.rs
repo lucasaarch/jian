@@ -11,17 +11,24 @@ use crate::clock::now_iso;
 /// the disk.
 const LOG_MAX_BYTES: u64 = 5 * 1024 * 1024;
 
+/// How serious a log line is.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Level {
+    /// Detail for finding a fault.
     Debug,
+    /// Something that happened in the normal course.
     Info,
+    /// Something odd that the worker got past.
     Warn,
+    /// Something that failed.
     Error,
 }
 
 impl Level {
+    /// Every level, least serious first.
     pub const ALL: [Level; 4] = [Level::Debug, Level::Info, Level::Warn, Level::Error];
 
+    /// The lowercase word the log writes for this level.
     pub fn name(self) -> &'static str {
         match self {
             Self::Debug => "debug",
@@ -31,6 +38,7 @@ impl Level {
         }
     }
 
+    /// The level a word names, if any.
     pub fn parse(name: &str) -> Option<Self> {
         Self::ALL.into_iter().find(|level| level.name() == name)
     }
@@ -58,6 +66,7 @@ fn value(text: &str) -> String {
     }
 }
 
+/// One log line: time, level, message and `key=value` fields.
 pub fn format_line(level: Level, message: &str, fields: &[(&str, &str)], at: &str) -> String {
     let mut line = format!("{at} {:<5} {message}", level.name().to_ascii_uppercase());
     for (key, field) in fields.iter().filter(|(_, field)| !field.is_empty()) {
@@ -77,6 +86,7 @@ pub struct Logger {
 }
 
 impl Logger {
+    /// A log that appends to `path`.
     pub fn new(path: PathBuf) -> Self {
         Self {
             path: Some(path),
@@ -94,6 +104,7 @@ impl Logger {
         }
     }
 
+    /// Appends one line; a failure to write is dropped, since there is nowhere to report it.
     pub fn write(&self, level: Level, message: &str, fields: &[(&str, &str)]) {
         let line = format_line(level, message, fields, &now_iso());
         let _guard = self.lock.lock();
@@ -113,15 +124,19 @@ impl Logger {
         }
     }
 
+    /// Writes at [`Level::Debug`].
     pub fn debug(&self, message: &str, fields: &[(&str, &str)]) {
         self.write(Level::Debug, message, fields);
     }
+    /// Writes at [`Level::Info`].
     pub fn info(&self, message: &str, fields: &[(&str, &str)]) {
         self.write(Level::Info, message, fields);
     }
+    /// Writes at [`Level::Warn`].
     pub fn warn(&self, message: &str, fields: &[(&str, &str)]) {
         self.write(Level::Warn, message, fields);
     }
+    /// Writes at [`Level::Error`].
     pub fn error(&self, message: &str, fields: &[(&str, &str)]) {
         self.write(Level::Error, message, fields);
     }

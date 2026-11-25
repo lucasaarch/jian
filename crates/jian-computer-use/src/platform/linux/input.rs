@@ -1,4 +1,4 @@
-//! Linux: reading the root window and acting on it through XTest, as the user's own mouse and
+//! Linux: reading the root window and acting on it through `XTest`, as the user's own mouse and
 //! keyboard would. X11 counts in pixels, so a point is a pixel: geometry reports scale 1.
 
 use std::thread::sleep;
@@ -20,7 +20,7 @@ use crate::platform::{Geometry, Held, Platform, SessionStatus};
 use crate::protocol::{Button, Direction, Point};
 use crate::screenshot::Frame;
 
-/// A GetImage reply carries at most this many bytes, so a large screen comes in strips.
+/// A `GetImage` reply carries at most this many bytes, so a large screen comes in strips.
 const STRIP_BYTES: usize = 4 << 20;
 
 pub struct Linux;
@@ -44,7 +44,7 @@ impl Platform for Linux {
     /// X11 has no common signal for a locked session, so it reads as unlocked; a display that
     /// DPMS has put to sleep reads as asleep.
     fn session_status(&self) -> SessionStatus {
-        let display_asleep = display().ok().is_some_and(|display| {
+        let display_asleep = display().is_ok_and(|display| {
             dpms::info(&display.conn)
                 .ok()
                 .and_then(|cookie| cookie.reply().ok())
@@ -225,7 +225,7 @@ fn cursor(display: &Display) -> Result<(i16, i16), String> {
     Ok((pointer.root_x, pointer.root_y))
 }
 
-/// XTest, which every action needs: the mouse here, the keys in `keyboard`.
+/// `XTest`, which every action needs: the mouse here, the keys in `keyboard`.
 struct Input {
     display: &'static Display,
 }

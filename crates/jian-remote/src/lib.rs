@@ -5,6 +5,7 @@
 pub mod clock;
 pub mod computer;
 pub mod ends;
+pub mod error;
 pub mod files;
 pub mod forwards;
 pub mod log;

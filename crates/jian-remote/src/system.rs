@@ -79,7 +79,7 @@ fn os_release_value(text: &str, key: &str) -> Option<String> {
     (!value.is_empty()).then_some(value)
 }
 
-/// PRETTY_NAME (`Ubuntu 24.04.1 LTS`), else NAME and VERSION_ID, else the kernel.
+/// `PRETTY_NAME` (`Ubuntu 24.04.1 LTS`), else NAME and `VERSION_ID`, else the kernel.
 pub fn linux_system(os_release: Option<&str>, kernel: &str) -> String {
     if let Some(text) = os_release {
         if let Some(pretty) = os_release_value(text, "PRETTY_NAME") {
@@ -127,6 +127,7 @@ pub fn detect_system() -> String {
     printable(&described)
 }
 
+/// The machine's name as the owner knows it.
 pub fn hostname() -> String {
     if let Ok(name) = std::env::var(if cfg!(windows) {
         "COMPUTERNAME"

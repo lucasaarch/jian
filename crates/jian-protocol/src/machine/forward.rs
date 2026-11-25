@@ -1,3 +1,4 @@
+use super::ForwardId;
 use serde::{Deserialize, Serialize};
 
 /// The ports a worker listens on, on its own loopback: first and last.
@@ -11,7 +12,8 @@ pub const FORWARD_CONNECTIONS_MAX: usize = 64;
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ForwardAssignment {
-    pub id: String,
+    /// The gateway's id for the forward.
+    pub id: ForwardId,
     /// The port on the gateway's side; only its own loopback is reached.
     pub port: u16,
     /// Where the worker listens. Only a loopback address is accepted: a port another computer
@@ -28,11 +30,14 @@ fn loopback() -> String {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ForwardState {
-    pub id: String,
+    /// The forward this state is about.
+    pub id: ForwardId,
+    /// Open with its port, or failed with why.
     #[serde(flatten)]
     pub status: ForwardStatus,
 }
 
+/// Whether a forward's listener is up.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(
     tag = "status",
@@ -40,11 +45,14 @@ pub struct ForwardState {
     rename_all_fields = "camelCase"
 )]
 pub enum ForwardStatus {
+    /// The listener accepts connections.
     Open {
+        /// The port picked from [`FORWARD_LOCAL_PORTS`].
         local_port: u16,
     },
-    /// Why, for a person to read.
+    /// The listener could not start or stopped.
     Failed {
+        /// The reason, for a person to read.
         error: String,
     },
 }

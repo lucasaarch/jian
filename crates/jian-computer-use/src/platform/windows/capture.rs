@@ -19,12 +19,14 @@ impl Capture {
     pub fn primary() -> Result<Self, String> {
         let primary = Primary::read()?;
         let surface = Surface::new(primary.width, primary.height)?;
+        // SAFETY: `GetDC(null)` takes no pointer and returns the screen's device context, or null, which is checked next.
         let screen = unsafe { GetDC(null_mut()) };
         if screen.is_null() {
             return Err("could not read the screen".into());
         }
         // CAPTUREBLT takes layered windows too — menus, tooltips and the Jian pointer, as the
         // macOS capture shows them. The primary display's top-left is the desktop's origin.
+        // SAFETY: `surface.dc()` is a live memory context of `primary`'s size and `screen` was just checked not to be null.
         let copied = unsafe {
             BitBlt(
                 surface.dc(),
@@ -38,6 +40,7 @@ impl Capture {
                 SRCCOPY | CAPTUREBLT,
             )
         };
+        // SAFETY: `screen` came from `GetDC(null)` above and is released once.
         unsafe { ReleaseDC(null_mut(), screen) };
         // Fails while another desktop has the input: the lock screen or a UAC prompt.
         if copied == 0 {
@@ -51,6 +54,7 @@ impl Capture {
         let full = &self.0;
         let (width, height) = fitted(full.width(), full.height(), max_width);
         let target = Surface::new(width, height)?;
+        // SAFETY: both device contexts are live for the whole block, and each call only draws into the target's own bitmap.
         let drawn = unsafe {
             // Halftone averages the pixels a target pixel covers; the default drops rows and
             // columns, which loses thin text. It needs the brush origin set after it.

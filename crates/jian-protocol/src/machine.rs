@@ -13,11 +13,13 @@
 mod computer;
 mod files;
 mod forward;
+mod ids;
 mod task;
 
 pub use computer::*;
 pub use files::*;
 pub use forward::*;
+pub use ids::*;
 pub use task::*;
 
 use serde::{Deserialize, Serialize};
@@ -40,6 +42,7 @@ pub const RESULT_BUDGET_BYTES: usize = 480_000;
 /// How much of a command's output the result keeps, in characters, its first and last halves
 /// with a marker between them.
 pub const STDOUT_CAP: usize = 400_000;
+/// The same cut for a command's error output, which is rarely worth as much room.
 pub const STDERR_CAP: usize = 50_000;
 
 /// Close codes the gateway uses, from the range RFC 6455 leaves to applications.
@@ -51,19 +54,26 @@ pub const CLOSE_REPLACED: u16 = 4002;
 pub const CLOSE_TOKEN_REVOKED: u16 = 4003;
 
 /// What a worker can do. The gateway sends a task only to a worker that advertises its kind.
+/// Runs shell commands.
 pub const CAP_SHELL: &str = "shell";
+/// Reads, writes, finds and searches files.
 pub const CAP_FILES: &str = "files";
+/// Opens local ports for the gateway to reach.
 pub const CAP_FORWARDS: &str = "forwards";
 /// The worker replaces its own binary from a release (see the worker's `update` module).
 pub const CAP_UPDATE: &str = "update";
+/// Computer Use on a Mac.
 pub const CAP_COMPUTER_MACOS: &str = "computer-macos";
+/// Computer Use on Linux, under X11.
 pub const CAP_COMPUTER_LINUX: &str = "computer-linux";
+/// Computer Use on Windows.
 pub const CAP_COMPUTER_WINDOWS: &str = "computer-windows";
 
 /// The first message on a connection: who this worker is and what it can do.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Hello {
+    /// The [`PROTOCOL_VERSION`] this worker speaks.
     pub protocol_version: u32,
     /// The worker's release, `1.2.3`.
     pub worker_version: String,
@@ -71,10 +81,13 @@ pub struct Hello {
     pub os: String,
     /// `aarch64` or `x86_64`.
     pub arch: String,
+    /// The machine's own name, as the owner sees it in the panel.
     pub hostname: String,
     /// The OS by name and version as a person reads it: `macOS 15.4`, `Ubuntu 24.04.1 LTS`.
     pub system: String,
+    /// The `CAP_*` kinds of task this worker accepts.
     pub capabilities: Vec<String>,
+    /// Whether the screen is usable now; later changes come as [`WorkerMessage::UiState`].
     pub ui_state: UiState,
 }
 
@@ -82,10 +95,12 @@ pub struct Hello {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Welcome {
+    /// The [`PROTOCOL_VERSION`] the gateway speaks.
     pub protocol_version: u32,
+    /// The gateway's release, when it tells.
     pub gateway_version: Option<String>,
     /// For `status` to show; the worker never sends it back.
-    pub machine_id: Option<String>,
+    pub machine_id: Option<MachineId>,
 }
 
 /// Whether the screen can be used: a locked machine is online, but Computer Use needs it
@@ -93,9 +108,13 @@ pub struct Welcome {
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum UiState {
+    /// The screen can be used.
     Unlocked,
+    /// Signed out or behind the lock screen.
     Locked,
+    /// The display is off; input would wake it, not reach a window.
     DisplayAsleep,
+    /// This platform cannot tell.
     #[default]
     Unknown,
 }
@@ -104,7 +123,9 @@ pub enum UiState {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Stream {
+    /// Standard output.
     Stdout,
+    /// Standard error.
     Stderr,
 }
 
@@ -113,8 +134,11 @@ pub enum Stream {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TaskOutput {
-    pub id: String,
+    /// The task the chunk belongs to.
+    pub id: TaskId,
+    /// Which output wrote it.
     pub stream: Stream,
+    /// The text written, cut at a character boundary.
     pub data: String,
 }
 
@@ -126,29 +150,42 @@ pub struct TaskOutput {
     rename_all_fields = "camelCase"
 )]
 pub enum WorkerMessage {
+    /// The first message after the upgrade.
     Hello(Hello),
+    /// Live output of a running task.
     Output(TaskOutput),
     /// Sent until the gateway answers [`GatewayMessage::ResultAck`]: one finished while the
     /// connection was down, or not yet acknowledged when it dropped, is sent again after the next
     /// [`Welcome`]. The gateway must accept a result for a task id it already closed.
     Result(TaskResult),
+    /// A forward opened, failed or closed.
     ForwardState(ForwardState),
     /// The worker accepted a local connection on a forward's port: the gateway connects to the
     /// forward's port on its side and carries `channel`'s binary frames both ways.
     ChannelOpen {
-        forward: String,
+        /// The forward whose port took the connection.
+        forward: ForwardId,
+        /// The id the binary frames of this connection carry.
         channel: u32,
     },
+    /// The local side of a forwarded connection ended.
     ChannelClose {
+        /// The connection that ended.
         channel: u32,
     },
+    /// The screen's state changed.
     UiState {
+        /// The new state.
         state: UiState,
     },
+    /// A liveness probe; the gateway answers [`GatewayMessage::Pong`] with the same nonce.
     Ping {
+        /// Echoed back unchanged.
         nonce: u64,
     },
+    /// The answer to the gateway's [`GatewayMessage::Ping`].
     Pong {
+        /// The nonce of the ping it answers.
         nonce: u64,
     },
 }
@@ -161,29 +198,39 @@ pub enum WorkerMessage {
     rename_all_fields = "camelCase"
 )]
 pub enum GatewayMessage {
+    /// The answer to [`Hello`].
     Welcome(Welcome),
     /// A task whose id is already running is ignored; one whose result is still unacknowledged
     /// gets that result again, so a gateway can resend a task it is unsure was received.
     Task(Task),
     /// The gateway stored a task's result; the worker forgets it.
     ResultAck {
+        /// The task whose result was stored.
         id: String,
     },
     /// Stops a running task; its result still comes, with `cancelled`. Unknown ids are ignored.
     Cancel {
+        /// The task to stop.
         id: String,
     },
     /// Every forward this machine should have open; the worker closes what is not listed.
     Forwards {
+        /// The complete list, not a delta.
         forwards: Vec<ForwardAssignment>,
     },
+    /// The gateway side of a forwarded connection ended.
     ChannelClose {
+        /// The connection that ended.
         channel: u32,
     },
+    /// A liveness probe; the worker answers [`WorkerMessage::Pong`] with the same nonce.
     Ping {
+        /// Echoed back unchanged.
         nonce: u64,
     },
+    /// The answer to the worker's [`WorkerMessage::Ping`].
     Pong {
+        /// The nonce of the ping it answers.
         nonce: u64,
     },
 }
@@ -201,6 +248,3 @@ pub fn decode_channel_frame(frame: &[u8]) -> Option<(u32, &[u8])> {
     let (head, data) = frame.split_first_chunk::<4>()?;
     Some((u32::from_be_bytes(*head), data))
 }
-
-#[cfg(test)]
-mod tests;

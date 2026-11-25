@@ -48,6 +48,7 @@ pub fn fit_result(mut result: TaskResult, budget: usize) -> (TaskResult, String)
     (result, body)
 }
 
+/// Shrinks a result until its JSON fits [`jian_protocol::machine::RESULT_BUDGET_BYTES`], returning it with the serialized form.
 pub fn fit(result: TaskResult) -> (TaskResult, String) {
     fit_result(result, RESULT_BUDGET_BYTES)
 }

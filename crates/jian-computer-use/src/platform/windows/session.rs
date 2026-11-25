@@ -8,21 +8,24 @@ use windows_sys::Win32::System::StationsAndDesktops::{
 /// The user's desktop is called `Default`; Winlogon's and the secure desktop are not, and a
 /// user's process cannot even open them, so failing to is read as locked too.
 pub fn locked() -> bool {
+    // SAFETY: `OpenInputDesktop` takes plain values; a null handle is handled next.
     let desktop = unsafe { OpenInputDesktop(0, 0, DESKTOP_READOBJECTS) };
     if desktop.is_null() {
         return true;
     }
     let mut name = [0u16; 64];
     let mut needed = 0;
+    // SAFETY: `desktop` is open and `name` is a live buffer of the length passed.
     let read = unsafe {
         GetUserObjectInformationW(
             desktop,
             UOI_NAME,
             name.as_mut_ptr().cast(),
             size_of_val(&name) as u32,
-            &mut needed,
+            &raw mut needed,
         )
     };
+    // SAFETY: `desktop` was opened above and is closed once.
     unsafe { CloseDesktop(desktop) };
     let length = name
         .iter()

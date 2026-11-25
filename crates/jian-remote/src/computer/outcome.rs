@@ -7,9 +7,13 @@ use serde_json::Value;
 /// the same action again; after `Uncertain` it has to look first.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ActionError {
+    /// What went wrong, in words an agent can act on.
     pub message: String,
+    /// The class of failure.
     pub code: ComputerErrorCode,
+    /// Whether any of the action reached the screen.
     pub delivery: Delivery,
+    /// The OS permission that was missing, for a permission failure.
     pub permission: Option<Permission>,
 }
 
@@ -24,6 +28,7 @@ impl ActionError {
         }
     }
 
+    /// Refused because the action's arguments do not make sense.
     pub fn invalid(message: impl Into<String>) -> Self {
         Self::refused(message, ComputerErrorCode::InvalidArgs)
     }
@@ -38,6 +43,7 @@ impl ActionError {
         }
     }
 
+    /// The helper did not answer in time; the action may have been done.
     pub fn timeout(message: impl Into<String>) -> Self {
         Self {
             code: ComputerErrorCode::Timeout,
@@ -82,10 +88,15 @@ impl ActionError {
 /// An action that worked: a screenshot's JPEG travels as base64 in `stdout`, a note in `stderr`.
 #[derive(Debug, Default)]
 pub struct Done {
+    /// The screenshot's width, in pixels.
     pub width_px: Option<u32>,
+    /// The screenshot's height, in pixels.
     pub height_px: Option<u32>,
+    /// How screenshot pixels map to display points.
     pub scale: Option<Scale>,
+    /// The base64 JPEG of a screenshot, or nothing.
     pub stdout: String,
+    /// A note for the agent, such as a locked screen.
     pub stderr: String,
 }
 

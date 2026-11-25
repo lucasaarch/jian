@@ -1,4 +1,4 @@
-//! Keys as X11 names them. XTest presses keycodes, and which keysym a keycode makes depends on
+//! Keys as X11 names them. `XTest` presses keycodes, and which keysym a keycode makes depends on
 //! the user's layout, so each keysym is looked up in the current keyboard mapping. A character
 //! the layout cannot type is bound for a moment to a keycode nothing uses — as xdotool does —
 //! and the keycode is given back once the text is typed.
@@ -125,7 +125,7 @@ impl Keymap {
     }
 }
 
-/// Presses keys through XTest for one request, then gives back any keycode it borrowed.
+/// Presses keys through `XTest` for one request, then gives back any keycode it borrowed.
 pub struct Keyboard<'a> {
     display: &'a Display,
     keymap: Keymap,
@@ -216,18 +216,17 @@ impl<'a> Keyboard<'a> {
 
     /// Binds `keysym` to a free keycode for the rest of this request.
     fn borrow(&mut self, keysym: Keysym) -> Result<Keycode, String> {
-        let keycode = match self.spare.pop() {
-            Some(keycode) => keycode,
-            None => {
-                if self.borrowed.is_empty() {
-                    return Err("the keyboard layout has no free keycode to type with".into());
-                }
-                // Out of room: the oldest borrowed keycode, once its last press has been read.
-                let keycode = self.borrowed.remove(0);
-                self.display.flush()?;
-                sleep(SETTLE);
-                keycode
+        let keycode = if let Some(keycode) = self.spare.pop() {
+            keycode
+        } else {
+            if self.borrowed.is_empty() {
+                return Err("the keyboard layout has no free keycode to type with".into());
             }
+            // Out of room: the oldest borrowed keycode, once its last press has been read.
+            let keycode = self.borrowed.remove(0);
+            self.display.flush()?;
+            sleep(SETTLE);
+            keycode
         };
         self.bind(keycode, keysym)?;
         self.borrowed.push(keycode);

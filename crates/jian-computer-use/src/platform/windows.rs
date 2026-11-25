@@ -1,4 +1,4 @@
-//! Windows: GDI reads the display, SendInput acts on it, and a layered window draws each
+//! Windows: GDI reads the display, `SendInput` acts on it, and a layered window draws each
 //! agent's pointer.
 //!
 //! Threads: a window belongs to the thread that created it, and only that thread's message
@@ -39,6 +39,7 @@ use crate::protocol::{Envelope, error};
 pub fn run(serve: impl FnOnce(&mut dyn FnMut(Envelope) -> Value) + Send + 'static) {
     display::become_dpi_aware();
     messages::create_queue();
+    // SAFETY: `GetCurrentThreadId` has no preconditions.
     let thread = unsafe { GetCurrentThreadId() };
     let (requests, inbox) = mpsc::channel::<Envelope>();
     let (outbox, answers) = mpsc::channel::<Value>();

@@ -3,12 +3,14 @@
 
 use std::time::{SystemTime, UNIX_EPOCH};
 
+/// Milliseconds since the Unix epoch.
 pub fn now_ms() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_or(0, |since| since.as_millis() as u64)
 }
 
+/// The current UTC time as an ISO 8601 string with milliseconds, as the logs and state file write it.
 pub fn now_iso() -> String {
     iso(now_ms())
 }

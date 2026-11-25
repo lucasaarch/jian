@@ -10,6 +10,8 @@ mod windows;
 
 use std::path::{Path, PathBuf};
 
+use jian_remote::error::UpdateError;
+
 use crate::{lock, paths};
 
 pub struct Started {
@@ -66,7 +68,11 @@ pub fn put_binary() -> Result<PathBuf, String> {
 
 /// On a Mac, the bundle's Info.plist and its ad-hoc signature, which must be made again whenever
 /// the binary's bytes change. Nothing elsewhere.
-pub fn refresh_bundle(version: &str) -> Result<(), String> {
+#[allow(
+    clippy::unnecessary_wraps,
+    reason = "the signature the updater calls; only a Mac can fail"
+)]
+pub fn refresh_bundle(version: &str) -> Result<(), UpdateError> {
     #[cfg(target_os = "macos")]
     {
         let app = paths::macos_app_root();

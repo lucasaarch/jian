@@ -18,6 +18,7 @@ use super::coords::{Desktop, Pixel, Scale};
 /// process's awareness is fixed once it has one. Per-monitor v2 needs Windows 10 1703; before
 /// it, system awareness is the same on a single monitor.
 pub fn become_dpi_aware() {
+    // SAFETY: these calls take plain values and only change this process's own DPI awareness.
     unsafe {
         if SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) == 0 {
             SetProcessDPIAware();
@@ -35,6 +36,7 @@ pub struct Primary {
 
 impl Primary {
     pub fn read() -> Result<Self, String> {
+        // SAFETY: `GetSystemMetrics` takes a plain index and has no preconditions.
         let (width, height) =
             unsafe { (GetSystemMetrics(SM_CXSCREEN), GetSystemMetrics(SM_CYSCREEN)) };
         if width <= 0 || height <= 0 {
@@ -52,8 +54,11 @@ impl Primary {
 /// scale the user picked in Settings; 1.0 when Windows will not say.
 pub fn primary_scale() -> Scale {
     let mut dpi = (0, 0);
+    // SAFETY: `MonitorFromPoint` takes plain values and returns a handle that is valid for the call.
     let monitor = unsafe { MonitorFromPoint(POINT { x: 0, y: 0 }, MONITOR_DEFAULTTOPRIMARY) };
-    let read = unsafe { GetDpiForMonitor(monitor, MDT_EFFECTIVE_DPI, &mut dpi.0, &mut dpi.1) };
+    // SAFETY: `monitor` is the handle returned above and both out-pointers refer to locals that outlive the call.
+    let read =
+        unsafe { GetDpiForMonitor(monitor, MDT_EFFECTIVE_DPI, &raw mut dpi.0, &raw mut dpi.1) };
     if read < 0 || dpi.0 == 0 {
         Scale(1.0)
     } else {
@@ -62,6 +67,7 @@ pub fn primary_scale() -> Scale {
 }
 
 pub fn desktop() -> Desktop {
+    // SAFETY: `GetSystemMetrics` takes a plain index and has no preconditions.
     unsafe {
         Desktop {
             left: GetSystemMetrics(SM_XVIRTUALSCREEN),
@@ -76,7 +82,8 @@ pub fn desktop() -> Desktop {
 pub fn cursor() -> Result<Pixel, String> {
     let mut at = POINT { x: 0, y: 0 };
     // Fails while another desktop has the input: the lock screen or a UAC prompt.
-    if unsafe { GetCursorPos(&mut at) } == 0 {
+    // SAFETY: `at` is a local the call fills in.
+    if unsafe { GetCursorPos(&raw mut at) } == 0 {
         return Err("could not read the cursor; is the screen locked?".into());
     }
     Ok(Pixel { x: at.x, y: at.y })

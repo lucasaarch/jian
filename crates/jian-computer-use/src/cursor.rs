@@ -4,7 +4,7 @@
 //! and draws the name's text in its system font and hands it over as a `Mask`.
 //!
 //! The dart's outline, its rim and shadow, and the pill's measures and its place beside the tip
-//! are those of agent-desktop's cursor overlay (Apache-2.0; see THIRD_PARTY_NOTICES.md).
+//! are those of agent-desktop's cursor overlay (Apache-2.0; see `THIRD_PARTY_NOTICES.md`).
 
 /// The colour of a pointer nobody gave one: agent-desktop's accent.
 pub const DEFAULT_COLOR: [u8; 3] = [0x42, 0x99, 0xFF];

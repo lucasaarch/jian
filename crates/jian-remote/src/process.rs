@@ -19,19 +19,25 @@ const TERM_GRACE: Duration = Duration::from_secs(2);
 const EXIT_DRAIN: Duration = Duration::from_secs(1);
 const READ_CHUNK: usize = 64 * 1024;
 
+/// How a bounded command ended.
 #[derive(Debug, Default)]
 pub struct Bounded {
     /// `None` when the command never exited by itself (killed by a signal) or never started.
     pub code: Option<i32>,
+    /// It ran past its deadline and was stopped.
     pub timed_out: bool,
+    /// It was stopped on request.
     pub cancelled: bool,
     /// Set only when the process could not be started.
     pub spawn_error: Option<std::io::Error>,
 }
 
+/// Which of a command's outputs a chunk came from.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Pipe {
+    /// Standard output.
     Stdout,
+    /// Standard error.
     Stderr,
 }
 
@@ -40,7 +46,9 @@ pub enum Pipe {
 static RUNNING: LazyLock<Mutex<HashSet<u32>>> = LazyLock::new(Mutex::default);
 
 fn running() -> std::sync::MutexGuard<'static, HashSet<u32>> {
-    RUNNING.lock().unwrap_or_else(|poison| poison.into_inner())
+    RUNNING
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
 /// Stops every command still running, for a worker on its way out.
@@ -53,14 +61,15 @@ pub fn reap_all() {
 
 #[cfg(unix)]
 fn stop_tree(pid: u32, hard: bool) {
-    let signal = if hard { libc::SIGKILL } else { libc::SIGTERM };
-    let Ok(pid) = i32::try_from(pid) else { return };
-    // SAFETY: kill(2) takes any pid and signal number; a gone group only returns ESRCH.
-    // The command leads its own group, so the negative pid reaches all of it.
-    unsafe {
-        if libc::kill(-pid, signal) != 0 {
-            libc::kill(pid, signal);
-        }
+    use rustix::process::{Pid, Signal, kill_process, kill_process_group};
+    let signal = if hard { Signal::KILL } else { Signal::TERM };
+    let Some(pid) = i32::try_from(pid).ok().and_then(Pid::from_raw) else {
+        return;
+    };
+    // The command leads its own group, so the group reaches all of it; a gone group only
+    // answers ESRCH, and then the process alone is tried.
+    if kill_process_group(pid, signal).is_err() {
+        let _ = kill_process(pid, signal);
     }
 }
 
@@ -151,7 +160,7 @@ pub async fn run_bounded(
 
     let mut outcome = Bounded::default();
     let deadline = Instant::now() + timeout;
-    let far = Instant::now() + Duration::from_secs(86_400 * 365);
+    let far = Instant::now() + Duration::from_hours(8760);
     let mut kill_at = far;
     let mut drain_until = far;
     let mut stopping = false;

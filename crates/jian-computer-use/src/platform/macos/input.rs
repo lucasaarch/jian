@@ -51,12 +51,14 @@ impl Platform for Mac {
     /// first is the only way to tell the agent the truth, and neither call shows a prompt.
     fn preflight(&self, need: Need) -> Result<(), Failure> {
         match need {
+            // SAFETY: takes no arguments and only reads whether this process may record the screen.
             Need::Screen if !unsafe { CGPreflightScreenCaptureAccess() } => {
                 Err(Failure::permission(
                     "screen_recording",
                     "Jian Remote needs the Screen Recording permission: System Settings, Privacy & Security, Screen Recording. Restart Jian Remote after granting it.",
                 ))
             }
+            // SAFETY: takes no arguments and only reads whether this process is trusted for Accessibility.
             Need::Keyboard | Need::Mouse(_) if unsafe { AXIsProcessTrusted() } == 0 => {
                 Err(Failure::permission(
                     "accessibility",
@@ -83,6 +85,7 @@ impl Platform for Mac {
     }
 
     fn session_status(&self) -> SessionStatus {
+        // SAFETY: `CGDisplay::main` names a live display, and the call only reads whether it sleeps.
         let display_asleep = unsafe { CGDisplayIsAsleep(CGDisplay::main().id) } != 0;
         SessionStatus {
             locked: screen_locked(),
@@ -240,7 +243,7 @@ impl Platform for Mac {
                     dx * lines,
                     0,
                 )
-                .map_err(|_| "could not create a scroll event")?
+                .map_err(|()| "could not create a scroll event")?
                 .post(CGEventTapLocation::HID);
                 sleep(Duration::from_millis(12));
             }
@@ -250,10 +253,13 @@ impl Platform for Mac {
 }
 
 fn screen_locked() -> bool {
+    // SAFETY: takes no arguments; it returns a dictionary the caller owns, or null, which is checked next.
     let raw = unsafe { CGSessionCopyCurrentDictionary() };
     if raw.is_null() {
         return false;
     }
+    // SAFETY: `raw` is not null and came from a `Copy` function, so this process owns it and the wrapper
+    // releases it exactly once.
     let session: CFDictionary<CFString, CFType> =
         unsafe { CFDictionary::wrap_under_create_rule(raw) };
     let Some(value) = session.find(CFString::from_static_string("CGSSessionScreenIsLocked")) else {
@@ -270,7 +276,7 @@ fn screen_locked() -> bool {
 
 fn user_cursor() -> Result<CGPoint, String> {
     Ok(CGEvent::new(source()?)
-        .map_err(|_| "could not read the cursor")?
+        .map_err(|()| "could not read the cursor")?
         .location())
 }
 
@@ -280,7 +286,7 @@ fn cg(point: Point) -> CGPoint {
 
 fn source() -> Result<CGEventSource, String> {
     CGEventSource::new(CGEventSourceStateID::HIDSystemState)
-        .map_err(|_| "could not create an input event source".into())
+        .map_err(|()| "could not create an input event source".into())
 }
 
 fn mouse_event(
@@ -290,7 +296,7 @@ fn mouse_event(
     click_state: Option<i64>,
 ) -> Result<CGEvent, String> {
     let event = CGEvent::new_mouse_event(source()?, kind, at, button)
-        .map_err(|_| "could not create a mouse event")?;
+        .map_err(|()| "could not create a mouse event")?;
     if let Some(click) = click_state {
         event.set_integer_value_field(EventField::MOUSE_EVENT_CLICK_STATE, click);
     }
@@ -328,7 +334,7 @@ fn with_user_cursor_kept(act: impl FnOnce() -> Result<(), String>) -> Result<(),
 fn post_key(code: CGKeyCode, flags: CGEventFlags, text: Option<&[u16]>) -> Result<(), String> {
     let event = |down: bool| {
         let event = CGEvent::new_keyboard_event(source()?, code, down)
-            .map_err(|_| "could not create a keyboard event")?;
+            .map_err(|()| "could not create a keyboard event")?;
         event.set_flags(flags);
         if let Some(units) = text {
             event.set_string_from_utf16_unchecked(units);

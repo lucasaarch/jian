@@ -34,7 +34,7 @@ pub async fn run_computer_task(
     };
     match outcome {
         Ok(Ok(done)) => TaskResult {
-            id: id.to_owned(),
+            id: id.into(),
             exit_code: Some(0),
             stdout: done.stdout.clone(),
             stderr: done.stderr.clone(),
@@ -63,7 +63,7 @@ pub async fn run_computer_task(
 
 fn failure(id: &str, error: &ActionError) -> TaskResult {
     TaskResult {
-        id: id.to_owned(),
+        id: id.into(),
         exit_code: Some(1),
         stderr: error.message.clone(),
         computer: Some(outcome::failed_outcome(error)),

@@ -1,6 +1,6 @@
 //! The conversation with the Computer Use helper process: one JSON object per line each way,
 //! answered strictly in order. The helper is this same binary run as `computer-helper`, a child
-//! of its own so a stuck one can be killed and AppKit gets the main thread it requires.
+//! of its own so a stuck one can be killed and `AppKit` gets the main thread it requires.
 
 use std::path::PathBuf;
 use std::process::Stdio;
@@ -14,7 +14,9 @@ use super::outcome::ActionError;
 /// How the helper is started.
 #[derive(Debug, Clone)]
 pub struct HelperCommand {
+    /// The executable to start: the worker's own binary, which runs the helper when told to.
     pub program: PathBuf,
+    /// The arguments that make that binary act as the helper.
     pub args: Vec<String>,
 }
 

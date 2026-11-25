@@ -135,10 +135,10 @@ pub fn find(
     let mut timed_out = false;
     let mut stack = vec![real.to_path_buf()];
     'walk: while let Some(directory) = stack.pop() {
-        let Ok(read) = std::fs::read_dir(&directory) else {
+        let Ok(listing) = std::fs::read_dir(&directory) else {
             continue;
         };
-        for entry in read.filter_map(Result::ok) {
+        for entry in listing.filter_map(Result::ok) {
             if Instant::now() >= deadline {
                 timed_out = true;
                 break 'walk;

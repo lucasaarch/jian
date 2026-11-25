@@ -1,6 +1,7 @@
 //! How the CLI reports: a marked headline, then aligned facts. Colour only on a terminal that
 //! wants it, so logs and pipes stay plain.
 
+use std::fmt::Write as _;
 use std::io::IsTerminal;
 
 pub const GREEN: &str = "32";
@@ -28,7 +29,7 @@ pub fn block(mark: &str, headline: &str, facts: &[(&str, String)]) -> String {
     let width = facts.iter().map(|(key, _)| key.len()).max().unwrap_or(0);
     let mut text = format!("{mark} {headline}\n");
     for (key, value) in facts {
-        text.push_str(&format!("  {key:<width$}  {value}\n"));
+        let _ = writeln!(text, "  {key:<width$}  {value}");
     }
     text
 }

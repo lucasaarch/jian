@@ -1,6 +1,9 @@
 //! `jian-remote`: pairs this machine with a Jian gateway, keeps the worker running as a service,
 //! and is the worker itself (`run`) and its Computer Use helper (`computer-helper`).
 
+// This is a command-line program: what it prints is its output, for the person at the terminal.
+#![allow(clippy::print_stdout, clippy::print_stderr)]
+
 mod args;
 mod commands;
 mod config;

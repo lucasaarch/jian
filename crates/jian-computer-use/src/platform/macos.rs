@@ -1,4 +1,4 @@
-//! macOS: CoreGraphics reads the display and posts input; AppKit draws the pointer. AppKit
+//! macOS: CoreGraphics reads the display and posts input; `AppKit` draws the pointer. `AppKit`
 //! wants the main thread and its run loop, so the requests are read on another thread and each
 //! one runs on the main thread, in order.
 
@@ -24,7 +24,11 @@ thread_local! {
 }
 
 /// Runs the helper: `serve` reads the requests and gets each answered, and when it returns the
-/// process ends. The main thread stays in AppKit's run loop until then.
+/// process ends. The main thread stays in `AppKit`'s run loop until then.
+#[allow(
+    clippy::expect_used,
+    reason = "the helper starts on the process's main thread and sets `HELPER` before serving; anything else is a bug"
+)]
 pub fn run(serve: impl FnOnce(&mut dyn FnMut(Envelope) -> Value) + Send + 'static) {
     let mtm = MainThreadMarker::new().expect("the helper starts on the main thread");
     let app = NSApplication::sharedApplication(mtm);

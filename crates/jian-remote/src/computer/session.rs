@@ -21,7 +21,7 @@ const IDLE: Duration = Duration::from_secs(30);
 /// Without an action for this long a seat is over. Only the agent says `end_session`, and a run
 /// that was cancelled or failed never does: its pointer, the helper and the display assertion
 /// would stay until the worker restarts. Far longer than a model thinks.
-pub const SEAT_IDLE: Duration = Duration::from_secs(30 * 60);
+pub const SEAT_IDLE: Duration = Duration::from_mins(30);
 /// How long the helper gets to answer a housekeeping request before it is killed.
 const LEAVE_WAIT: Duration = Duration::from_secs(5);
 /// Expired seats remembered, so each is told to look again when it comes back.
@@ -34,7 +34,7 @@ const SCREEN_CHANGED: &str = "The screen may have changed since your last screen
 /// What changes the screen under the other conversations. Moving a pointer only moves Jian's own
 /// drawing of it, never the user's cursor.
 fn acts(action: ComputerAction) -> bool {
-    use ComputerAction::*;
+    use ComputerAction::{DoubleClick, Key, LeftClick, LeftClickDrag, RightClick, Scroll, Type};
     matches!(
         action,
         LeftClick | RightClick | DoubleClick | LeftClickDrag | Type | Key | Scroll
@@ -97,6 +97,7 @@ struct Inner {
     display_hold: Option<(u32, std::process::Child)>,
 }
 
+/// The worker's Computer Use state: the helper process, started on demand, and the seats using it.
 pub struct ComputerSession {
     inner: Mutex<Inner>,
     command: Option<HelperCommand>,
@@ -123,7 +124,9 @@ impl Inner {
     }
 
     fn seat(&mut self, id: &str) -> &mut Seat {
-        if !self.seats.contains_key(id) {
+        let stale = if self.seats.contains_key(id) {
+            false
+        } else {
             // Whoever arrives at a screen others are using has not seen what they did to it, and
             // one coming back after its seat expired no longer knows what is there either.
             let expired = self
@@ -131,19 +134,15 @@ impl Inner {
                 .iter()
                 .position(|old| old == id)
                 .map(|at| self.expired.remove(at));
-            let stale = expired.is_some() || !self.seats.is_empty();
-            self.seats.insert(
-                id.to_owned(),
-                Seat {
-                    shot: None,
-                    generation: None,
-                    last: Instant::now(),
-                    idle_sent: false,
-                    stale,
-                },
-            );
-        }
-        self.seats.get_mut(id).expect("inserted above")
+            expired.is_some() || !self.seats.is_empty()
+        };
+        self.seats.entry(id.to_owned()).or_insert(Seat {
+            shot: None,
+            generation: None,
+            last: Instant::now(),
+            idle_sent: false,
+            stale,
+        })
     }
 
     /// After `action` by seat `id`, the others no longer know what is on the screen.
@@ -184,7 +183,9 @@ impl Inner {
         id: &str,
         seat: Option<&ComputerSeat>,
     ) -> Result<(), ActionError> {
-        if self.running.is_none() {
+        let running = if let Some(ref mut running) = self.running {
+            running
+        } else {
             let Some(command) = command else {
                 return Err(ActionError::refused(
                     "The Computer Use helper could not be found.",
@@ -218,9 +219,8 @@ impl Inner {
                     ComputerErrorCode::Failed,
                 ));
             }
-            self.running = Some(running);
-        }
-        let running = self.running.as_mut().expect("started above");
+            self.running.insert(running)
+        };
         let generation = running.generation;
         if let Some(pid) = running.helper.pid()
             && self
@@ -239,7 +239,6 @@ impl Inner {
                 payload["label"] = Value::String(seat.name.clone());
                 payload["color"] = Value::String(seat.color.clone());
             }
-            let running = self.running.as_mut().expect("started above");
             running
                 .helper
                 .call(&named(id, payload), "Could not show the pointer.")
@@ -338,7 +337,10 @@ impl Inner {
     }
 
     async fn input(&mut self, id: &str, task: &ComputerTask) -> Result<(), ActionError> {
-        use ComputerAction::*;
+        use ComputerAction::{
+            DoubleClick, EndSession, Key, LeftClick, LeftClickDrag, MouseMove, RightClick,
+            Screenshot, Scroll, Type, Wait,
+        };
         let needed = "coordinate is required for this action.";
         match task.action {
             MouseMove => {
@@ -408,10 +410,12 @@ impl Inner {
 }
 
 impl ComputerSession {
+    /// A session that starts `command` when the first action needs a helper; `None` where Computer Use is not built.
     pub fn new(command: Option<HelperCommand>) -> Self {
         Self::with_seat_idle(command, SEAT_IDLE)
     }
 
+    /// Like [`ComputerSession::new`], with how long a seat may sit unused before its pointer is removed.
     pub fn with_seat_idle(command: Option<HelperCommand>, seat_idle: Duration) -> Self {
         Self {
             inner: Mutex::new(Inner::default()),
@@ -420,6 +424,7 @@ impl ComputerSession {
         }
     }
 
+    /// The command that starts the helper, when there is one.
     pub fn helper_command(&self) -> Option<&HelperCommand> {
         self.command.as_ref()
     }

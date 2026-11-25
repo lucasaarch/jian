@@ -1,6 +1,7 @@
 //! systemd: a user unit where the user's bus is reachable, a system unit on a headless or root
 //! host where it is not (or when `--system` asks for one).
 
+use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
@@ -74,12 +75,10 @@ fn user_bus_available() -> bool {
 }
 
 fn can_install_system_unit() -> bool {
-    // SAFETY: geteuid has no preconditions; access only reads a path we own the string of.
-    if unsafe { libc::geteuid() } == 0 {
+    if rustix::process::geteuid().is_root() {
         return true;
     }
-    let dir = std::ffi::CString::new("/etc/systemd/system").expect("no NUL");
-    unsafe { libc::access(dir.as_ptr(), libc::W_OK) == 0 }
+    rustix::fs::access("/etc/systemd/system", rustix::fs::Access::WRITE_OK).is_ok()
 }
 
 /// A fresh install probes the bus (and honours `--system`); every later start keeps the saved
@@ -173,8 +172,7 @@ pub fn unit(binary: &Path, home: &Path, scope: Scope, user: Option<&str>) -> Str
 
 /// The user a system unit runs as, when root is not the one installing it.
 fn invoking_user() -> Option<String> {
-    // SAFETY: geteuid has no preconditions.
-    if unsafe { libc::geteuid() } == 0 {
+    if rustix::process::geteuid().is_root() {
         return None;
     }
     std::env::var("USER").ok().filter(|user| !user.is_empty())
@@ -193,7 +191,6 @@ pub fn start(binary: &Path, scope: Scope) -> Result<(String, String), String> {
         }
         std::fs::write(path, &body)
             .map_err(|error| format!("Could not write {}: {error}", path.display()))?;
-        use std::os::unix::fs::PermissionsExt;
         let _ = std::fs::set_permissions(path, std::fs::Permissions::from_mode(mode));
         Ok(())
     };

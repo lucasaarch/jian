@@ -27,13 +27,17 @@ pub const SEARCH_TIMEOUT: Duration = Duration::from_secs(30);
 const MESSAGE_MAX: usize = 2000;
 
 /// A refusal in the protocol's words, raised from deep helpers and answered at the top.
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
+#[error("{message}")]
 pub struct Problem {
+    /// The protocol's class of refusal.
     pub problem: FilesProblem,
+    /// What happened, in words an agent can act on.
     pub message: String,
 }
 
 impl Problem {
+    /// A refusal of `problem` with its message.
     pub fn new(problem: FilesProblem, message: impl Into<String>) -> Self {
         Self {
             problem,
@@ -63,6 +67,7 @@ impl From<std::io::Error> for Problem {
 /// Folders that are off limits, and how long a walk may take.
 #[derive(Clone)]
 pub struct FilesConfig {
+    /// Absolute paths the worker never reads or writes (its own credentials).
     pub refused: Vec<PathBuf>,
 }
 
@@ -189,6 +194,7 @@ pub async fn answer(op: &FilesOp, config: &FilesConfig, timeout: Duration) -> Fi
     answer
 }
 
+/// Runs one file operation within `timeout` and answers it as the protocol says, fitted under the result budget.
 pub async fn run_files_task(
     id: &str,
     op: &FilesOp,

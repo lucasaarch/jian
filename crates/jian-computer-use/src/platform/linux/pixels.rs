@@ -1,5 +1,5 @@
 //! Pixels as the X server stores them, and as the rest of the helper wants them: RGBA bytes.
-//! A ZPixmap image is rows of packed pixels whose channels sit where the visual's masks say,
+//! A `ZPixmap` image is rows of packed pixels whose channels sit where the visual's masks say,
 //! in the server's byte order, each row padded to the format's scanline unit.
 
 use x11rb::protocol::xproto::{ImageOrder, Setup, Visualid};
@@ -193,7 +193,7 @@ fn spans(from: u32, to: u32) -> Vec<Vec<(usize, f32)>> {
 mod tests {
     use super::*;
 
-    /// The usual depth-24 TrueColor layout: BGRX bytes on a little-endian server.
+    /// The usual depth-24 `TrueColor` layout: BGRX bytes on a little-endian server.
     const BGRX: Layout = Layout {
         bits_per_pixel: 32,
         scanline_pad: 32,

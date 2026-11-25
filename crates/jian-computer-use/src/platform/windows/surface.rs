@@ -37,17 +37,29 @@ impl Surface {
             },
             ..Default::default()
         };
+        // SAFETY: a null device context means one compatible with the screen; a null result is checked next.
         let dc = unsafe { CreateCompatibleDC(null_mut()) };
         if dc.is_null() {
             return Err("could not create a drawing context".into());
         }
         let mut bits = null_mut();
-        let bitmap =
-            unsafe { CreateDIBSection(dc, &info, DIB_RGB_COLORS, &mut bits, null_mut(), 0) };
+        // SAFETY: `dc` is live, and `info` and `bits` are locals that outlive the call; a null result is checked next.
+        let bitmap = unsafe {
+            CreateDIBSection(
+                dc,
+                &raw const info,
+                DIB_RGB_COLORS,
+                &raw mut bits,
+                null_mut(),
+                0,
+            )
+        };
         if bitmap.is_null() || bits.is_null() {
+            // SAFETY: `dc` was created above and is deleted once on this failure path.
             unsafe { DeleteDC(dc) };
             return Err(format!("could not allocate a {width} x {height} bitmap"));
         }
+        // SAFETY: `dc` and `bitmap` are live and not selected anywhere else.
         let previous = unsafe { SelectObject(dc, bitmap) };
         Ok(Self {
             dc,
@@ -73,6 +85,8 @@ impl Surface {
 
     /// The pixels as BGRA rows. GDI batches its drawing, so it is flushed first.
     pub fn pixels(&self) -> &[u8] {
+        // SAFETY: `bits` points at `len()` bytes of the section that lives as long as `self`; `GdiFlush` makes
+        // the pending drawing land first.
         unsafe {
             GdiFlush();
             std::slice::from_raw_parts(self.bits, self.len())
@@ -80,6 +94,8 @@ impl Surface {
     }
 
     pub fn pixels_mut(&mut self) -> &mut [u8] {
+        // SAFETY: `bits` points at `len()` bytes of the section that lives as long as `self`, and `&mut self` is
+        // the only way to it.
         unsafe {
             GdiFlush();
             std::slice::from_raw_parts_mut(self.bits, self.len())
@@ -93,6 +109,7 @@ impl Surface {
 
 impl Drop for Surface {
     fn drop(&mut self) {
+        // SAFETY: these handles were created by `Surface::new`, and `drop` releases each one once.
         unsafe {
             SelectObject(self.dc, self.previous);
             DeleteObject(self.bitmap);

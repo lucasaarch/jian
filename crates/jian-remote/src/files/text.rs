@@ -49,13 +49,16 @@ fn regular_file(real: &Path, max_bytes: u64) -> Result<Metadata, Problem> {
 }
 
 /// A regular file, never read past `max_bytes`: the size the file system gives is no limit, as a
-/// file under /proc says 0 and can yield gigabytes. O_NONBLOCK keeps a kernel file with nothing
+/// file under /proc says 0 and can yield gigabytes. `O_NONBLOCK` keeps a kernel file with nothing
 /// to say yet (/proc/kmsg) from holding the task; it does nothing to a file on disk.
 fn read_within(real: &Path, max_bytes: u64) -> Result<Vec<u8>, Problem> {
     let mut options = OpenOptions::new();
     options.read(true);
     #[cfg(unix)]
-    std::os::unix::fs::OpenOptionsExt::custom_flags(&mut options, libc::O_NONBLOCK);
+    std::os::unix::fs::OpenOptionsExt::custom_flags(
+        &mut options,
+        rustix::fs::OFlags::NONBLOCK.bits() as i32,
+    );
     let file = options.open(real)?;
     if !file.metadata()?.is_file() {
         return Err(Problem::new(
@@ -64,14 +67,14 @@ fn read_within(real: &Path, max_bytes: u64) -> Result<Vec<u8>, Problem> {
         ));
     }
     let mut buffer = Vec::new();
-    let read = file
+    let count = file
         .take(max_bytes + 1)
         .read_to_end(&mut buffer)
         .or_else(|error| match error.kind() {
             ErrorKind::WouldBlock => Ok(buffer.len()),
             _ => Err(error),
         })?;
-    if read as u64 > max_bytes {
+    if count as u64 > max_bytes {
         return Err(Problem::new(
             FilesProblem::TooLarge,
             format!("The file has more than the {max_bytes} bytes this read allows."),
@@ -135,6 +138,10 @@ fn current(real: &Path) -> Result<Option<Metadata>, Problem> {
 }
 
 #[cfg(unix)]
+#[allow(
+    clippy::unnecessary_wraps,
+    reason = "the same signature as the non-Unix build"
+)]
 fn mode_of(meta: &Metadata) -> Option<u32> {
     Some(std::os::unix::fs::PermissionsExt::mode(&meta.permissions()) & 0o7777)
 }
@@ -186,7 +193,7 @@ pub fn write_text(
                 "The file already exists; read it before changing it.",
             ));
         }
-        (Some(meta), Some(expected)) if mtime_ms(meta) != expected => {
+        (Some(meta), Some(expected)) if (mtime_ms(meta) - expected).abs() > f64::EPSILON => {
             return Err(Problem::new(
                 FilesProblem::Changed,
                 "The file changed since it was read.",

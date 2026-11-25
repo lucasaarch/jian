@@ -1,6 +1,8 @@
 //! Key chords as the agent writes them — `cmd+shift+t`, `Return`, `f5` — read once for every
 //! OS. Each platform only maps the result to its own key codes.
 
+// A set of independent keys held together, not a state machine: four flags are the clearest shape.
+#[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub struct Modifiers {
     pub command: bool,
@@ -54,7 +56,7 @@ pub fn parse_chord(spec: &str) -> Result<Chord, String> {
             "shift" => modifiers.shift = true,
             _ if key.is_some() => return Err(format!("ambiguous key chord: {spec}")),
             token => {
-                key = Some(parse_key(token).ok_or_else(|| format!("unrecognized key: {spec}"))?)
+                key = Some(parse_key(token).ok_or_else(|| format!("unrecognized key: {spec}"))?);
             }
         }
     }

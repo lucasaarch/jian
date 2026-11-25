@@ -16,6 +16,7 @@ use crate::process::{Pipe, run_bounded};
 /// systemd: where the usual tools live, Homebrew's included.
 pub const MINIMAL_PATH: &str = "/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin";
 
+/// The user's home directory, or the temp directory when none is set.
 pub fn home_dir() -> PathBuf {
     let key = if cfg!(windows) { "USERPROFILE" } else { "HOME" };
     std::env::var_os(key)

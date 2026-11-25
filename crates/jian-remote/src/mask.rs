@@ -5,6 +5,7 @@
 const SECRET_MIN: usize = 8;
 const MASK: &str = "[secret]";
 
+/// Values to hide from everything the worker sends or logs.
 #[derive(Clone, Default)]
 pub struct Secrets {
     values: Vec<String>,
@@ -14,6 +15,7 @@ pub struct Secrets {
 }
 
 impl Secrets {
+    /// The secrets among `values`; one shorter than `SECRET_MIN` is not worth masking and is dropped.
     pub fn new<'a>(values: impl IntoIterator<Item = &'a String>) -> Self {
         let mut values: Vec<String> = values
             .into_iter()
@@ -26,6 +28,7 @@ impl Secrets {
         Self { values, longest }
     }
 
+    /// `text` with every secret replaced by a marker.
     pub fn mask(&self, text: &str) -> String {
         let mut out = text.to_owned();
         for value in &self.values {
@@ -36,6 +39,7 @@ impl Secrets {
         out
     }
 
+    /// A masker for output that arrives in chunks.
     pub fn stream(&self) -> StreamMask {
         StreamMask {
             secrets: self.clone(),
@@ -61,10 +65,11 @@ impl StreamMask {
         while !masked.is_char_boundary(cut) {
             cut -= 1;
         }
-        self.held = masked[cut..].to_owned();
+        masked[cut..].clone_into(&mut self.held);
         masked[..cut].to_owned()
     }
 
+    /// What the masker still held back, masked.
     pub fn finish(&mut self) -> String {
         std::mem::take(&mut self.held)
     }

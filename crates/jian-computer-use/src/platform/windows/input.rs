@@ -1,5 +1,5 @@
-//! Windows: GDI reads the display and SendInput acts on it, as the user's own mouse and
-//! keyboard would. SendInput reaches only windows at the helper's integrity level or below: an
+//! Windows: GDI reads the display and `SendInput` acts on it, as the user's own mouse and
+//! keyboard would. `SendInput` reaches only windows at the helper's integrity level or below: an
 //! app running as administrator ignores it unless the worker does too, which `preflight` says
 //! before anything is sent.
 
@@ -35,7 +35,7 @@ pub struct Windows;
 impl Platform for Windows {
     type Capture = Capture;
 
-    /// Input for a window above the helper's integrity level goes nowhere and SendInput calls
+    /// Input for a window above the helper's integrity level goes nowhere and `SendInput` calls
     /// it sent; see `integrity`. Reading the display needs nothing.
     fn preflight(&self, need: Need) -> Result<(), Failure> {
         let window = match need {
@@ -191,7 +191,7 @@ fn pixel(point: Point) -> Pixel {
 }
 
 /// Windows delivers a click where the cursor is, so the cursor goes there and comes back. The
-/// way back is SendInput too, queued behind the agent's events: SetCursorPos would take effect
+/// way back is `SendInput` too, queued behind the agent's events: `SetCursorPos` would take effect
 /// at once and could overtake a click still in the queue. The pause before it is for apps that
 /// read the cursor when they handle the click, as a context menu does to place itself.
 fn with_user_cursor_kept(act: impl FnOnce() -> Result<(), String>) -> Result<(), String> {
@@ -206,6 +206,7 @@ fn with_user_cursor_kept(act: impl FnOnce() -> Result<(), String>) -> Result<(),
 /// some: another desktop has the input, or the target runs at a higher integrity level.
 fn send(inputs: &[INPUT]) -> Result<(), String> {
     messages::stay_responsive();
+    // SAFETY: `inputs` is a live slice and the size passed is that of one `INPUT`.
     let sent = unsafe {
         SendInput(
             inputs.len() as u32,
@@ -265,6 +266,7 @@ fn tap(key: VirtualKey) -> [INPUT; 2] {
 
 /// A key by its virtual code, with its scan code too: games and remote desktops read that.
 fn key_input(key: VirtualKey, up: bool) -> INPUT {
+    // SAFETY: `MapVirtualKeyW` takes plain values and has no preconditions.
     let scan = unsafe { MapVirtualKeyW(u32::from(key.code), MAPVK_VK_TO_VSC) } as u16;
     let mut flags = if up { KEYEVENTF_KEYUP } else { 0 };
     if key.extended {

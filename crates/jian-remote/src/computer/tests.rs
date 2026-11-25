@@ -66,7 +66,7 @@ async fn coordinates_are_pixels_of_the_last_screenshot() {
         .await
         .unwrap();
     assert_eq!((shot.width_px, shot.height_px), (Some(200), Some(100)));
-    assert_eq!(shot.scale.unwrap().image_to_point_x, 0.5);
+    assert!((shot.scale.unwrap().image_to_point_x - 0.5).abs() < f64::EPSILON);
     assert_eq!(shot.stdout, "AAAA");
 
     session

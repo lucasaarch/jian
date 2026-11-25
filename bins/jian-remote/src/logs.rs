@@ -34,15 +34,14 @@ pub fn logs(args: &Args) -> Result<(), String> {
     };
     let follow = args.flag(&["--follow", "-f"]);
     let path = paths::log_path();
-    let text = match std::fs::read(&path) {
-        Ok(bytes) => String::from_utf8_lossy(&bytes).into_owned(),
-        Err(_) => {
-            output::info(&format!(
-                "No log yet at {}. It starts when the worker runs.",
-                path.display()
-            ));
-            String::new()
-        }
+    let text = if let Ok(bytes) = std::fs::read(&path) {
+        String::from_utf8_lossy(&bytes).into_owned()
+    } else {
+        output::info(&format!(
+            "No log yet at {}. It starts when the worker runs.",
+            path.display()
+        ));
+        String::new()
     };
     let mut out = std::io::stdout().lock();
     for line in last_lines(&text, count, floor) {

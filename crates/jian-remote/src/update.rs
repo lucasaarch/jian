@@ -5,6 +5,7 @@
 //! A release carries, per platform, `jian-remote-<os>-<arch>` (`.exe` on Windows) and
 //! `<that name>.sha256`, whose first word is the hex digest.
 
+use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
@@ -14,22 +15,29 @@ use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use url::Url;
 
+use crate::error::UpdateError;
+
+/// The GitHub repository the worker's releases come from.
 pub const REPOSITORY: &str = "lucasaarch/jian";
+/// The GitHub API's address.
 pub const GITHUB_API: &str = "https://api.github.com";
 /// Larger than any build of the worker; a bigger download is not one.
 const MAX_BINARY_BYTES: u64 = 200 * 1024 * 1024;
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(300);
 
 /// Finishes an install on the host, given the new version; an error fails the update.
-pub type AfterInstall = fn(&str) -> Result<(), String>;
+pub type AfterInstall = fn(&str) -> Result<(), UpdateError>;
 
+/// Where an update comes from and what it replaces.
 #[derive(Debug, Clone)]
 pub struct UpdateConfig {
     /// The GitHub API, overridable so a test can serve its own releases.
     pub api_base: String,
+    /// The `owner/name` of the releases' repository.
     pub repository: String,
     /// The binary to replace: the running one.
     pub binary: PathBuf,
+    /// The version that is running.
     pub current: String,
     /// Run with the new version once the new binary is in place, whoever started the update
     /// (the CLI or a task from the gateway). On a Mac the host remakes the bundle's Info.plist
@@ -39,6 +47,7 @@ pub struct UpdateConfig {
 }
 
 impl UpdateConfig {
+    /// The configuration that replaces the running binary, or nothing when its path is unknown.
     pub fn for_this_binary(current: &str, after_install: Option<AfterInstall>) -> Option<Self> {
         Some(Self {
             api_base: GITHUB_API.into(),
@@ -60,18 +69,37 @@ pub fn asset_name() -> String {
     )
 }
 
+/// `1.2.3`, optionally followed by `-` and a pre-release such as `rc.1`.
+fn is_release_number(text: &str) -> bool {
+    let (core, pre) = text
+        .split_once('-')
+        .map_or((text, None), |(core, pre)| (core, Some(pre)));
+    let mut parts = core.split('.');
+    let numbers = parts
+        .by_ref()
+        .take(3)
+        .filter(|part| !part.is_empty() && part.bytes().all(|byte| byte.is_ascii_digit()));
+    numbers.count() == 3
+        && parts.next().is_none()
+        && pre.is_none_or(|pre| {
+            !pre.is_empty()
+                && pre
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || byte == b'.')
+        })
+}
+
 /// `latest`, or a release such as `1.2.3` (a leading `v` is accepted).
-pub fn release_path(version: &str) -> Result<String, String> {
+pub fn release_path(version: &str) -> Result<String, UpdateError> {
     let version = version.trim();
     if version == "latest" {
         return Ok("releases/latest".into());
     }
     let bare = version.strip_prefix('v').unwrap_or(version);
-    let valid = regex::Regex::new(r"^\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?$").expect("valid pattern");
-    if !valid.is_match(bare) {
-        return Err(format!(
-            "Not a release: {version}. Use latest or a version such as 1.2.3."
-        ));
+    if !is_release_number(bare) {
+        return Err(
+            format!("Not a release: {version}. Use latest or a version such as 1.2.3.").into(),
+        );
     }
     Ok(format!("releases/tags/v{bare}"))
 }
@@ -95,20 +123,17 @@ struct Asset {
 }
 
 /// Only https crosses a network; plain http is accepted on loopback, for tests.
-fn checked(url: &str) -> Result<Url, String> {
+fn checked(url: &str) -> Result<Url, UpdateError> {
     let parsed = Url::parse(url).map_err(|error| format!("Bad URL {url}: {error}"))?;
     let loopback = matches!(parsed.host_str(), Some("127.0.0.1" | "localhost" | "[::1]"));
     match parsed.scheme() {
         "https" => Ok(parsed),
         "http" if loopback => Ok(parsed),
-        _ => Err(format!(
-            "Refused to download over {}: {url}",
-            parsed.scheme()
-        )),
+        _ => Err(format!("Refused to download over {}: {url}", parsed.scheme()).into()),
     }
 }
 
-fn client() -> Result<reqwest::Client, String> {
+fn client() -> Result<reqwest::Client, UpdateError> {
     reqwest::Client::builder()
         .user_agent(concat!("jian-remote/", env!("CARGO_PKG_VERSION")))
         .timeout(REQUEST_TIMEOUT)
@@ -121,10 +146,10 @@ fn client() -> Result<reqwest::Client, String> {
             }
         }))
         .build()
-        .map_err(|error| error.to_string())
+        .map_err(|error| error.to_string().into())
 }
 
-async fn get(client: &reqwest::Client, url: &str) -> Result<reqwest::Response, String> {
+async fn get(client: &reqwest::Client, url: &str) -> Result<reqwest::Response, UpdateError> {
     let response = client
         .get(checked(url)?)
         .header(
@@ -135,16 +160,13 @@ async fn get(client: &reqwest::Client, url: &str) -> Result<reqwest::Response, S
         .await
         .map_err(|error| format!("Could not reach {url}: {error}"))?;
     if !response.status().is_success() {
-        return Err(format!(
-            "{url} answered HTTP {}",
-            response.status().as_u16()
-        ));
+        return Err(format!("{url} answered HTTP {}", response.status().as_u16()).into());
     }
     Ok(response)
 }
 
 /// Streams the binary to `to`, hashing it as it comes, never holding more than a chunk.
-async fn download(client: &reqwest::Client, url: &str, to: &Path) -> Result<String, String> {
+async fn download(client: &reqwest::Client, url: &str, to: &Path) -> Result<String, UpdateError> {
     use tokio::io::AsyncWriteExt;
     let response = get(client, url).await?;
     let mut file = tokio::fs::File::create(to)
@@ -157,7 +179,7 @@ async fn download(client: &reqwest::Client, url: &str, to: &Path) -> Result<Stri
         let chunk = chunk.map_err(|error| format!("Download of {url} broke off: {error}"))?;
         size += chunk.len() as u64;
         if size > MAX_BINARY_BYTES {
-            return Err(format!("{url} is larger than any worker build."));
+            return Err(format!("{url} is larger than any worker build.").into());
         }
         hash.update(&chunk);
         file.write_all(&chunk)
@@ -165,11 +187,10 @@ async fn download(client: &reqwest::Client, url: &str, to: &Path) -> Result<Stri
             .map_err(|error| format!("Could not write {}: {error}", to.display()))?;
     }
     file.sync_all().await.map_err(|error| error.to_string())?;
-    Ok(hash
-        .finalize()
-        .iter()
-        .map(|byte| format!("{byte:02x}"))
-        .collect())
+    Ok(hash.finalize().iter().fold(String::new(), |mut hex, byte| {
+        let _ = write!(hex, "{byte:02x}");
+        hex
+    }))
 }
 
 /// Puts `new` where `binary` is. Unix replaces a running binary by rename; Windows cannot
@@ -195,7 +216,7 @@ fn install(new: &Path, binary: &Path) -> std::io::Result<()> {
 
 /// Installs the release `version` names and answers the versions it went from and to. `to`
 /// equal to `from` means nothing was changed and the worker carries on.
-pub async fn update(version: &str, config: &UpdateConfig) -> Result<UpdateOutcome, String> {
+pub async fn update(version: &str, config: &UpdateConfig) -> Result<UpdateOutcome, UpdateError> {
     let client = client()?;
     let api = config.api_base.trim_end_matches('/');
     let release_url = format!(

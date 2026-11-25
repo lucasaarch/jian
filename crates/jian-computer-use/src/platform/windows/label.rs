@@ -23,6 +23,7 @@ pub fn mask(label: &str, scale: f64) -> Option<Mask> {
     let text: Vec<u16> = label.encode_utf16().collect();
     let face: Vec<u16> = "Segoe UI\0".encode_utf16().collect();
     // A negative height asks for that character height in pixels, not the cell's.
+    // SAFETY: `CreateFontW` takes plain values and a NUL-terminated name that `face` outlives; a null font is handled.
     let font = unsafe {
         CreateFontW(
             -((LABEL_FONT_POINTS * scale).round() as i32),
@@ -33,12 +34,12 @@ pub fn mask(label: &str, scale: f64) -> Option<Mask> {
             0,
             0,
             0,
-            DEFAULT_CHARSET as u32,
-            OUT_DEFAULT_PRECIS as u32,
-            CLIP_DEFAULT_PRECIS as u32,
+            u32::from(DEFAULT_CHARSET),
+            u32::from(OUT_DEFAULT_PRECIS),
+            u32::from(CLIP_DEFAULT_PRECIS),
             // Grey levels, not ClearType's coloured fringes: the mask is one coverage a pixel.
-            ANTIALIASED_QUALITY as u32,
-            DEFAULT_PITCH as u32,
+            u32::from(ANTIALIASED_QUALITY),
+            u32::from(DEFAULT_PITCH),
             face.as_ptr(),
         )
     };
@@ -47,6 +48,7 @@ pub fn mask(label: &str, scale: f64) -> Option<Mask> {
         return None;
     }
     let written = write(&text, font);
+    // SAFETY: `font` was created above and is deleted once, after the last use.
     unsafe { DeleteObject(font) };
     written
         .inspect_err(|message| eprintln!("computer-helper: the pointer has no name: {message}"))
@@ -58,9 +60,11 @@ fn write(text: &[u16], font: HFONT) -> Result<Mask, String> {
     // Measured on a surface of one pixel, then written on one of the text's size.
     let probe = Surface::new(1, 1)?;
     let mut size = SIZE { cx: 0, cy: 0 };
+    // SAFETY: `probe.dc()` and `font` are live; `text` and `size` are locals that outlive the calls, and the previous
+    // object is selected back.
     let measured = unsafe {
         let previous = SelectObject(probe.dc(), font);
-        let measured = GetTextExtentPoint32W(probe.dc(), text.as_ptr(), length, &mut size);
+        let measured = GetTextExtentPoint32W(probe.dc(), text.as_ptr(), length, &raw mut size);
         SelectObject(probe.dc(), previous);
         measured
     };
@@ -68,6 +72,8 @@ fn write(text: &[u16], font: HFONT) -> Result<Mask, String> {
         return Err("could not measure the text".into());
     }
     let surface = Surface::new(size.cx, size.cy)?;
+    // SAFETY: `surface.dc()` and `font` are live; the text buffer outlives the calls, and the previous object is
+    // selected back.
     let drawn = unsafe {
         let previous = SelectObject(surface.dc(), font);
         SetBkMode(surface.dc(), TRANSPARENT as i32);

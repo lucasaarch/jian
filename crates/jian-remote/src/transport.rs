@@ -13,7 +13,9 @@ pub use ws::{WsTransport, gateway_connect_url};
 /// One WebSocket message as the worker sees it. Protocol pings are answered by the transport.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Frame {
+    /// A UTF-8 message.
     Text(String),
+    /// A binary message.
     Binary(Vec<u8>),
     /// The peer closed, with its close code when it gave one.
     Close(Option<u16>),
@@ -22,10 +24,13 @@ pub enum Frame {
 /// An open connection: frames go out through `outgoing` and come in through `incoming`. Either
 /// channel closing means the connection is gone.
 pub struct Connection {
+    /// Frames to send.
     pub outgoing: mpsc::Sender<Frame>,
+    /// Frames received.
     pub incoming: mpsc::Receiver<Frame>,
 }
 
+/// Why a connection could not be opened.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ConnectError {
     /// The gateway does not know the token: retrying soon will not help.
@@ -48,9 +53,12 @@ impl std::fmt::Display for ConnectError {
     }
 }
 
+/// What [`Transport::connect`] returns.
 pub type ConnectFuture<'a> =
     Pin<Box<dyn Future<Output = Result<Connection, ConnectError>> + Send + 'a>>;
 
+/// Opens connections to the gateway; tests replace it with their own.
 pub trait Transport: Send + Sync {
+    /// Opens a connection.
     fn connect(&self) -> ConnectFuture<'_>;
 }

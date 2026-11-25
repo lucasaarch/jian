@@ -1,10 +1,10 @@
 //! Linux (X11, or XWayland): one pure-Rust connection to the X server reads the display, posts
-//! input through XTest and draws the pointer. Nothing in X11 is tied to a thread, so requests
+//! input through `XTest` and draws the pointer. Nothing in X11 is tied to a thread, so requests
 //! are answered on the thread that reads them.
 //!
-//! Under XWayland only XWayland apps can be seen and driven. A native Wayland backend would sit
-//! beside this one, chosen from XDG_SESSION_TYPE behind the same traits: portals (ScreenCast,
-//! RemoteDesktop with libei) on GNOME and KDE, wlroots protocols elsewhere, and layer-shell for
+//! Under `XWayland` only `XWayland` apps can be seen and driven. A native Wayland backend would sit
+//! beside this one, chosen from `XDG_SESSION_TYPE` behind the same traits: portals (`ScreenCast`,
+//! `RemoteDesktop` with libei) on GNOME and KDE, wlroots protocols elsewhere, and layer-shell for
 //! the pointer, which GNOME does not offer. apps/remote-control/README.md has the details; it is
 //! open for someone who can test on a Wayland desktop.
 

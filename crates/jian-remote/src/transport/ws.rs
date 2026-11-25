@@ -15,6 +15,7 @@ use tokio_tungstenite::{Connector, connect_async_tls_with_config};
 use url::Url;
 
 use super::{ConnectError, ConnectFuture, Connection, Frame, Transport};
+use crate::error::GatewayError;
 
 /// An upgrade that takes longer than this, TLS included, is given up and retried.
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(20);
@@ -23,7 +24,7 @@ const QUEUE: usize = 64;
 
 /// The connect URL for a gateway's base URL. Only `https` is accepted, except for a gateway on
 /// this machine's loopback: the token travels in the upgrade and must not cross a network bare.
-pub fn gateway_connect_url(gateway: &str) -> Result<Url, String> {
+pub fn gateway_connect_url(gateway: &str) -> Result<Url, GatewayError> {
     let mut url = Url::parse(gateway.trim()).map_err(|error| format!("Not a URL: {error}"))?;
     let loopback = match url.host() {
         Some(url::Host::Domain(name)) => name == "localhost",
@@ -37,7 +38,7 @@ pub fn gateway_connect_url(gateway: &str) -> Result<Url, String> {
         "http" | "ws" => {
             return Err("The gateway must use https unless it runs on this machine.".into());
         }
-        other => return Err(format!("The gateway URL cannot use {other}.")),
+        other => return Err(format!("The gateway URL cannot use {other}.").into()),
     };
     url.set_scheme(scheme)
         .map_err(|()| "The gateway URL cannot be used.".to_owned())?;
@@ -50,7 +51,7 @@ pub fn gateway_connect_url(gateway: &str) -> Result<Url, String> {
 
 /// TLS with the Mozilla roots built in: a machine's own store may be missing or stale (a minimal
 /// container, an old Mac), and the provider is named so no feature unification can swap it.
-fn tls_config() -> Arc<rustls::ClientConfig> {
+fn tls_config() -> Result<Arc<rustls::ClientConfig>, GatewayError> {
     let roots = rustls::RootCertStore {
         roots: webpki_roots::TLS_SERVER_ROOTS.to_vec(),
     };
@@ -58,12 +59,13 @@ fn tls_config() -> Arc<rustls::ClientConfig> {
         rustls::crypto::ring::default_provider(),
     ))
     .with_safe_default_protocol_versions()
-    .expect("ring supports the default TLS versions")
+    .map_err(|error| GatewayError(format!("TLS setup failed: {error}")))?
     .with_root_certificates(roots)
     .with_no_client_auth();
-    Arc::new(config)
+    Ok(Arc::new(config))
 }
 
+/// The WebSocket transport over TLS that the worker uses against a real gateway.
 pub struct WsTransport {
     url: Url,
     token: String,
@@ -71,11 +73,12 @@ pub struct WsTransport {
 }
 
 impl WsTransport {
-    pub fn new(gateway: &str, token: &str) -> Result<Self, String> {
+    /// A transport for `gateway`, authenticating with `token`.
+    pub fn new(gateway: &str, token: &str) -> Result<Self, GatewayError> {
         Ok(Self {
             url: gateway_connect_url(gateway)?,
             token: token.to_owned(),
-            tls: tls_config(),
+            tls: tls_config()?,
         })
     }
 

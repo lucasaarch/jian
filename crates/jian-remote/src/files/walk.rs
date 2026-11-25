@@ -15,6 +15,7 @@ use regex::{Regex, RegexBuilder};
 use super::find::SKIPPED;
 use super::paths::is_refused;
 use super::text::is_binary;
+use crate::error::SearchError;
 
 /// A file larger than this, in bytes, is skipped, as the read tool refuses it.
 const MAX_SEARCHED_BYTES: u64 = 20 * 1024 * 1024;
@@ -185,7 +186,7 @@ impl Walker<'_> {
     }
 }
 
-pub fn walk_search(target: &Path, job: &WalkJob) -> Result<Walked, String> {
+pub fn walk_search(target: &Path, job: &WalkJob) -> Result<Walked, SearchError> {
     let expression = RegexBuilder::new(job.pattern)
         .case_insensitive(job.ignore_case)
         .build()

@@ -33,12 +33,17 @@ pub struct Timings {
     pub ping: Duration,
     /// Nothing at all from the gateway for this long and the connection is given up.
     pub silence: Duration,
+    /// How long to wait for the gateway's welcome after connecting.
     pub welcome: Duration,
+    /// The first wait before reconnecting; it doubles up to `backoff_max`.
     pub backoff_base: Duration,
+    /// The longest wait before reconnecting.
     pub backoff_max: Duration,
+    /// How long after an update's result the worker exits even if nobody acknowledged it.
     pub update_grace: Duration,
     /// How often the screen's lock state is read, to tell the gateway when it changes.
     pub ui_state: Duration,
+    /// How often the Computer Use seats are checked for idleness.
     pub computer_tick: Duration,
 }
 
@@ -57,19 +62,28 @@ impl Default for Timings {
     }
 }
 
+/// Everything a worker needs besides its transport.
 pub struct WorkerConfig {
+    /// The worker's version, reported at the handshake.
     pub version: String,
+    /// The limits and refusals for file tasks.
     pub files: FilesConfig,
+    /// The command that starts the Computer Use helper, where it is built.
     pub helper: Option<HelperCommand>,
+    /// How to update, or nothing when this build cannot.
     pub update: Option<UpdateConfig>,
+    /// Where the worker records its state.
     pub state: StateFile,
+    /// Where the worker logs.
     pub log: Arc<Logger>,
+    /// The loop's clocks.
     pub timings: Timings,
 }
 
 /// Why `run` returned.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Exit {
+    /// The worker was asked to stop.
     Stopped,
     /// A new binary is in place; exit for the service manager to start it.
     Updated,
@@ -84,6 +98,7 @@ enum Ended {
     },
 }
 
+/// The worker: one connection to the gateway at a time, kept open for as long as it runs.
 pub struct Worker {
     transport: Box<dyn Transport>,
     tasks: Arc<Tasks>,
@@ -100,6 +115,7 @@ pub struct Worker {
 }
 
 impl Worker {
+    /// A worker that connects through `transport`.
     pub fn new(transport: Box<dyn Transport>, config: WorkerConfig) -> Self {
         let (sender, events) = outgoing::channel();
         let computer = Arc::new(ComputerSession::new(config.helper));
@@ -326,8 +342,8 @@ impl Worker {
             &[("machineId", welcome.machine_id.as_deref().unwrap_or("?"))],
         );
         self.state.update(|state| {
-            state.machine_id = welcome.machine_id.clone();
-            state.gateway_version = welcome.gateway_version.clone();
+            state.machine_id = welcome.machine_id.as_ref().map(ToString::to_string);
+            state.gateway_version.clone_from(&welcome.gateway_version);
         });
         self.state.contact();
         for frame in self.tasks.unacknowledged() {

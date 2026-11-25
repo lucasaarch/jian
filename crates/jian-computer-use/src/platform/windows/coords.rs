@@ -1,4 +1,4 @@
-//! Points, pixels and SendInput's absolute coordinates. Plain arithmetic, kept apart from
+//! Points, pixels and `SendInput`'s absolute coordinates. Plain arithmetic, kept apart from
 //! Win32 so it is tested on any machine.
 //!
 //! The helper is per-monitor DPI aware, so every coordinate Win32 hands it is a physical pixel.
@@ -48,7 +48,7 @@ pub struct Desktop {
 }
 
 impl Desktop {
-    /// SendInput's `MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_VIRTUALDESK` coordinates for a pixel:
+    /// `SendInput`'s `MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_VIRTUALDESK` coordinates for a pixel:
     /// 0 to 65535 across the virtual desktop on each axis. Points outside it are clamped to
     /// its edge, as Windows would clamp the cursor.
     pub fn absolute(self, pixel: Pixel) -> (i32, i32) {

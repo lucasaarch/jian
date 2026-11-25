@@ -1,4 +1,4 @@
-//! launchd, and the thin `Jian Remote.app` the LaunchAgent runs. macOS gives Login Items and the
+//! `launchd`, and the thin `Jian Remote.app` the `LaunchAgent` runs. macOS gives Login Items and the
 //! privacy permissions (Accessibility, Screen Recording) to an app bundle: run as a bare binary,
 //! the worker would show up under a meaningless name, if at all. The worker is one static
 //! binary, so the bundle is that binary and an Info.plist; nothing else needs copying or
@@ -50,7 +50,7 @@ pub fn info_plist(version: &str) -> String {
 /// ProcessType=Interactive keeps App Nap away: it would freeze the worker while the screen is
 /// locked or idle and the gateway would see it go silent. PATH, HOME and TMPDIR are explicit
 /// because launchd hands a sparse environment, and a wrong HOME puts the config and every shell
-/// in the wrong place. ThrottleInterval keeps KeepAlive from fighting a restart after an update.
+/// in the wrong place. `ThrottleInterval` keeps `KeepAlive` from fighting a restart after an update.
 pub fn launch_agent_plist(executable: &Path, log: &Path, home: &Path, tmp: &str) -> String {
     let executable = xml(&executable.to_string_lossy());
     let log = xml(&log.to_string_lossy());
@@ -94,10 +94,9 @@ fn plist_path() -> PathBuf {
         .join(format!("{MACOS_LAUNCH_AGENT_LABEL}.plist"))
 }
 
-/// The logged-in user's launchd domain, where a LaunchAgent lives.
+/// The logged-in user's `launchd` domain, where a `LaunchAgent` lives.
 fn domain() -> String {
-    // SAFETY: getuid has no preconditions.
-    format!("gui/{}", unsafe { libc::getuid() })
+    format!("gui/{}", rustix::process::getuid().as_raw())
 }
 
 fn quiet(program: &str, args: &[&str]) -> bool {

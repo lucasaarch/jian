@@ -158,6 +158,10 @@ impl Peer {
     }
 
     /// Gone without a close frame, as a dropped network would.
+    #[allow(
+        clippy::unused_self,
+        reason = "taking the peer by value is what drops it"
+    )]
     pub fn drop_now(self) {}
 }
 

@@ -18,6 +18,10 @@ pub fn not_kept_marker(lines: usize, characters: usize) -> String {
     )
 }
 
+#[allow(
+    clippy::expect_used,
+    reason = "a constant pattern, exercised by the tests"
+)]
 static NOT_KEPT: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"\n?\[… ([\d,]+) lines \(([\d,]+) characters\) of this output were not kept\]\n?")
         .expect("marker pattern")
@@ -61,6 +65,7 @@ pub struct OutputEnds {
 }
 
 impl OutputEnds {
+    /// Keeps at most `cap` characters: the first and the last halves of what is pushed.
     pub fn new(cap: usize) -> Self {
         Self {
             head: String::new(),
@@ -74,6 +79,7 @@ impl OutputEnds {
         }
     }
 
+    /// Adds raw output; a character split across two reads is held until its rest arrives.
     pub fn push_bytes(&mut self, chunk: &[u8]) {
         self.pending.extend_from_slice(chunk);
         let bytes = std::mem::take(&mut self.pending);
@@ -104,6 +110,7 @@ impl OutputEnds {
         }
     }
 
+    /// Adds text.
     pub fn push(&mut self, text: &str) {
         let mut text = text;
         if self.head_chars < self.half {
@@ -137,6 +144,7 @@ impl OutputEnds {
         self.tail_chars = self.half;
     }
 
+    /// The kept output, with a marker saying how much was cut from the middle.
     pub fn text(mut self) -> String {
         if !self.pending.is_empty() {
             self.pending.clear();
@@ -162,26 +170,24 @@ pub fn keep_ends(text: &str, room: usize) -> String {
     if length <= room {
         return text.to_owned();
     }
-    let (mut lines, mut characters, head, tail) = match NOT_KEPT.captures(text) {
-        Some(found) => {
-            let whole = found.get(0).expect("whole match");
-            let number = |index: usize| {
-                found[index]
-                    .replace(',', "")
-                    .parse::<usize>()
-                    .unwrap_or_default()
-            };
-            (
-                number(1),
-                number(2),
-                &text[..whole.start()],
-                &text[whole.end()..],
-            )
-        }
-        None => {
-            let middle = byte_at(text, length / 2);
-            (0, 0, &text[..middle], &text[middle..])
-        }
+    let (mut lines, mut characters, head, tail) = if let Some(found) = NOT_KEPT.captures(text)
+        && let Some(whole) = found.get(0)
+    {
+        let number = |index: usize| {
+            found[index]
+                .replace(',', "")
+                .parse::<usize>()
+                .unwrap_or_default()
+        };
+        (
+            number(1),
+            number(2),
+            &text[..whole.start()],
+            &text[whole.end()..],
+        )
+    } else {
+        let middle = byte_at(text, length / 2);
+        (0, 0, &text[..middle], &text[middle..])
     };
     let head_chars = head.chars().count();
     let tail_chars = tail.chars().count();
