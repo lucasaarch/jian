@@ -12,6 +12,7 @@
 mod debug_jobs;
 mod owner_token;
 mod shutdown;
+mod users_cli;
 
 use std::future::IntoFuture as _;
 use std::net::SocketAddr;
@@ -32,6 +33,7 @@ use tokio_util::sync::CancellationToken;
 
 use crate::owner_token::Source;
 use crate::shutdown::Shutdown;
+use crate::users_cli::UsersAction;
 
 /// Where the gateway listens when nothing says otherwise: loopback only, so an unconfigured
 /// install is not reachable from the network.
@@ -110,6 +112,17 @@ struct Cli {
     )]
     api_token: Option<String>,
 
+    /// Whether people sign in with an email address and a password. On for a self-hosted
+    /// install, which has no other way in besides the tokens; off, the login routes are a 404.
+    #[arg(
+        long,
+        env = "JIAN_PASSWORD_LOGIN",
+        default_value_t = true,
+        action = clap::ArgAction::Set,
+        value_name = "BOOL"
+    )]
+    password_login: bool,
+
     #[command(subcommand)]
     command: Option<Command>,
 }
@@ -120,6 +133,12 @@ enum Command {
     Keys {
         #[command(subcommand)]
         action: KeysAction,
+    },
+    /// The people who can sign in. With the embedded Postgres, stop the gateway first: this
+    /// starts that database itself.
+    Users {
+        #[command(subcommand)]
+        action: UsersAction,
     },
     /// The job queue, for trying it by hand.
     Jobs {
@@ -233,6 +252,7 @@ async fn main() -> anyhow::Result<()> {
     let addr = cli.addr.clone();
     let keys = cli.master_keys()?;
     let command = cli.command.take();
+    let password_login = cli.password_login;
     let source = cli.database_source()?;
     let (owner, owner_source) = owner_token::resolve(cli.api_token.as_deref(), &cli.data_dir()?)
         .context("cannot get the owner's token")?;
@@ -258,11 +278,21 @@ async fn main() -> anyhow::Result<()> {
         Some(Command::Keys {
             action: KeysAction::Rotate,
         }) => rotate(&database).await,
+        Some(Command::Users { action }) => users_cli::run(&database, action).await,
         Some(Command::Jobs {
             action: JobsAction::EnqueueTest { message, work_ms },
         }) => enqueue_test(&database, &message, work_ms).await,
         None => match prepare(&database, &owner).await {
-            Ok(()) => serve(&addr, &database, &owner_source, &mut shutdown).await,
+            Ok(()) => {
+                serve(
+                    &addr,
+                    &database,
+                    &owner_source,
+                    password_login,
+                    &mut shutdown,
+                )
+                .await
+            }
             Err(error) => Err(error),
         },
     };
@@ -379,6 +409,7 @@ async fn serve(
     addr: &str,
     database: &Arc<Database>,
     owner_source: &Source,
+    password_login: bool,
     shutdown: &mut Shutdown,
 ) -> anyhow::Result<()> {
     let listener = tokio::net::TcpListener::bind(addr)
@@ -390,6 +421,14 @@ async fn serve(
         Source::NewFile(path) => println!("owner token: generated into {}", path.display()),
         Source::File(path) => println!("owner token: in {}", path.display()),
     }
+    println!(
+        "password login: {}",
+        if password_login {
+            "on (add the first admin with `jian users add --admin`)"
+        } else {
+            "off"
+        }
+    );
     for route in jian_server::ROUTES {
         let (method, path) = route.split_once(' ').unwrap_or(("GET", route));
         println!("  {method} http://{addr}{path}");
@@ -422,6 +461,7 @@ async fn serve(
         closing.clone(),
         Settings {
             gateway_version: Some(env!("CARGO_PKG_VERSION").to_owned()),
+            password_login: password_login.then(TenantId::self_hosted),
             ..Settings::default()
         },
     );
@@ -596,6 +636,41 @@ mod tests {
             .master_keys()
             .unwrap_err();
         assert!(format!("{error:#}").contains("JIAN_MASTER_KEY is not usable"));
+    }
+
+    #[test]
+    fn password_login_is_on_unless_switched_off() {
+        // JIAN_PASSWORD_LOGIN may be set where the tests run; the flag wins over it.
+        assert!(
+            Cli::try_parse_from(["jian", "--password-login", "true"])
+                .unwrap()
+                .password_login
+        );
+        assert!(
+            !Cli::try_parse_from(["jian", "--password-login", "false"])
+                .unwrap()
+                .password_login
+        );
+    }
+
+    #[test]
+    fn users_add_is_a_subcommand() {
+        let cli = Cli::try_parse_from([
+            "jian",
+            "users",
+            "add",
+            "--email",
+            "a@b.test",
+            "--admin",
+            "--password-stdin",
+        ])
+        .unwrap();
+        assert!(matches!(
+            cli.command,
+            Some(Command::Users {
+                action: UsersAction::Add(_)
+            })
+        ));
     }
 
     #[test]

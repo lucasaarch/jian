@@ -126,6 +126,11 @@ async fn a_migration_changed_after_it_was_applied_is_refused_and_says_which() {
         "/migrations/platform/0005_jobs.sql"
     ))
     .unwrap();
+    let sixth = std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/migrations/platform/0006_sessions.sql"
+    ))
+    .unwrap();
     let altered = migrator(
         server.dir.path(),
         "platform-edited",
@@ -138,6 +143,7 @@ async fn a_migration_changed_after_it_was_applied_is_refused_and_says_which() {
             ("0003_api_tokens.sql", &third),
             ("0004_slot_leases.sql", &fourth),
             ("0005_jobs.sql", &fifth),
+            ("0006_sessions.sql", &sixth),
         ],
     )
     .await;
@@ -278,7 +284,7 @@ async fn the_embedded_migrations_apply_to_the_platform_and_to_each_tenant() {
             "SELECT version::text FROM _sqlx_migrations ORDER BY version"
         )
         .await,
-        ["1", "2", "3"]
+        ["1", "2", "3", "4"]
     );
     // After a restart the tenant is migrated again with nothing to do.
     let report = db.migrate().await.unwrap();

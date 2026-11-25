@@ -96,7 +96,7 @@ pub(crate) async fn insert_token(
     .map_err(StoreError::query("store a token"))
 }
 
-async fn revoke_tokens(
+pub(crate) async fn revoke_tokens(
     tx: &mut Transaction<'static, Postgres>,
     ctx: &TenantCtx,
     kind: TokenKind,

@@ -4,8 +4,10 @@ use std::time::Duration;
 
 use sqlx::PgPool;
 use sqlx::postgres::PgPoolOptions;
+use tokio::sync::Semaphore;
 
 use crate::embedded::{EmbeddedConfig, EmbeddedPostgres};
+use crate::passwords::{self, PasswordParams};
 use crate::schema_version::VerifiedTenants;
 use crate::secrets::{DekCache, MasterKeys};
 use crate::{Migrations, StoreError};
@@ -62,6 +64,9 @@ pub struct Database {
     pub(crate) verified: VerifiedTenants,
     pub(crate) master_keys: Option<Arc<dyn MasterKeys>>,
     pub(crate) deks: DekCache,
+    pub(crate) password_params: PasswordParams,
+    /// Caps the password hashes running at once; see [`crate::passwords`].
+    pub(crate) hashing: Arc<Semaphore>,
     embedded: Option<EmbeddedPostgres>,
 }
 
@@ -85,6 +90,8 @@ impl Database {
                 verified: VerifiedTenants::default(),
                 master_keys: None,
                 deks: DekCache::default(),
+                password_params: PasswordParams::default(),
+                hashing: Arc::new(Semaphore::new(passwords::hash_slots())),
                 embedded,
             }),
             Err(error) => {

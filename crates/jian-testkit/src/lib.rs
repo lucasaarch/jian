@@ -33,10 +33,12 @@
 //!   (written through the sandbox's own API, with the tenant's context), seed it in
 //!   `Side::seed`, and let the test read, list and overwrite the other side's path by its name,
 //!   with `..` and through a symlink.
-//! - **Users inside a tenant** (M3, workspaces): add a second subject to [`Side`] (a user with a
-//!   private agent) and a pairing next to [`TwoTenants::crossings`] for two users of one tenant,
-//!   so the same loops prove user X does not see user Y's private agent. The tenant wall and the
-//!   user wall are different checks: keep both.
+//! - **Users inside a tenant**: each [`Side`] has an admin and a member, with passwords and
+//!   sessions, under the same two addresses on both sides. What a user owns inside a tenant (a
+//!   private agent, M3) is not there yet: add it to `Side`, and a pairing next to
+//!   [`TwoTenants::crossings`] for two users of one tenant, so the same loops prove user X does
+//!   not see user Y's private agent. The tenant wall and the user wall are different checks: keep
+//!   both.
 //! - **A new job kind or route**: list it in [`coverage`] (jobs) or in the gateway's isolation
 //!   test (routes, requests, topics) together with the test that proves it.
 
@@ -49,4 +51,6 @@ mod database;
 mod tenants;
 
 pub use database::{TestDb, master_keys, sql_error_code};
-pub use tenants::{JOB_KIND, SECRET_OWNER, SHARED_KEY, Side, TwoTenants};
+pub use tenants::{
+    ADMIN_EMAIL, JOB_KIND, MEMBER_EMAIL, SECRET_OWNER, SHARED_KEY, Side, TwoTenants,
+};

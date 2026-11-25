@@ -1,7 +1,7 @@
 //! Tokens: what a caller presents, how it is stored, and who it turns out to be.
 //!
 //! A token is opaque: a prefix that says what it is for (`jo_` the owner, `jrm_` a machine,
-//! `jd_` a phone), then 32 random bytes in base64url. The database never holds it, only its
+//! `jd_` a phone, `js_` a person's login session), then 32 random bytes in base64url. The database never holds it, only its
 //! SHA-256 in lowercase hex, which is the form the Node gateway stores: the hashes of tokens it
 //! already handed out can be copied over and keep working.
 //!
@@ -19,10 +19,10 @@ use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use sha2::{Digest as _, Sha256};
 
-pub use ids::{DeviceId, MachineId, Subject};
+pub use ids::{DeviceId, MachineId, Subject, UserId};
 
 use crate::secrets::Secret;
-use crate::{StoreError, TenantId};
+use crate::{Role, StoreError, TenantId};
 
 /// Bytes of randomness in a token: 256 bits, so the hash cannot be searched for the token.
 const TOKEN_BYTES: usize = 32;
@@ -41,6 +41,9 @@ pub enum TokenKind {
     Machine,
     /// A phone with the app.
     Device,
+    /// A person who signed in with a password: it expires, and ends when they sign out, change
+    /// their password or are disabled.
+    Session,
 }
 
 impl TokenKind {
@@ -50,6 +53,7 @@ impl TokenKind {
             Self::Owner => "owner",
             Self::Machine => "machine",
             Self::Device => "device",
+            Self::Session => "session",
         }
     }
 
@@ -58,6 +62,7 @@ impl TokenKind {
             "owner" => Some(Self::Owner),
             "machine" => Some(Self::Machine),
             "device" => Some(Self::Device),
+            "session" => Some(Self::Session),
             _ => None,
         }
     }
@@ -68,6 +73,7 @@ impl TokenKind {
             Self::Owner => "jo_",
             Self::Machine => "jrm_",
             Self::Device => "jd_",
+            Self::Session => "js_",
         }
     }
 }
@@ -114,11 +120,16 @@ impl std::fmt::Debug for TokenHash {
 
 /// A new random token of this kind. Show it to its owner once; the store keeps only its hash.
 pub fn generate_token(kind: TokenKind) -> Result<Secret, StoreError> {
+    generate_prefixed(kind.prefix())
+}
+
+/// 256 random bits under a prefix that says what the token is for. An invitation uses it too,
+/// though it is no [`TokenKind`]: it never opens the API.
+pub(crate) fn generate_prefixed(prefix: &str) -> Result<Secret, StoreError> {
     let mut bytes = zeroize::Zeroizing::new([0u8; TOKEN_BYTES]);
     crate::secrets::random_bytes(bytes.as_mut())?;
     Ok(Secret::new(format!(
-        "{}{}",
-        kind.prefix(),
+        "{prefix}{}",
         URL_SAFE_NO_PAD.encode(bytes.as_ref())
     )))
 }
@@ -144,12 +155,22 @@ pub struct Authenticated {
     pub subject: Subject,
     /// The token's hash, to check later that it has not been revoked.
     pub token: TokenHash,
+    /// The person the token belongs to: whoever signed in for a session, and the owner of a
+    /// machine's or a phone's token when it has one. The owner's token belongs to nobody.
+    pub user_id: Option<UserId>,
+    /// What a session may do. `None` for every other kind of token.
+    pub role: Option<Role>,
+    /// A session of someone whose password an admin chose: it may do nothing but change it.
+    pub must_change_password: bool,
 }
 
 impl crate::Database {
-    /// The tenant and subject a token opens, or `None` for a token that is unknown, revoked or
-    /// absurdly long. The caller must not say which. `last_used_at` is refreshed at most once a
-    /// minute, so a busy token does not write on every request.
+    /// The tenant and subject a token opens, or `None` for a token that is unknown, revoked,
+    /// expired or absurdly long. The caller must not say which. `last_used_at` is refreshed at
+    /// most once a minute, so a busy token does not write on every request.
+    ///
+    /// A session is checked against its user as well: one whose user is gone or disabled opens
+    /// nothing, even if its row was somehow left unrevoked.
     pub async fn authenticate(&self, token: &str) -> Result<Option<Authenticated>, StoreError> {
         const ACTION: &str = "look up a token";
         if token.is_empty() || token.len() > MAX_TOKEN_LEN {
@@ -157,16 +178,17 @@ impl crate::Database {
         }
         let hash = TokenHash::of(token);
         let mut tx = self.platform_tx(ACTION).await?;
-        let found: Option<(String, String, String, bool)> = sqlx::query_as(
-            "SELECT tenant_id, kind, subject_id, \
+        let found: Option<(String, String, String, Option<String>, bool)> = sqlx::query_as(
+            "SELECT tenant_id, kind, subject_id, user_id, \
              (last_used_at IS NULL OR last_used_at < now() - interval '1 minute') \
-             FROM api_tokens WHERE token_hash = $1 AND revoked_at IS NULL",
+             FROM api_tokens WHERE token_hash = $1 AND revoked_at IS NULL \
+             AND (expires_at IS NULL OR expires_at > now())",
         )
         .bind(hash.as_str())
         .fetch_optional(&mut *tx)
         .await
         .map_err(StoreError::query(ACTION))?;
-        let Some((tenant, kind, subject, stale)) = found else {
+        let Some((tenant, kind, subject, user_id, stale)) = found else {
             return Ok(None);
         };
         if stale {
@@ -177,16 +199,28 @@ impl crate::Database {
                 .map_err(StoreError::query(ACTION))?;
         }
         tx.commit().await.map_err(StoreError::query(ACTION))?;
-        let subject = TokenKind::parse(&kind).and_then(|kind| Subject::from_row(kind, subject));
+        let kind = TokenKind::parse(&kind);
+        let subject = kind.and_then(|kind| Subject::from_row(kind, subject));
         // A row that does not parse was not written by this build: refuse it like an unknown token.
-        match (TenantId::parse(&tenant), subject) {
-            (Ok(tenant), Some(subject)) => Ok(Some(Authenticated {
-                tenant,
-                subject,
-                token: hash,
-            })),
-            _ => Ok(None),
-        }
+        let (Ok(tenant), Some(subject)) = (TenantId::parse(&tenant), subject) else {
+            return Ok(None);
+        };
+        let user_id = user_id.map(UserId::new);
+        let (role, must_change_password) = match &subject {
+            Subject::User(id) => match self.session_user(&tenant, id).await? {
+                Some((role, must_change)) => (Some(role), must_change),
+                None => return Ok(None),
+            },
+            _ => (None, false),
+        };
+        Ok(Some(Authenticated {
+            tenant,
+            subject,
+            token: hash,
+            user_id,
+            role,
+            must_change_password,
+        }))
     }
 
     /// Whether the token is still valid, for a connection that stays open long after its upgrade
@@ -195,7 +229,8 @@ impl crate::Database {
         const ACTION: &str = "check a token";
         let mut tx = self.platform_tx(ACTION).await?;
         let active: bool = sqlx::query_scalar(
-            "SELECT EXISTS (SELECT FROM api_tokens WHERE token_hash = $1 AND revoked_at IS NULL)",
+            "SELECT EXISTS (SELECT FROM api_tokens WHERE token_hash = $1 AND revoked_at IS NULL \
+             AND (expires_at IS NULL OR expires_at > now()))",
         )
         .bind(token.as_str())
         .fetch_one(&mut *tx)

@@ -14,6 +14,9 @@ license = "Apache-2.0"
 [workspace.dependencies]
 aes-gcm = { version = "0.10", default-features = false, features = ["aes", "alloc"] }
 anyhow = "1"
+# Password hashing: argon2id, in a PHC string. `std` for the error traits, `zeroize` wipes the
+# memory blocks. No `rand`: the salt comes from the OS random source the store already uses.
+argon2 = { version = "0.5.3", default-features = false, features = ["password-hash", "std", "zeroize"] }
 axum = "0.8"
 clap = { version = "4", features = ["derive", "env"] }
 clap_complete = "4"

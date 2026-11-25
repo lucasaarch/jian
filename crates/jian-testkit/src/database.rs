@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use jian_store::embedded::{EmbeddedConfig, EmbeddedPostgres};
 use jian_store::secrets::LocalKeyring;
-use jian_store::{Database, DatabaseSource, DatabaseUrl, TenantCtx};
+use jian_store::{Database, DatabaseSource, DatabaseUrl, PasswordParams, TenantCtx};
 use sqlx::AssertSqlSafe;
 
 /// 32 zero bytes in base64: a synthetic master key, worth nothing outside a test database.
@@ -17,7 +17,8 @@ pub fn master_keys() -> Arc<LocalKeyring> {
     Arc::new(LocalKeyring::from_single(TEST_MASTER_KEY).unwrap())
 }
 
-/// An embedded Postgres in a directory of its own, migrated, with [`master_keys`].
+/// An embedded Postgres in a directory of its own, migrated, with [`master_keys`] and cheap
+/// password hashing.
 pub struct TestDb {
     /// The database, as a gateway holds it.
     pub db: Database,
@@ -43,7 +44,9 @@ impl TestDb {
         let db = Database::open(DatabaseSource::External(url.clone()))
             .await
             .unwrap()
-            .with_master_keys(master_keys());
+            .with_master_keys(master_keys())
+            // A test signs in hundreds of times; real hashing would be most of its time.
+            .with_password_params(PasswordParams::insecure_for_tests());
         db.migrate().await.unwrap();
         Self {
             db,

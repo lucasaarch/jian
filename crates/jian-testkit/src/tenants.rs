@@ -1,10 +1,12 @@
-//! Two tenants, each with data of every kind the core stores today.
+//! Two tenants, each with data of every kind the core stores today: a machine, a phone, a
+//! secret, a job and two users.
 
 use std::sync::atomic::{AtomicU32, Ordering};
 
 use jian_store::secrets::Secret;
 use jian_store::{
-    Database, Device, DeviceId, Job, Machine, MachineId, NewJob, TenantCtx, TenantId,
+    Database, Device, DeviceId, Job, LoginOutcome, Machine, MachineId, NewJob, NewUser, Role,
+    TenantCtx, TenantId, User,
 };
 use serde_json::json;
 
@@ -18,6 +20,16 @@ pub const JOB_KIND: &str = "isolation.probe";
 
 /// The idempotency key both sides use for their job: one key, two tenants, two jobs.
 pub const SHARED_KEY: &str = "same-key";
+
+/// The address of both sides' admin. The same text on both sides on purpose, like
+/// [`SECRET_OWNER`]: a lookup by address that ignored the tenant would find the other side's
+/// user, not nothing.
+pub const ADMIN_EMAIL: &str = "admin@isolation.test";
+/// The address of both sides' member; see [`ADMIN_EMAIL`].
+pub const MEMBER_EMAIL: &str = "member@isolation.test";
+
+/// How long the sessions seeded here last.
+const SESSION_TTL: std::time::Duration = std::time::Duration::from_secs(3600);
 
 static NEXT: AtomicU32 = AtomicU32::new(0);
 
@@ -42,6 +54,18 @@ pub struct Side {
     pub secret_text: String,
     /// The tenant's queued job.
     pub job: Job,
+    /// An admin of the tenant, who signs in with [`ADMIN_EMAIL`].
+    pub admin: User,
+    /// The admin's password.
+    pub admin_password: String,
+    /// The admin's session token.
+    pub admin_session: String,
+    /// A member of the tenant, who signs in with [`MEMBER_EMAIL`].
+    pub member: User,
+    /// The member's password.
+    pub member_password: String,
+    /// The member's session token.
+    pub member_session: String,
 }
 
 impl Side {
@@ -65,6 +89,10 @@ impl Side {
             .await
             .unwrap()
             .job;
+        let (admin, admin_password, admin_session) =
+            seed_user(db, &ctx, &id, ADMIN_EMAIL, Role::Admin).await;
+        let (member, member_password, member_session) =
+            seed_user(db, &ctx, &id, MEMBER_EMAIL, Role::Member).await;
         Self {
             id,
             ctx,
@@ -75,6 +103,12 @@ impl Side {
             device_token: device_token.expose().to_owned(),
             secret_text,
             job,
+            admin,
+            admin_password,
+            admin_session,
+            member,
+            member_password,
+            member_session,
         }
     }
 
@@ -94,6 +128,34 @@ impl Side {
     }
 }
 
+/// A user with a password of their own and a session. The database must use cheap password
+/// hashing (`jian_store::PasswordParams::insecure_for_tests`), or seeding is slow.
+async fn seed_user(
+    db: &Database,
+    ctx: &TenantCtx,
+    id: &TenantId,
+    email: &str,
+    role: Role,
+) -> (User, String, String) {
+    let password = format!("password-of-{email}-in-{id}");
+    db.add_user(
+        ctx,
+        NewUser {
+            email,
+            name: "Isolation user",
+            role,
+            password: Some(&password),
+            must_change_password: false,
+        },
+    )
+    .await
+    .unwrap();
+    match db.login(ctx, email, &password, SESSION_TTL).await.unwrap() {
+        LoginOutcome::Granted(login) => (login.user, password, login.token.expose().to_owned()),
+        LoginOutcome::Refused => panic!("a freshly added user could not sign in"),
+    }
+}
+
 /// Tenants A and B, made in one database with the same kinds of data and different values.
 pub struct TwoTenants {
     /// The first tenant.
@@ -110,9 +172,15 @@ impl TwoTenants {
         let n = NEXT.fetch_add(1, Ordering::Relaxed);
         let pid = std::process::id();
         let id = |side: &str| TenantId::parse(&format!("iso{side}{pid}n{n}")).unwrap();
+        Self::seed_as(db, id("a"), id("b")).await
+    }
+
+    /// [`seed`](TwoTenants::seed) with ids the test chooses, for a gateway that has to be told
+    /// which tenant signs in by password before the tenants exist.
+    pub async fn seed_as(db: &Database, a: TenantId, b: TenantId) -> Self {
         Self {
-            a: Side::seed(db, id("a")).await,
-            b: Side::seed(db, id("b")).await,
+            a: Side::seed(db, a).await,
+            b: Side::seed(db, b).await,
         }
     }
 

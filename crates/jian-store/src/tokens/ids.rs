@@ -36,6 +36,8 @@ subject_id! {
     MachineId,
     /// A phone of a tenant.
     DeviceId,
+    /// A person who can sign in to a tenant.
+    UserId,
 }
 
 /// What a token acts as inside its tenant.
@@ -47,6 +49,8 @@ pub enum Subject {
     Machine(MachineId),
     /// One phone.
     Device(DeviceId),
+    /// A person, through a login session.
+    User(UserId),
 }
 
 impl Subject {
@@ -56,6 +60,7 @@ impl Subject {
             Self::Owner => TokenKind::Owner,
             Self::Machine(_) => TokenKind::Machine,
             Self::Device(_) => TokenKind::Device,
+            Self::User(_) => TokenKind::Session,
         }
     }
 
@@ -64,6 +69,7 @@ impl Subject {
             TokenKind::Owner => (id == OWNER_SUBJECT).then_some(Self::Owner),
             TokenKind::Machine => Some(Self::Machine(MachineId(id))),
             TokenKind::Device => Some(Self::Device(DeviceId(id))),
+            TokenKind::Session => Some(Self::User(UserId(id))),
         }
     }
 }

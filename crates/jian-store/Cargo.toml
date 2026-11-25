@@ -6,6 +6,7 @@ license.workspace = true
 
 [dependencies]
 aes-gcm.workspace = true
+argon2.workspace = true
 base64.workspace = true
 futures-util.workspace = true
 getrandom.workspace = true
@@ -14,7 +15,7 @@ serde_json.workspace = true
 sha2.workspace = true
 sqlx.workspace = true
 thiserror.workspace = true
-tokio = { workspace = true, features = ["time"] }
+tokio = { workspace = true, features = ["rt", "sync", "time"] }
 tracing.workspace = true
 zeroize.workspace = true
 

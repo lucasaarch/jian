@@ -37,6 +37,19 @@
 //! loop, the handlers and the drain are `jian-server`'s. Jobs of the old Node gateway's pg-boss
 //! are not imported.
 //!
+//! # Users and sessions
+//!
+//! A tenant's people are rows of its `users` table: an email address, a role (`admin` or
+//! `member`) and an argon2id password hash ([`PasswordParams`]). Nobody signs themselves up: a
+//! user is added by an admin ([`Database::add_user`], [`Database::invite_user`]) or is the first
+//! admin ([`Database::create_first_admin`]), which is also what the import of the old Jian calls.
+//! [`Database::login`] turns an address and a password into a session, a token of kind
+//! `session` in `platform.api_tokens` that expires, belongs to the user and ends when the user
+//! signs out, changes their password, is reset or is disabled. Everything but the login itself
+//! runs as the tenant's role, so another tenant cannot reach a user. Login by password is for a
+//! self-hosted install; the Cloud signs people in by other means and leaves the password
+//! column empty.
+//!
 //! # Migrations and schema versions
 //!
 //! [`Database::migrate`] brings the platform and then every tenant to the last migration, a few
@@ -97,6 +110,7 @@ mod machines;
 mod migrate;
 #[cfg(unix)]
 mod orphan;
+mod passwords;
 mod platform;
 mod schema_version;
 pub mod secrets;
@@ -105,6 +119,7 @@ mod subjects;
 mod tenant;
 mod tenants;
 mod tokens;
+mod users;
 
 pub use backup::tenant_dump_args;
 pub use database::{Database, DatabaseHealth, DatabaseSource, DatabaseUrl};
@@ -117,6 +132,7 @@ pub use jobs::{
 pub use legacy::{DeviceImport, ImportOutcome, LegacyDevice, LegacyMachine, MachineImport};
 pub use machines::{MAX_PAGE, Machine, MachineReport, Page};
 pub use migrate::{MigrateOptions, MigrationReport, Migrations};
+pub use passwords::{MAX_PASSWORD_BYTES, MIN_PASSWORD_CHARS, PasswordParams};
 pub use schema_version::{SchemaState, TenantVersion};
 pub use slots::{
     HeldSlot, InstanceId, SLOT_COUNT, SlotClaim, SlotId, SlotOptions, SlotRow, slot_of,
@@ -124,5 +140,6 @@ pub use slots::{
 pub use tenant::{TenantCtx, TenantId};
 pub use tenants::TenantStatus;
 pub use tokens::{
-    Authenticated, DeviceId, MachineId, Subject, TokenHash, TokenKind, generate_token,
+    Authenticated, DeviceId, MachineId, Subject, TokenHash, TokenKind, UserId, generate_token,
 };
+pub use users::{Invite, Login, LoginOutcome, NewUser, Role, User, normalize_email};

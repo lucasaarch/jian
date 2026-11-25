@@ -27,7 +27,9 @@ use jian_server::{
     AppState, ManualClock, MemoryEventBus, MemoryRateLimiter, NoRunQueue, Settings, SlotKeeper,
 };
 use jian_store::embedded::{EmbeddedConfig, EmbeddedPostgres};
-use jian_store::{Database, DatabaseSource, DatabaseUrl, SlotOptions, TenantCtx, TenantId};
+use jian_store::{
+    Database, DatabaseSource, DatabaseUrl, PasswordParams, SlotOptions, TenantCtx, TenantId,
+};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tokio::task::JoinHandle;
@@ -75,7 +77,9 @@ impl Gateway {
             .await
             .unwrap()
             // So `TwoTenants::seed` can store a secret in this database.
-            .with_master_keys(jian_testkit::master_keys());
+            .with_master_keys(jian_testkit::master_keys())
+            // Tests sign in many times; see `PasswordParams::insecure_for_tests`.
+            .with_password_params(PasswordParams::insecure_for_tests());
         db.migrate().await.unwrap();
         Self::serve(
             Arc::new(db),
@@ -93,7 +97,8 @@ impl Gateway {
     pub async fn join(&self, settings: Settings, slots: SlotOptions) -> Self {
         let db = Database::open(DatabaseSource::External(self.url.clone()))
             .await
-            .unwrap();
+            .unwrap()
+            .with_password_params(PasswordParams::insecure_for_tests());
         Self::serve(Arc::new(db), self.url.clone(), settings, slots, None, None).await
     }
 
@@ -243,11 +248,39 @@ pub async fn closed_with(socket: &mut Socket) -> Option<u16> {
 
 /// A GET over plain HTTP: the status and the body.
 pub async fn http_get(addr: SocketAddr, path: &str, token: Option<&str>) -> (u16, String) {
+    http_send(addr, "GET", path, token, None).await
+}
+
+/// A POST with a JSON body over plain HTTP: the status and the body.
+pub async fn http_post(
+    addr: SocketAddr,
+    path: &str,
+    token: Option<&str>,
+    json: &serde_json::Value,
+) -> (u16, String) {
+    http_send(addr, "POST", path, token, Some(&json.to_string())).await
+}
+
+async fn http_send(
+    addr: SocketAddr,
+    method: &str,
+    path: &str,
+    token: Option<&str>,
+    json: Option<&str>,
+) -> (u16, String) {
     let mut stream = TcpStream::connect(addr).await.unwrap();
     let auth = token.map_or_else(String::new, |token| {
         format!("Authorization: Bearer {token}\r\n")
     });
-    let request = format!("GET {path} HTTP/1.1\r\nHost: test\r\n{auth}Connection: close\r\n\r\n");
+    let body = json.map_or_else(String::new, |json| {
+        format!(
+            "Content-Type: application/json\r\nContent-Length: {}\r\n\r\n{json}",
+            json.len()
+        )
+    });
+    let end = if json.is_some() { "" } else { "\r\n" };
+    let request =
+        format!("{method} {path} HTTP/1.1\r\nHost: test\r\n{auth}Connection: close\r\n{body}{end}");
     stream.write_all(request.as_bytes()).await.unwrap();
     let mut answer = String::new();
     stream.read_to_string(&mut answer).await.unwrap();

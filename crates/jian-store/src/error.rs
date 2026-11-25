@@ -154,6 +154,32 @@ pub enum StoreError {
     /// build cannot read.
     #[error("invalid job: {0}")]
     InvalidJob(&'static str),
+    /// An email address that is empty, too long, or has no `@` between a name and a domain.
+    #[error("that is not an email address")]
+    InvalidEmail,
+    /// A password the store will not set. The limits are in the message so a person can fix it.
+    #[error("a password has at least {min_chars} characters and at most {max_bytes} bytes")]
+    InvalidPassword {
+        /// The fewest characters.
+        min_chars: usize,
+        /// The most bytes.
+        max_bytes: usize,
+    },
+    /// The password given as the current one is not the user's.
+    #[error("the current password is wrong")]
+    WrongPassword,
+    /// Another user of the tenant has this email address.
+    #[error("another user has that email address")]
+    EmailTaken,
+    /// The invitation is unknown, used, expired or its user is disabled. Which one is not said.
+    #[error("the invitation is not valid")]
+    InvalidInvite,
+    /// The tenant already has users, so there is no first one to make.
+    #[error("the tenant already has users")]
+    UsersExist,
+    /// Hashing a password failed. Nothing about the password is in the message.
+    #[error("could not hash a password")]
+    PasswordHashing,
     /// The operating system could not give random bytes.
     #[error("the operating system has no random bytes to give: {0}")]
     Random(getrandom::Error),

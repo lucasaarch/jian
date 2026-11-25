@@ -8,17 +8,19 @@
 use std::time::Duration;
 
 use futures_util::SinkExt;
+use jian_protocol::auth::UsersPage;
 use jian_protocol::client::{
     ClientRequest, ClientResponse, DeltaPayload, ErrorCode, Resume, Topic,
 };
 use jian_protocol::machine::{GatewayMessage, TaskResult, WorkerMessage};
-use jian_server::{DispatchError, ROUTES, Settings};
+use jian_server::{DispatchError, ROUTES};
 use jian_testkit::TwoTenants;
 use tokio_tungstenite::tungstenite::Message;
 use tokio_util::sync::CancellationToken;
 
+use super::accounts::{OTHER_TENANT, SIGN_IN_TENANT, open_settings};
 use super::shell;
-use super::support::{Client, Gateway, RawWorker, http_get};
+use super::support::{Client, Gateway, RawWorker, http_get, http_post};
 
 /// Not a fixed wait for something to happen: how long to watch for something that must not.
 const QUIET: Duration = Duration::from_millis(300);
@@ -27,9 +29,8 @@ const QUIET: Duration = Duration::from_millis(300);
 const THIS_FILE: &str = include_str!("isolation.rs");
 
 async fn start() -> (Gateway, TwoTenants) {
-    let gateway = Gateway::start(Settings::default()).await;
-    let tenants = TwoTenants::seed(&gateway.db).await;
-    (gateway, tenants)
+    // Tenant `isoa` is the one that signs in by password, so its users can be reached by login.
+    super::accounts::start(open_settings()).await
 }
 
 fn is_a_test_here(name: &str) -> bool {
@@ -41,6 +42,14 @@ fn is_a_test_here(name: &str) -> bool {
 const ROUTE_TESTS: &[(&str, &str)] = &[
     ("GET /health", "health_says_nothing_about_any_tenant"),
     ("GET /v1/me", "a_token_names_only_its_own_tenant_over_http"),
+    ("POST /v1/auth/login", USERS_TEST),
+    ("POST /v1/auth/logout", USERS_TEST),
+    ("POST /v1/auth/password", USERS_TEST),
+    ("POST /v1/auth/invite/accept", USERS_TEST),
+    ("GET /v1/users", USERS_TEST),
+    ("POST /v1/users", USERS_TEST),
+    ("POST /v1/users/{id}/disable", USERS_TEST),
+    ("POST /v1/users/{id}/reset-password", USERS_TEST),
     (
         "GET /v1/machines/connect",
         "a_worker_of_one_tenant_neither_gets_nor_answers_the_others_tasks",
@@ -50,6 +59,9 @@ const ROUTE_TESTS: &[(&str, &str)] = &[
         "client_requests_aimed_at_the_other_tenant_find_nothing",
     ),
 ];
+
+/// The test that shows tenant B reaches no user, session or invitation of tenant A.
+const USERS_TEST: &str = "users_and_sessions_of_the_other_tenant_are_out_of_reach";
 
 /// Which test here covers a client request. No wildcard arm: a new `ClientRequest` does not
 /// compile until it is listed, and the listing has to name a test that exists (a sample of it
@@ -502,5 +514,121 @@ async fn a_worker_of_one_tenant_neither_gets_nor_answers_the_others_tasks() {
         assert_eq!(result.exit_code, Some(0));
         assert_ne!(result.stderr, "forged");
     }
+    gateway.stop().await;
+}
+
+#[tokio::test]
+async fn users_and_sessions_of_the_other_tenant_are_out_of_reach() {
+    let (gateway, tenants) = start().await;
+    let addr = gateway.addr;
+    for (actor, victim) in tenants.crossings() {
+        let session = &actor.admin_session;
+
+        // The list holds the actor's own users. Both tenants use the same two addresses, so
+        // the ids are what tells them apart.
+        let (status, body) = http_get(addr, "/v1/users", Some(session)).await;
+        assert_eq!(status, 200, "{body}");
+        let page: UsersPage = serde_json::from_str(&body).unwrap();
+        let ids: Vec<&str> = page.items.iter().map(|user| user.id.as_str()).collect();
+        assert_eq!(ids, [actor.admin.id.as_str(), actor.member.id.as_str()]);
+
+        // A victim's id is "no such user", word for word what an id that never existed gets.
+        for (path, body) in [
+            ("disable", serde_json::json!({})),
+            (
+                "reset-password",
+                serde_json::json!({ "password": "twelve chars long" }),
+            ),
+        ] {
+            let aimed = format!("/v1/users/{}/{path}", victim.member.id);
+            let never = format!("/v1/users/usr_never_existed/{path}");
+            let refused = http_post(addr, &aimed, Some(session), &body).await;
+            assert_eq!(refused.0, 404, "{path}: {}", refused.1);
+            assert_eq!(refused, http_post(addr, &never, Some(session), &body).await);
+        }
+
+        // The victim is as it was: enabled, with its password and its session.
+        let kept = gateway
+            .db
+            .user(&victim.ctx, &victim.member.id)
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(!kept.disabled);
+        assert!(!kept.must_change_password);
+        assert_eq!(
+            http_get(addr, "/v1/me", Some(&victim.member_session))
+                .await
+                .0,
+            200
+        );
+
+        // What the actor's session names is the actor's tenant, whatever the query says.
+        let path = format!("/v1/me?tenant={}", victim.id);
+        let (_, body) = http_get(addr, &path, Some(&actor.member_session)).await;
+        assert!(
+            body.contains(&format!(r#""tenant":"{}""#, actor.id)),
+            "{body}"
+        );
+        assert!(!body.contains(victim.id.as_str()), "{body}");
+    }
+
+    // The gateway signs in tenant `isoa` and no other. The same address with the other tenant's
+    // password is a wrong password, not an open door.
+    let (a, b) = (&tenants.a, &tenants.b);
+    let credentials = |password: &str| serde_json::json!({ "email": jian_testkit::ADMIN_EMAIL, "password": password });
+    let (status, body) = http_post(
+        addr,
+        "/v1/auth/login",
+        None,
+        &credentials(&b.admin_password),
+    )
+    .await;
+    assert_eq!(status, 401, "{body}");
+    let (status, body) = http_post(
+        addr,
+        "/v1/auth/login",
+        None,
+        &credentials(&a.admin_password),
+    )
+    .await;
+    assert_eq!(status, 200, "{body}");
+    assert!(
+        body.contains(&format!(r#""id":"{}""#, a.admin.id)),
+        "{body}"
+    );
+    assert_eq!(
+        (SIGN_IN_TENANT, OTHER_TENANT),
+        (a.id.as_str(), b.id.as_str())
+    );
+
+    // An invitation of the other tenant opens nothing here.
+    let invite = gateway
+        .db
+        .invite_user(
+            &b.ctx,
+            "invited@other.test",
+            "Invited",
+            jian_store::Role::Member,
+            Duration::from_secs(60),
+        )
+        .await
+        .unwrap();
+    let (status, _) = http_post(
+        addr,
+        "/v1/auth/invite/accept",
+        None,
+        &serde_json::json!({ "token": invite.token.expose(), "password": "twelve chars long" }),
+    )
+    .await;
+    assert_eq!(status, 400);
+    assert!(
+        gateway
+            .db
+            .user_by_email(&a.ctx, "invited@other.test")
+            .await
+            .unwrap()
+            .is_none()
+    );
     gateway.stop().await;
 }
