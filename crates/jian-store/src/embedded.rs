@@ -19,7 +19,7 @@ use std::time::Duration;
 
 use postgresql_embedded::{PostgreSQL, Settings};
 
-use crate::{DatabaseUrl, StoreError, orphan};
+use crate::{DatabaseUrl, StoreError};
 
 /// The only Postgres major this build runs. It must match `POSTGRESQL_VERSION` in
 /// `.cargo/config.toml`, which decides what is bundled. A cluster is not portable across majors,
@@ -96,8 +96,9 @@ impl EmbeddedPostgres {
                 source,
             })?;
         // After `setup` so `pg_ctl` is unpacked, before `start` so a leftover server does not
-        // fail it.
-        orphan::clear(
+        // fail it. Unix only (see `orphan`).
+        #[cfg(unix)]
+        crate::orphan::clear(
             &server.settings().data_dir,
             &server.settings().binary_dir().join("pg_ctl"),
         )?;

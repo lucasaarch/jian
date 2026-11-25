@@ -8,6 +8,9 @@
 //!
 //! The only process this ever signals is one whose command line names this data directory, so a
 //! recycled pid, or another cluster, is never touched.
+//!
+//! Unix only: on Windows `pg_ctl` tells a live server from a stale file by itself, and a desktop
+//! gateway stopped abruptly is not the case this covers.
 
 use std::fs;
 use std::io;
@@ -18,7 +21,6 @@ use crate::StoreError;
 
 /// How long `pg_ctl stop` waits for the server to finish, in seconds. A fast shutdown only
 /// checkpoints, so this is generous.
-#[cfg(unix)]
 const STOP_WAIT_SECONDS: &str = "60";
 
 /// Gets `pgdata` ready to be started: stops a live server of this directory and removes a stale
@@ -26,7 +28,6 @@ const STOP_WAIT_SECONDS: &str = "60";
 ///
 /// `pg_ctl` is the one of the unpacked server, so it is the version that wrote the cluster.
 /// Blocking: it runs once at boot, before anything else needs the runtime.
-#[cfg(unix)]
 pub(crate) fn clear(pgdata: &Path, pg_ctl: &Path) -> Result<(), StoreError> {
     let pid_file = pgdata.join("postmaster.pid");
     let text = match fs::read_to_string(&pid_file) {
@@ -77,15 +78,7 @@ pub(crate) fn clear(pgdata: &Path, pg_ctl: &Path) -> Result<(), StoreError> {
     }
 }
 
-/// Windows has no `postmaster.pid` check here: `pg_ctl` tells a live server from a stale file by
-/// itself there, and a desktop gateway stopped abruptly is not the case this covers.
-#[cfg(not(unix))]
-pub(crate) fn clear(_pgdata: &Path, _pg_ctl: &Path) -> Result<(), StoreError> {
-    Ok(())
-}
-
 /// What a pid is, as far as this module needs to know.
-#[cfg(unix)]
 enum Inspected {
     /// No process, or a zombie: a zombie postmaster is dead, only its parent has not collected it
     /// (in a container whose PID 1 does not reap, that is for good).
@@ -122,7 +115,7 @@ fn inspect(pid: u32) -> Inspected {
 }
 
 /// macOS and the other Unixes have no `/proc`; `ps` is always there.
-#[cfg(all(unix, not(target_os = "linux")))]
+#[cfg(not(target_os = "linux"))]
 fn inspect(pid: u32) -> Inspected {
     let Ok(output) = Command::new("ps")
         .args(["-o", "stat=,args=", "-p", &pid.to_string()])
@@ -148,7 +141,6 @@ fn inspect(pid: u32) -> Inspected {
 
 /// True when a postmaster's command line names this data directory. `pg_ctl start` passes it as
 /// `-D <dir>`; it may be written through a symlink, so the resolved path counts as well.
-#[cfg(unix)]
 fn names_directory(args: &str, pgdata: &Path) -> bool {
     let is_postgres = args.contains("postgres");
     let named = |dir: &Path| args.contains(&dir.display().to_string());
@@ -157,7 +149,6 @@ fn names_directory(args: &str, pgdata: &Path) -> bool {
 
 /// A fast shutdown of the server of `pgdata`: sessions end and the cluster is checkpointed, so
 /// the next start has no crash recovery to do.
-#[cfg(unix)]
 fn stop(pid: u32, pgdata: &Path, pg_ctl: &Path) -> Result<(), StoreError> {
     let output = Command::new(pg_ctl)
         .args(["stop", "-m", "fast", "-w", "-t", STOP_WAIT_SECONDS, "-D"])
@@ -177,7 +168,6 @@ fn stop(pid: u32, pgdata: &Path, pg_ctl: &Path) -> Result<(), StoreError> {
     })
 }
 
-#[cfg(unix)]
 fn remove(pid_file: &Path) -> Result<(), StoreError> {
     match fs::remove_file(pid_file) {
         Ok(()) => Ok(()),
