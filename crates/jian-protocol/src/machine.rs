@@ -58,6 +58,12 @@ pub const CLOSE_UNSUPPORTED_PROTOCOL: u16 = 4001;
 pub const CLOSE_REPLACED: u16 = 4002;
 /// The token was revoked or rotated while connected.
 pub const CLOSE_TOKEN_REVOKED: u16 = 4003;
+/// This gateway instance does not own the tenant's slot (it never did, lost its lease, or is
+/// draining): connect again, and the new connection lands on the instance that does. Unlike
+/// the codes above, nothing is wrong with the worker or its token. Adding it changes no message,
+/// so [`PROTOCOL_VERSION`] stays; a worker that does not know the code retries with backoff, as
+/// it does for any close it was not told to give up on.
+pub const CLOSE_RECONNECT: u16 = 4004;
 
 /// What a worker can do. The gateway sends a task only to a worker that advertises its kind.
 /// Runs shell commands.

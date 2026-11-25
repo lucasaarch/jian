@@ -51,6 +51,10 @@ pub const MAX_CLIENT_FRAME_BYTES: usize = 256 * 1024;
 pub const CLOSE_UNSUPPORTED_PROTOCOL: u16 = 4001;
 /// The client's token was revoked or rotated while it was connected.
 pub const CLOSE_TOKEN_REVOKED: u16 = 4003;
+/// This gateway instance does not own the tenant's slot (it never did, lost its lease, or is
+/// draining): connect again, and keep the resume point of every subscription. The same code as
+/// [`crate::machine::CLOSE_RECONNECT`]; no message changed, so the version stays.
+pub const CLOSE_RECONNECT: u16 = 4004;
 
 string_id! {
     /// The id a client gives a request, echoed in its answer.

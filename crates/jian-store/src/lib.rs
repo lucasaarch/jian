@@ -20,6 +20,14 @@
 //! and it takes a [`TenantCtx`] to do so, which only [`Database::tenant`] makes. `LOCAL` ends both
 //! with the transaction, so a pooled connection never carries one tenant's role to the next.
 //!
+//! # Slots
+//!
+//! A tenant hashes to one of 1024 slots ([`slot_of`]), and a slot is owned by at most one
+//! gateway instance at a time through a lease in `platform.slot_leases` that expires
+//! ([`Database::claim_slots`]). The store holds the SQL and the numbers; keeping the leases
+//! renewed and stopping to serve when one is lost is `jian-server`'s. The tables are ephemeral
+//! coordination state, so there is nothing of the old Jian to import into them.
+//!
 //! # Migrations and schema versions
 //!
 //! [`Database::migrate`] brings the platform and then every tenant to the last migration, a few
@@ -82,6 +90,7 @@ mod orphan;
 mod platform;
 mod schema_version;
 pub mod secrets;
+mod slots;
 mod subjects;
 mod tenant;
 mod tenants;
@@ -95,6 +104,9 @@ pub use legacy::{DeviceImport, ImportOutcome, LegacyDevice, LegacyMachine, Machi
 pub use machines::{MAX_PAGE, Machine, MachineReport, Page};
 pub use migrate::{MigrateOptions, MigrationReport, Migrations};
 pub use schema_version::{SchemaState, TenantVersion};
+pub use slots::{
+    HeldSlot, InstanceId, SLOT_COUNT, SlotClaim, SlotId, SlotOptions, SlotRow, slot_of,
+};
 pub use tenant::{TenantCtx, TenantId};
 pub use tenants::TenantStatus;
 pub use tokens::{
