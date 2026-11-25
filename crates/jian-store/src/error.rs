@@ -183,6 +183,14 @@ pub enum StoreError {
     /// change what the person signs in with there.
     #[error("the account is also a member of another workspace")]
     AccountInOtherTenants,
+    /// A request about agents or threads that cannot be done as asked; the text says which part
+    /// is wrong and never carries a value.
+    #[error("invalid request: {0}")]
+    InvalidWorkspace(&'static str),
+    /// The caller can see what they asked about but may not do this to it. Only for things they
+    /// can see: what they cannot see is "not found", never this.
+    #[error("not allowed: {0}")]
+    Denied(&'static str),
     /// The operating system could not give random bytes.
     #[error("the operating system has no random bytes to give: {0}")]
     Random(getrandom::Error),

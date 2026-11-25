@@ -296,12 +296,85 @@ async fn the_embedded_migrations_apply_to_the_platform_and_to_each_tenant() {
             "SELECT version::text FROM _sqlx_migrations ORDER BY version"
         )
         .await,
-        ["1", "2", "3", "4"]
+        ["1", "2", "3", "4", "5"]
     );
     // After a restart the tenant is migrated again with nothing to do.
     let report = db.migrate().await.unwrap();
     assert_eq!(report.migrated, [id("local")]);
     exec(&db, &local, "SELECT 1").await;
+    db.close().await.unwrap();
+    server.stop().await;
+}
+
+#[tokio::test]
+async fn the_threads_migration_upgrades_a_tenant_and_keeps_what_it_had() {
+    // The four tenant migrations as shipped before the workspace of agents and threads.
+    let shipped = |file: &str| {
+        std::fs::read_to_string(format!(
+            "{}/migrations/tenant/{file}",
+            env!("CARGO_MANIFEST_DIR")
+        ))
+        .unwrap()
+    };
+    let files = [
+        "0001_init.sql",
+        "0002_secrets.sql",
+        "0003_machines_devices.sql",
+        "0004_providers.sql",
+    ];
+    let before: Vec<(&str, String)> = files.iter().map(|f| (*f, shipped(f))).collect();
+    let before: Vec<(&str, &str)> = before.iter().map(|(f, s)| (*f, s.as_str())).collect();
+    let server = Server::start().await;
+    let db = database(&server, "before", &before).await;
+    db.migrate().await.unwrap();
+    let alpha = tenant(&db, "alpha").await;
+    db.issue_machine(&alpha, "kept box").await.unwrap();
+    assert_eq!(
+        texts(
+            &db,
+            &alpha,
+            "SELECT count(*)::text FROM information_schema.tables \
+             WHERE table_schema = 'tenant_alpha' AND table_name = 'threads'"
+        )
+        .await,
+        ["0"]
+    );
+
+    let db = db.with_migrations(Migrations::embedded());
+    let report = db.migrate().await.unwrap();
+    assert_eq!(report.migrated, [id("alpha")]);
+    assert!(report.failed.is_empty());
+    assert_eq!(
+        texts(&db, &alpha, "SELECT name FROM machines").await,
+        ["kept box"]
+    );
+    let tables = texts(
+        &db,
+        &alpha,
+        "SELECT table_name::text FROM information_schema.tables \
+         WHERE table_schema = 'tenant_alpha' AND table_name IN \
+         ('agents', 'agent_viewers', 'member_grants', 'threads', 'thread_participants', 'messages') \
+         ORDER BY 1",
+    )
+    .await;
+    assert_eq!(
+        tables,
+        [
+            "agent_viewers",
+            "agents",
+            "member_grants",
+            "messages",
+            "thread_participants",
+            "threads"
+        ]
+    );
+    // The new tables work for a tenant that already had data.
+    exec(
+        &db,
+        &alpha,
+        "INSERT INTO agents (id, name, visibility, created_by) VALUES ('agt_1', 'A', 'workspace', 'acc')",
+    )
+    .await;
     db.close().await.unwrap();
     server.stop().await;
 }

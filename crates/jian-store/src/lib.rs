@@ -60,6 +60,15 @@
 //! `jian-import`'s; the store only keeps the place, so a run that stopped halfway is found by
 //! the next one.
 //!
+//! # Agents, threads and messages
+//!
+//! The workspace of people and agents ([`Database::create_agent`], [`Database::create_thread`],
+//! [`Database::post_message`]). Who sees an agent and who sees a thread is each decided in one
+//! place (see the `agents` and `threads` modules' notes), and what a caller may not see is
+//! `None`, never an error that says it exists. Only a [`Viewer`] built from a member's token
+//! reaches these calls. A message written to a thread with an agent in it reaches the
+//! [`ThreadObserver`], which is where the agent loop (LUC-78) plugs in.
+//!
 //! # Migrations and schema versions
 //!
 //! [`Database::migrate`] brings the platform and then every tenant to the last migration, a few
@@ -110,18 +119,22 @@
 //! (`CREATEROLE`) and own the database: it creates, grants and drops the tenant roles.
 
 mod accounts;
+mod agents;
 mod backup;
 mod credentials;
 mod database;
 mod devices;
 pub mod embedded;
 mod error;
+mod grants;
 mod imports;
 mod invites;
 mod jobs;
 mod legacy;
+mod legacy_threads;
 mod machines;
 mod members;
+mod messages;
 mod migrate;
 #[cfg(unix)]
 mod orphan;
@@ -134,15 +147,22 @@ mod slots;
 mod subjects;
 mod tenant;
 mod tenants;
+mod threads;
 mod tokens;
 mod usage;
 
 pub use accounts::{Account, NewAccount, default_name, normalize_email};
+pub use agents::{
+    Agent, AgentId, AgentPatch, MAX_AGENT_AVATAR_BYTES, MAX_AGENT_DESCRIPTION_CHARS,
+    MAX_AGENT_INSTRUCTIONS_CHARS, MAX_AGENT_NAME_CHARS, MAX_AGENT_VIEWERS, NewAgent, Viewer,
+    can_manage_agent,
+};
 pub use backup::tenant_dump_args;
 pub use credentials::{CredentialKind, PasswordCredential};
 pub use database::{Database, DatabaseHealth, DatabaseSource, DatabaseUrl};
 pub use devices::Device;
 pub use error::StoreError;
+pub use grants::{GRANTS, MemberGrant};
 pub use imports::{ImportMarker, ImportResult, ImportStatus};
 pub use invites::{
     Accepted, Invite, InviteStatus, InviteTarget, IssuedInvite, MAX_INVITE_TOKEN_LEN, SendOutcome,
@@ -153,8 +173,13 @@ pub use jobs::{
     MAX_PAYLOAD_BYTES, NewJob, PURGE_BATCH, RetryPolicy,
 };
 pub use legacy::{DeviceImport, ImportOutcome, LegacyDevice, LegacyMachine, MachineImport};
+pub use legacy_threads::{LegacyAgent, LegacyChat, LegacyMessage, LegacyThread};
 pub use machines::{MAX_PAGE, Machine, MachineReport, Page};
 pub use members::{AddedMember, Member, NewMember, Role};
+pub use messages::{
+    Author, MAX_CLIENT_KEY, Message, MessageAppended, MessageId, MessagePage, NewMessage,
+    NoObserver, Posted, ThreadObserver, Window,
+};
 pub use migrate::{MigrateOptions, MigrationReport, Migrations};
 pub use providers::{
     LegacyProvider, MAX_ACCOUNTS, MAX_LABEL_CHARS, NewProviderAccount, ProviderAccount,
@@ -167,6 +192,10 @@ pub use slots::{
 };
 pub use tenant::{TenantCtx, TenantId};
 pub use tenants::TenantStatus;
+pub use threads::{
+    ChannelOrigin, MAX_PARTICIPANTS, MAX_THREAD_TITLE_CHARS, NewThread, Participant, Thread,
+    ThreadId, Who,
+};
 pub use tokens::{
     AccountId, Authenticated, DeviceId, MachineId, Subject, TokenHash, TokenKind, generate_token,
 };

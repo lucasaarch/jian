@@ -19,6 +19,7 @@ use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use sha2::{Digest as _, Sha256};
 
+pub(crate) use ids::subject_id;
 pub use ids::{AccountId, DeviceId, MachineId, Subject};
 
 use crate::secrets::Secret;

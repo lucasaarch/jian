@@ -7,7 +7,11 @@
 //! `jian-runtime`, `jian-llm`, `jian-exec` and `jian-server` depend on it.
 
 mod catalog;
+mod message;
 mod provider;
 
 pub use catalog::{ModelInfo, models};
+pub use message::{
+    MAX_PARTS, MAX_TEXT_BYTES, MessagePart, MessageParts, PartsError, ThreadKind, Visibility,
+};
 pub use provider::{AccountMode, ProviderKind};

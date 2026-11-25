@@ -1,5 +1,5 @@
 //! Two tenants, each with data of every kind the core stores today: a machine, a phone, a
-//! secret, a job and two members.
+//! secret, a job and three members.
 
 use std::sync::atomic::{AtomicU32, Ordering};
 
@@ -63,6 +63,11 @@ pub struct Side {
     pub member: Member,
     /// The member's session token, clear text.
     pub member_session: String,
+    /// A second member, `peer@<tenant>.test`, who shares the tenant with [`Side::member`] and must
+    /// not see what that member keeps private.
+    pub peer: Member,
+    /// The second member's session token, clear text.
+    pub peer_session: String,
 }
 
 impl Side {
@@ -88,6 +93,7 @@ impl Side {
             .job;
         let (admin, admin_session) = seed_member(db, &ctx, "admin", Role::Admin).await;
         let (member, member_session) = seed_member(db, &ctx, "member", Role::Member).await;
+        let (peer, peer_session) = seed_member(db, &ctx, "peer", Role::Member).await;
         Self {
             id,
             ctx,
@@ -102,6 +108,8 @@ impl Side {
             admin_session,
             member,
             member_session,
+            peer,
+            peer_session,
         }
     }
 

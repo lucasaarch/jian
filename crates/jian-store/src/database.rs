@@ -8,7 +8,7 @@ use sqlx::postgres::PgPoolOptions;
 use crate::embedded::{EmbeddedConfig, EmbeddedPostgres};
 use crate::schema_version::VerifiedTenants;
 use crate::secrets::{DekCache, MasterKeys};
-use crate::{Migrations, StoreError};
+use crate::{Migrations, NoObserver, StoreError, ThreadObserver};
 
 /// The longest a caller waits for a connection from the pool, and so for the first `SELECT 1`.
 const ACQUIRE_TIMEOUT: Duration = Duration::from_secs(5);
@@ -62,6 +62,7 @@ pub struct Database {
     pub(crate) verified: VerifiedTenants,
     pub(crate) master_keys: Option<Arc<dyn MasterKeys>>,
     pub(crate) deks: DekCache,
+    pub(crate) observer: Arc<dyn ThreadObserver>,
     embedded: Option<EmbeddedPostgres>,
 }
 
@@ -85,6 +86,7 @@ impl Database {
                 verified: VerifiedTenants::default(),
                 master_keys: None,
                 deks: DekCache::default(),
+                observer: Arc::new(NoObserver),
                 embedded,
             }),
             Err(error) => {

@@ -3,4 +3,4 @@
 /**
  * What a client can subscribe to. One topic today; each domain adds its own with its issue.
  */
-export type Topic = "machines";
+export type Topic = "machines" | "threads";

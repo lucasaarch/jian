@@ -402,5 +402,47 @@ export const serverMessages = [
     "seq": 0,
     "topic": "machines",
     "type": "resync"
+  },
+  {
+    "payload": {
+      "author": {
+        "id": "acc_1",
+        "kind": "member",
+        "label": null
+      },
+      "clientKey": "k1",
+      "createdAt": "2026-01-01T00:00:00.000Z",
+      "deleted": false,
+      "editedAt": null,
+      "id": "msg_1",
+      "parts": [
+        {
+          "text": "hi",
+          "type": "text"
+        }
+      ],
+      "replyTo": null,
+      "seq": 1,
+      "threadId": "thr_1",
+      "type": "message.created"
+    },
+    "seq": 1,
+    "topic": "threads",
+    "type": "delta"
+  },
+  {
+    "payload": {
+      "participant": {
+        "id": "acc_2",
+        "joinedAt": "2026-01-01T00:00:00.000Z",
+        "kind": "member",
+        "label": null
+      },
+      "threadId": "thr_1",
+      "type": "participant.left"
+    },
+    "seq": 2,
+    "topic": "threads",
+    "type": "delta"
   }
 ] satisfies ServerMessage[];

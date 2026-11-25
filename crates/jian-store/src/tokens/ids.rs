@@ -1,7 +1,5 @@
 //! The ids a token can act as.
 
-use std::fmt;
-
 use super::TokenKind;
 
 macro_rules! subject_id {
@@ -23,13 +21,14 @@ macro_rules! subject_id {
             }
         }
 
-        impl fmt::Display for $name {
-            fn fmt(&self, out: &mut fmt::Formatter<'_>) -> fmt::Result {
+        impl ::std::fmt::Display for $name {
+            fn fmt(&self, out: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
                 out.write_str(&self.0)
             }
         }
     )+};
 }
+pub(crate) use subject_id;
 
 subject_id! {
     /// A machine of a tenant: a computer running Jian Remote.
