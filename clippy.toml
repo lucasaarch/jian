@@ -4,3 +4,6 @@ allow-expect-in-tests = true
 allow-panic-in-tests = true
 allow-print-in-tests = true
 allow-dbg-in-tests = true
+
+# Vendor names that docs spell as written.
+doc-valid-idents = ["OpenAI", "OpenRouter", "ChatGPT", "SQLite", ".."]

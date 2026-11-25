@@ -5,3 +5,9 @@
 //! the world it asks for through a trait that the other crates implement, so every rule here
 //! tests without a server. It depends on no other crate of the workspace; `jian-store`,
 //! `jian-runtime`, `jian-llm`, `jian-exec` and `jian-server` depend on it.
+
+mod catalog;
+mod provider;
+
+pub use catalog::{ModelInfo, models};
+pub use provider::{AccountMode, ProviderKind};
