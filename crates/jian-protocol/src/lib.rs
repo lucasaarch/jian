@@ -5,7 +5,9 @@
 //! knows nothing about how either side runs a task; `jian-remote` speaks it from the machine, and
 //! the server will speak it from the gateway. Every type here is serialized as the TypeScript
 //! gateway already expects, so a change that a peer of the other version would misread bumps
-//! [`machine::PROTOCOL_VERSION`].
+//! [`machine::PROTOCOL_VERSION`]. [`auth`] holds the bodies of the plain HTTP routes of sign-in and
+//! users, which have no version of their own: they are additive.
 
+pub mod auth;
 pub mod client;
 pub mod machine;
