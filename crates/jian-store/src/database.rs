@@ -1,4 +1,5 @@
 use std::fmt;
+use std::sync::Arc;
 use std::time::Duration;
 
 use sqlx::PgPool;
@@ -6,6 +7,7 @@ use sqlx::postgres::PgPoolOptions;
 
 use crate::embedded::{EmbeddedConfig, EmbeddedPostgres};
 use crate::schema_version::VerifiedTenants;
+use crate::secrets::{DekCache, MasterKeys};
 use crate::{Migrations, StoreError};
 
 /// The longest a caller waits for a connection from the pool, and so for the first `SELECT 1`.
@@ -58,6 +60,8 @@ pub struct Database {
     pub(crate) pool: PgPool,
     pub(crate) migrations: Migrations,
     pub(crate) verified: VerifiedTenants,
+    pub(crate) master_keys: Option<Arc<dyn MasterKeys>>,
+    pub(crate) deks: DekCache,
     embedded: Option<EmbeddedPostgres>,
 }
 
@@ -79,6 +83,8 @@ impl Database {
                 pool,
                 migrations: Migrations::embedded(),
                 verified: VerifiedTenants::default(),
+                master_keys: None,
+                deks: DekCache::default(),
                 embedded,
             }),
             Err(error) => {

@@ -165,10 +165,15 @@ async fn creating_a_tenant_twice_changes_nothing_and_deleting_it_removes_schema_
         db.list_tenants().await.unwrap(),
         std::slice::from_ref(&alpha)
     );
-    // The migration table is in the tenant's schema, with the one migration applied.
+    // The migration table is in the tenant's schema, with every migration the build ships.
     assert_eq!(
-        texts(&db, &ctx, "SELECT version::text FROM _sqlx_migrations").await,
-        ["1"]
+        texts(
+            &db,
+            &ctx,
+            "SELECT version::text FROM _sqlx_migrations ORDER BY version"
+        )
+        .await,
+        ["1", "2"]
     );
 
     // The catalog is readable by every role, so a second tenant can tell what exists.

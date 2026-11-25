@@ -28,6 +28,27 @@ start unpacks Postgres and creates the cluster, so it takes longer than the next
   file when that server is gone. It never signals a process that is not the Postgres of that
   data directory.
 
+## Master key for secrets
+
+Provider keys, OAuth tokens and channel credentials are stored encrypted (AES-256-GCM, one data
+key per tenant, itself encrypted by a master key). Where the master key comes from, first match
+wins:
+
+| Variable | Format |
+| --- | --- |
+| `JIAN_MASTER_KEYS` + `JIAN_ACTIVE_KEY_ID` | JSON `{"<keyId>": "<base64 of 32 bytes>"}`, as the Node Jian takes it. The active id may be left out when the list has one key. |
+| `JIAN_MASTER_KEY` | One key, the base64 of 32 bytes, with the key id `local`, as the desktop app takes it. |
+| none | `master.key` in the data directory, generated on the first start (mode 0600 on Unix) and reused after. `make rust-dev` uses `.jian-dev/master.key`. |
+
+The log names the key ids, never a key. **Back the key up with the database**: without it the
+secrets cannot be read, and a lost `master.key` is not recoverable.
+
+Rotate the master key: add the new key to `JIAN_MASTER_KEYS`, make it active with
+`JIAN_ACTIVE_KEY_ID`, and run `jian keys rotate`. It rewraps the data keys only (the secrets do not
+change), in batches, and prints how many; run it again and it changes nothing. Then remove the old
+key. With the embedded Postgres, stop the gateway first, because the command starts that database
+itself; with `DATABASE_URL` it can run beside the gateway.
+
 ## Talk to it
 
 There is no UI. The gateway has one route:

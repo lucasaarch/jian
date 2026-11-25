@@ -34,6 +34,10 @@ formatting in `rustfmt.toml`, tests-may-unwrap in `clippy.toml`, licenses and ad
   `undocumented_unsafe_blocks`. Prefer a safe wrapper (`rustix`) over a new `unsafe`.
 - Logs: `tracing`, never `println!` or `eprintln!` in a library. A binary may print: that is the
   user's interface. Never log a secret or a token.
+- Secrets (provider keys, tokens, channel credentials) are stored only through
+  `Database::vault`, never in a plain column, and held in memory as `jian_store::secrets::Secret`
+  (redacted `Debug`, wiped on drop). Key material and secret text never reach a log, an error or
+  a `{:?}`.
 - Modules stay near 400 lines. `foo.rs` beside `foo/`, never `mod.rs`. Names say the domain: no
   `utils` or `helpers`.
 - Dependencies: the version is written once, in `[workspace.dependencies]`; a crate says

@@ -110,6 +110,31 @@ pub enum StoreError {
         /// Which migration, and why. A migration edited after it was applied says so here.
         source: MigrateError,
     },
+    /// A secret was asked for but the database has no master keys: the binary did not pass any
+    /// ([`Database::with_master_keys`](crate::Database::with_master_keys)).
+    #[error("no master key is configured, so secrets cannot be stored or read")]
+    NoMasterKeys,
+    /// A master key cannot be used: wrong length, not base64, a malformed list, or an active key
+    /// that is not in it. The reason never contains key material.
+    #[error("invalid master key: {0}")]
+    InvalidMasterKey(String),
+    /// A stored key or envelope names a master key that is not in the keyring. Add the old key
+    /// back (rotation keeps it until every data key has been rewrapped).
+    #[error("master key {0:?} is not in the keyring")]
+    UnknownMasterKey(String),
+    /// Decryption failed: the data was altered, belongs to another tenant or owner, or the key is
+    /// wrong. AES-GCM cannot tell these apart, and neither does this message.
+    #[error("cannot decrypt {what}: the data was altered or does not belong here")]
+    Decrypt {
+        /// What was being opened: `a secret`, `a data key`.
+        what: &'static str,
+    },
+    /// An envelope is not in a format this build reads (truncated, or a version it does not know).
+    #[error("malformed secret envelope: {0}")]
+    MalformedEnvelope(&'static str),
+    /// The operating system could not give random bytes.
+    #[error("the operating system has no random bytes to give: {0}")]
+    Random(getrandom::Error),
 }
 
 impl StoreError {

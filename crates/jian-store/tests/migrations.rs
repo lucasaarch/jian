@@ -105,13 +105,22 @@ async fn a_migration_changed_after_it_was_applied_is_refused_and_says_which() {
     );
 
     // The platform's are held to the same rule, and that one stops the start.
+    // The platform's second migration stays as shipped, so only the first one is changed.
+    let second = std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/migrations/platform/0002_tenant_keys.sql"
+    ))
+    .unwrap();
     let altered = migrator(
         server.dir.path(),
         "platform-edited",
-        &[(
-            "0001_tenants.sql",
-            "CREATE TABLE tenants (id text PRIMARY KEY);",
-        )],
+        &[
+            (
+                "0001_tenants.sql",
+                "CREATE TABLE tenants (id text PRIMARY KEY);",
+            ),
+            ("0002_tenant_keys.sql", &second),
+        ],
     )
     .await;
     let db = db.with_migrations(Migrations::new(
@@ -245,8 +254,13 @@ async fn the_embedded_migrations_apply_to_the_platform_and_to_each_tenant() {
     assert!(report.migrated.is_empty() && report.failed.is_empty());
     let local = tenant(&db, "local").await;
     assert_eq!(
-        texts(&db, &local, "SELECT version::text FROM _sqlx_migrations").await,
-        ["1"]
+        texts(
+            &db,
+            &local,
+            "SELECT version::text FROM _sqlx_migrations ORDER BY version"
+        )
+        .await,
+        ["1", "2"]
     );
     // After a restart the tenant is migrated again with nothing to do.
     let report = db.migrate().await.unwrap();

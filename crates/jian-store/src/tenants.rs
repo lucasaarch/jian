@@ -77,6 +77,9 @@ impl Database {
         if inserted == 0 {
             return Ok(TenantStatus::AlreadyExisted);
         }
+        // Still `jian_platform`, which owns `tenant_keys`. In this transaction, so a tenant never
+        // exists without its key when master keys are configured.
+        self.create_data_key_in(&mut tx, id).await?;
         // Back to the database's own user, the one allowed to create roles.
         let name = id.quoted();
         for statement in [
@@ -144,6 +147,7 @@ impl Database {
         }
         tx.commit().await.map_err(StoreError::query(ACTION))?;
         self.verified.remove(id);
+        self.deks.remove(id);
         tracing::info!(tenant = %id, "tenant deleted");
         Ok(())
     }

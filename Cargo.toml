@@ -12,6 +12,7 @@ license = "Apache-2.0"
 # Every dependency version lives here; a crate says `name.workspace = true`, and adds only the
 # features it needs. Internal crates are listed too, so a path is written once.
 [workspace.dependencies]
+aes-gcm = { version = "0.10", default-features = false, features = ["aes", "alloc"] }
 anyhow = "1"
 axum = "0.8"
 clap = { version = "4", features = ["derive", "env"] }
@@ -19,6 +20,8 @@ clap_complete = "4"
 directories = "6"
 base64 = "0.23.1"
 futures-util = { version = "0.3.31", default-features = false, features = ["sink", "std"] }
+# The OS random source, for nonces and data keys.
+getrandom = "0.3"
 globset = { version = "0.4", default-features = false }
 jian-computer-use = { path = "crates/jian-computer-use" }
 jian-protocol = { path = "crates/jian-protocol" }
@@ -54,6 +57,8 @@ tracing-subscriber = { version = "0.3", default-features = false, features = ["a
 ts-rs = "12.0.1"
 url = "2.5"
 webpki-roots = "1.0"
+# Wipes keys and secrets from memory when they drop.
+zeroize = "1"
 
 # Computer Use helper, per platform. The macOS set is the AppKit and Quartz bindings the pointer
 # overlay and input need; the Linux one is pure Rust (no libxcb, no libX11) so the binary links

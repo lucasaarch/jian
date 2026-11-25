@@ -35,6 +35,21 @@
 //! [`StoreError::SchemaAhead`]. The check is remembered per tenant, so a request pays for it once
 //! after each `migrate`, not on every call.
 //!
+//! # Secrets
+//!
+//! Provider keys, OAuth tokens and channel credentials live in each tenant's `secrets` table,
+//! only as AES-256-GCM envelopes ([`secrets`]). A tenant has one random data key, kept in
+//! `platform.tenant_keys` wrapped by a master key; the master key sits behind
+//! [`secrets::MasterKeys`], and [`Database::with_master_keys`] gives the database one. A dump of
+//! the database holds ciphertext and wrapped keys, nothing readable. Rotating the master key
+//! ([`Database::rotate_master_keys`]) rewraps the data keys and leaves every secret as it is.
+//!
+//! The library reads no environment. The `jian` binary builds a [`secrets::LocalKeyring`] from
+//! `JIAN_MASTER_KEYS` (JSON of key ids to base64 keys) with `JIAN_ACTIVE_KEY_ID`, or from
+//! `JIAN_MASTER_KEY` (one base64 key, id `local`), and when neither is set from `master.key` in
+//! the data directory, generated on the first start (mode 0600 on Unix). A tenant made before
+//! secrets existed, or without master keys, gets its data key with its first secret.
+//!
 //! # What this protects against, and what it does not
 //!
 //! The role is the wall: a query as `tenant_b` cannot read or write `tenant_a` or `platform`
@@ -63,6 +78,7 @@ mod migrate;
 mod orphan;
 mod platform;
 mod schema_version;
+pub mod secrets;
 mod tenant;
 mod tenants;
 
