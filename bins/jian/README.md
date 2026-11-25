@@ -1,7 +1,7 @@
 # jian (Rust gateway)
 
-The Jian gateway as one binary, with its own Postgres 18 inside. Today it serves `GET /health`
-only: no panel, no authentication and no WebSocket yet, so there is no token to find.
+The Jian gateway as one binary, with its own Postgres 18 inside. It serves `GET /health`,
+`GET /v1/me` and two WebSockets, behind bearer tokens. There is no panel yet.
 
 ## Run it for development
 
@@ -49,20 +49,47 @@ change), in batches, and prints how many; run it again and it changes nothing. T
 key. With the embedded Postgres, stop the gateway first, because the command starts that database
 itself; with `DATABASE_URL` it can run beside the gateway.
 
-## Talk to it
+## Tokens
 
-There is no UI. The gateway has one route:
+Every request except `/health` carries `Authorization: Bearer <token>`. The token alone says which
+tenant it is; nothing else (header, query, body) is read for that. The database keeps only the
+SHA-256 of a token.
+
+| Prefix | Who | Where |
+| --- | --- | --- |
+| `jo_`... (any string of 32+ characters for the owner) | the owner | `/v1/ws`, `/v1/me` |
+| `jrm_` | a machine's worker | `/v1/machines/connect` |
+| `jd_` | a phone or other device | `/v1/ws` (cannot issue tokens) |
+
+The owner token is `JIAN_API_TOKEN` / `--api-token` when set (at least 32 characters). Otherwise it
+is generated on the first start into `owner.token` in the data directory (mode 0600 on Unix) and
+reused after; `make rust-dev` uses `.jian-dev/owner.token`. The log names the file, never the
+token. Machine and device tokens are issued, listed and revoked by the owner over `/v1/ws`; a token
+is shown once. A missing or wrong token gets a bare 401, a token of the wrong kind a 403, and
+guessing from one address is slowed down with a 429 and `Retry-After`.
+
+## Talk to it
 
 ```bash
 curl -i http://127.0.0.1:4410/health
 # {"status":"ok","database":"up"}   (503 and "unavailable" when the database does not answer)
+curl -H "Authorization: Bearer $(cat .jian-dev/owner.token)" http://127.0.0.1:4410/v1/me
+# {"tenant":"local","kind":"owner","subject":null}
 ```
 
-There is no WebSocket endpoint yet. When it exists it will be reachable like this:
+`/v1/ws` speaks the client protocol of `jian-protocol` (`ClientMessage` / `ServerMessage`,
+TypeScript types in `packages/protocol`). Without a panel, try it with the example client, which
+issues a machine (third argument) and lists the machines:
 
 ```bash
-websocat ws://127.0.0.1:4410/<path>
+cargo run -p jian-server --example ws_client -- 127.0.0.1:4410 .jian-dev/owner.token my-laptop
 ```
+
+Give the printed machine token to a worker (`jian-remote`, gateway `http://127.0.0.1:4410`) and
+run the example again without the name: the machine is `online`. With `websocat` the bearer goes
+in a header, `websocat -H "Authorization: Bearer $TOKEN" ws://127.0.0.1:4410/v1/ws`, and the first
+message is `{"type":"hello","protocolVersion":1}`. A browser cannot set that header; the panel's
+own login comes later.
 
 ## Another address or another Postgres
 

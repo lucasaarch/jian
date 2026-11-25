@@ -3,26 +3,31 @@
 //! This is the only place the gateway reads its environment: each flag has a variable that stands
 //! in when the flag is absent (`JIAN_ADDR`, `JIAN_DATA_DIR`, `DATABASE_URL`), and `RUST_LOG` sets
 //! the log level. The master key variables (`JIAN_MASTER_KEYS`, `JIAN_ACTIVE_KEY_ID`,
-//! `JIAN_MASTER_KEY`) are read here too and handed to the store as a keyring. The libraries
+//! `JIAN_MASTER_KEY`) and the owner's token (`JIAN_API_TOKEN`) are read here too and handed to the store as a keyring. The libraries
 //! receive the values.
 
 // What a server prints at start-up is this binary's interface to whoever runs it.
 #![allow(clippy::print_stdout)]
 
+mod owner_token;
 mod shutdown;
 
 use std::future::IntoFuture as _;
+use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::Context as _;
 use clap::{Parser, Subcommand};
+use jian_server::{AppState, Settings};
 use jian_store::embedded::EmbeddedConfig;
 use jian_store::secrets::{LocalKeyring, MasterKeys as _};
 use jian_store::{Database, DatabaseSource, DatabaseUrl, TenantId, TenantStatus};
 use tokio::sync::oneshot;
+use tokio_util::sync::CancellationToken;
 
+use crate::owner_token::Source;
 use crate::shutdown::Shutdown;
 
 /// Where the gateway listens when nothing says otherwise: loopback only, so an unconfigured
@@ -89,6 +94,18 @@ struct Cli {
         global = true
     )]
     master_key: Option<String>,
+
+    /// The owner's token, at least 32 characters. Without one, the first start generates a token
+    /// into `owner.token` in the data directory and later starts reuse it. Holds a secret, so
+    /// `--help` does not show its value.
+    #[arg(
+        long,
+        env = "JIAN_API_TOKEN",
+        value_name = "TOKEN",
+        hide_env_values = true,
+        global = true
+    )]
+    api_token: Option<String>,
 
     #[command(subcommand)]
     command: Option<Command>,
@@ -193,6 +210,8 @@ async fn main() -> anyhow::Result<()> {
     let keys = cli.master_keys()?;
     let command = cli.command.take();
     let source = cli.database_source()?;
+    let (owner, owner_source) = owner_token::resolve(cli.api_token.as_deref(), &cli.data_dir()?)
+        .context("cannot get the owner's token")?;
     match &source {
         DatabaseSource::External(_) => println!("database: external, from DATABASE_URL"),
         DatabaseSource::Embedded(config) => {
@@ -204,26 +223,44 @@ async fn main() -> anyhow::Result<()> {
     }
     let mut shutdown = Shutdown::install().context("cannot listen for stop signals")?;
 
-    let database = Database::open(source)
-        .await
-        .context("cannot open the database")?
-        .with_master_keys(Arc::new(keys));
+    let database = Arc::new(
+        Database::open(source)
+            .await
+            .context("cannot open the database")?
+            .with_master_keys(Arc::new(keys)),
+    );
     // From here the database is up, so every way out goes through `close` below.
     let served = match command {
         Some(Command::Keys {
             action: KeysAction::Rotate,
         }) => rotate(&database).await,
-        None => match prepare(&database).await {
-            Ok(()) => serve(&addr, &database, &mut shutdown).await,
+        None => match prepare(&database, &owner).await {
+            Ok(()) => serve(&addr, &database, &owner_source, &mut shutdown).await,
             Err(error) => Err(error),
         },
     };
-    let closed = database
-        .close()
-        .await
-        .context("cannot close the database cleanly");
+    let closed = close(database).await;
     served?;
     closed
+}
+
+/// Closes the database once the last connection that held it is gone. The server's tasks hold a
+/// handle until they end, and an open WebSocket is one of them: it was told to close when the
+/// stop signal came, so this waits only for them to notice.
+async fn close(mut database: Arc<Database>) -> anyhow::Result<()> {
+    for _ in 0..50 {
+        match Arc::try_unwrap(database) {
+            Ok(database) => {
+                return database
+                    .close()
+                    .await
+                    .context("cannot close the database cleanly");
+            }
+            Err(still_shared) => database = still_shared,
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    anyhow::bail!("connections still use the database after 5 s; it was not closed")
 }
 
 /// `jian keys rotate`: moves every data key to the active master key and says how many.
@@ -241,7 +278,7 @@ async fn rotate(database: &Database) -> anyhow::Result<()> {
 
 /// Brings the database to the latest migration and makes the one tenant of a self-hosted install.
 /// Both are safe to repeat: a second start finds nothing to do.
-async fn prepare(database: &Database) -> anyhow::Result<()> {
+async fn prepare(database: &Database, owner_token: &str) -> anyhow::Result<()> {
     let report = database
         .migrate()
         .await
@@ -272,36 +309,68 @@ async fn prepare(database: &Database) -> anyhow::Result<()> {
     if status == TenantStatus::Created {
         tracing::info!(%tenant, "created the tenant of this install");
     }
+    // Every start sets it, so changing JIAN_API_TOKEN replaces the token the database knows.
+    let ctx = database
+        .tenant(tenant)
+        .await
+        .context("cannot open the tenant")?;
+    database
+        .set_owner_token(&ctx, owner_token)
+        .await
+        .context("cannot set the owner's token (JIAN_API_TOKEN needs at least 32 characters)")?;
     Ok(())
 }
 
 /// Serves until a stop signal, then drains. Returns `Ok` after a clean drain or a drain that hit
 /// the deadline; an error only when the address cannot be bound or the server fails by itself.
-async fn serve(addr: &str, database: &Database, shutdown: &mut Shutdown) -> anyhow::Result<()> {
+async fn serve(
+    addr: &str,
+    database: &Arc<Database>,
+    owner_source: &Source,
+    shutdown: &mut Shutdown,
+) -> anyhow::Result<()> {
     let listener = tokio::net::TcpListener::bind(addr)
         .await
         .with_context(|| format!("cannot listen on {addr}"))?;
     println!("jian listening on http://{addr}");
-    // There is no authentication in the core yet, so there is no token to print: every route is
-    // open on loopback. When one exists, its dev token goes here.
+    match owner_source {
+        Source::Variable => println!("owner token: from JIAN_API_TOKEN"),
+        Source::NewFile(path) => println!("owner token: generated into {}", path.display()),
+        Source::File(path) => println!("owner token: in {}", path.display()),
+    }
     for route in jian_server::ROUTES {
         let (method, path) = route.split_once(' ').unwrap_or(("GET", route));
         println!("  {method} http://{addr}{path}");
     }
 
+    let closing = CancellationToken::new();
+    let state = AppState::new(
+        database.clone(),
+        closing.clone(),
+        Settings {
+            gateway_version: Some(env!("CARGO_PKG_VERSION").to_owned()),
+            ..Settings::default()
+        },
+    );
     let (stop, stopped) = oneshot::channel::<()>();
     let mut server = tokio::spawn(
-        axum::serve(listener, jian_server::router(database.health()))
-            .with_graceful_shutdown(async {
-                // A dropped sender counts as a stop as well.
-                let _ = stopped.await;
-            })
-            .into_future(),
+        // Connect info is how the server tells callers apart for its rate limit.
+        axum::serve(
+            listener,
+            jian_server::router(state).into_make_service_with_connect_info::<SocketAddr>(),
+        )
+        .with_graceful_shutdown(async {
+            // A dropped sender counts as a stop as well.
+            let _ = stopped.await;
+        })
+        .into_future(),
     );
 
     tokio::select! {
         () = shutdown.wait() => {
             tracing::info!("stop signal received; draining requests");
+            // Open sockets close first: a graceful stop waits for them.
+            closing.cancel();
             // The receiver is gone only if the server already ended, which is what we want anyway.
             let _ = stop.send(());
             if let Ok(joined) = tokio::time::timeout(DRAIN_DEADLINE, &mut server).await {
