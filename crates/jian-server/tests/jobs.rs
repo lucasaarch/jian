@@ -96,7 +96,8 @@ impl Env {
         Arc::new(
             Database::open(DatabaseSource::External(self.url.clone()))
                 .await
-                .unwrap(),
+                .unwrap()
+                .with_master_keys(jian_testkit::master_keys()),
         )
     }
 
@@ -469,5 +470,86 @@ async fn a_drain_lets_a_quick_job_finish_and_hands_back_the_one_it_had_to_stop()
     // Nothing is taken after the drain began.
     assert_eq!(state_of(&instance.db, &later).await, (JobState::Queued, 0));
     assert_eq!(started.load(Ordering::SeqCst), 2);
+    env.stop().await;
+}
+
+/// What a handler saw of the world while it ran one job.
+struct Seen {
+    job_tenant: TenantId,
+    context_tenant: TenantId,
+    machines: Vec<String>,
+    foreign_machine_found: bool,
+    secret: Option<String>,
+}
+
+#[tokio::test]
+async fn a_job_runs_as_its_own_tenant_and_a_handler_sees_nothing_of_another() {
+    let env = Env::start().await;
+    let instance = Instance::start(&env).await;
+    let tenants = jian_testkit::TwoTenants::seed(&instance.db).await;
+    let ids = [tenants.a.machine_id(), tenants.b.machine_id()];
+
+    // What each run found, by the tenant its job belongs to.
+    let seen: Arc<Mutex<HashMap<TenantId, Seen>>> = Arc::default();
+    let recorder = seen.clone();
+    let probe = handler(move |context| {
+        let (recorder, ids) = (recorder.clone(), ids.clone());
+        Box::pin(async move {
+            let (ctx, db) = (&context.tenant, &context.db);
+            let page = db.list_machines(ctx, None, 100).await.unwrap();
+            // The machine that is not this tenant's.
+            let foreign = ids
+                .iter()
+                .find(|id| page.items.iter().all(|m| m.id != id.as_str()))
+                .unwrap();
+            let found = Seen {
+                job_tenant: context.job.tenant.clone(),
+                context_tenant: ctx.id().clone(),
+                machines: page.items.iter().map(|m| m.id.clone()).collect(),
+                foreign_machine_found: db.machine(ctx, foreign).await.unwrap().is_some(),
+                secret: db
+                    .vault()
+                    .read(ctx, jian_testkit::SECRET_OWNER)
+                    .await
+                    .unwrap()
+                    .map(|s| s.expose().to_owned()),
+            };
+            recorder
+                .lock()
+                .unwrap()
+                .insert(context.job.tenant.clone(), found);
+            Ok(())
+        })
+    });
+    let runner = instance
+        .runner(
+            JobRegistry::new().register(jian_testkit::JOB_KIND, probe),
+            options(),
+        )
+        .await;
+    for side in [&tenants.a, &tenants.b] {
+        wait_for(&instance.db, &side.job.id, JobState::Done).await;
+    }
+
+    let seen = std::mem::take(&mut *seen.lock().unwrap());
+    for (own, other) in tenants.crossings() {
+        let saw = &seen[&own.id];
+        assert_eq!(saw.job_tenant, own.id);
+        assert_eq!(
+            saw.context_tenant, own.id,
+            "the handler got another context"
+        );
+        assert_eq!(saw.machines, vec![own.machine.id.clone()]);
+        assert!(
+            !saw.foreign_machine_found,
+            "{}'s handler read {}'s machine",
+            own.id, other.id
+        );
+        assert_eq!(saw.secret.as_deref(), Some(own.secret_text.as_str()));
+    }
+
+    let until = Instant::now() + Duration::from_secs(5);
+    assert_eq!(runner.shutdown(until).await, 0);
+    instance.stop().await;
     env.stop().await;
 }

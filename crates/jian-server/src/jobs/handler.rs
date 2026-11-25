@@ -87,7 +87,9 @@ impl JobRegistry {
         self
     }
 
-    pub(super) fn kinds(&self) -> Vec<String> {
+    /// The kinds this registry has a handler for, in no particular order.
+    #[must_use]
+    pub fn kinds(&self) -> Vec<String> {
         self.handlers.keys().cloned().collect()
     }
 

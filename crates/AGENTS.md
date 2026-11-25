@@ -58,6 +58,27 @@ formatting in `rustfmt.toml`, tests-may-unwrap in `clippy.toml`, licenses and ad
   `cargo check -p jian-computer-use --target aarch64-apple-darwin` (and
   `x86_64-pc-windows-msvc`). Keep changes there small.
 
+### Tenant isolation
+
+Tenant B sees and changes nothing of tenant A. Every new HTTP route, WebSocket request or event
+topic, worker message, job kind and store table gets a test that runs the operation as A on B's
+data and as B on A's, and shows it finds nothing and changes nothing.
+
+- `jian-testkit` is the fixture: `TwoTenants::seed(&db)` gives two tenants with an owner token,
+  machine, device, secret and queued job each, and `crossings()` yields (actor, victim) both ways.
+  It is a dev-only crate (`publish = false`, under `[dev-dependencies]` only): never a normal
+  dependency. A kind of data the core starts storing (sandbox files, users inside a tenant) is
+  added to `Side` there, so every existing test loop covers it.
+- Examples: `jian-store/tests/isolation.rs` (role, tokens, secrets, jobs),
+  `jian-server/tests/gateway/isolation.rs` (HTTP, WS, events, workers),
+  `jian-server/tests/jobs.rs` (a handler runs as its own tenant).
+- Guards fail when something is added without a test: the gateway's `ROUTES` and `ROUTE_TESTS`
+  tables, the exhaustive matches on `ClientRequest`, `Topic` and `WorkerMessage` (no wildcard arm,
+  so a new variant does not compile), and `jian_testkit::coverage::JOB_KINDS` against the binary's
+  registry. Axum cannot list its routes, so a new route is added to `ROUTES` by hand.
+- A test names its test: an entry in these tables points at a test that exists, written in the
+  same change.
+
 ## Migrations
 
 - SQL files in `crates/jian-store/migrations/`: `platform/` once, `tenant/` in the schema of every

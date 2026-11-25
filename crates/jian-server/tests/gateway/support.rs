@@ -73,7 +73,9 @@ impl Gateway {
         let url = postgres.url().clone();
         let db = Database::open(DatabaseSource::External(url.clone()))
             .await
-            .unwrap();
+            .unwrap()
+            // So `TwoTenants::seed` can store a secret in this database.
+            .with_master_keys(jian_testkit::master_keys());
         db.migrate().await.unwrap();
         Self::serve(
             Arc::new(db),

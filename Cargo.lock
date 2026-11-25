@@ -1278,6 +1278,7 @@ dependencies = [
  "futures-util",
  "jian-server",
  "jian-store",
+ "jian-testkit",
  "serde_json",
  "tempfile",
  "tokio",
@@ -1404,6 +1405,7 @@ dependencies = [
  "jian-protocol",
  "jian-remote",
  "jian-store",
+ "jian-testkit",
  "serde",
  "serde_json",
  "tempfile",
@@ -1422,6 +1424,7 @@ dependencies = [
  "base64 0.23.1",
  "futures-util",
  "getrandom 0.3.4",
+ "jian-testkit",
  "postgresql_embedded",
  "serde_json",
  "sha2 0.10.9",
@@ -1431,6 +1434,16 @@ dependencies = [
  "tokio",
  "tracing",
  "zeroize",
+]
+
+[[package]]
+name = "jian-testkit"
+version = "0.1.0"
+dependencies = [
+ "jian-store",
+ "serde_json",
+ "sqlx",
+ "tempfile",
 ]
 
 [[package]]

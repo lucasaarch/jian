@@ -45,3 +45,25 @@ impl JobHandler for DebugLog {
 pub fn registry() -> JobRegistry {
     JobRegistry::new().register(KIND, Arc::new(DebugLog))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::registry;
+
+    /// A job kind registered here runs code as a tenant; it must come with a test that shows it
+    /// sees nothing of another tenant.
+    #[test]
+    fn every_registered_kind_has_an_isolation_test() {
+        let listed: Vec<&str> = jian_testkit::coverage::JOB_KINDS
+            .iter()
+            .map(|(kind, _)| *kind)
+            .collect();
+        for kind in registry().kinds() {
+            assert!(
+                listed.contains(&kind.as_str()),
+                "job kind {kind:?} has no isolation test: write one (see crates/AGENTS.md) and \
+                 list it in jian-testkit's coverage::JOB_KINDS"
+            );
+        }
+    }
+}

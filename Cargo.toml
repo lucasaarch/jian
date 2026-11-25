@@ -28,6 +28,8 @@ jian-protocol = { path = "crates/jian-protocol" }
 jian-remote = { path = "crates/jian-remote" }
 jian-server = { path = "crates/jian-server" }
 jian-store = { path = "crates/jian-store" }
+# Test fixtures only: a crate lists it under [dev-dependencies].
+jian-testkit = { path = "crates/jian-testkit" }
 jpeg-encoder = "0.7.1"
 # The Postgres the gateway embeds. `bundled` puts the archive in the binary at build time (from
 # theseus-rs/postgresql-binaries, which is why CI passes GITHUB_TOKEN) so nothing is downloaded at
