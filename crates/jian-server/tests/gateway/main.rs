@@ -107,12 +107,13 @@ async fn a_real_worker_runs_tasks_for_the_owner_who_follows_it() {
     let id = MachineId::new(machine.id.as_str());
     let never = CancellationToken::new();
     let run = |spec, wait| gateway.state.hub.dispatch(&alpha, &id, spec, wait, &never);
+    // The shell is PowerShell on Windows, which ends lines with \r\n: compare without the ending.
     let result = run(shell("echo hi"), Duration::from_secs(10))
         .await
         .unwrap();
     assert_eq!(
-        (result.exit_code, result.stdout.as_str()),
-        (Some(0), "hi\n")
+        (result.exit_code, result.stdout.trim_end()),
+        (Some(0), "hi")
     );
 
     // The worker enforces the task's own timeout and says so in the result.
@@ -143,7 +144,7 @@ async fn a_real_worker_runs_tasks_for_the_owner_who_follows_it() {
     let after = run(shell("echo again"), Duration::from_secs(10))
         .await
         .unwrap();
-    assert_eq!(after.stdout, "again\n");
+    assert_eq!(after.stdout.trim_end(), "again");
 
     // Pages follow the cursor.
     issued(&mut client, "second").await;
