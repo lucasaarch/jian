@@ -6,9 +6,9 @@
 //!
 //! Providers with an API key are here: Anthropic (Messages), OpenAI (Responses), Gemini, and any
 //! OpenAI Chat Completions server (OpenRouter, Groq, xAI, Ollama, or an address the owner
-//! gives). A subscription sign-in (Claude, Codex) is not: it needs an OAuth flow with a stored,
-//! refreshed token and each vendor's private headers, which is a provider of its own. [`Provider`]
-//! is the seam it will plug into, and nothing here assumes the credential is a static key.
+//! gives). A Claude subscription is Anthropic's API with the token of `claude setup-token` and
+//! Claude Code's own headers; [`LimitsBoard`] keeps what its answers say of the usage windows.
+//! [`Provider`] is the seam every one plugs into, and nothing assumes the credential is a key.
 //!
 //! Cancelling is dropping: the [`EventStream`] owns the connection, and so does the future of
 //! [`Provider::stream`] while it connects.
@@ -20,17 +20,19 @@ mod decode;
 mod error;
 mod event;
 mod gemini;
+mod limits;
 mod openai;
 mod request;
 mod sse;
 mod transport;
 
 use futures_util::future::BoxFuture;
-use jian_core::ProviderKind;
+use jian_core::{AccountMode, ProviderKind};
 
 pub use decode::EventStream;
 pub use error::LlmError;
 pub use event::{Event, StopReason, ToolCall, Usage};
+pub use limits::{LimitWindow, LimitsBoard, LimitsSink, SubscriptionLimits};
 pub use request::{Effort, Message, Params, Part, Request, Role, TextBlock, ToolSpec};
 pub use transport::HttpConfig;
 
@@ -42,12 +44,26 @@ pub trait Provider: Send + Sync {
     fn stream<'a>(&'a self, request: &'a Request) -> BoxFuture<'a, Result<EventStream, LlmError>>;
 }
 
-/// The provider for an account: its vendor, its key, and the server's address when it is not the
-/// vendor's own. The key is held in memory, zeroed when the provider drops, and never printed.
+/// The provider for an account that signs in with an API key: its vendor, its key, and the
+/// server's address when it is not the vendor's own. The key is held in memory, zeroed when the
+/// provider drops, and never printed.
 pub fn connect(
     kind: ProviderKind,
     key: &str,
     base_url: Option<&str>,
+    http: &HttpConfig,
+) -> Result<Box<dyn Provider>, LlmError> {
+    connect_account(kind, AccountMode::Api, key, base_url, None, http)
+}
+
+/// The provider for an account of either mode. In `Subscription` mode `key` is the sign-in
+/// token (Claude's static one), and `limits` is where the answers' usage windows are written.
+pub fn connect_account(
+    kind: ProviderKind,
+    mode: AccountMode,
+    key: &str,
+    base_url: Option<&str>,
+    limits: Option<LimitsSink>,
     http: &HttpConfig,
 ) -> Result<Box<dyn Provider>, LlmError> {
     let base = |default: &'static str| -> Result<String, LlmError> {
@@ -57,38 +73,49 @@ pub fn connect(
             None => Ok(default.to_owned()),
         }
     };
-    Ok(match kind {
-        ProviderKind::Anthropic => Box::new(anthropic::Anthropic::new(
+    Ok(match (kind, mode) {
+        (ProviderKind::Anthropic, AccountMode::Subscription) => {
+            Box::new(anthropic::Anthropic::subscription(
+                http,
+                key,
+                base(anthropic::DEFAULT_BASE_URL)?,
+                limits,
+            )?)
+        }
+        (_, AccountMode::Subscription) => {
+            return Err(LlmError::Config("this vendor has no subscription sign-in"));
+        }
+        (ProviderKind::Anthropic, AccountMode::Api) => Box::new(anthropic::Anthropic::new(
             http,
             key,
             base(anthropic::DEFAULT_BASE_URL)?,
         )?),
-        ProviderKind::OpenAi => Box::new(openai::OpenAi::new(
+        (ProviderKind::OpenAi, AccountMode::Api) => Box::new(openai::OpenAi::new(
             http,
             key,
             base(openai::DEFAULT_BASE_URL)?,
         )?),
-        ProviderKind::Google => Box::new(gemini::Gemini::new(
+        (ProviderKind::Google, AccountMode::Api) => Box::new(gemini::Gemini::new(
             http,
             key,
             base(gemini::DEFAULT_BASE_URL)?,
         )?),
-        ProviderKind::OpenRouter => Box::new(compatible::Compatible::new(
+        (ProviderKind::OpenRouter, AccountMode::Api) => Box::new(compatible::Compatible::new(
             http,
             key,
             base("https://openrouter.ai/api/v1")?,
         )?),
-        ProviderKind::Groq => Box::new(compatible::Compatible::new(
+        (ProviderKind::Groq, AccountMode::Api) => Box::new(compatible::Compatible::new(
             http,
             key,
             base("https://api.groq.com/openai/v1")?,
         )?),
-        ProviderKind::Xai => Box::new(compatible::Compatible::new(
+        (ProviderKind::Xai, AccountMode::Api) => Box::new(compatible::Compatible::new(
             http,
             key,
             base("https://api.x.ai/v1")?,
         )?),
-        ProviderKind::Ollama | ProviderKind::OpenAiCompatible => {
+        (ProviderKind::Ollama | ProviderKind::OpenAiCompatible, AccountMode::Api) => {
             Box::new(compatible::Compatible::new(http, key, base("")?)?)
         }
     })

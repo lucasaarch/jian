@@ -1577,6 +1577,7 @@ dependencies = [
  "futures-util",
  "jian-auth",
  "jian-core",
+ "jian-llm",
  "jian-mail",
  "jian-protocol",
  "jian-remote",

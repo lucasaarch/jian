@@ -15,6 +15,14 @@ pub enum LlmError {
         /// How long the provider asked to wait.
         retry_after: Option<Duration>,
     },
+    /// A subscription has spent a usage window (the five hours or the week). Unlike a rate limit
+    /// this lasts hours, so it is never retried: the runtime tells the owner, or waits for
+    /// `resets_at`.
+    #[error("the subscription's usage limit is reached (resets at {resets_at:?}, Unix seconds)")]
+    SubscriptionLimit {
+        /// When the full window starts over, in Unix seconds, if the provider said.
+        resets_at: Option<u64>,
+    },
     /// The provider has no capacity right now (Anthropic's 529, a 503).
     #[error("the provider is overloaded")]
     Overloaded,

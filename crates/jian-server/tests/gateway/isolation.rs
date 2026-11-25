@@ -69,6 +69,7 @@ const ROUTE_TESTS: &[(&str, &str)] = &[
     ("POST /v1/providers", PROVIDERS_TEST),
     ("POST /v1/providers/{id}/activate", PROVIDERS_TEST),
     ("POST /v1/providers/{id}/revoke", PROVIDERS_TEST),
+    ("GET /v1/providers/{id}/usage", PROVIDERS_TEST),
     ("GET /v1/providers/models", PROVIDERS_TEST),
     ("GET /v1/agents", THREADS_TEST),
     ("POST /v1/agents", THREADS_TEST),

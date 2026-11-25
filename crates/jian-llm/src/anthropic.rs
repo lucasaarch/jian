@@ -1,11 +1,15 @@
 //! Anthropic's Messages API (`POST /v1/messages`, server-sent events).
 
+mod subscription;
+
 use std::collections::HashMap;
 
 use futures_util::future::BoxFuture;
 use serde_json::{Value, json};
+use zeroize::Zeroizing;
 
 use crate::decode::{Decoder, EventStream, count, cut_short, parse, stream_failure};
+use crate::limits::LimitsSink;
 use crate::sse::SseEvent;
 use crate::transport::{HttpConfig, Transport};
 use crate::{Event, LlmError, Part, Provider, Request, Role, StopReason, ToolCall, Usage};
@@ -16,12 +20,13 @@ pub const DEFAULT_BASE_URL: &str = "https://api.anthropic.com";
 /// Anthropic refuses a thinking budget under this.
 const MIN_THINKING_BUDGET: u32 = 1_024;
 
-/// Anthropic's Messages API, with an API key. A subscription token is not an API key and is not
-/// handled here (see the crate's docs).
+/// Anthropic's Messages API, with an API key or with a Claude subscription's token. The two are
+/// the same API with a different way of signing in.
 #[derive(Debug)]
 pub struct Anthropic {
     http: Transport,
     base_url: String,
+    subscription: bool,
 }
 
 impl Anthropic {
@@ -29,7 +34,39 @@ impl Anthropic {
         Ok(Self {
             http: Transport::new(http, key)?,
             base_url,
+            subscription: false,
         })
+    }
+
+    /// With the token of `claude setup-token`. What its answers say of the usage windows goes to
+    /// `limits`.
+    pub(crate) fn subscription(
+        http: &HttpConfig,
+        token: &str,
+        base_url: String,
+        limits: Option<LimitsSink>,
+    ) -> Result<Self, LlmError> {
+        Ok(Self {
+            http: Transport::new(http, token)?.inspected_by(subscription::inspector(limits)),
+            base_url,
+            subscription: true,
+        })
+    }
+
+    /// The headers that sign a call in: the key, or the token dressed as Claude Code's.
+    fn headers<'a>(&'a self, bearer: &'a str) -> Vec<(&'static str, &'a str)> {
+        let version = ("anthropic-version", "2023-06-01");
+        if self.subscription {
+            vec![
+                ("authorization", bearer),
+                version,
+                ("anthropic-beta", subscription::BETAS),
+                ("x-app", subscription::APP),
+                ("user-agent", subscription::USER_AGENT),
+            ]
+        } else {
+            vec![("x-api-key", self.http.key()), version]
+        }
     }
 }
 
@@ -37,12 +74,18 @@ impl Provider for Anthropic {
     fn stream<'a>(&'a self, request: &'a Request) -> BoxFuture<'a, Result<EventStream, LlmError>> {
         Box::pin(async move {
             let url = format!("{}/v1/messages", self.base_url);
-            let headers = [
-                ("x-api-key", self.http.key()),
-                ("anthropic-version", "2023-06-01"),
-            ];
+            let bearer = Zeroizing::new(format!("Bearer {}", self.http.key()));
+            let mut body = body(request);
+            if self.subscription {
+                subscription::with_identity(&mut body);
+            }
             self.http
-                .stream(&url, &headers, &body(request), AnthropicDecoder::default())
+                .stream(
+                    &url,
+                    &self.headers(&bearer),
+                    &body,
+                    AnthropicDecoder::default(),
+                )
                 .await
         })
     }

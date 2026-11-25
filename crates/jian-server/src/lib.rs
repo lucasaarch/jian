@@ -62,6 +62,7 @@ mod hub;
 mod invite_job;
 mod invites;
 mod jobs;
+mod llm_access;
 mod mail;
 mod mail_settings;
 mod members;
@@ -93,6 +94,7 @@ pub use events::{BUFFER_DELTAS, EventBus, MemoryEventBus, Scope, Subscription};
 pub use hub::{DispatchError, HubCommand, MachineHub};
 pub use invite_job::{INVITE_SEND_KIND, InviteSender};
 pub use jobs::{JobContext, JobError, JobHandler, JobOptions, JobRegistry, JobRequeue, JobRunner};
+pub use llm_access::LlmAccess;
 pub use mail::{DeployMail, MailConfig};
 pub use public_url::{InvalidPublicUrl, PublicUrl};
 pub use rate::{Clock, Limit, ManualClock, MemoryRateLimiter, RateLimiter, SystemClock, Verdict};
@@ -123,6 +125,7 @@ pub const ROUTES: &[&str] = &[
     "POST /v1/providers (an admin)",
     "POST /v1/providers/{id}/activate (an admin)",
     "POST /v1/providers/{id}/revoke (an admin)",
+    "GET /v1/providers/{id}/usage (an admin)",
     "GET /v1/providers/models (a session or token)",
     "GET /v1/agents (a member)",
     "POST /v1/agents (an admin, or a member with the agents.create grant)",
@@ -232,6 +235,8 @@ pub struct AppState {
     pub shutdown: CancellationToken,
     /// The timings and limits.
     pub settings: Settings,
+    /// How model providers are reached, and what their subscriptions last said of their usage.
+    pub llm: LlmAccess,
 }
 
 impl AppState {
@@ -251,6 +256,7 @@ impl AppState {
             limiter: Arc::new(MemoryRateLimiter::new(SystemClock::new())),
             shutdown,
             settings,
+            llm: LlmAccess::default(),
         }
     }
 }
@@ -294,6 +300,7 @@ pub fn router_with(state: AppState, extra: Router<AppState>) -> Router {
         .route("/v1/providers/models", get(providers::catalog))
         .route("/v1/providers/{id}/activate", post(providers::activate))
         .route("/v1/providers/{id}/revoke", post(providers::revoke))
+        .route("/v1/providers/{id}/usage", get(providers::usage))
         .route("/v1/agents", get(agents::list).post(agents::create))
         .route("/v1/agents/{id}", get(agents::get).patch(agents::update))
         .route("/v1/agents/{id}/archive", post(agents::archive))

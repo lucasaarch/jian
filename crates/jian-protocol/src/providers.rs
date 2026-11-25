@@ -45,7 +45,8 @@ pub struct ProvidersPage {
 pub struct CreateProviderRequest {
     /// The vendor, as in [`ProviderAccountSummary::provider`].
     pub provider: String,
-    /// `api`, the default. `subscription` is not supported yet and is refused.
+    /// `api` (the default) or `subscription`. A Claude subscription (`anthropic`) takes the token
+    /// of `claude setup-token` as `apiKey`.
     #[serde(default)]
     pub mode: Option<String>,
     /// What to call it. Default: the vendor's name.
@@ -54,7 +55,7 @@ pub struct CreateProviderRequest {
     /// The server's address. Required for `ollama` and `openai-compatible`.
     #[serde(default)]
     pub base_url: Option<String>,
-    /// The API key. A local server needs none.
+    /// The API key, or a subscription's token. A local server needs none.
     #[serde(default)]
     pub api_key: Option<String>,
 }
@@ -103,4 +104,33 @@ pub struct ProviderModels {
 pub struct ModelCatalog {
     /// One entry per vendor.
     pub providers: Vec<ProviderModels>,
+}
+
+/// One usage window of a subscription.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export)]
+#[serde(rename_all = "camelCase")]
+pub struct UsageWindow {
+    /// How much is spent, in percent. It may pass 100 when the window is over its limit.
+    pub used_percent: f64,
+    /// When the window starts over, in Unix seconds, if the provider said.
+    #[ts(type = "number | null")]
+    pub resets_at: Option<u64>,
+}
+
+/// `GET /v1/providers/{id}/usage`: how much of a subscription account is spent. It is only what
+/// the provider's last answer to this gateway said, never a request made to find out, so it is
+/// `unavailable` until the account has been used since the gateway started.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export)]
+#[serde(rename_all = "camelCase")]
+pub struct SubscriptionUsage {
+    /// The vendor of the account.
+    pub provider: String,
+    /// `available` or `unavailable`.
+    pub status: String,
+    /// The rolling five-hour window.
+    pub five_hour: Option<UsageWindow>,
+    /// The weekly window.
+    pub weekly: Option<UsageWindow>,
 }

@@ -1,9 +1,10 @@
 //! The one HTTP client of every provider: timeouts, and retry before the first byte.
 
 use std::fmt;
+use std::sync::Arc;
 use std::time::Duration;
 
-use reqwest::header::RETRY_AFTER;
+use reqwest::header::{HeaderMap, RETRY_AFTER};
 use serde_json::Value;
 use zeroize::Zeroizing;
 
@@ -50,11 +51,19 @@ impl Default for HttpConfig {
     }
 }
 
+/// Reads every answer's status and headers before anyone else does: a provider that says more in
+/// them than the status does (a subscription's usage windows) is heard here, once, for all calls.
+pub(crate) trait Inspect: Send + Sync {
+    /// Sees an answer. An error returned for a refusal replaces what its status alone would mean.
+    fn inspect(&self, status: u16, headers: &HeaderMap) -> Option<LlmError>;
+}
+
 /// A client bound to one account's key.
 pub(crate) struct Transport {
     client: reqwest::Client,
     config: HttpConfig,
     key: Zeroizing<String>,
+    inspector: Option<Arc<dyn Inspect>>,
 }
 
 impl fmt::Debug for Transport {
@@ -78,7 +87,14 @@ impl Transport {
             client,
             config: config.clone(),
             key: Zeroizing::new(key.to_owned()),
+            inspector: None,
         })
+    }
+
+    /// Has every answer pass through `inspector` first.
+    pub(crate) fn inspected_by(mut self, inspector: Arc<dyn Inspect>) -> Self {
+        self.inspector = Some(inspector);
+        self
     }
 
     /// The account's key, for the header the provider wants it in.
@@ -97,7 +113,7 @@ impl Transport {
     ) -> Result<EventStream, LlmError> {
         let bytes = serde_json::to_vec(body)
             .map_err(|_| LlmError::InvalidRequest("the request cannot be written".to_owned()))?;
-        let response = self.open(url, headers, &bytes).await?;
+        let response = self.open(url, headers, Some(&bytes)).await?;
         Ok(event_stream(response, decoder, self.config.idle_timeout))
     }
 
@@ -107,7 +123,7 @@ impl Transport {
         &self,
         url: &str,
         headers: &[(&str, &str)],
-        body: &[u8],
+        body: Option<&[u8]>,
     ) -> Result<reqwest::Response, LlmError> {
         let mut attempt = 0;
         loop {
@@ -131,27 +147,33 @@ impl Transport {
         &self,
         url: &str,
         headers: &[(&str, &str)],
-        body: &[u8],
+        body: Option<&[u8]>,
     ) -> Result<reqwest::Response, LlmError> {
-        let mut request = self
-            .client
-            .post(url)
-            .header("content-type", "application/json")
-            .header("accept", "text/event-stream");
+        // A body means a streaming call; none means a plain read of JSON.
+        let mut request = match body {
+            Some(bytes) => self
+                .client
+                .post(url)
+                .header("content-type", "application/json")
+                .header("accept", "text/event-stream")
+                .body(bytes.to_vec()),
+            None => self.client.get(url).header("accept", "application/json"),
+        };
         for (name, value) in headers {
             request = request.header(*name, *value);
         }
-        let sent = tokio::time::timeout(
-            self.config.first_byte_timeout,
-            request.body(body.to_vec()).send(),
-        )
-        .await
-        .map_err(|_| LlmError::Network("the provider did not answer in time".to_owned()))?;
+        let sent = tokio::time::timeout(self.config.first_byte_timeout, request.send())
+            .await
+            .map_err(|_| LlmError::Network("the provider did not answer in time".to_owned()))?;
         let mut response = sent.map_err(|error| {
             // The text of a transport error can carry the address, never a header.
             LlmError::Network(scrub(&error.without_url().to_string(), self.key()))
         })?;
         let status = response.status();
+        let verdict = self
+            .inspector
+            .as_ref()
+            .and_then(|inspector| inspector.inspect(status.as_u16(), response.headers()));
         if status.is_success() {
             return Ok(response);
         }
@@ -160,6 +182,9 @@ impl Transport {
             .get(RETRY_AFTER)
             .and_then(|value| value.to_str().ok())
             .and_then(retry_after);
+        if let Some(error) = verdict {
+            return Err(error);
+        }
         let text = self.error_body(&mut response).await;
         Err(refusal(status.as_u16(), wait, &text, self.key()))
     }

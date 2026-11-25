@@ -9,7 +9,8 @@ export type CreateProviderRequest = {
  */
 provider: string, 
 /**
- * `api`, the default. `subscription` is not supported yet and is refused.
+ * `api` (the default) or `subscription`. A Claude subscription (`anthropic`) takes the token
+ * of `claude setup-token` as `apiKey`.
  */
 mode: string | null, 
 /**
@@ -21,6 +22,6 @@ label: string | null,
  */
 baseUrl: string | null, 
 /**
- * The API key. A local server needs none.
+ * The API key, or a subscription's token. A local server needs none.
  */
 apiKey: string | null, };

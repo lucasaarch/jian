@@ -75,7 +75,7 @@ impl fmt::Display for ProviderKind {
 pub enum AccountMode {
     /// An API key the owner pays for by use.
     Api,
-    /// A subscription's sign-in (Claude, ChatGPT). Stored, but no provider speaks it yet.
+    /// A subscription's sign-in: Claude's static token, or ChatGPT's OAuth tokens.
     Subscription,
 }
 

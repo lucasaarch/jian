@@ -1,7 +1,9 @@
 //! `/v1/providers`: an admin's alone, and one workspace's accounts and keys are out of reach of
 //! another's. No test calls a model.
 
-use jian_protocol::providers::{ModelCatalog, ProviderAccountSummary, ProvidersPage};
+use jian_protocol::providers::{
+    ModelCatalog, ProviderAccountSummary, ProvidersPage, SubscriptionUsage,
+};
 use serde_json::{Value, json};
 
 use super::accounts::{open_settings, start};
@@ -52,6 +54,7 @@ async fn provider_accounts_of_the_other_tenant_are_out_of_reach() {
         json!({ "provider": "nobody" }),
         json!({ "provider": "openai-compatible" }),
         json!({ "provider": "openai", "mode": "subscription" }),
+        json!({ "provider": "nobody", "mode": "subscription" }),
         json!({ "provider": "openai", "label": "  " }),
     ] {
         let (status, text) = create(&gateway, &a.admin_session, &bad).await;
@@ -80,6 +83,60 @@ async fn provider_accounts_of_the_other_tenant_are_out_of_reach() {
     let theirs = listed(&gateway, &a.admin_session).await;
     assert_eq!(theirs.len(), 1);
     assert!(theirs[0].has_key && !theirs[0].active);
+
+    // A Claude subscription is added by its token, which no answer shows. Its usage is the
+    // admin's of that workspace alone: B gets the 404 of an id that never was.
+    let token = "sk-ant-oat01-WORKSPACE-A-TOKEN";
+    let body = json!({ "provider": "anthropic", "mode": "subscription", "apiKey": token });
+    let (status, text) = create(&gateway, &a.admin_session, &body).await;
+    assert_eq!(status, 201, "{text}");
+    assert!(!text.contains(token));
+    let claude: ProviderAccountSummary = serde_json::from_str(&text).unwrap();
+    assert!(claude.has_key && claude.mode == "subscription");
+    for bad in [
+        // No token, an API key where a token belongs, and a vendor that signs in another way.
+        json!({ "provider": "anthropic", "mode": "subscription" }),
+        json!({ "provider": "anthropic", "mode": "subscription", "apiKey": "sk-ant-api03-x" }),
+        json!({ "provider": "groq", "mode": "subscription", "apiKey": token }),
+    ] {
+        let (status, text) = create(&gateway, &a.admin_session, &bad).await;
+        assert_eq!(status, 400, "{bad}: {text}");
+        assert!(!text.contains(token));
+    }
+    let usage = format!("/v1/providers/{}/usage", claude.id);
+    let (status, text) = http_get(gateway.addr, &usage, Some(&a.admin_session)).await;
+    assert_eq!(status, 200, "{text}");
+    let seen: SubscriptionUsage = serde_json::from_str(&text).unwrap();
+    assert_eq!(seen.status, "unavailable");
+    let (status, other) = http_get(
+        gateway.addr,
+        "/v1/providers/prv_nothing/usage",
+        Some(&b.admin_session),
+    )
+    .await;
+    assert_eq!(status, 404);
+    let (status, text) = http_get(gateway.addr, &usage, Some(&b.admin_session)).await;
+    assert_eq!(status, 404);
+    assert_eq!(text, other);
+    let (status, _) = http_get(gateway.addr, &usage, Some(&a.member_session)).await;
+    assert!(matches!(status, 401 | 403), "{status}");
+    // A key account has no windows to show.
+    let (status, _) = http_get(
+        gateway.addr,
+        &format!("/v1/providers/{}/usage", made.id),
+        Some(&a.admin_session),
+    )
+    .await;
+    assert_eq!(status, 400);
+    let revoke_claude = format!("/v1/providers/{}/revoke", claude.id);
+    let (status, _) = http_post(
+        gateway.addr,
+        &revoke_claude,
+        Some(&a.admin_session),
+        &json!({}),
+    )
+    .await;
+    assert_eq!(status, 204);
 
     // The owner activates and revokes their own.
     let (status, text) =

@@ -28,7 +28,11 @@ pub enum Reply {
     },
     /// A `200` event stream, sent chunk by chunk. After the last chunk the connection ends, or
     /// stays open and silent when `hang` is set.
-    Stream { chunks: Vec<Vec<u8>>, hang: bool },
+    Stream {
+        chunks: Vec<Vec<u8>>,
+        hang: bool,
+        headers: Vec<(&'static str, &'static str)>,
+    },
 }
 
 impl Reply {
@@ -38,6 +42,16 @@ impl Reply {
         Self::Stream {
             chunks: text.as_bytes().chunks(size).map(<[u8]>::to_vec).collect(),
             hang: false,
+            headers: Vec::new(),
+        }
+    }
+
+    /// A whole stream, with these response headers.
+    pub fn sse_with(headers: &[(&'static str, &'static str)], text: &str) -> Self {
+        Self::Stream {
+            chunks: vec![text.as_bytes().to_vec()],
+            hang: false,
+            headers: headers.to_vec(),
         }
     }
 
@@ -46,6 +60,7 @@ impl Reply {
         Self::Stream {
             chunks: vec![text.as_bytes().to_vec()],
             hang: true,
+            headers: Vec::new(),
         }
     }
 }
@@ -147,7 +162,11 @@ async fn handle(
             }
             builder.body(Body::from(body)).unwrap()
         }
-        Some(Reply::Stream { chunks, hang }) => {
+        Some(Reply::Stream {
+            chunks,
+            hang,
+            headers,
+        }) => {
             let watch = Watch(inner.closed.clone());
             let body = Body::from_stream(stream::unfold(
                 (VecDeque::from(chunks), watch, false),
@@ -166,10 +185,11 @@ async fn handle(
                     }
                 },
             ));
-            builder
-                .header("content-type", "text/event-stream")
-                .body(body)
-                .unwrap()
+            let mut builder = builder.header("content-type", "text/event-stream");
+            for (name, value) in headers {
+                builder = builder.header(name, value);
+            }
+            builder.body(body).unwrap()
         }
     }
 }
