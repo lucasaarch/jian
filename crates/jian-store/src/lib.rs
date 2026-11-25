@@ -37,6 +37,21 @@
 //! loop, the handlers and the drain are `jian-server`'s. Jobs of the old Node gateway's pg-boss
 //! are not imported.
 //!
+//! # Accounts, credentials and members
+//!
+//! One person is one account in `platform.accounts`, outside any tenant. How they sign in is a row
+//! of `platform.credentials` per way ([`CredentialKind`]; only the password has code, as an
+//! argon2id hash that `jian-auth` makes and checks). Which workspaces they open, and as what
+//! ([`Role`]), is a row of `platform.members`: the same account may be a member of many tenants.
+//! Nobody signs themselves up here: a member is added by an admin ([`Database::add_member`]),
+//! comes in by an [invitation](Database::create_invite), or is the tenant's first admin
+//! ([`Database::add_first_admin`], which is also what the import of the old Jian calls).
+//! [`Database::start_session`] writes the session of a person who has proved who they are: a
+//! token of kind `session` in `platform.api_tokens` that expires, opens ONE tenant and ends when
+//! the person signs out, changes their password, is reset or is disabled. Members and invitations
+//! are filtered by the tenant of the caller's token on every statement; that filter is their
+//! isolation, and the isolation tests cover it.
+//!
 //! # Migrations and schema versions
 //!
 //! [`Database::migrate`] brings the platform and then every tenant to the last migration, a few
@@ -86,43 +101,55 @@
 //! The embedded server's user is a superuser. An external one must be able to create roles
 //! (`CREATEROLE`) and own the database: it creates, grants and drops the tenant roles.
 
+mod accounts;
 mod backup;
+mod credentials;
 mod database;
 mod devices;
 pub mod embedded;
 mod error;
+mod invites;
 mod jobs;
 mod legacy;
 mod machines;
+mod members;
 mod migrate;
 #[cfg(unix)]
 mod orphan;
 mod platform;
 mod schema_version;
 pub mod secrets;
+mod sessions;
 mod slots;
 mod subjects;
 mod tenant;
 mod tenants;
 mod tokens;
 
+pub use accounts::{Account, NewAccount, default_name, normalize_email};
 pub use backup::tenant_dump_args;
+pub use credentials::{CredentialKind, PasswordCredential};
 pub use database::{Database, DatabaseHealth, DatabaseSource, DatabaseUrl};
 pub use devices::Device;
 pub use error::StoreError;
+pub use invites::{
+    Accepted, Invite, InviteStatus, InviteTarget, IssuedInvite, MAX_INVITE_TOKEN_LEN,
+};
 pub use jobs::{
     Enqueued, Failure, Job, JobId, JobState, JobWakeups, MAX_ATTEMPTS, MAX_ERROR_CHARS,
     MAX_PAYLOAD_BYTES, NewJob, PURGE_BATCH, RetryPolicy,
 };
 pub use legacy::{DeviceImport, ImportOutcome, LegacyDevice, LegacyMachine, MachineImport};
 pub use machines::{MAX_PAGE, Machine, MachineReport, Page};
+pub use members::{AddedMember, Member, NewMember, Role};
 pub use migrate::{MigrateOptions, MigrationReport, Migrations};
 pub use schema_version::{SchemaState, TenantVersion};
+pub use sessions::{LoginCandidate, NewSession};
 pub use slots::{
     HeldSlot, InstanceId, SLOT_COUNT, SlotClaim, SlotId, SlotOptions, SlotRow, slot_of,
 };
 pub use tenant::{TenantCtx, TenantId};
 pub use tenants::TenantStatus;
 pub use tokens::{
-    Authenticated, DeviceId, MachineId, Subject, TokenHash, TokenKind, generate_token,
+    AccountId, Authenticated, DeviceId, MachineId, Subject, TokenHash, TokenKind, generate_token,
 };

@@ -1,10 +1,12 @@
-//! Two tenants, each with data of every kind the core stores today.
+//! Two tenants, each with data of every kind the core stores today: a machine, a phone, a
+//! secret, a job and two members.
 
 use std::sync::atomic::{AtomicU32, Ordering};
 
 use jian_store::secrets::Secret;
 use jian_store::{
-    Database, Device, DeviceId, Job, Machine, MachineId, NewJob, TenantCtx, TenantId,
+    Database, Device, DeviceId, Job, Machine, MachineId, Member, NewJob, NewMember, Role,
+    TenantCtx, TenantId,
 };
 use serde_json::json;
 
@@ -18,6 +20,17 @@ pub const JOB_KIND: &str = "isolation.probe";
 
 /// The idempotency key both sides use for their job: one key, two tenants, two jobs.
 pub const SHARED_KEY: &str = "same-key";
+
+/// The password of every seeded account. Synthetic.
+pub const PASSWORD: &str = "correct horse battery staple";
+
+/// [`PASSWORD`] as argon2id at the cheapest cost, so that seeding hashes nothing. This crate
+/// cannot depend on `jian-auth` (that crate's tests depend on this one), so it is made once.
+const PASSWORD_HASH: &str =
+    "$argon2id$v=19$m=8,t=1,p=1$u4VdiL+SNf5YkY/Bb0w0+g$YxDk33lU+nHQ0Ch6mnDAFP8IVRDk6xDPy7Ld1LfZlyI";
+
+/// How long the sessions seeded here last.
+const SESSION_TTL: std::time::Duration = std::time::Duration::from_secs(3600);
 
 static NEXT: AtomicU32 = AtomicU32::new(0);
 
@@ -42,6 +55,14 @@ pub struct Side {
     pub secret_text: String,
     /// The tenant's queued job.
     pub job: Job,
+    /// An admin of the tenant: `admin@<tenant>.test`, with [`PASSWORD`].
+    pub admin: Member,
+    /// The admin's session token, clear text.
+    pub admin_session: String,
+    /// A member of the tenant: `member@<tenant>.test`, with [`PASSWORD`].
+    pub member: Member,
+    /// The member's session token, clear text.
+    pub member_session: String,
 }
 
 impl Side {
@@ -65,6 +86,8 @@ impl Side {
             .await
             .unwrap()
             .job;
+        let (admin, admin_session) = seed_member(db, &ctx, "admin", Role::Admin).await;
+        let (member, member_session) = seed_member(db, &ctx, "member", Role::Member).await;
         Self {
             id,
             ctx,
@@ -75,6 +98,10 @@ impl Side {
             device_token: device_token.expose().to_owned(),
             secret_text,
             job,
+            admin,
+            admin_session,
+            member,
+            member_session,
         }
     }
 
@@ -92,6 +119,31 @@ impl Side {
     pub fn schema(&self) -> String {
         self.id.schema_name()
     }
+}
+
+/// A member of the tenant with an account of its own (an account is global, so the address
+/// carries the tenant and two sides never share one), and a session.
+async fn seed_member(db: &Database, ctx: &TenantCtx, who: &str, role: Role) -> (Member, String) {
+    let email = format!("{who}@{}.test", ctx.id());
+    let added = db
+        .add_member(
+            ctx,
+            NewMember {
+                email: &email,
+                name: Some("Isolation member"),
+                role,
+                invited_by: None,
+                password_hash: Some(PASSWORD_HASH),
+                must_change: false,
+            },
+        )
+        .await
+        .unwrap();
+    let session = db
+        .start_session(ctx, &added.member.account_id, SESSION_TTL)
+        .await
+        .unwrap();
+    (added.member, session.token.expose().to_owned())
 }
 
 /// Tenants A and B, made in one database with the same kinds of data and different values.

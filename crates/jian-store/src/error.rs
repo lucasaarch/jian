@@ -154,6 +154,23 @@ pub enum StoreError {
     /// build cannot read.
     #[error("invalid job: {0}")]
     InvalidJob(&'static str),
+    /// An email address that is empty, too long, or has no `@` between a name and a domain.
+    #[error("that is not an email address")]
+    InvalidEmail,
+    /// The account is already a member of the tenant.
+    #[error("that account is already a member of the tenant")]
+    MemberExists,
+    /// The invitation is unknown, used, revoked, expired, or its account is disabled. Which one
+    /// is not said.
+    #[error("the invitation is not valid")]
+    InvalidInvite,
+    /// The tenant already has members, so there is no first one to make.
+    #[error("the tenant already has members")]
+    TenantHasMembers,
+    /// The account belongs to another workspace too, so a password reset from this one would
+    /// change what the person signs in with there.
+    #[error("the account is also a member of another workspace")]
+    AccountInOtherTenants,
     /// The operating system could not give random bytes.
     #[error("the operating system has no random bytes to give: {0}")]
     Random(getrandom::Error),
