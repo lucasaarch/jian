@@ -46,7 +46,7 @@
 //!
 //! # Not imported
 //!
-//! Conversations, agents, memories, skills, schedules, channels, providers and the rest have no
+//! Conversations, agents, memories, skills, schedules, channels and the rest have no
 //! table in the core yet. Each run lists those tables of the old database with their rows
 //! ([`ImportReport::not_imported`]); the issue that creates a domain's table adds its import
 //! here.
@@ -55,6 +55,7 @@ mod error;
 mod machines;
 mod outcome;
 mod owner;
+mod providers;
 mod reader;
 mod run;
 mod secrets;

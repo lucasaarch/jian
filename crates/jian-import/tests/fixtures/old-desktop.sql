@@ -1365,6 +1365,7 @@ INSERT INTO public.devices VALUES ('33333333-3333-4333-8333-333333333333', 'Pixe
 --
 
 INSERT INTO public.gateway_secrets VALUES ('provider:openai', '{"iv": "V1kOfr871yWHQwZ0", "tag": "zuMxj293F1KpCQI+urmkwQ==", "keyId": "local", "version": 1, "ciphertext": "2GfbALm4AoxWI+lBvy0pKRjUl1Uhiw=="}', '2026-11-25 17:45:03.577+00', '2026-11-25 17:45:03.577+00');
+INSERT INTO public.gateway_secrets VALUES ('provider:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', '{"iv": "JzRDJbjH1PmS+Dcp", "tag": "hWOjux7NgOIy2b/5CRulZw==", "keyId": "local", "version": 1, "ciphertext": "regmSZiSBHs/BzkFwO6/Szf5ejXVtx0="}', '2026-11-25 17:45:03.577+00', '2026-11-25 17:45:03.577+00');
 
 
 --
@@ -1486,6 +1487,8 @@ INSERT INTO public.profiles VALUES ('11111111-1111-4111-8111-111111111111', 'Syn
 -- Data for Name: providers; Type: TABLE DATA; Schema: public; Owner: -
 --
 
+INSERT INTO public.providers (id, name, kind, auth_mode, created_at, credential, base_url, active, label) VALUES ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'groq', 'groq', NULL, '2026-11-25 17:45:03.577+00', NULL, NULL, true, 'Groq work');
+INSERT INTO public.providers (id, name, kind, auth_mode, created_at, credential, base_url, active, label) VALUES ('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', 'openai', 'openai', 'codex', '2026-11-25 17:45:03.577+00', NULL, NULL, true, 'ChatGPT');
 
 
 --

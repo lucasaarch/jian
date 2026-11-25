@@ -4,7 +4,7 @@ use std::fs;
 use std::path::PathBuf;
 
 use jian_store::embedded::EmbeddedPostgres;
-use jian_store::{LegacyDevice, LegacyMachine};
+use jian_store::{LegacyDevice, LegacyMachine, LegacyProvider};
 use sqlx::{AssertSqlSafe, Connection as _, PgConnection};
 
 use crate::ImportError;
@@ -119,6 +119,35 @@ impl LegacyReader {
             .collect())
     }
 
+    /// The accounts not revoked. The keys are not here: they are secrets.
+    pub(crate) async fn providers(&mut self) -> Result<Vec<LegacyProvider>, ImportError> {
+        let rows: Vec<ProviderRow> = sqlx::query_as(
+            "SELECT id::text, name, label, kind::text, auth_mode, credential, base_url, active, \
+             created_at::text FROM providers WHERE revoked_at IS NULL ORDER BY created_at, id",
+        )
+        .fetch_all(&mut self.connection)
+        .await
+        .map_err(ImportError::Source)?;
+        Ok(rows
+            .into_iter()
+            .map(
+                |(id, name, label, kind, auth_mode, credential, base_url, active, created_at)| {
+                    LegacyProvider {
+                        id,
+                        name,
+                        label,
+                        kind,
+                        auth_mode,
+                        credential,
+                        base_url,
+                        active,
+                        created_at,
+                    }
+                },
+            )
+            .collect())
+    }
+
     /// The install-wide secrets, then each agent's.
     pub(crate) async fn secrets(&mut self) -> Result<Vec<SealedSecret>, ImportError> {
         let mut found = Vec::new();
@@ -214,4 +243,16 @@ type DeviceRow = (
     String,
     Option<String>,
     Option<String>,
+);
+
+type ProviderRow = (
+    String,
+    String,
+    Option<String>,
+    String,
+    Option<String>,
+    Option<String>,
+    Option<String>,
+    bool,
+    String,
 );

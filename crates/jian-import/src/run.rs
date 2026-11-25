@@ -6,7 +6,7 @@ use jian_store::secrets::LocalKeyring;
 use jian_store::{Database, ImportResult, ImportStatus, TenantCtx};
 
 use crate::reader::{LegacyReader, LegacyTable};
-use crate::{ImportError, Source, machines, owner, secrets};
+use crate::{ImportError, Source, machines, owner, providers, secrets};
 
 /// A part of the old Jian that has a table in the core, imported on its own: one marker, one
 /// result.
@@ -16,6 +16,8 @@ pub enum Domain {
     Owner,
     /// Provider keys, MCP tokens and channel credentials.
     Secrets,
+    /// Model provider accounts, with their keys.
+    Providers,
     /// Jian Remote workers and their tokens.
     Machines,
     /// Phones and their tokens.
@@ -24,13 +26,20 @@ pub enum Domain {
 
 impl Domain {
     /// Every domain, in the order a run takes them.
-    pub const ALL: [Self; 4] = [Self::Owner, Self::Secrets, Self::Machines, Self::Devices];
+    pub const ALL: [Self; 5] = [
+        Self::Owner,
+        Self::Secrets,
+        Self::Providers,
+        Self::Machines,
+        Self::Devices,
+    ];
 
     /// The name in a marker and in the report.
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Owner => "owner",
             Self::Secrets => "secrets",
+            Self::Providers => "providers",
             Self::Machines => "machines",
             Self::Devices => "devices",
         }
@@ -41,6 +50,7 @@ impl Domain {
         match self {
             Self::Owner => &[],
             Self::Secrets => &["gateway_secrets", "secrets"],
+            Self::Providers => &["providers"],
             Self::Machines => &["remote_machines"],
             Self::Devices => &["devices"],
         }
@@ -195,6 +205,9 @@ impl<'a> Importer<'a> {
             }
             Domain::Secrets => {
                 secrets::import(self.db, self.ctx, reader, self.options.keys.as_ref()).await
+            }
+            Domain::Providers => {
+                providers::import(self.db, self.ctx, reader, self.options.keys.as_ref()).await
             }
             Domain::Machines => machines::machines(self.db, self.ctx, reader).await,
             Domain::Devices => machines::devices(self.db, self.ctx, reader).await,

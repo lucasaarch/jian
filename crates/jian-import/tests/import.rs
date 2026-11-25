@@ -23,6 +23,14 @@ const OLD_KEY: &str = "BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc=";
 const PROFILE: &str = "11111111-1111-4111-8111-111111111111";
 const OPENAI: &str = "sk-test-synthetic-0001";
 const TELEGRAM: &str = "123456:synthetic-bot-token";
+const GROQ_ID: &str = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+const GROQ: &str = "gsk-test-synthetic-0002";
+
+/// What each domain writes from the fixture: the secrets are the OpenAI key, the Groq key and the
+/// Telegram token; the providers are a Groq account (a ChatGPT sign-in is left behind).
+fn rows(which: Domain) -> u32 {
+    if which == Domain::Secrets { 3 } else { 1 }
+}
 
 fn keys(key: &str) -> LocalKeyring {
     LocalKeyring::for_reading_legacy(&serde_json::json!({ "local": key }).to_string()).unwrap()
@@ -99,8 +107,7 @@ async fn a_dump_of_the_old_desktop_database_comes_over_once() {
             ImportStatus::Done,
             "{which:?}"
         );
-        let rows = if which == Domain::Secrets { 2 } else { 1 };
-        assert_eq!(domain(&first, which).imported, rows, "{which:?}");
+        assert_eq!(domain(&first, which).imported, rows(which), "{which:?}");
     }
     // The secrets open under the new tenant's data key, with the values the old ones held.
     let vault = new.db.vault();
@@ -112,6 +119,21 @@ async fn a_dump_of_the_old_desktop_database_comes_over_once() {
         .unwrap()
         .unwrap();
     assert_eq!(telegram.expose(), TELEGRAM);
+    // The Groq account came with its key, active; the ChatGPT sign-in did not come, and says why.
+    let accounts = new.db.provider_accounts(&ctx).await.unwrap();
+    assert_eq!(accounts.len(), 1);
+    assert_eq!(
+        (accounts[0].id.as_str(), accounts[0].label.as_str()),
+        (GROQ_ID, "Groq work")
+    );
+    assert!(accounts[0].active && accounts[0].has_key);
+    let groq = new.db.provider_key(&ctx, GROQ_ID).await.unwrap().unwrap();
+    assert_eq!(groq.expose(), GROQ);
+    let detail = domain(&first, Domain::Providers).detail.clone().unwrap();
+    assert!(
+        detail.contains("subscription not supported yet"),
+        "{detail}"
+    );
     let machines = new.db.list_machines(&ctx, None, 10).await.unwrap().items;
     assert_eq!(machines.len(), 1);
     assert_eq!(machines[0].name, "Studio Mac");
@@ -124,6 +146,7 @@ async fn a_dump_of_the_old_desktop_database_comes_over_once() {
     let left: Vec<&str> = first.not_imported.iter().map(|t| t.name.as_str()).collect();
     assert!(left.contains(&"profiles"));
     assert!(!left.contains(&"remote_machines") && !left.contains(&"secrets"));
+    assert!(!left.contains(&"providers"));
     assert!(
         first
             .not_imported
@@ -140,10 +163,9 @@ async fn a_dump_of_the_old_desktop_database_comes_over_once() {
         .unwrap();
     for which in Domain::ALL {
         let result = domain(&again, which);
-        let rows = if which == Domain::Secrets { 2 } else { 1 };
         assert_eq!(
             (result.imported, result.already_there),
-            (0, rows),
+            (0, rows(which)),
             "{which:?}"
         );
     }
@@ -163,7 +185,7 @@ async fn a_dump_of_the_old_desktop_database_comes_over_once() {
         .unwrap();
     assert!(pending.domains.is_empty());
     let markers = new.db.imports(&ctx).await.unwrap();
-    assert_eq!(markers.len(), 4);
+    assert_eq!(markers.len(), 5);
     assert!(markers.iter().all(|m| m.status == ImportStatus::Done));
     new.stop().await;
 }
@@ -193,7 +215,8 @@ async fn reading_a_live_old_database_changes_nothing_in_it() {
     assert!(!report.source.contains('@'));
     assert_eq!(domain(&report, Domain::Machines).imported, 1);
     assert_eq!(domain(&report, Domain::Devices).imported, 1);
-    assert_eq!(domain(&report, Domain::Secrets).imported, 2);
+    assert_eq!(domain(&report, Domain::Secrets).imported, 3);
+    assert_eq!(domain(&report, Domain::Providers).imported, 1);
     // No address was given: the owner is skipped, and a later run with one takes it.
     assert_eq!(domain(&report, Domain::Owner).status, ImportStatus::Skipped);
     assert_eq!(counts(&old).await, before);
@@ -226,7 +249,7 @@ async fn a_run_that_stopped_or_lacked_a_key_is_finished_by_the_next() {
     let secrets = domain(&first, Domain::Secrets);
     assert_eq!(
         (secrets.status, secrets.failed, secrets.imported),
-        (ImportStatus::Failed, 2, 0)
+        (ImportStatus::Failed, 3, 0)
     );
     let markers = format!("{:?}", new.db.imports(&ctx).await.unwrap());
     assert!(!markers.contains(OPENAI) && !markers.contains(TELEGRAM));
@@ -239,8 +262,8 @@ async fn a_run_that_stopped_or_lacked_a_key_is_finished_by_the_next() {
         .await
         .unwrap();
     let ran: Vec<Domain> = second.domains.iter().map(|d| d.domain).collect();
-    assert_eq!(ran, [Domain::Owner, Domain::Secrets]);
-    assert_eq!(domain(&second, Domain::Secrets).imported, 2);
+    assert_eq!(ran, [Domain::Owner, Domain::Secrets, Domain::Providers]);
+    assert_eq!(domain(&second, Domain::Secrets).imported, 3);
     assert_eq!(
         new.db
             .list_machines(&ctx, None, 10)

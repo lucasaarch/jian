@@ -4,7 +4,8 @@
 //! Where each one goes: a secret the whole old install shared keeps its name (`provider:openai`);
 //! one that belonged to an agent becomes `profile:<agent id>:<name>`, so two agents' secrets of
 //! the same name stay two secrets. The tables that give them meaning (providers, MCP servers,
-//! channels) do not exist in the core yet; the secrets wait under those names for them. A secret
+//! channels) mostly do not exist in the core yet; the secrets wait under those names for
+//! them (the `providers` domain takes the provider keys from here, by name). A secret
 //! already in the vault under its name is left as it is, so a run never undoes a change made
 //! since.
 //!
@@ -52,7 +53,7 @@ pub(crate) async fn import(
 }
 
 /// `true` when the secret was written, `false` when its name was taken.
-async fn one(
+pub(crate) async fn one(
     db: &Database,
     ctx: &TenantCtx,
     keys: &LocalKeyring,

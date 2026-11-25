@@ -163,6 +163,9 @@ pub enum StoreError {
     /// build cannot read.
     #[error("invalid job: {0}")]
     InvalidJob(&'static str),
+    /// A provider account that cannot be made or read: what is wrong, in words with no value.
+    #[error("invalid provider account: {0}")]
+    InvalidProvider(&'static str),
     /// An email address that is empty, too long, or has no `@` between a name and a domain.
     #[error("that is not an email address")]
     InvalidEmail,

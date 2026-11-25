@@ -1,0 +1,80 @@
+//! The model provider accounts, with their keys.
+//!
+//! The mapping of one row is `jian_store`'s (`LegacyProvider`); this reads the rows, brings each
+//! account's key over from the old secrets (opened with the old master key, sealed under the new
+//! tenant's data key), and counts what the store did.
+//!
+//! A ChatGPT sign-in and a Claude token are subscriptions, which the core cannot use yet: they
+//! are not imported, and the marker says so. An account that arrives still marked active does
+//! not take the place of one the owner chose here since.
+
+use jian_store::{Database, ImportOutcome, ImportResult, TenantCtx, provider_secret_owner};
+
+use crate::ImportError;
+use crate::outcome::{Tally, skipped};
+use crate::reader::LegacyReader;
+use crate::secrets;
+
+const SUBSCRIPTION: &str = "skipped: subscription not supported yet";
+
+pub(crate) async fn import(
+    db: &Database,
+    ctx: &TenantCtx,
+    reader: &mut LegacyReader,
+    keys: Option<&jian_store::secrets::LocalKeyring>,
+) -> Result<ImportResult, ImportError> {
+    if !reader.has_table("providers").await? {
+        return Ok(Tally::default().finish(Some("the old database has no such table")));
+    }
+    let accounts = reader.providers().await?;
+    if accounts.is_empty() {
+        return Ok(Tally::default().finish(Some("the old database holds no provider accounts")));
+    }
+    let Some(keys) = keys else {
+        return Ok(skipped(
+            "the old keys need the old install's master key: give it with \
+             --import-master-key or --import-master-keys (JIAN_IMPORT_MASTER_KEY, \
+             JIAN_IMPORT_MASTER_KEYS)",
+        ));
+    };
+    let sealed = reader.secrets().await?;
+    let mut tally = Tally::default();
+    let mut subscriptions = 0_u32;
+    for account in accounts {
+        let id = account.id.clone();
+        let prepared = match account.into_import() {
+            Ok(prepared) => prepared,
+            Err(error) => {
+                tracing::warn!(%id, %error, "a provider account of the old Jian was not imported");
+                tally.failed(format!("provider {id}: {error}"));
+                continue;
+            }
+        };
+        if prepared.mode() == jian_core::AccountMode::Subscription {
+            subscriptions += 1;
+            continue;
+        }
+        let owner = provider_secret_owner(&id);
+        // The key first: an account is never there without the key that was waiting for it.
+        let key = sealed
+            .iter()
+            .find(|secret| secret.profile_id.is_none() && secret.owner == owner);
+        let outcome = async {
+            if let Some(key) = key {
+                secrets::one(db, ctx, keys, key, &owner).await?;
+            }
+            db.import_provider(ctx, &prepared).await
+        }
+        .await;
+        match outcome {
+            Ok(ImportOutcome::Imported) => tally.imported(),
+            Ok(ImportOutcome::AlreadyThere) => tally.already_there(),
+            Err(error) => {
+                tracing::warn!(%id, %error, "a provider account of the old Jian was not imported");
+                tally.failed(format!("provider {id}: {error}"));
+            }
+        }
+    }
+    let note = (subscriptions > 0).then(|| format!("{subscriptions} account(s) {SUBSCRIPTION}"));
+    Ok(tally.finish(note.as_deref()))
+}

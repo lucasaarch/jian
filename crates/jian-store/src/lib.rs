@@ -126,6 +126,7 @@ mod migrate;
 #[cfg(unix)]
 mod orphan;
 mod platform;
+mod providers;
 mod schema_version;
 pub mod secrets;
 mod sessions;
@@ -134,6 +135,7 @@ mod subjects;
 mod tenant;
 mod tenants;
 mod tokens;
+mod usage;
 
 pub use accounts::{Account, NewAccount, default_name, normalize_email};
 pub use backup::tenant_dump_args;
@@ -154,6 +156,10 @@ pub use legacy::{DeviceImport, ImportOutcome, LegacyDevice, LegacyMachine, Machi
 pub use machines::{MAX_PAGE, Machine, MachineReport, Page};
 pub use members::{AddedMember, Member, NewMember, Role};
 pub use migrate::{MigrateOptions, MigrationReport, Migrations};
+pub use providers::{
+    LegacyProvider, MAX_ACCOUNTS, MAX_LABEL_CHARS, NewProviderAccount, ProviderAccount,
+    ProviderImport, provider_secret_owner,
+};
 pub use schema_version::{SchemaState, TenantVersion};
 pub use sessions::{LoginCandidate, NewSession};
 pub use slots::{
@@ -164,3 +170,4 @@ pub use tenants::TenantStatus;
 pub use tokens::{
     AccountId, Authenticated, DeviceId, MachineId, Subject, TokenHash, TokenKind, generate_token,
 };
+pub use usage::{DailyUsage, MAX_USAGE_DAYS, TokenCounts};
