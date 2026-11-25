@@ -44,6 +44,7 @@ mod database;
 pub mod embedded;
 mod error;
 mod migrate;
+mod orphan;
 mod platform;
 mod tenant;
 mod tenants;

@@ -15,7 +15,7 @@ COMPOSE_DEV := docker compose -f compose.dev.yaml
 
 .DEFAULT_GOAL := help
 
-.PHONY: help install setup up pull down logs ps dev db-up db-stop db-reset changelog check-rust rust-check protocol-gen protocol-check \
+.PHONY: help install setup up pull down logs ps dev db-up db-stop db-reset changelog check-rust rust-check rust-dev rust-dev-reset protocol-gen protocol-check \
         check test test-integration lint format build image image-push \
         release rollback test-display image-test-display image-test-inspection image-test-network \
         preview-up preview-down preview-status preview-token
@@ -88,6 +88,25 @@ rust-check: ## The Rust workspace: format, clippy, tests and docs, as the rules 
 	cargo clippy --workspace --all-targets --locked -- -D warnings
 	cargo test --workspace --locked
 	RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --locked
+
+# The Rust gateway on its own embedded Postgres, in .jian-dev/ (git-ignored). A DATABASE_URL in the
+# environment, or `make rust-dev DATABASE_URL=...`, points it at an external one instead.
+RUST_DEV_DIR := $(CURDIR)/.jian-dev
+RUST_LOG ?= info,sqlx=warn,jian=debug,jian_server=debug,jian_store=debug
+export RUST_LOG
+
+rust-dev: ## Run the Rust gateway on :4410 with its own Postgres in .jian-dev/, restarting on code changes
+	@mkdir -p $(RUST_DEV_DIR)
+	@if cargo watch --version >/dev/null 2>&1; then \
+	  exec cargo watch -w Cargo.toml -w Cargo.lock -w crates -w bins -x 'run -p jian -- --data-dir $(RUST_DEV_DIR)'; \
+	else \
+	  echo "cargo-watch is not installed, so the gateway will not restart on changes."; \
+	  echo "Install it once with: cargo install cargo-watch --locked"; \
+	  exec cargo run -p jian -- --data-dir $(RUST_DEV_DIR); \
+	fi
+
+rust-dev-reset: ## Delete .jian-dev/ (the dev gateway's database), stopping its Postgres first
+	@sh scripts/rust-dev-reset.sh $(RUST_DEV_DIR)
 
 protocol-gen: ## Regenerate packages/protocol (the TypeScript types) from crates/jian-protocol
 	rm -rf packages/protocol/src/generated

@@ -26,6 +26,8 @@ apps/web/out/
 packages/remote-core/native/bin/
 # Cargo builds into the workspace root.
 /target/
+# The data of `make rust-dev`: its embedded Postgres and password.
+/.jian-dev/
 # The desktop app's build and packages.
 apps/desktop/out/
 apps/desktop/release/

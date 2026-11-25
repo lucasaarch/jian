@@ -39,6 +39,19 @@ pub enum StoreError {
         /// What the server's tooling said.
         source: postgresql_embedded::Error,
     },
+    /// A Postgres of this data directory outlived an earlier gateway and would not stop. It is
+    /// left running; stop it by hand (`pg_ctl stop -m fast -D <pgdata>`) and start again.
+    #[error(
+        "the Postgres of {pgdata} (pid {pid}) is still running from an earlier start and would not stop: {reason}"
+    )]
+    OrphanedServer {
+        /// The postmaster's process id, from `postmaster.pid`.
+        pid: u32,
+        /// The cluster directory.
+        pgdata: PathBuf,
+        /// What `pg_ctl stop` printed.
+        reason: String,
+    },
     /// The database did not accept a connection or answer `SELECT 1`.
     #[error("cannot connect to the database: {0}")]
     Connect(#[source] sqlx::Error),

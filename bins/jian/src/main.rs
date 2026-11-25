@@ -86,6 +86,15 @@ async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
     let addr = cli.addr.clone();
     let source = cli.database_source()?;
+    match &source {
+        DatabaseSource::External(_) => println!("database: external, from DATABASE_URL"),
+        DatabaseSource::Embedded(config) => {
+            println!(
+                "database: embedded Postgres in {}",
+                config.data_dir.display()
+            );
+        }
+    }
     let mut shutdown = Shutdown::install().context("cannot listen for stop signals")?;
 
     let database = Database::open(source)
@@ -133,7 +142,13 @@ async fn serve(addr: &str, database: &Database, shutdown: &mut Shutdown) -> anyh
     let listener = tokio::net::TcpListener::bind(addr)
         .await
         .with_context(|| format!("cannot listen on {addr}"))?;
-    println!("jian listening on {addr}");
+    println!("jian listening on http://{addr}");
+    // There is no authentication in the core yet, so there is no token to print: every route is
+    // open on loopback. When one exists, its dev token goes here.
+    for route in jian_server::ROUTES {
+        let (method, path) = route.split_once(' ').unwrap_or(("GET", route));
+        println!("  {method} http://{addr}{path}");
+    }
 
     let (stop, stopped) = oneshot::channel::<()>();
     let mut server = tokio::spawn(

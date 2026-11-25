@@ -19,7 +19,7 @@ use std::time::Duration;
 
 use postgresql_embedded::{PostgreSQL, Settings};
 
-use crate::{DatabaseUrl, StoreError};
+use crate::{DatabaseUrl, StoreError, orphan};
 
 /// The only Postgres major this build runs. It must match `POSTGRESQL_VERSION` in
 /// `.cargo/config.toml`, which decides what is bundled. A cluster is not portable across majors,
@@ -57,7 +57,8 @@ pub struct EmbeddedPostgres {
 impl EmbeddedPostgres {
     /// Unpacks the server on first use, creates the cluster on first use, and starts it. A second
     /// start in the same directory reuses both, and a server that was killed recovers from its
-    /// write-ahead log.
+    /// write-ahead log. A server of this directory that outlived the last gateway (it took
+    /// `SIGKILL`) is stopped first, so it does not block the start.
     ///
     /// Fails with [`StoreError::UnsupportedMajor`] before touching any file when the directory
     /// holds a cluster of another major.
@@ -94,6 +95,12 @@ impl EmbeddedPostgres {
                 action: "install and initialise",
                 source,
             })?;
+        // After `setup` so `pg_ctl` is unpacked, before `start` so a leftover server does not
+        // fail it.
+        orphan::clear(
+            &server.settings().data_dir,
+            &server.settings().binary_dir().join("pg_ctl"),
+        )?;
         server
             .start()
             .await

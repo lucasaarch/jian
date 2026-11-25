@@ -9,7 +9,11 @@ use axum::{Json, Router, extract::State, http::StatusCode, routing::get};
 use jian_store::DatabaseHealth;
 use serde::Serialize;
 
-/// The gateway's routes. Today only `/health`.
+/// The routes `router` serves, for the binary to print at start-up: there is no panel yet to
+/// show what is reachable. Keep it in step with `router`.
+pub const ROUTES: &[&str] = &["GET /health"];
+
+/// The gateway's routes: those in [`ROUTES`].
 pub fn router(database: DatabaseHealth) -> Router {
     Router::new()
         .route("/health", get(health))

@@ -202,3 +202,94 @@ async fn a_data_directory_of_another_major_is_refused_and_left_alone() {
         "the directory must not be touched"
     );
 }
+
+/// The postmaster's pid, from the first line of `postmaster.pid`.
+#[cfg(unix)]
+fn postmaster_pid(dir: &Path) -> u32 {
+    let text = fs::read_to_string(dir.join("pgdata/postmaster.pid")).unwrap();
+    text.lines().next().unwrap().trim().parse().unwrap()
+}
+
+/// True while `pid` is a process that has not exited. A zombie does not count: in a container
+/// whose PID 1 does not reap, a stopped server stays one.
+#[cfg(unix)]
+fn is_running(pid: u32) -> bool {
+    let output = std::process::Command::new("ps")
+        .args(["-o", "stat=", "-p", &pid.to_string()])
+        .output()
+        .unwrap();
+    let state = String::from_utf8_lossy(&output.stdout);
+    !state.trim().is_empty() && !state.trim().starts_with('Z')
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn a_server_left_running_by_a_gateway_that_was_killed_is_stopped_and_started_again() {
+    let dir = scratch();
+    let first = open(dir.path()).await;
+    let ctx = tenant(&first).await;
+    run(
+        &first,
+        &ctx,
+        "CREATE TABLE note AS SELECT 'left behind'::text AS body",
+    )
+    .await;
+    let orphan = postmaster_pid(dir.path());
+    // What `SIGKILL` on the gateway does: no `stop`, no drop, and the postmaster carries on.
+    std::mem::forget(first);
+    assert!(is_running(orphan), "the server must still be up");
+
+    let second = open(dir.path()).await;
+    assert_ne!(postmaster_pid(dir.path()), orphan, "a new server must run");
+    assert!(!is_running(orphan), "the old server must be stopped");
+    let ctx = tenant(&second).await;
+    let body = run(&second, &ctx, "SELECT body FROM note").await.unwrap();
+    assert_eq!(body, "left behind");
+    second.close().await.unwrap();
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn a_pid_file_of_a_server_that_is_gone_is_removed() {
+    let dir = scratch();
+    open(dir.path()).await.close().await.unwrap();
+    // A pid that was a process a moment ago and is not any more.
+    let mut finished = std::process::Command::new("true").spawn().unwrap();
+    finished.wait().unwrap();
+    let pgdata = dir.path().join("pgdata");
+    fs::write(
+        pgdata.join("postmaster.pid"),
+        format!("{}\n{}\n0\n0\n", finished.id(), pgdata.display()),
+    )
+    .unwrap();
+
+    let db = open(dir.path()).await;
+    assert!(db.health().is_up().await);
+    db.close().await.unwrap();
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn a_process_that_is_not_this_server_is_never_signalled() {
+    let dir = scratch();
+    open(dir.path()).await.close().await.unwrap();
+    // A live process that took the pid the file names, as after a reboot.
+    let mut bystander = std::process::Command::new("sleep")
+        .arg("600")
+        .spawn()
+        .unwrap();
+    let pgdata = dir.path().join("pgdata");
+    fs::write(
+        pgdata.join("postmaster.pid"),
+        format!("{}\n{}\n0\n0\n", bystander.id(), pgdata.display()),
+    )
+    .unwrap();
+
+    let db = open(dir.path()).await;
+    let alive = bystander.try_wait().unwrap().is_none();
+    bystander.kill().unwrap();
+    bystander.wait().unwrap();
+    assert!(alive, "another process must be left alone");
+    assert!(db.health().is_up().await);
+    db.close().await.unwrap();
+}
