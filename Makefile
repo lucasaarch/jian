@@ -116,6 +116,10 @@ protocol-check: protocol-gen ## Fail when packages/protocol differs from what th
 	git diff --exit-code -- packages/protocol
 	@test -z "$$(git ls-files --others --exclude-standard packages/protocol)" || \
 	  { echo "packages/protocol has generated files that are not committed:"; git ls-files --others --exclude-standard packages/protocol; exit 1; }
+	# check.ts holds messages serde actually wrote; tsc fails when the generated types disagree
+	# (skip_serializing_if, serde(with), flatten). npx keeps the Rust CI free of pnpm install;
+	# the version follows typescript in the root package.json.
+	npx --yes -p typescript@7.0.2 tsc --noEmit -p packages/protocol
 
 test: ## Unit tests, no Docker and no provider
 	pnpm run test

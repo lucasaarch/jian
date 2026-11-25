@@ -51,7 +51,8 @@ jobs:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
       - run: cargo fmt --all --check
-      # The TypeScript types are generated from the Rust ones; a stale copy fails here.
+      # The TypeScript types are generated from the Rust ones; a stale copy, or a type that
+      # disagrees with what serde writes (tsc over check.ts), fails here.
       - run: make protocol-check
       - run: cargo doc --workspace --no-deps --locked
         env:
