@@ -14,6 +14,8 @@ pub(crate) struct Tally {
     already_there: u32,
     failed: u32,
     notes: Vec<String>,
+    left_out: u32,
+    left_out_reasons: Vec<&'static str>,
 }
 
 impl Tally {
@@ -34,12 +36,32 @@ impl Tally {
         }
     }
 
+    /// A row that was refused for a reason the data itself carries (a key the core does not
+    /// accept, a memory that had ended). It is not a failure: running again would say the same.
+    pub(crate) fn left_out(&mut self, reason: &'static str) {
+        self.left_out += 1;
+        if !self.left_out_reasons.contains(&reason) {
+            self.left_out_reasons.push(reason);
+        }
+    }
+
     /// `Done` when no row failed, else `Failed` with what the first few said.
     pub(crate) fn finish(self, note: Option<&str>) -> ImportResult {
         let mut detail = self.notes.join("; ");
         let unnamed = (self.failed as usize).saturating_sub(self.notes.len());
         if unnamed > 0 {
             let _ = write!(detail, " (and {unnamed} more)");
+        }
+        if self.left_out > 0 {
+            if !detail.is_empty() {
+                detail.push_str("; ");
+            }
+            let _ = write!(
+                detail,
+                "{} left out: {}",
+                self.left_out,
+                self.left_out_reasons.join(", ")
+            );
         }
         if let Some(note) = note {
             if !detail.is_empty() {

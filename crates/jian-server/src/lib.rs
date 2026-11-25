@@ -67,6 +67,8 @@ mod llm_access;
 mod mail;
 mod mail_settings;
 mod members;
+mod memories;
+mod projects;
 mod providers;
 mod public_url;
 mod rate;
@@ -82,7 +84,7 @@ use std::time::Duration;
 
 use axum::extract::DefaultBodyLimit;
 use axum::extract::State;
-use axum::routing::{delete, get, patch, post};
+use axum::routing::{delete, get, patch, post, put};
 use axum::{Json, Router, http::StatusCode};
 use jian_auth::Auth;
 use jian_protocol::auth::Me;
@@ -136,6 +138,19 @@ pub const ROUTES: &[&str] = &[
     "PATCH /v1/agents/{id} (its creator or an admin)",
     "POST /v1/agents/{id}/archive (its creator or an admin)",
     "GET /v1/agents/{id}/threads (a member who sees it)",
+    "GET /v1/agents/{id}/memories (a member who sees the agent)",
+    "GET /v1/agents/{id}/memories/{key} (a member who sees the agent)",
+    "PUT /v1/agents/{id}/memories/{key} (a member who sees the agent)",
+    "DELETE /v1/agents/{id}/memories/{key} (a member who sees the agent)",
+    "PUT /v1/agents/{id}/memories/{key}/links/{other} (a member who sees the agent)",
+    "DELETE /v1/agents/{id}/memories/{key}/links/{other} (a member who sees the agent)",
+    "GET /v1/projects (a member)",
+    "POST /v1/projects (a member)",
+    "GET /v1/projects/{id} (a member)",
+    "PATCH /v1/projects/{id} (its creator or an admin)",
+    "DELETE /v1/projects/{id} (its creator or an admin)",
+    "GET /v1/threads/{id}/project (a member who sees it)",
+    "PUT /v1/threads/{id}/project (a member in it)",
     "GET /v1/grants (an admin)",
     "POST /v1/grants (an admin)",
     "POST /v1/grants/revoke (an admin)",
@@ -310,6 +325,28 @@ pub fn router_with(state: AppState, extra: Router<AppState>) -> Router {
         .route("/v1/agents/{id}", get(agents::get).patch(agents::update))
         .route("/v1/agents/{id}/archive", post(agents::archive))
         .route("/v1/agents/{id}/threads", get(agents::threads))
+        .route("/v1/agents/{id}/memories", get(memories::list))
+        .route(
+            "/v1/agents/{id}/memories/{key}",
+            get(memories::get)
+                .put(memories::put)
+                .delete(memories::delete),
+        )
+        .route(
+            "/v1/agents/{id}/memories/{key}/links/{other}",
+            put(memories::link).delete(memories::unlink),
+        )
+        .route("/v1/projects", get(projects::list).post(projects::create))
+        .route(
+            "/v1/projects/{id}",
+            get(projects::get)
+                .patch(projects::update)
+                .delete(projects::delete),
+        )
+        .route(
+            "/v1/threads/{id}/project",
+            get(projects::of_thread).put(projects::set_for_thread),
+        )
         .route("/v1/grants", get(agents::grants).post(agents::give))
         .route("/v1/grants/revoke", post(agents::revoke))
         .route("/v1/threads", get(threads::list).post(threads::create))

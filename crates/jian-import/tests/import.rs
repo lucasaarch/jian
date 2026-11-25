@@ -36,7 +36,8 @@ const CLAUDE: &str = "sk-ant-oat01-synthetic-0005";
 /// Groq account, a ChatGPT sign-in and a Claude subscription.
 fn rows(which: Domain) -> u32 {
     match which {
-        Domain::Secrets | Domain::Providers => 3,
+        // Two memories and the link between them (the ended one and the bad key are left out).
+        Domain::Secrets | Domain::Providers | Domain::Memories => 3,
         Domain::Messages => 5,
         // Two sessions with a person (the one between two agents is left).
         Domain::Threads => 2,
@@ -117,7 +118,8 @@ async fn a_dump_of_the_old_desktop_database_comes_over_once() {
         assert_eq!(
             domain(&first, which).status,
             ImportStatus::Done,
-            "{which:?}"
+            "{which:?}: {:?}",
+            domain(&first, which).detail
         );
         assert_eq!(domain(&first, which).imported, rows(which), "{which:?}");
     }
@@ -178,6 +180,7 @@ async fn a_dump_of_the_old_desktop_database_comes_over_once() {
         "{threads}"
     );
     owners_chats_came_over(&new.db, &ctx, &members[0].account_id).await;
+    memories_and_projects_came_over(&new.db, &ctx, &first, &members[0].account_id).await;
     // The scratch server is gone with its directory.
     assert!(!dir.path().join("scratch").exists());
 
@@ -210,7 +213,7 @@ async fn a_dump_of_the_old_desktop_database_comes_over_once() {
         .unwrap();
     assert!(pending.domains.is_empty());
     let markers = new.db.imports(&ctx).await.unwrap();
-    assert_eq!(markers.len(), 8);
+    assert_eq!(markers.len(), 10);
     assert!(markers.iter().all(|m| m.status == ImportStatus::Done));
     new.stop().await;
 }
@@ -301,11 +304,19 @@ async fn a_run_that_stopped_or_lacked_a_key_is_finished_by_the_next() {
             Domain::Providers,
             Domain::Agents,
             Domain::Threads,
-            Domain::Messages
+            Domain::Messages,
+            Domain::Memories,
+            Domain::Projects
         ]
     );
     // No owner address was given, so the chats wait for one and say so.
-    for which in [Domain::Agents, Domain::Threads, Domain::Messages] {
+    for which in [
+        Domain::Agents,
+        Domain::Threads,
+        Domain::Messages,
+        Domain::Memories,
+        Domain::Projects,
+    ] {
         assert_eq!(domain(&second, which).status, ImportStatus::Skipped);
     }
     assert_eq!(domain(&second, Domain::Secrets).imported, 3);
@@ -557,4 +568,62 @@ async fn a_chatgpt_sign_in_that_does_not_parse_is_skipped_and_leaves_nothing() {
     assert!(new.db.vault().read(&ctx, &owner).await.unwrap().is_none());
     new.stop().await;
     old.stop().await.unwrap();
+}
+
+async fn memories_and_projects_came_over(
+    db: &Database,
+    ctx: &TenantCtx,
+    report: &ImportReport,
+    owner: &jian_store::AccountId,
+) {
+    let viewer = Viewer {
+        account: owner.clone(),
+        admin: true,
+    };
+    let agent = db.list_agents(ctx, &viewer, None, 10).await.unwrap().items[0]
+        .id
+        .clone();
+    let page = db
+        .list_memories(
+            ctx,
+            &agent,
+            &jian_store::MemoryQuery {
+                scope: jian_store::RecallScope::Everything,
+                search: None,
+                after: None,
+                limit: 10,
+            },
+            1_900_000_000_000,
+        )
+        .await
+        .unwrap();
+    let keys: Vec<&str> = page.items.iter().map(|m| m.key.as_str()).collect();
+    assert_eq!(keys, ["likes-tea", "trip"]);
+    assert_eq!(page.items[0].origin.kind.as_str(), "imported");
+    assert_eq!(page.items[0].content, "Prefers green tea.");
+    assert!(page.items[1].expires_at.is_some());
+    let links = db
+        .memory_links(ctx, &agent, "likes-tea", 1_900_000_000_000)
+        .await
+        .unwrap();
+    assert_eq!(links, ["trip"]);
+    // Why two were left out is in the marker; the link between memories and projects is listed
+    // as not imported, since the core has no place for it.
+    let detail = domain(report, Domain::Memories).detail.clone().unwrap();
+    assert!(detail.contains("2 left out"), "{detail}");
+    assert!(detail.contains("had ended") && detail.contains("key the core does not accept"));
+    let left: Vec<&str> = report
+        .not_imported
+        .iter()
+        .map(|t| t.name.as_str())
+        .collect();
+    assert!(left.contains(&"memory_projects") && !left.contains(&"memories"));
+    let projects = db.list_projects(ctx, None, 10).await.unwrap().items;
+    assert_eq!(projects.len(), 1);
+    assert_eq!(projects[0].name, "Synthetic site");
+    assert_eq!(
+        projects[0].repository_url.as_deref(),
+        Some("https://example.test/synthetic/site")
+    );
+    assert_eq!(&projects[0].created_by, owner);
 }

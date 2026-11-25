@@ -131,14 +131,18 @@ mod imports;
 mod invites;
 mod jobs;
 mod legacy;
+mod legacy_memories;
 mod legacy_threads;
 mod machines;
 mod members;
+mod memories;
+mod memory_links;
 mod messages;
 mod migrate;
 #[cfg(unix)]
 mod orphan;
 mod platform;
+mod projects;
 mod providers;
 mod schema_version;
 pub mod secrets;
@@ -173,14 +177,23 @@ pub use jobs::{
     MAX_PAYLOAD_BYTES, NewJob, PURGE_BATCH, RetryPolicy,
 };
 pub use legacy::{DeviceImport, ImportOutcome, LegacyDevice, LegacyMachine, MachineImport};
+pub use legacy_memories::{LegacyMemory, LegacyMemoryLink, LegacyProject};
 pub use legacy_threads::{LegacyAgent, LegacyChat, LegacyMessage, LegacyThread};
 pub use machines::{MAX_PAGE, Machine, MachineReport, Page};
 pub use members::{AddedMember, Member, NewMember, Role};
+pub use memories::{
+    MAX_FLASH_HOURS, MAX_MEMORY_CHARS, MAX_MEMORY_KEY, MAX_MEMORY_LINKS, MAX_MEMORY_PAGE, Memory,
+    MemoryOrigin, MemoryPage, MemoryQuery, MemoryWrite, OriginKind, RecallScope,
+};
 pub use messages::{
     Author, MAX_CLIENT_KEY, Message, MessageAppended, MessageId, MessagePage, NewMessage,
     NoObserver, Posted, ThreadObserver, Window,
 };
 pub use migrate::{MigrateOptions, MigrationReport, Migrations};
+pub use projects::{
+    MAX_PROJECT_INSTRUCTIONS_CHARS, MAX_PROJECT_NAME_CHARS, MAX_PROJECT_URL_CHARS, NewProject,
+    Project, ProjectId, ProjectPatch,
+};
 pub use providers::{
     LegacyProvider, MAX_ACCOUNTS, MAX_LABEL_CHARS, NewProviderAccount, ProviderAccount,
     ProviderImport, provider_secret_owner,

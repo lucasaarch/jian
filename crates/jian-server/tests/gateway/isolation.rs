@@ -31,6 +31,7 @@ const THIS_FILE: &str = include_str!("isolation.rs");
 const CODEX_FILE: &str = include_str!("codex.rs");
 const INVITES_FILE: &str = include_str!("invites.rs");
 const PROVIDERS_FILE: &str = include_str!("providers.rs");
+const MEMORIES_FILE: &str = include_str!("memories.rs");
 const THREADS_FILE: &str = include_str!("threads.rs");
 
 async fn start() -> (Gateway, TwoTenants) {
@@ -43,6 +44,7 @@ fn is_a_test_here(name: &str) -> bool {
         || CODEX_FILE.contains(&declared)
         || INVITES_FILE.contains(&declared)
         || PROVIDERS_FILE.contains(&declared)
+        || MEMORIES_FILE.contains(&declared)
         || THREADS_FILE.contains(&declared)
 }
 
@@ -81,6 +83,25 @@ const ROUTE_TESTS: &[(&str, &str)] = &[
     ("PATCH /v1/agents/{id}", THREADS_TEST),
     ("POST /v1/agents/{id}/archive", THREADS_TEST),
     ("GET /v1/agents/{id}/threads", THREADS_TEST),
+    ("GET /v1/agents/{id}/memories", MEMORIES_TEST),
+    ("GET /v1/agents/{id}/memories/{key}", MEMORIES_TEST),
+    ("PUT /v1/agents/{id}/memories/{key}", MEMORIES_TEST),
+    ("DELETE /v1/agents/{id}/memories/{key}", MEMORIES_TEST),
+    (
+        "PUT /v1/agents/{id}/memories/{key}/links/{other}",
+        MEMORIES_TEST,
+    ),
+    (
+        "DELETE /v1/agents/{id}/memories/{key}/links/{other}",
+        MEMORIES_TEST,
+    ),
+    ("GET /v1/projects", MEMORIES_TEST),
+    ("POST /v1/projects", MEMORIES_TEST),
+    ("GET /v1/projects/{id}", MEMORIES_TEST),
+    ("PATCH /v1/projects/{id}", MEMORIES_TEST),
+    ("DELETE /v1/projects/{id}", MEMORIES_TEST),
+    ("GET /v1/threads/{id}/project", MEMORIES_TEST),
+    ("PUT /v1/threads/{id}/project", MEMORIES_TEST),
     ("GET /v1/grants", THREADS_TEST),
     ("POST /v1/grants", THREADS_TEST),
     ("POST /v1/grants/revoke", THREADS_TEST),
@@ -114,6 +135,9 @@ const ROUTE_TESTS: &[(&str, &str)] = &[
 /// tenant A's invitation, and that A's job sends with A's own account.
 const INVITES_TEST: &str =
     "an_invitation_is_sent_with_its_own_workspaces_mail_account_and_nobody_elses";
+
+/// The test that shows tenant B reaches no memory, project or thread-project link of tenant A.
+const MEMORIES_TEST: &str = "memories_and_projects_of_the_other_tenant_are_out_of_reach";
 
 /// The test that shows tenant B reaches no agent, thread or message of tenant A.
 const THREADS_TEST: &str = "agents_threads_and_messages_of_the_other_tenant_are_out_of_reach";

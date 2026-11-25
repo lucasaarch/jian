@@ -6,7 +6,7 @@ use jian_store::secrets::LocalKeyring;
 use jian_store::{Database, ImportResult, ImportStatus, TenantCtx};
 
 use crate::reader::{LegacyReader, LegacyTable};
-use crate::{ImportError, Source, conversations, machines, owner, providers, secrets};
+use crate::{ImportError, Source, conversations, machines, memories, owner, providers, secrets};
 
 /// A part of the old Jian that has a table in the core, imported on its own: one marker, one
 /// result.
@@ -28,11 +28,16 @@ pub enum Domain {
     Threads,
     /// The messages of those sessions. Needs the threads.
     Messages,
+    /// The old memories and their links, into the agents made from their profiles. Needs the
+    /// agents.
+    Memories,
+    /// The old projects, as the workspace's. Needs the owner.
+    Projects,
 }
 
 impl Domain {
     /// Every domain, in the order a run takes them.
-    pub const ALL: [Self; 8] = [
+    pub const ALL: [Self; 10] = [
         Self::Owner,
         Self::Secrets,
         Self::Providers,
@@ -41,6 +46,8 @@ impl Domain {
         Self::Agents,
         Self::Threads,
         Self::Messages,
+        Self::Memories,
+        Self::Projects,
     ];
 
     /// The name in a marker and in the report.
@@ -54,6 +61,8 @@ impl Domain {
             Self::Agents => "agents",
             Self::Threads => "threads",
             Self::Messages => "messages",
+            Self::Memories => "memories",
+            Self::Projects => "projects",
         }
     }
 
@@ -68,6 +77,10 @@ impl Domain {
             Self::Agents => &["profiles"],
             Self::Threads => &["sessions", "contacts"],
             Self::Messages => &["messages"],
+            // `memory_projects` (which memory belonged to which project) has no place in the
+            // core, so it stays in the report of what was not imported.
+            Self::Memories => &["memories", "memory_links"],
+            Self::Projects => &["projects"],
         }
     }
 }
@@ -237,6 +250,11 @@ impl<'a> Importer<'a> {
             Domain::Messages => {
                 let email = self.options.owner_email.as_deref();
                 conversations::messages(self.db, self.ctx, reader, email).await
+            }
+            Domain::Memories => memories::memories(self.db, self.ctx, reader).await,
+            Domain::Projects => {
+                let email = self.options.owner_email.as_deref();
+                memories::projects(self.db, self.ctx, reader, email).await
             }
         }
     }

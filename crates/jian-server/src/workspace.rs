@@ -45,8 +45,20 @@ pub(crate) fn failure(error: &StoreError) -> Refusal {
         StoreError::Denied(why) => forbidden(why),
         StoreError::InvalidWorkspace(why) => refuse(StatusCode::BAD_REQUEST, "invalid_input", why),
         StoreError::InvalidImport(_) => internal(error),
+        StoreError::VersionConflict { current } => refuse(
+            StatusCode::CONFLICT,
+            "version_conflict",
+            &format!("the stored version is {current}: read it again and retry"),
+        ),
         other => store_failure(other),
     }
+}
+
+/// The wall clock, in Unix milliseconds, for what the store dates by an injected `now_ms`.
+pub(crate) fn now_ms() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| i64::try_from(d.as_millis()).unwrap_or(i64::MAX))
 }
 
 /// A cursor, which is the store's number written as text.

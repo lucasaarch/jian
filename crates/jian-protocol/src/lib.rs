@@ -11,5 +11,7 @@
 pub mod auth;
 pub mod client;
 pub mod machine;
+pub mod memories;
+pub mod projects;
 pub mod providers;
 pub mod threads;

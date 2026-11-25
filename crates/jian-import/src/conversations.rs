@@ -27,7 +27,7 @@ const BATCH: usize = 500;
 
 /// The imported owner: the member the options name, once the `owner` domain is done. The inner
 /// `Err` is the result of a domain that is skipped for lack of them.
-async fn owner(
+pub(crate) async fn owner(
     db: &Database,
     ctx: &TenantCtx,
     email: Option<&str>,

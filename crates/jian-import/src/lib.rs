@@ -46,15 +46,17 @@
 //!
 //! # Not imported
 //!
-//! Memories, skills, schedules, channel settings, runs and the rest have no table in the core
+//! Skills, schedules, which memory belonged to which project, channel settings, runs and the rest have no table in the core
 //! yet. Each run lists those tables of the old database with their rows
 //! ([`ImportReport::not_imported`]); the issue that creates a domain's table adds its import
 //! here. (Profiles, sessions, contacts and messages do have one: the `agents`, `threads` and
-//! `messages` domains, which need the owner imported first.)
+//! `messages` domains, which need the owner imported first; memories and projects, in the
+//! `memories` and `projects` domains.)
 
 mod conversations;
 mod error;
 mod machines;
+mod memories;
 mod outcome;
 mod owner;
 mod providers;

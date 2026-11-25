@@ -1488,6 +1488,13 @@ INSERT INTO public.messages (id, profile_id, session_id, role, content, created_
 INSERT INTO public.messages (id, profile_id, session_id, role, content, created_at, author_id, author_name, seq) VALUES ('84444444-4444-4444-8444-444444444444', '11111111-1111-4111-8111-111111111111', '52222222-2222-4222-8222-222222222222', 'user', 'oi gente', '2026-11-25 18:05:01+00', '5511999990001@s.whatsapp.net', 'Ana', 1);
 INSERT INTO public.messages (id, profile_id, session_id, role, content, created_at, reactions, channel_message, seq) VALUES ('85555555-5555-4555-8555-555555555555', '11111111-1111-4111-8111-111111111111', '52222222-2222-4222-8222-222222222222', 'assistant', 'oi Ana', '2026-11-25 18:05:02+00', '[{"emoji": "x", "by": "Ana"}]', '{"id": "wamid-1"}', 2);
 
+INSERT INTO public.memories (profile_id, key, content, version, updated_at) VALUES ('11111111-1111-4111-8111-111111111111', 'likes-tea', 'Prefers green tea.', 3, '2026-11-25 18:10:00+00');
+INSERT INTO public.memories (profile_id, key, content, version, updated_at, expires_at) VALUES ('11111111-1111-4111-8111-111111111111', 'trip', 'Flying on Friday.', 1, '2126-11-25 18:10:00+00', '2126-11-30 00:00:00+00');
+INSERT INTO public.memories (profile_id, key, content, version, updated_at, expires_at) VALUES ('11111111-1111-4111-8111-111111111111', 'over', 'Long gone.', 1, '2020-01-01 10:00:00+00', '2020-01-02 00:00:00+00');
+INSERT INTO public.memories (profile_id, key, content, version, updated_at) VALUES ('11111111-1111-4111-8111-111111111111', 'Bad Key!', 'Not a key the core accepts.', 1, '2026-11-25 18:10:00+00');
+INSERT INTO public.memory_links (profile_id, a_key, b_key) VALUES ('11111111-1111-4111-8111-111111111111', 'likes-tea', 'trip');
+INSERT INTO public.projects (id, profile_id, name, repository_url, created_at) VALUES ('91111111-1111-4111-8111-111111111111', '11111111-1111-4111-8111-111111111111', 'Synthetic site', 'https://example.test/synthetic/site', '2026-11-25 18:20:00+00');
+INSERT INTO public.memory_projects (profile_id, memory_key, project_id) VALUES ('11111111-1111-4111-8111-111111111111', 'likes-tea', '91111111-1111-4111-8111-111111111111');
 
 --
 -- Data for Name: projects; Type: TABLE DATA; Schema: public; Owner: -

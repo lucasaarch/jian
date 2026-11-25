@@ -191,6 +191,13 @@ pub enum StoreError {
     /// can see: what they cannot see is "not found", never this.
     #[error("not allowed: {0}")]
     Denied(&'static str),
+    /// A write expected another version of a row than the one stored: someone wrote in between.
+    /// `current` is the stored version, `0` for none.
+    #[error("the stored version is {current}, not the one expected")]
+    VersionConflict {
+        /// What is stored now.
+        current: i64,
+    },
     /// The operating system could not give random bytes.
     #[error("the operating system has no random bytes to give: {0}")]
     Random(getrandom::Error),

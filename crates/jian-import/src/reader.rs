@@ -5,8 +5,8 @@ use std::path::PathBuf;
 
 use jian_store::embedded::EmbeddedPostgres;
 use jian_store::{
-    LegacyAgent, LegacyChat, LegacyDevice, LegacyMachine, LegacyMessage, LegacyProvider,
-    LegacyThread,
+    LegacyAgent, LegacyChat, LegacyDevice, LegacyMachine, LegacyMemory, LegacyMemoryLink,
+    LegacyMessage, LegacyProject, LegacyProvider, LegacyThread,
 };
 use sqlx::{AssertSqlSafe, Connection as _, PgConnection};
 
@@ -175,6 +175,65 @@ impl LegacyReader {
                     }),
                 },
             )
+            .collect())
+    }
+
+    pub(crate) async fn memories(&mut self) -> Result<Vec<LegacyMemory>, ImportError> {
+        let rows: Vec<(String, String, String, String, Option<String>)> = sqlx::query_as(
+            "SELECT profile_id::text, key, content, updated_at::text, expires_at::text \
+             FROM memories ORDER BY profile_id, key",
+        )
+        .fetch_all(&mut self.connection)
+        .await
+        .map_err(ImportError::Source)?;
+        Ok(rows
+            .into_iter()
+            .map(
+                |(profile_id, key, content, updated_at, expires_at)| LegacyMemory {
+                    profile_id,
+                    key,
+                    content,
+                    updated_at,
+                    expires_at,
+                },
+            )
+            .collect())
+    }
+
+    pub(crate) async fn memory_links(&mut self) -> Result<Vec<LegacyMemoryLink>, ImportError> {
+        let rows: Vec<(String, String, String)> = sqlx::query_as(
+            "SELECT profile_id::text, a_key, b_key FROM memory_links \
+             ORDER BY profile_id, a_key, b_key",
+        )
+        .fetch_all(&mut self.connection)
+        .await
+        .map_err(ImportError::Source)?;
+        Ok(rows
+            .into_iter()
+            .map(|(profile_id, a_key, b_key)| LegacyMemoryLink {
+                profile_id,
+                a_key,
+                b_key,
+            })
+            .collect())
+    }
+
+    pub(crate) async fn projects(&mut self) -> Result<Vec<LegacyProject>, ImportError> {
+        let rows: Vec<(String, String, String, String)> = sqlx::query_as(
+            "SELECT id::text, name, repository_url, created_at::text FROM projects \
+             ORDER BY created_at, id",
+        )
+        .fetch_all(&mut self.connection)
+        .await
+        .map_err(ImportError::Source)?;
+        Ok(rows
+            .into_iter()
+            .map(|(id, name, repository_url, created_at)| LegacyProject {
+                id,
+                name,
+                repository_url,
+                created_at,
+            })
             .collect())
     }
 

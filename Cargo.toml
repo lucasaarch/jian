@@ -38,6 +38,9 @@ jian-server = { path = "crates/jian-server" }
 jian-store = { path = "crates/jian-store" }
 # Test fixtures only: a crate lists it under [dev-dependencies].
 jian-testkit = { path = "crates/jian-testkit" }
+# Calendar and time zone arithmetic for cron schedules (DST-aware). The tz database is bundled,
+# so the next run never depends on the host's zoneinfo; no system or IO feature is on.
+jiff = { version = "1", default-features = false, features = ["std", "tz-fat", "tzdb-bundle-always"] }
 jpeg-encoder = "0.7.1"
 # The Postgres the gateway embeds. `bundled` puts the archive in the binary at build time (from
 # theseus-rs/postgresql-binaries, which is why CI passes GITHUB_TOKEN) so nothing is downloaded at
