@@ -5,6 +5,7 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+futures-util.workspace = true
 postgresql_embedded.workspace = true
 sqlx.workspace = true
 thiserror.workspace = true

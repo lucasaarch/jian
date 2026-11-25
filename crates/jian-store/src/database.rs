@@ -5,6 +5,7 @@ use sqlx::PgPool;
 use sqlx::postgres::PgPoolOptions;
 
 use crate::embedded::{EmbeddedConfig, EmbeddedPostgres};
+use crate::schema_version::VerifiedTenants;
 use crate::{Migrations, StoreError};
 
 /// The longest a caller waits for a connection from the pool, and so for the first `SELECT 1`.
@@ -14,6 +15,10 @@ const ACQUIRE_TIMEOUT: Duration = Duration::from_secs(5);
 const HEALTH_TIMEOUT: Duration = Duration::from_secs(2);
 
 const MAX_CONNECTIONS: u32 = 10;
+
+/// How many tenant migrations may hold a connection at once: the pool less the one the migration
+/// lock holds for the whole run and one spare for `/health` and the startup path.
+pub(crate) const MAX_MIGRATION_CONNECTIONS: usize = MAX_CONNECTIONS as usize - 2;
 
 /// A connection URL. It carries the password, so it prints as a placeholder: logging or
 /// `{:?}`-ing one is safe, and only [`expose`](DatabaseUrl::expose) shows the text.
@@ -52,6 +57,7 @@ pub enum DatabaseSource {
 pub struct Database {
     pub(crate) pool: PgPool,
     pub(crate) migrations: Migrations,
+    pub(crate) verified: VerifiedTenants,
     embedded: Option<EmbeddedPostgres>,
 }
 
@@ -72,6 +78,7 @@ impl Database {
             Ok(pool) => Ok(Self {
                 pool,
                 migrations: Migrations::embedded(),
+                verified: VerifiedTenants::default(),
                 embedded,
             }),
             Err(error) => {
@@ -89,6 +96,7 @@ impl Database {
     #[must_use]
     pub fn with_migrations(mut self, migrations: Migrations) -> Self {
         self.migrations = migrations;
+        self.verified.clear();
         self
     }
 

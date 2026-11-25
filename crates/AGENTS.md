@@ -66,3 +66,6 @@ formatting in `rustfmt.toml`, tests-may-unwrap in `clippy.toml`, licenses and ad
   transaction, so a failure leaves that tenant as it was; do not put `-- no-transaction` in one.
 - A query for a tenant goes through `Database::begin(&TenantCtx)`, never the pool. Its SQL is
   written in the store with bound parameters, never assembled from user or model text.
+- Tenants migrate in parallel under the one lock; one that fails stays at its old version and is
+  refused by `Database::tenant`/`begin` (behind or ahead of the binary) until `migrate` finishes
+  it. A binary logs that and serves the others; only a platform failure stops the start.

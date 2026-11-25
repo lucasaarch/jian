@@ -1329,6 +1329,7 @@ dependencies = [
 name = "jian-store"
 version = "0.1.0"
 dependencies = [
+ "futures-util",
  "postgresql_embedded",
  "sqlx",
  "tempfile",

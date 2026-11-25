@@ -120,10 +120,23 @@ async fn prepare(database: &Database) -> anyhow::Result<()> {
         .migrate()
         .await
         .context("cannot migrate the database")?;
-    // A tenant that cannot be migrated is left as it was and the others go on, which suits a
-    // shared gateway. Here it is the only tenant, so serving without it would serve nothing.
-    if let Some((tenant, error)) = report.failed.into_iter().next() {
-        return Err(anyhow::Error::new(error).context(format!("tenant {tenant} is not migrated")));
+    // A tenant that cannot be migrated is left as it was and the others are served: the store
+    // refuses the one that is behind or ahead when someone asks for it. Only the platform failing
+    // (the `?` above) stops the start.
+    tracing::info!(
+        migrated = report.migrated.len(),
+        failed = report.failed.len(),
+        behind = report.behind().count(),
+        ahead = report.ahead().count(),
+        "tenant migrations finished"
+    );
+    for version in report.behind().chain(report.ahead()) {
+        tracing::error!(
+            tenant = %version.tenant,
+            found = version.found,
+            expected = version.expected,
+            "tenant schema does not match this build; it will not be served"
+        );
     }
     let tenant = TenantId::self_hosted();
     let status = database

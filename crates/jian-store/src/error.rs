@@ -73,6 +73,34 @@ pub enum StoreError {
     /// the platform's migrations stays applied.
     #[error("the platform migrations failed: {0}")]
     PlatformMigration(#[source] MigrateError),
+    /// The tenant's schema is older than this build expects, usually because its last migration
+    /// failed. It is not served until `migrate` brings it up to date.
+    #[error(
+        "tenant {tenant} is at schema version {found}, but this build needs {expected}; \
+         its migrations have not finished, so it is not served"
+    )]
+    SchemaBehind {
+        /// The tenant.
+        tenant: TenantId,
+        /// The last migration applied in its schema (`0` for none).
+        found: i64,
+        /// The last migration this build ships.
+        expected: i64,
+    },
+    /// The tenant's schema is newer than this build knows: a newer gateway migrated it and this
+    /// one is older. It is not served and not changed; run the newer build.
+    #[error(
+        "tenant {tenant} is at schema version {found}, which is newer than the {expected} this \
+         build knows; run a newer build, this one will not touch it"
+    )]
+    SchemaAhead {
+        /// The tenant.
+        tenant: TenantId,
+        /// The last migration applied in its schema.
+        found: i64,
+        /// The last migration this build ships.
+        expected: i64,
+    },
     /// A migration of one tenant failed. Nothing of that tenant's migrations stays applied, and
     /// other tenants are not affected.
     #[error("the migrations of tenant {tenant} failed: {source}")]

@@ -20,6 +20,21 @@
 //! and it takes a [`TenantCtx`] to do so, which only [`Database::tenant`] makes. `LOCAL` ends both
 //! with the transaction, so a pooled connection never carries one tenant's role to the next.
 //!
+//! # Migrations and schema versions
+//!
+//! [`Database::migrate`] brings the platform and then every tenant to the last migration, a few
+//! tenants at a time ([`MigrateOptions::concurrency`], 4 by default), each in its own transaction:
+//! one that fails is left as it was, named in the [`MigrationReport`], and does not stop the rest.
+//! One connection holds the advisory lock for the whole run and the tenants use others, so two
+//! gateways still take turns. The report also says which version each schema is at, and which
+//! are behind or ahead of the build ([`Database::schema_versions`] reads the same without
+//! migrating).
+//!
+//! [`Database::tenant`] and [`Database::begin`] refuse a tenant that is not at the version the
+//! build expects, behind or ahead, with [`StoreError::SchemaBehind`] or
+//! [`StoreError::SchemaAhead`]. The check is remembered per tenant, so a request pays for it once
+//! after each `migrate`, not on every call.
+//!
 //! # What this protects against, and what it does not
 //!
 //! The role is the wall: a query as `tenant_b` cannot read or write `tenant_a` or `platform`
@@ -47,12 +62,14 @@ mod migrate;
 #[cfg(unix)]
 mod orphan;
 mod platform;
+mod schema_version;
 mod tenant;
 mod tenants;
 
 pub use backup::tenant_dump_args;
 pub use database::{Database, DatabaseHealth, DatabaseSource, DatabaseUrl};
 pub use error::StoreError;
-pub use migrate::{MigrationReport, Migrations};
+pub use migrate::{MigrateOptions, MigrationReport, Migrations};
+pub use schema_version::{SchemaState, TenantVersion};
 pub use tenant::{TenantCtx, TenantId};
 pub use tenants::TenantStatus;

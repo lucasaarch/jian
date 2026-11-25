@@ -206,6 +206,12 @@ async fn a_tenant_whose_migration_fails_is_left_as_it_was_and_the_others_go_on()
     let half = "SELECT tablename::text FROM pg_tables WHERE tablename = 'half' AND schemaname = current_schema()";
     assert_eq!(texts(&db, &alpha, half).await, ["half"]);
     assert_eq!(texts(&db, &gamma, half).await, ["half"]);
+    // Beta is behind this build, so the store will not hand it out (see schema_versions.rs);
+    // it is read through the build it is still at.
+    let db = db.with_migrations(Migrations::new(
+        platform_migrator().await,
+        migrator(server.dir.path(), "v1", &[ITEMS]).await,
+    ));
     assert!(texts(&db, &beta, half).await.is_empty());
     assert_eq!(
         texts(&db, &beta, "SELECT version::text FROM _sqlx_migrations").await,
@@ -215,6 +221,10 @@ async fn a_tenant_whose_migration_fails_is_left_as_it_was_and_the_others_go_on()
         texts(&db, &beta, "SELECT name FROM items").await,
         ["beta data"]
     );
+    let db = db.with_migrations(Migrations::new(
+        platform_migrator().await,
+        migrator(server.dir.path(), "v2", &[ITEMS, breaks]).await,
+    ));
 
     // A tenant that cannot be migrated when it is created is not created at all.
     let error = db.create_tenant(&id("delta")).await.unwrap_err();

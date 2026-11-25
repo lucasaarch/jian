@@ -7,7 +7,11 @@
 
 use sqlx::{AssertSqlSafe, Postgres, Transaction};
 
-use crate::{Database, MigrationReport, StoreError, TenantId};
+use futures_util::{StreamExt, stream};
+
+use crate::database::MAX_MIGRATION_CONNECTIONS;
+use crate::schema_version::SchemaState;
+use crate::{Database, MigrateOptions, MigrationReport, StoreError, TenantId};
 
 /// The key of the transaction-scoped advisory lock every schema or role change and every
 /// migration takes first (the bytes of `jianmigr`). One lock for all of it, because creating a
@@ -35,32 +39,70 @@ const SETUP: [&str; 5] = [
 ];
 
 impl Database {
+    /// [`migrate_with`](Database::migrate_with) with the default options.
+    pub async fn migrate(&self) -> Result<MigrationReport, StoreError> {
+        self.migrate_with(&MigrateOptions::default()).await
+    }
+
     /// Brings every schema to the latest migration: the platform's first, then each existing
-    /// tenant's. Creates `platform` and its role the first time, and closes what PUBLIC may do
-    /// in the database (see the crate docs).
+    /// tenant's, a few at a time. Creates `platform` and its role the first time, and closes what
+    /// PUBLIC may do in the database (see the crate docs).
     ///
     /// Takes a lock for the whole run, so two gateways that start together take turns instead of
-    /// racing. A failure in the platform's migrations is returned as an error. A failure in one
-    /// tenant's is not: that tenant is left as it was, named in the report, and the others go on.
-    pub async fn migrate(&self) -> Result<MigrationReport, StoreError> {
+    /// racing. The lock is held by one connection that stays out of the pool until the run ends;
+    /// the tenants migrate on other connections, so concurrency does not weaken it: a second
+    /// gateway waits for the lock before it starts any tenant. A failure in the platform's
+    /// migrations is returned as an error. A failure in one tenant's is not: that tenant is left
+    /// as it was, named in the report, and the others go on.
+    pub async fn migrate_with(
+        &self,
+        options: &MigrateOptions,
+    ) -> Result<MigrationReport, StoreError> {
         let lock = self.lock_migrations().await?;
-        let report = self.migrate_locked().await;
+        let report = self.migrate_locked(options).await;
         let released = lock.commit().await;
         let report = report?;
         released.map_err(StoreError::query("release the migration lock"))?;
         Ok(report)
     }
 
-    async fn migrate_locked(&self) -> Result<MigrationReport, StoreError> {
+    async fn migrate_locked(
+        &self,
+        options: &MigrateOptions,
+    ) -> Result<MigrationReport, StoreError> {
+        let concurrency = options.concurrency.clamp(1, MAX_MIGRATION_CONNECTIONS);
+        // Schemas are about to change, so what was verified no longer holds.
+        self.verified.clear();
         self.migrate_platform().await?;
+        let tenants = self.list_tenants().await?;
         let mut report = MigrationReport::default();
-        for tenant in self.list_tenants().await? {
-            match self.migrate_tenant(&tenant).await {
-                Ok(()) => report.migrated.push(tenant),
+        let mut results: Vec<_> = stream::iter(&tenants)
+            .map(|tenant| async move { (tenant, self.migrate_tenant(tenant).await) })
+            .buffer_unordered(concurrency)
+            .collect()
+            .await;
+        results.sort_by_key(|(tenant, _)| *tenant);
+        for (tenant, result) in results {
+            match result {
+                Ok(()) => report.migrated.push(tenant.clone()),
                 Err(error) => {
                     tracing::error!(%tenant, %error, "tenant migration failed; the tenant is unchanged");
-                    report.failed.push((tenant, error));
+                    report.failed.push((tenant.clone(), error));
                 }
+            }
+        }
+        for (tenant, version) in tenants
+            .iter()
+            .zip(self.versions_of(&tenants, concurrency).await)
+        {
+            match version {
+                Ok(version) => {
+                    if version.state() == SchemaState::Current {
+                        self.verified.insert(tenant);
+                    }
+                    report.versions.push(version);
+                }
+                Err(error) => tracing::warn!(%tenant, %error, "cannot read the tenant's version"),
             }
         }
         Ok(report)

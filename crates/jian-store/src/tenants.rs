@@ -15,7 +15,10 @@ pub enum TenantStatus {
 }
 
 impl Database {
-    /// The only way to get a [`TenantCtx`]: checks that the tenant exists and hands out the proof.
+    /// The only way to get a [`TenantCtx`]: checks that the tenant exists and that its schema is
+    /// at the version this build expects, and hands out the proof. A tenant that is behind or
+    /// ahead is refused ([`StoreError::SchemaBehind`], [`StoreError::SchemaAhead`]); the check
+    /// is remembered until the next [`migrate`](Database::migrate), so it is not repeated.
     ///
     /// Call it from the authentication layer, after the token is validated and the tenant it
     /// names is known, and nowhere that takes an id from a request body.
@@ -29,10 +32,11 @@ impl Database {
         tx.commit()
             .await
             .map_err(StoreError::query("look up a tenant"))?;
-        match found {
-            Some(_) => Ok(TenantCtx::new(id)),
-            None => Err(StoreError::TenantNotFound(id)),
+        if found.is_none() {
+            return Err(StoreError::TenantNotFound(id));
         }
+        self.verify(&id).await?;
+        Ok(TenantCtx::new(id))
     }
 
     /// Every tenant, by id.
@@ -139,6 +143,7 @@ impl Database {
                 .map_err(StoreError::query(ACTION))?;
         }
         tx.commit().await.map_err(StoreError::query(ACTION))?;
+        self.verified.remove(id);
         tracing::info!(tenant = %id, "tenant deleted");
         Ok(())
     }
@@ -159,6 +164,9 @@ impl Database {
             .await
             .map_err(StoreError::query("start a tenant transaction"))?;
         scope_to_tenant(&mut tx, ctx.id()).await?;
+        // Also here, not only in `tenant`: a context can outlive the migrations it was checked
+        // against. A tenant already verified costs nothing.
+        self.verify_in(&mut tx, ctx.id()).await?;
         Ok(tx)
     }
 }
