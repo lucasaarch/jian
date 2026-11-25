@@ -6,7 +6,6 @@ use std::time::Duration;
 
 use jian_remote::log::Level;
 
-use crate::args::Args;
 use crate::{output, paths};
 
 /// A line the log format did not write (a crash the service caught) always shows.
@@ -14,25 +13,18 @@ fn shown(line: &str, floor: Level) -> bool {
     !line.is_empty() && Level::of_line(line).is_none_or(|level| level >= floor)
 }
 
+/// The last `count` lines at `floor` or above.
 pub fn last_lines(text: &str, count: usize, floor: Level) -> Vec<&str> {
     let lines: Vec<&str> = text.lines().filter(|line| shown(line, floor)).collect();
     lines[lines.len().saturating_sub(count)..].to_vec()
 }
 
-pub fn logs(args: &Args) -> Result<(), String> {
-    let count = args
-        .option(&["--lines", "-n"])
-        .and_then(|count| count.parse::<usize>().ok())
-        .filter(|count| *count > 0)
-        .unwrap_or(100);
-    let floor = match args.option(&["--level"]) {
-        Some(name) => Level::parse(name).ok_or_else(|| {
-            let names: Vec<&str> = Level::ALL.iter().map(|level| level.name()).collect();
-            format!("--level takes one of {}", names.join(", "))
-        })?,
-        None => Level::Debug,
-    };
-    let follow = args.flag(&["--follow", "-f"]);
+/// Prints the last `count` lines from `floor` up, then with `follow` the new ones for ever.
+#[allow(
+    clippy::unnecessary_wraps,
+    reason = "every command returns the same result"
+)]
+pub fn logs(count: usize, floor: Level, follow: bool) -> anyhow::Result<()> {
     let path = paths::log_path();
     let text = if let Ok(bytes) = std::fs::read(&path) {
         String::from_utf8_lossy(&bytes).into_owned()

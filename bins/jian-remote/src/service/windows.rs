@@ -1,6 +1,7 @@
 //! Task Scheduler: a task at logon, in the user's interactive session, since Computer Use needs
 //! the user's desktop and a Windows service has none.
 
+use anyhow::bail;
 use std::path::Path;
 use std::process::{Command, Stdio};
 
@@ -19,7 +20,7 @@ pub fn stop() {
     schtasks(&["/End", "/TN", WINDOWS_TASK_NAME]);
 }
 
-pub fn start(binary: &Path) -> Result<(String, String), String> {
+pub fn start(binary: &Path) -> anyhow::Result<(String, String)> {
     let action = format!("\"{}\" run", binary.display());
     let created = schtasks(&[
         "/Create",
@@ -35,10 +36,10 @@ pub fn start(binary: &Path) -> Result<(String, String), String> {
         "/IT",
     ]);
     if !created {
-        return Err("Could not install the Jian Remote logon task with Task Scheduler.".into());
+        bail!("Could not install the Jian Remote logon task with Task Scheduler.");
     }
     if !schtasks(&["/Run", "/TN", WINDOWS_TASK_NAME]) {
-        return Err("Could not start the Jian Remote scheduled task.".into());
+        bail!("Could not start the Jian Remote scheduled task.");
     }
     Ok((
         "Task Scheduler".into(),

@@ -15,66 +15,63 @@ mod run;
 mod service;
 mod status;
 
-use args::Args;
+use anyhow::Context as _;
+use clap::Parser as _;
+use clap_complete::generate;
 
-const HELP: &str = "Jian Remote: connects this machine to a Jian gateway.
-
-Usage: jian-remote <command> [options]
-
-  install --gateway URL (--token-prompt | --token-stdin | --token T) [--system]
-                      Pair, install the service and start it
-  configure [--gateway URL] [--token-…]
-                      Change the gateway or token, then restart
-  start | stop | restart
-                      Control the service
-  status [--json]     Whether it is connected, and what it has run
-  logs [-n N] [--level debug|info|warn|error] [-f]
-                      The worker's log
-  update [--version X.Y.Z]
-                      Install a release from GitHub, checked by SHA-256
-  uninstall [--purge] Remove the service (and with --purge the config and log)
-  run                 The worker in the foreground, as the service runs it
-  version             Print the version";
+use args::{Cli, Command};
 
 fn main() {
-    let args = Args::parse(std::env::args().skip(1).collect());
+    let cli = Cli::parse();
     // Before any runtime: on macOS and Windows the helper needs the process's main thread.
-    if args.command.as_deref() == Some("computer-helper") {
-        jian_computer_use::helper_main(args.rest());
+    if let Command::ComputerHelper { args } = cli.command {
+        jian_computer_use::helper_main(args);
         return;
     }
-    let code = match dispatch(&args) {
+    let code = match dispatch(cli.command) {
         Ok(code) => code,
         Err(error) => {
             let on = output::colour(true);
-            eprintln!("{} {error}", output::paint("Error:", output::RED, on));
+            eprintln!("{} {error:#}", output::paint("Error:", output::RED, on));
             1
         }
     };
     std::process::exit(code);
 }
 
-fn runtime() -> Result<tokio::runtime::Runtime, String> {
+fn runtime() -> anyhow::Result<tokio::runtime::Runtime> {
     tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
-        .map_err(|error| error.to_string())
+        .context("Could not start the async runtime")
 }
 
-fn dispatch(args: &Args) -> Result<i32, String> {
-    match args.command.as_deref() {
-        Some("version") => println!("{}", env!("CARGO_PKG_VERSION")),
-        Some("install") => commands::install(args)?,
-        Some("configure") => commands::configure(args)?,
-        Some("start" | "restart") => commands::start()?,
-        Some("stop") => commands::stop()?,
-        Some("uninstall") => commands::uninstall(args)?,
-        Some("run") => run::run()?,
-        Some("status") => return runtime()?.block_on(status::status(args)),
-        Some("logs") => logs::logs(args)?,
-        Some("update") => runtime()?.block_on(commands::update(args))?,
-        None | Some("help") => println!("{HELP}"),
-        Some(other) => return Err(format!("Unknown command {other:?}.\n\n{HELP}")),
+/// Runs one command; the number is the process's exit code.
+fn dispatch(command: Command) -> anyhow::Result<i32> {
+    match command {
+        Command::Version => println!("{}", env!("CARGO_PKG_VERSION")),
+        Command::Install(install) => commands::install(install)?,
+        Command::Configure(configure) => commands::configure(configure)?,
+        Command::Start | Command::Restart => commands::start()?,
+        Command::Stop => commands::stop()?,
+        Command::Uninstall { purge } => commands::uninstall(purge)?,
+        Command::Run => run::run()?,
+        Command::Status { json } => return runtime()?.block_on(status::status(json)),
+        Command::Logs(logs) => {
+            let count = usize::try_from(logs.lines).unwrap_or(usize::MAX);
+            logs::logs(count, logs.level, logs.follow)?;
+        }
+        Command::Update { version } => runtime()?.block_on(commands::update(&version))?,
+        Command::Completions { shell } => {
+            generate(
+                shell,
+                &mut Cli::grammar(),
+                "jian-remote",
+                &mut std::io::stdout(),
+            );
+        }
+        // Handled in `main`, before any runtime exists.
+        Command::ComputerHelper { .. } => {}
     }
     Ok(0)
 }

@@ -2,6 +2,7 @@
 //! restart racing a CLI start would otherwise leave two workers, and the gateway would close one
 //! as replaced, over and over.
 
+use anyhow::{Context as _, bail};
 use std::io::Write;
 use std::path::Path;
 use std::time::{Duration, Instant};
@@ -96,9 +97,10 @@ fn signal(pid: u32, kill: bool) {
 }
 
 /// Claims the lock, stopping a live worker that holds it.
-pub fn acquire(path: &Path) -> Result<(), String> {
+pub fn acquire(path: &Path) -> anyhow::Result<()> {
     if let Some(parent) = path.parent() {
-        jian_remote::state::create_private_dir(parent).map_err(|error| error.to_string())?;
+        jian_remote::state::create_private_dir(parent)
+            .with_context(|| format!("Could not create {}", parent.display()))?;
     }
     let me = std::process::id();
     for _ in 0..8 {
@@ -119,18 +121,21 @@ pub fn acquire(path: &Path) -> Result<(), String> {
         std::os::unix::fs::OpenOptionsExt::mode(&mut options, 0o600);
         match options.open(path) {
             Ok(mut file) => {
-                return writeln!(file, "{me}").map_err(|error| error.to_string());
+                return writeln!(file, "{me}")
+                    .with_context(|| format!("Could not write {}", path.display()));
             }
             Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
                 std::thread::sleep(Duration::from_millis(150));
             }
-            Err(error) => return Err(format!("Could not write {}: {error}", path.display())),
+            Err(error) => {
+                return Err(error).with_context(|| format!("Could not write {}", path.display()));
+            }
         }
     }
-    Err(format!(
+    bail!(
         "Could not claim the Jian Remote worker lock at {}. Stop other workers with: jian-remote stop",
         path.display()
-    ))
+    )
 }
 
 /// Removes the lock if this process holds it; someone else's is left alone.

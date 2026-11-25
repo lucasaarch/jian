@@ -7,7 +7,6 @@ use std::time::{Duration, Instant};
 use jian_remote::clock::{now_ms, parse_iso};
 use serde_json::{Value, json};
 
-use crate::args::Args;
 use crate::output::{self, GREEN, RED, YELLOW, paint};
 use crate::{config, lock, paths, service};
 
@@ -61,7 +60,7 @@ fn ago(at: Option<&str>) -> Option<String> {
 }
 
 /// Exits 1 when the worker is not connected, so a script can tell.
-pub async fn status(args: &Args) -> Result<i32, String> {
+pub async fn status(json: bool) -> anyhow::Result<i32> {
     let config = config::load().ok();
     // Written by whichever worker ran last: any field may be missing.
     let state = jian_remote::state::read(&paths::state_path());
@@ -86,7 +85,7 @@ pub async fn status(args: &Args) -> Result<i32, String> {
                 .and_then(|state| state.gateway_version.clone())
         });
 
-    if args.flag(&["--json"]) {
+    if json {
         let report = json!({
             "installed": config.is_some(),
             "running": running,

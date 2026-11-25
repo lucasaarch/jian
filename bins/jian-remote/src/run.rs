@@ -3,6 +3,7 @@
 
 use std::sync::Arc;
 
+use anyhow::Context as _;
 use jian_remote::computer::HelperCommand;
 use jian_remote::files::FilesConfig;
 use jian_remote::log::Logger;
@@ -16,21 +17,22 @@ use crate::{config, lock, paths};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
-pub fn run() -> Result<(), String> {
+/// Runs the worker until it is stopped or updated.
+pub fn run() -> anyhow::Result<()> {
     let config = config::load()?;
     let lock_path = paths::lock_path();
     lock::acquire(&lock_path)?;
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()
-        .map_err(|error| error.to_string());
+        .context("Could not start the async runtime");
     let exit = runtime.and_then(|runtime| runtime.block_on(work(config)));
     jian_remote::process::reap_all();
     lock::release(&lock_path);
     exit.map(|_| ())
 }
 
-async fn work(config: config::Config) -> Result<Exit, String> {
+async fn work(config: config::Config) -> anyhow::Result<Exit> {
     let log = Arc::new(Logger::new(paths::log_path()));
     let state = StateFile::new(Some(paths::state_path()), VERSION);
     let platform = format!("{}-{}", std::env::consts::OS, std::env::consts::ARCH);

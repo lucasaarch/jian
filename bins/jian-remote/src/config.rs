@@ -1,12 +1,13 @@
 //! The pairing: which gateway, and the machine token it gave. The token alone names the machine
 //! and its tenant, so nothing else is stored.
 
+use anyhow::{Context as _, bail};
 use std::io::{BufRead, IsTerminal, Read, Write};
 use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
-use crate::args::Args;
+use crate::args::TokenArgs;
 use crate::paths;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -15,60 +16,60 @@ pub struct Config {
     pub token: String,
 }
 
-pub fn load() -> Result<Config, String> {
+pub fn load() -> anyhow::Result<Config> {
     let path = paths::config_path();
-    let text = std::fs::read_to_string(&path).map_err(|_| {
+    let text = std::fs::read_to_string(&path).with_context(|| {
         format!(
             "No Jian Remote config at {}. Run install first: jian-remote install --gateway https://… --token-prompt",
             path.display()
         )
     })?;
     serde_json::from_str(&text)
-        .map_err(|error| format!("{} is not a Jian Remote config: {error}", path.display()))
+        .with_context(|| format!("{} is not a Jian Remote config", path.display()))
 }
 
 /// The gateway's base URL as stored: https with no credentials, query or fragment, and no
 /// trailing slash. Plain http only for a gateway on this machine.
-pub fn parse_gateway(gateway: &str) -> Result<String, String> {
+pub fn parse_gateway(gateway: &str) -> anyhow::Result<String> {
     let url = url_of(gateway)?;
     if !url.username().is_empty()
         || url.password().is_some()
         || url.query().is_some()
         || url.fragment().is_some()
     {
-        return Err("The gateway URL must not carry credentials, a query or a fragment.".into());
+        bail!("The gateway URL must not carry credentials, a query or a fragment.");
     }
     jian_remote::transport::gateway_connect_url(gateway)?;
     let base = url.as_str().trim_end_matches('/');
     Ok(base.to_owned())
 }
 
-fn url_of(text: &str) -> Result<reqwest::Url, String> {
-    reqwest::Url::parse(text.trim()).map_err(|error| format!("Not a URL: {error}"))
+fn url_of(text: &str) -> anyhow::Result<reqwest::Url> {
+    reqwest::Url::parse(text.trim()).context("Not a URL")
 }
 
 /// `--token VALUE` for the one-liner the panel shows; `--token-stdin` or `--token-prompt` keep
 /// the token out of shell history.
-pub fn read_token(args: &Args) -> Result<Option<String>, String> {
-    if let Some(token) = args.option(&["--token"]) {
+pub fn read_token(args: &TokenArgs) -> anyhow::Result<Option<String>> {
+    if let Some(token) = &args.token {
         return Ok(Some(token.trim().to_owned()));
     }
-    if args.flag(&["--token-stdin"]) {
+    if args.token_stdin {
         let mut text = String::new();
         std::io::stdin()
             .read_to_string(&mut text)
-            .map_err(|error| error.to_string())?;
+            .context("Could not read the token from standard input")?;
         return Ok(Some(text.trim().to_owned()));
     }
-    if args.flag(&["--token-prompt"]) {
+    if args.token_prompt {
         return prompt_secret("Machine token (input hidden): ").map(Some);
     }
     Ok(None)
 }
 
-fn prompt_secret(prompt: &str) -> Result<String, String> {
+fn prompt_secret(prompt: &str) -> anyhow::Result<String> {
     if !std::io::stdin().is_terminal() {
-        return Err("A hidden prompt needs a terminal; use --token-stdin instead.".into());
+        bail!("A hidden prompt needs a terminal; use --token-stdin instead.");
     }
     print!("{prompt}");
     let _ = std::io::stdout().flush();
@@ -77,7 +78,7 @@ fn prompt_secret(prompt: &str) -> Result<String, String> {
     std::io::stdin()
         .lock()
         .read_line(&mut line)
-        .map_err(|error| error.to_string())?;
+        .context("Could not read the token")?;
     println!();
     Ok(line.trim().to_owned())
 }
@@ -123,12 +124,12 @@ impl Drop for EchoOff {
 }
 
 /// Owner-only: the token is the machine's whole credential.
-pub fn save(config: &Config) -> Result<(), String> {
+pub fn save(config: &Config) -> anyhow::Result<()> {
     let dir = paths::config_dir();
     let path = paths::config_path();
-    let text = serde_json::to_string_pretty(config).map_err(|error| error.to_string())?;
+    let text = serde_json::to_string_pretty(config).context("Could not encode the config")?;
     jian_remote::state::write_private(&path, &format!("{text}\n"))
-        .map_err(|error| format!("Could not write {}: {error}", path.display()))?;
+        .with_context(|| format!("Could not write {}", path.display()))?;
     if cfg!(windows) {
         restrict_windows(&dir, "(OI)(CI)F")?;
         restrict_windows(&path, "F")?;
@@ -137,23 +138,19 @@ pub fn save(config: &Config) -> Result<(), String> {
 }
 
 /// Windows ignores Unix modes: the ACL is cut down to the current user instead.
-fn restrict_windows(path: &Path, rights: &str) -> Result<(), String> {
-    let account = std::env::var("USERNAME")
-        .map_err(|_| "Could not identify the current Windows user.".to_owned())?;
+fn restrict_windows(path: &Path, rights: &str) -> anyhow::Result<()> {
+    let account =
+        std::env::var("USERNAME").context("Could not identify the current Windows user.")?;
     let status = std::process::Command::new("icacls.exe")
         .arg(path)
         .args(["/inheritance:r", "/grant:r", &format!("{account}:{rights}")])
         .stdout(std::process::Stdio::null())
         .status()
-        .map_err(|error| error.to_string())?;
-    if status.success() {
-        Ok(())
-    } else {
-        Err(format!(
-            "Could not restrict permissions on {}.",
-            path.display()
-        ))
+        .context("Could not run icacls")?;
+    if !status.success() {
+        bail!("Could not restrict permissions on {}.", path.display());
     }
+    Ok(())
 }
 
 #[cfg(test)]

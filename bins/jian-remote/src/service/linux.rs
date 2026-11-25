@@ -1,6 +1,7 @@
 //! systemd: a user unit where the user's bus is reachable, a system unit on a headless or root
 //! host where it is not (or when `--system` asks for one).
 
+use anyhow::{Context as _, bail};
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
@@ -83,12 +84,14 @@ fn can_install_system_unit() -> bool {
 
 /// A fresh install probes the bus (and honours `--system`); every later start keeps the saved
 /// scope, so a system-unit install does not flip back when a user bus appears.
-pub fn choose_scope(prefer_system: bool, fresh: bool) -> Result<Scope, String> {
+pub fn choose_scope(prefer_system: bool, fresh: bool) -> anyhow::Result<Scope> {
     if prefer_system {
         return if can_install_system_unit() {
             Ok(Scope::System)
         } else {
-            Err("install --system needs write access to /etc/systemd/system (run as root, or use sudo).".into())
+            Err(anyhow::anyhow!(
+                "install --system needs write access to /etc/systemd/system (run as root, or use sudo)."
+            ))
         };
     }
     if !fresh {
@@ -103,7 +106,7 @@ pub fn choose_scope(prefer_system: bool, fresh: bool) -> Result<Scope, String> {
     } else if can_install_system_unit() {
         Ok(Scope::System)
     } else {
-        Err(NO_USER_BUS.into())
+        Err(anyhow::anyhow!(NO_USER_BUS))
     }
 }
 
@@ -183,14 +186,15 @@ pub fn stop() {
     quiet(systemctl(scope, &["stop", LINUX_SERVICE_UNIT]));
 }
 
-pub fn start(binary: &Path, scope: Scope) -> Result<(String, String), String> {
+pub fn start(binary: &Path, scope: Scope) -> anyhow::Result<(String, String)> {
     let body = unit(binary, &paths::home(), scope, invoking_user().as_deref());
-    let write = |path: &Path, mode: u32| -> Result<(), String> {
+    let write = |path: &Path, mode: u32| -> anyhow::Result<()> {
         if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+            std::fs::create_dir_all(parent)
+                .with_context(|| format!("Could not create {}", parent.display()))?;
         }
         std::fs::write(path, &body)
-            .map_err(|error| format!("Could not write {}: {error}", path.display()))?;
+            .with_context(|| format!("Could not write {}", path.display()))?;
         let _ = std::fs::set_permissions(path, std::fs::Permissions::from_mode(mode));
         Ok(())
     };
@@ -220,16 +224,18 @@ pub fn start(binary: &Path, scope: Scope) -> Result<(String, String), String> {
         "user\n"
     };
     jian_remote::state::write_private(&paths::linux_scope_path(), saved)
-        .map_err(|error| error.to_string())?;
+        .context("Could not save the service scope")?;
     for step in START {
         let ok = systemctl(scope, step)
             .status()
             .is_ok_and(|status| status.success());
         if !ok && scope == Scope::User {
-            return Err("Could not install/start Jian Remote with systemd --user. If you see \"Failed to connect to bus: No medium found\", the user bus is missing (common on headless VPS / root SSH). Retry with: jian-remote install --system …, or enable lingering: sudo loginctl enable-linger \"$(whoami)\" && export XDG_RUNTIME_DIR=/run/user/$(id -u)".into());
+            bail!(
+                "Could not install/start Jian Remote with systemd --user. If you see \"Failed to connect to bus: No medium found\", the user bus is missing (common on headless VPS / root SSH). Retry with: jian-remote install --system …, or enable lingering: sudo loginctl enable-linger \"$(whoami)\" && export XDG_RUNTIME_DIR=/run/user/$(id -u)"
+            );
         }
         if !ok {
-            return Err("Could not install/start Jian Remote with systemd (system unit).".into());
+            bail!("Could not install/start Jian Remote with systemd (system unit).");
         }
     }
     let detail = if scope == Scope::System {

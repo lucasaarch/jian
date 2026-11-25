@@ -1,33 +1,35 @@
 //! The commands that change the install: pair and install, reconfigure, start/stop/restart,
 //! uninstall, and update from a GitHub release.
 
+use anyhow::{Context as _, bail};
 use jian_remote::update::{GITHUB_API, REPOSITORY, UpdateConfig};
 
-use crate::args::Args;
+use crate::args::{ConfigureArgs, InstallArgs, TokenArgs};
 use crate::config::{self, Config};
 use crate::output::{self, success};
 use crate::{paths, service};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
-fn gateway_and_token(args: &Args, current: Option<&Config>) -> Result<Config, String> {
-    let gateway = match (args.option(&["--gateway"]), current) {
-        (Some(gateway), _) => config::parse_gateway(gateway)?,
+/// The gateway is already validated by the parser; whatever is left out comes from `current`.
+fn gateway_and_token(
+    gateway: Option<String>,
+    token: &TokenArgs,
+    current: Option<&Config>,
+) -> anyhow::Result<Config> {
+    let gateway = match (gateway, current) {
+        (Some(gateway), _) => gateway,
         (None, Some(current)) => current.gateway.clone(),
         (None, None) => {
-            return Err(
-                "Missing --gateway https://… (the gateway this machine pairs with).".into(),
-            );
+            bail!("Missing --gateway https://… (the gateway this machine pairs with).");
         }
     };
-    let token = match (config::read_token(args)?, current) {
+    let token = match (config::read_token(token)?, current) {
         (Some(token), _) if !token.is_empty() => token,
-        (Some(_), _) => return Err("The machine token is empty.".into()),
+        (Some(_), _) => bail!("The machine token is empty."),
         (None, Some(current)) => current.token.clone(),
         (None, None) => {
-            return Err(
-                "Missing the machine token: --token-prompt, --token-stdin or --token VALUE.".into(),
-            );
+            bail!("Missing the machine token: --token-prompt, --token-stdin or --token VALUE.");
         }
     };
     Ok(Config { gateway, token })
@@ -35,11 +37,11 @@ fn gateway_and_token(args: &Args, current: Option<&Config>) -> Result<Config, St
 
 /// Pairs and installs: saves the config, puts the binary in place, registers and starts the
 /// service. Run again, it replaces what was there.
-pub fn install(args: &Args) -> Result<(), String> {
-    let config = gateway_and_token(args, None)?;
+pub fn install(args: InstallArgs) -> anyhow::Result<()> {
+    let config = gateway_and_token(Some(args.gateway), &args.token, None)?;
     config::save(&config)?;
     let binary = service::put_binary()?;
-    let started = service::start(true, args.flag(&["--system"]))?;
+    let started = service::start(true, args.system)?;
     success(
         "Jian Remote is installed and running",
         &[
@@ -55,9 +57,9 @@ pub fn install(args: &Args) -> Result<(), String> {
 }
 
 /// A new gateway or token without reinstalling; restarts the worker if it is installed.
-pub fn configure(args: &Args) -> Result<(), String> {
+pub fn configure(args: ConfigureArgs) -> anyhow::Result<()> {
     let current = config::load().ok();
-    let config = gateway_and_token(args, current.as_ref())?;
+    let config = gateway_and_token(args.gateway, &args.token, current.as_ref())?;
     config::save(&config)?;
     let mut facts = vec![("Gateway", config.gateway)];
     if paths::installed_binary().exists() {
@@ -68,7 +70,8 @@ pub fn configure(args: &Args) -> Result<(), String> {
     Ok(())
 }
 
-pub fn start() -> Result<(), String> {
+/// Starts (or restarts) the installed service.
+pub fn start() -> anyhow::Result<()> {
     config::load()?;
     let started = service::start(false, false)?;
     success(
@@ -78,7 +81,8 @@ pub fn start() -> Result<(), String> {
     Ok(())
 }
 
-pub fn stop() -> Result<(), String> {
+/// Stops the service and any worker still holding the lock.
+pub fn stop() -> anyhow::Result<()> {
     let kind = service::stop()?;
     success("Jian Remote stopped", &[("Service", kind)]);
     Ok(())
@@ -88,8 +92,7 @@ pub fn stop() -> Result<(), String> {
     clippy::unnecessary_wraps,
     reason = "every command returns the same result"
 )]
-pub fn uninstall(args: &Args) -> Result<(), String> {
-    let purge = args.flag(&["--purge"]);
+pub fn uninstall(purge: bool) -> anyhow::Result<()> {
     let removed = service::uninstall(purge);
     let mut facts: Vec<(&str, String)> =
         removed.into_iter().map(|path| ("Removed", path)).collect();
@@ -105,16 +108,15 @@ pub fn uninstall(args: &Args) -> Result<(), String> {
     Ok(())
 }
 
-/// `update [--version X]`: the installed binary from a release, checked against its SHA-256,
+/// `update --version X`: the installed binary from a release, checked against its SHA-256,
 /// then the service restarted onto it. The gateway can ask a running worker for the same.
-pub async fn update(args: &Args) -> Result<(), String> {
-    let version = args.option(&["--version"]).unwrap_or("latest");
+pub async fn update(version: &str) -> anyhow::Result<()> {
     let binary = paths::installed_binary();
     if !binary.exists() {
-        return Err(format!(
+        bail!(
             "No installed worker at {}. Install it first.",
             binary.display()
-        ));
+        );
     }
     let config = UpdateConfig {
         api_base: GITHUB_API.into(),
@@ -124,7 +126,9 @@ pub async fn update(args: &Args) -> Result<(), String> {
         // The bytes change, so the bundle's ad-hoc signature must be made again.
         after_install: Some(service::refresh_bundle),
     };
-    let outcome = jian_remote::update::update(version, &config).await?;
+    let outcome = jian_remote::update::update(version, &config)
+        .await
+        .context("The update failed")?;
     if outcome.from == outcome.to {
         success("Jian Remote is up to date", &[("Version", outcome.to)]);
         return Ok(());

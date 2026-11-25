@@ -8,6 +8,7 @@
 //! macOS may ask for the permissions again.
 #![cfg_attr(not(target_os = "macos"), allow(dead_code))]
 
+use anyhow::{Context as _, bail};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
@@ -129,11 +130,12 @@ pub fn sign(app: &Path, executable: &Path) {
 }
 
 /// Writes the bundle's Info.plist; the executable itself is put there by the install.
-pub fn write_bundle(app: &Path, version: &str) -> Result<(), String> {
+pub fn write_bundle(app: &Path, version: &str) -> anyhow::Result<()> {
     let contents = app.join("Contents");
-    std::fs::create_dir_all(contents.join("MacOS")).map_err(|error| error.to_string())?;
+    std::fs::create_dir_all(contents.join("MacOS"))
+        .with_context(|| format!("Could not create the bundle in {}", app.display()))?;
     std::fs::write(contents.join("Info.plist"), info_plist(version))
-        .map_err(|error| error.to_string())
+        .context("Could not write the bundle's Info.plist")
 }
 
 pub fn stop() {
@@ -148,14 +150,16 @@ pub fn stop() {
     );
 }
 
-pub fn start(executable: &Path) -> Result<(String, String), String> {
+pub fn start(executable: &Path) -> anyhow::Result<(String, String)> {
     let plist = plist_path();
     if let Some(parent) = plist.parent() {
-        std::fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+        std::fs::create_dir_all(parent)
+            .with_context(|| format!("Could not create {}", parent.display()))?;
     }
     let tmp = std::env::var("TMPDIR").unwrap_or_else(|_| "/tmp".into());
     let body = launch_agent_plist(executable, &paths::log_path(), &paths::home(), &tmp);
-    jian_remote::state::write_private(&plist, &body).map_err(|error| error.to_string())?;
+    jian_remote::state::write_private(&plist, &body)
+        .with_context(|| format!("Could not write {}", plist.display()))?;
     let plist = plist.to_string_lossy().into_owned();
     // Out again after writing, so KeepAlive cannot bring back the old definition.
     quiet("launchctl", &["bootout", &domain(), &plist]);
@@ -165,7 +169,7 @@ pub fn start(executable: &Path) -> Result<(String, String), String> {
         .status()
         .is_ok_and(|status| status.success());
     if !loaded {
-        return Err("Could not start Jian Remote with launchd.".into());
+        bail!("Could not start Jian Remote with launchd.");
     }
     let app = paths::macos_app_root();
     Ok((

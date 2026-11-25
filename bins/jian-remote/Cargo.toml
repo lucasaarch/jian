@@ -13,6 +13,9 @@ path = "src/main.rs"
 doc = false
 
 [dependencies]
+anyhow.workspace = true
+clap.workspace = true
+clap_complete.workspace = true
 jian-computer-use.workspace = true
 jian-remote.workspace = true
 reqwest.workspace = true

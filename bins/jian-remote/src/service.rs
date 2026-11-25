@@ -8,6 +8,7 @@ mod macos;
 #[cfg(windows)]
 mod windows;
 
+use anyhow::{Context as _, bail};
 use std::path::{Path, PathBuf};
 
 use jian_remote::error::UpdateError;
@@ -31,7 +32,7 @@ pub fn kind() -> &'static str {
 }
 
 /// Stops the service, and any worker still holding the lock however it was started.
-pub fn stop() -> Result<String, String> {
+pub fn stop() -> anyhow::Result<String> {
     #[cfg(target_os = "linux")]
     linux::stop();
     #[cfg(target_os = "macos")]
@@ -43,10 +44,10 @@ pub fn stop() -> Result<String, String> {
         && pid != std::process::id()
         && !lock::terminate(pid)
     {
-        return Err(format!(
+        bail!(
             "Stopped the {} job but worker pid {pid} is still running. Try again or kill it.",
             kind()
-        ));
+        );
     }
     let _ = std::fs::remove_file(&lock);
     Ok(kind().to_owned())
@@ -54,9 +55,8 @@ pub fn stop() -> Result<String, String> {
 
 /// Puts this binary where the service runs it. On a Mac that is inside the app bundle, which is
 /// written and signed around it.
-pub fn put_binary() -> Result<PathBuf, String> {
-    let source =
-        std::env::current_exe().map_err(|error| format!("Could not find this binary: {error}"))?;
+pub fn put_binary() -> anyhow::Result<PathBuf> {
+    let source = std::env::current_exe().context("Could not find this binary")?;
     let target = paths::installed_binary();
     let same = std::fs::canonicalize(&source).ok() == std::fs::canonicalize(&target).ok();
     if !same {
@@ -85,13 +85,13 @@ pub fn refresh_bundle(version: &str) -> Result<(), UpdateError> {
 
 /// Through a temporary file and a rename: the old binary may be running, and a half-copied one
 /// must never be what the service starts.
-fn copy_binary(source: &Path, target: &Path) -> Result<(), String> {
-    let parent = target.parent().ok_or("The install path has no folder.")?;
+fn copy_binary(source: &Path, target: &Path) -> anyhow::Result<()> {
+    let parent = target.parent().context("The install path has no folder.")?;
     std::fs::create_dir_all(parent)
-        .map_err(|error| format!("Could not create {}: {error}", parent.display()))?;
+        .with_context(|| format!("Could not create {}", parent.display()))?;
     let temporary = target.with_extension(format!("{}.tmp", std::process::id()));
     std::fs::copy(source, &temporary)
-        .map_err(|error| format!("Could not copy {}: {error}", source.display()))?;
+        .with_context(|| format!("Could not copy {}", source.display()))?;
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
@@ -100,26 +100,29 @@ fn copy_binary(source: &Path, target: &Path) -> Result<(), String> {
     if cfg!(windows) && target.exists() {
         let _ = std::fs::remove_file(target);
     }
-    std::fs::rename(&temporary, target).map_err(|error| {
-        let _ = std::fs::remove_file(&temporary);
-        format!("Could not install {}: {error}", target.display())
-    })
+    std::fs::rename(&temporary, target)
+        .inspect_err(|_| {
+            let _ = std::fs::remove_file(&temporary);
+        })
+        .with_context(|| format!("Could not install {}", target.display()))
 }
 
 /// Registers and starts the installed binary. `fresh` is a new install, which may pick a new
 /// Linux scope; `prefer_system` is `--system`.
-pub fn start(fresh: bool, prefer_system: bool) -> Result<Started, String> {
+pub fn start(fresh: bool, prefer_system: bool) -> anyhow::Result<Started> {
+    // A worker that would not die must not be started over; any other stop failure is moot, the
+    // start below replaces what ran.
     if let Err(error) = stop()
-        && error.contains("still running")
+        && error.to_string().contains("still running")
     {
         return Err(error);
     }
     let binary = paths::installed_binary();
     if !binary.exists() {
-        return Err(format!(
+        bail!(
             "No installed worker at {}. Run: jian-remote install --gateway … --token-prompt",
             binary.display()
-        ));
+        );
     }
     let _ = (fresh, prefer_system);
     #[cfg(target_os = "linux")]
@@ -129,7 +132,7 @@ pub fn start(fresh: bool, prefer_system: bool) -> Result<Started, String> {
     #[cfg(windows)]
     let started = windows::start(&binary);
     #[cfg(not(any(target_os = "linux", target_os = "macos", windows)))]
-    let started: Result<(String, String), String> = Err(format!(
+    let started: anyhow::Result<(String, String)> = Err(anyhow::anyhow!(
         "No service manager is supported here. Run: {} run",
         binary.display()
     ));
