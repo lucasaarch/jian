@@ -52,6 +52,14 @@
 //! are filtered by the tenant of the caller's token on every statement; that filter is their
 //! isolation, and the isolation tests cover it.
 //!
+//! # Import markers
+//!
+//! `platform.imports` keeps one row per tenant and domain of the import of the old Node Jian
+//! ([`Database::start_import`], [`Database::finish_import`], [`Database::imports`]): where the
+//! data came from, how many rows went in and how it ended. The reading and mapping are
+//! `jian-import`'s; the store only keeps the place, so a run that stopped halfway is found by
+//! the next one.
+//!
 //! # Migrations and schema versions
 //!
 //! [`Database::migrate`] brings the platform and then every tenant to the last migration, a few
@@ -108,6 +116,7 @@ mod database;
 mod devices;
 pub mod embedded;
 mod error;
+mod imports;
 mod invites;
 mod jobs;
 mod legacy;
@@ -132,6 +141,7 @@ pub use credentials::{CredentialKind, PasswordCredential};
 pub use database::{Database, DatabaseHealth, DatabaseSource, DatabaseUrl};
 pub use devices::Device;
 pub use error::StoreError;
+pub use imports::{ImportMarker, ImportResult, ImportStatus};
 pub use invites::{
     Accepted, Invite, InviteStatus, InviteTarget, IssuedInvite, MAX_INVITE_TOKEN_LEN, SendOutcome,
     SendStatus,

@@ -124,6 +124,55 @@ impl EmbeddedPostgres {
         &self.url
     }
 
+    /// Runs a SQL script (a `pg_dump` file, with its `COPY` data) against the server's own
+    /// database with the `psql` of the unpacked server, which streams the file instead of holding
+    /// it in memory. Stops at the first error. The password goes in the environment of that one
+    /// process, not on its command line.
+    ///
+    /// For the import of the old desktop app's export, on a scratch server of its own.
+    pub async fn run_sql_file(&self, path: &Path) -> Result<(), StoreError> {
+        let settings = self.server.settings();
+        let psql = settings
+            .binary_dir()
+            .join(format!("psql{}", std::env::consts::EXE_SUFFIX));
+        let (host, port, user, password) = (
+            settings.host.clone(),
+            settings.port.to_string(),
+            settings.username.clone(),
+            settings.password.clone(),
+        );
+        let file = path.to_path_buf();
+        let output = tokio::task::spawn_blocking(move || {
+            std::process::Command::new(psql)
+                .args(["--no-psqlrc", "--quiet", "--set=ON_ERROR_STOP=1", "--file"])
+                .arg(&file)
+                .env("PGHOST", host)
+                .env("PGPORT", port)
+                .env("PGUSER", user)
+                .env("PGPASSWORD", password)
+                .env("PGDATABASE", postgresql_embedded::BOOTSTRAP_DATABASE)
+                .stdout(std::process::Stdio::null())
+                .output()
+        })
+        .await
+        .map_err(|error| StoreError::SqlFile {
+            path: path.to_path_buf(),
+            reason: error.to_string(),
+        })?
+        .map_err(|error| StoreError::SqlFile {
+            path: path.to_path_buf(),
+            reason: format!("cannot run psql: {error}"),
+        })?;
+        if output.status.success() {
+            return Ok(());
+        }
+        let said = String::from_utf8_lossy(&output.stderr);
+        Err(StoreError::SqlFile {
+            path: path.to_path_buf(),
+            reason: said.trim().chars().take(400).collect(),
+        })
+    }
+
     /// Shuts the server down cleanly (a fast shutdown: sessions end, the cluster is checkpointed)
     /// and waits for it.
     pub async fn stop(self) -> Result<(), StoreError> {

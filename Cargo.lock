@@ -1389,6 +1389,7 @@ dependencies = [
  "directories",
  "futures-util",
  "jian-auth",
+ "jian-import",
  "jian-mail",
  "jian-server",
  "jian-store",
@@ -1465,6 +1466,21 @@ version = "0.1.0"
 [[package]]
 name = "jian-exec"
 version = "0.1.0"
+
+[[package]]
+name = "jian-import"
+version = "0.1.0"
+dependencies = [
+ "jian-store",
+ "jian-testkit",
+ "serde_json",
+ "sha2 0.10.9",
+ "sqlx",
+ "tempfile",
+ "thiserror",
+ "tokio",
+ "tracing",
+]
 
 [[package]]
 name = "jian-llm"

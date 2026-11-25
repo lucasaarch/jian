@@ -23,6 +23,15 @@ pub enum StoreError {
         /// The major this build runs.
         expected: u32,
     },
+    /// A SQL file could not be run on the embedded server. `reason` is what `psql` said, which
+    /// may quote a line of the file: do not show it where the file's content must not go.
+    #[error("cannot run the SQL file {path}: {reason}")]
+    SqlFile {
+        /// The file.
+        path: PathBuf,
+        /// What went wrong, shortened.
+        reason: String,
+    },
     /// A file or directory of the embedded server could not be read or written.
     #[error("cannot access {path}: {source}")]
     Io {

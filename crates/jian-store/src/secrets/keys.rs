@@ -206,7 +206,7 @@ impl LocalKeyring {
             .ok_or_else(|| StoreError::UnknownMasterKey(id.to_owned()))
     }
 
-    /// Decrypts a secret written by the Node Jian, for the import: JSON
+    /// Decrypts a secret of one agent written by the Node Jian, for the import: JSON
     /// `{"version":1,"keyId","iv","ciphertext","tag"}`, each field base64, AES-256-GCM, bound to
     /// `jian:secret:<profile_id>:<owner>`. The key is the one the old install named, which must be
     /// in this keyring. The result is meant to be written back with the vault, which encrypts it
@@ -215,6 +215,41 @@ impl LocalKeyring {
         &self,
         profile_id: &str,
         owner: &str,
+        envelope: &str,
+    ) -> Result<super::Secret, StoreError> {
+        self.decrypt_legacy_bound(&cipher::secret_aad(profile_id, owner), envelope)
+    }
+
+    /// [`decrypt_legacy`](LocalKeyring::decrypt_legacy) for a secret the whole old install shared
+    /// (a provider's key, an MCP token), which the Node Jian bound to
+    /// `jian:gateway-secret:<owner>` and not to an agent.
+    pub fn decrypt_legacy_gateway(
+        &self,
+        owner: &str,
+        envelope: &str,
+    ) -> Result<super::Secret, StoreError> {
+        self.decrypt_legacy_bound(format!("jian:gateway-secret:{owner}").as_bytes(), envelope)
+    }
+
+    /// A keyring of the old install's keys, only to read what they sealed: the first id in sort
+    /// order is named active because the type needs one, and nothing is ever wrapped with it.
+    /// Same JSON as [`from_json`](LocalKeyring::from_json); an empty list is refused.
+    pub fn for_reading_legacy(keys: &str) -> Result<Self, StoreError> {
+        let list: HashMap<String, String> = serde_json::from_str(keys).map_err(|_| {
+            StoreError::InvalidMasterKey(
+                "the key list is not a JSON object of key ids and base64 keys".to_owned(),
+            )
+        })?;
+        let first =
+            list.keys().min().cloned().ok_or_else(|| {
+                StoreError::InvalidMasterKey("the key list has no key".to_owned())
+            })?;
+        Self::from_json(keys, Some(&first))
+    }
+
+    fn decrypt_legacy_bound(
+        &self,
+        aad: &[u8],
         envelope: &str,
     ) -> Result<super::Secret, StoreError> {
         let bad = |reason| StoreError::MalformedEnvelope(reason);
@@ -235,10 +270,9 @@ impl LocalKeyring {
             .ok_or(bad("no key id"))?;
         let mut encrypted = field("ciphertext")?;
         encrypted.extend_from_slice(&field("tag")?);
-        let aad = cipher::secret_aad(profile_id, owner);
         let plain = cipher::open_parts(
             self.key(key_id)?,
-            &aad,
+            aad,
             &field("iv")?,
             &encrypted,
             "a legacy secret",
