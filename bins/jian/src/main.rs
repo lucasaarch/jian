@@ -16,7 +16,7 @@ use std::time::Duration;
 use anyhow::Context as _;
 use clap::Parser;
 use jian_store::embedded::EmbeddedConfig;
-use jian_store::{Database, DatabaseSource, DatabaseUrl};
+use jian_store::{Database, DatabaseSource, DatabaseUrl, TenantId, TenantStatus};
 use tokio::sync::oneshot;
 
 use crate::shutdown::Shutdown;
@@ -92,13 +92,39 @@ async fn main() -> anyhow::Result<()> {
         .await
         .context("cannot open the database")?;
     // From here the database is up, so every way out goes through `close` below.
-    let served = serve(&addr, &database, &mut shutdown).await;
+    let served = match prepare(&database).await {
+        Ok(()) => serve(&addr, &database, &mut shutdown).await,
+        Err(error) => Err(error),
+    };
     let closed = database
         .close()
         .await
         .context("cannot close the database cleanly");
     served?;
     closed
+}
+
+/// Brings the database to the latest migration and makes the one tenant of a self-hosted install.
+/// Both are safe to repeat: a second start finds nothing to do.
+async fn prepare(database: &Database) -> anyhow::Result<()> {
+    let report = database
+        .migrate()
+        .await
+        .context("cannot migrate the database")?;
+    // A tenant that cannot be migrated is left as it was and the others go on, which suits a
+    // shared gateway. Here it is the only tenant, so serving without it would serve nothing.
+    if let Some((tenant, error)) = report.failed.into_iter().next() {
+        return Err(anyhow::Error::new(error).context(format!("tenant {tenant} is not migrated")));
+    }
+    let tenant = TenantId::self_hosted();
+    let status = database
+        .create_tenant(&tenant)
+        .await
+        .context("cannot create the tenant")?;
+    if status == TenantStatus::Created {
+        tracing::info!(%tenant, "created the tenant of this install");
+    }
+    Ok(())
 }
 
 /// Serves until a stop signal, then drains. Returns `Ok` after a clean drain or a drain that hit

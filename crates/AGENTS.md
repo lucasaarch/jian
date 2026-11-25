@@ -53,3 +53,16 @@ formatting in `rustfmt.toml`, tests-may-unwrap in `clippy.toml`, licenses and ad
 - Code for macOS and Windows is checked from Linux with
   `cargo check -p jian-computer-use --target aarch64-apple-darwin` (and
   `x86_64-pc-windows-msvc`). Keep changes there small.
+
+## Migrations
+
+- SQL files in `crates/jian-store/migrations/`: `platform/` once, `tenant/` in the schema of every
+  tenant. Embedded in the binary; they apply on start, under a lock, so two gateways take turns.
+- Forward only, and immutable once pushed. Never edit, rename, reorder or delete a migration that
+  was pushed: sqlx stores each one's checksum and refuses to start on a changed or missing one
+  (a test holds this). A mistake is fixed by a new migration. A column or table is dropped in a
+  later release than the one that stopped using it.
+- A new file takes the next number (`0002_name.sql`). Each tenant's pending migrations run in one
+  transaction, so a failure leaves that tenant as it was; do not put `-- no-transaction` in one.
+- A query for a tenant goes through `Database::begin(&TenantCtx)`, never the pool. Its SQL is
+  written in the store with bound parameters, never assembled from user or model text.

@@ -4,8 +4,8 @@ use std::time::Duration;
 use sqlx::PgPool;
 use sqlx::postgres::PgPoolOptions;
 
-use crate::StoreError;
 use crate::embedded::{EmbeddedConfig, EmbeddedPostgres};
+use crate::{Migrations, StoreError};
 
 /// The longest a caller waits for a connection from the pool, and so for the first `SELECT 1`.
 const ACQUIRE_TIMEOUT: Duration = Duration::from_secs(5);
@@ -50,7 +50,8 @@ pub enum DatabaseSource {
 /// An open database: a pool that has answered `SELECT 1`, and the embedded server behind it when
 /// there is one.
 pub struct Database {
-    pool: PgPool,
+    pub(crate) pool: PgPool,
+    pub(crate) migrations: Migrations,
     embedded: Option<EmbeddedPostgres>,
 }
 
@@ -68,7 +69,11 @@ impl Database {
             }
         };
         match connect(&url).await {
-            Ok(pool) => Ok(Self { pool, embedded }),
+            Ok(pool) => Ok(Self {
+                pool,
+                migrations: Migrations::embedded(),
+                embedded,
+            }),
             Err(error) => {
                 if let Some(server) = embedded
                     && let Err(stop_error) = server.stop().await
@@ -80,9 +85,11 @@ impl Database {
         }
     }
 
-    /// The pool, for queries.
-    pub fn pool(&self) -> &PgPool {
-        &self.pool
+    /// Uses these migrations instead of the ones embedded in the binary. For tests.
+    #[must_use]
+    pub fn with_migrations(mut self, migrations: Migrations) -> Self {
+        self.migrations = migrations;
+        self
     }
 
     /// A cheap handle that answers whether the database responds, for the health endpoint.

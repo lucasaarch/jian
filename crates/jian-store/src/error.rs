@@ -1,5 +1,9 @@
 use std::path::PathBuf;
 
+use sqlx::migrate::MigrateError;
+
+use crate::TenantId;
+
 /// What can go wrong opening, running or closing the database.
 ///
 /// No variant carries a connection URL or a password, so a message is safe to log.
@@ -38,4 +42,38 @@ pub enum StoreError {
     /// The database did not accept a connection or answer `SELECT 1`.
     #[error("cannot connect to the database: {0}")]
     Connect(#[source] sqlx::Error),
+    /// A statement failed: the tenant's setup, a lookup, or a transaction that would not open.
+    #[error("the database failed to {action}: {source}")]
+    Query {
+        /// What was being done, as a verb phrase: `create a tenant`.
+        action: &'static str,
+        /// What Postgres said.
+        source: sqlx::Error,
+    },
+    /// Text that is not a valid tenant id (`[a-z0-9]{1,48}`). It is cut to 80 characters.
+    #[error("{0:?} is not a tenant id: use 1 to 48 lowercase letters and digits")]
+    InvalidTenantId(String),
+    /// No tenant has this id.
+    #[error("there is no tenant {0}")]
+    TenantNotFound(TenantId),
+    /// A platform migration failed, was edited after it was applied, or is missing. Nothing of
+    /// the platform's migrations stays applied.
+    #[error("the platform migrations failed: {0}")]
+    PlatformMigration(#[source] MigrateError),
+    /// A migration of one tenant failed. Nothing of that tenant's migrations stays applied, and
+    /// other tenants are not affected.
+    #[error("the migrations of tenant {tenant} failed: {source}")]
+    TenantMigration {
+        /// The tenant whose schema was being migrated.
+        tenant: TenantId,
+        /// Which migration, and why. A migration edited after it was applied says so here.
+        source: MigrateError,
+    },
+}
+
+impl StoreError {
+    /// The `map_err` argument that names what a failed statement was for.
+    pub(crate) fn query(action: &'static str) -> impl FnOnce(sqlx::Error) -> Self {
+        move |source| Self::Query { action, source }
+    }
 }

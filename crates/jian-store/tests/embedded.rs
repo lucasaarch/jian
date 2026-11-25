@@ -9,8 +9,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use jian_store::embedded::EmbeddedConfig;
-use jian_store::{Database, DatabaseSource, StoreError};
-use sqlx::Row as _;
+use jian_store::{Database, DatabaseSource, StoreError, TenantCtx, TenantId};
 
 fn scratch() -> tempfile::TempDir {
     tempfile::tempdir_in(env!("CARGO_TARGET_TMPDIR")).unwrap()
@@ -23,6 +22,21 @@ async fn open(data_dir: &Path) -> Database {
     }))
     .await
     .unwrap()
+}
+
+/// Migrates, makes the self-hosted tenant (both are no-ops the second time) and returns its context.
+async fn tenant(db: &Database) -> TenantCtx {
+    db.migrate().await.unwrap();
+    db.create_tenant(&TenantId::self_hosted()).await.unwrap();
+    db.tenant(TenantId::self_hosted()).await.unwrap()
+}
+
+/// Runs a statement as the tenant, committed, and returns the first column of its first row.
+async fn run(db: &Database, ctx: &TenantCtx, sql: &'static str) -> Option<String> {
+    let mut tx = db.begin(ctx).await.unwrap();
+    let rows: Vec<String> = sqlx::query_scalar(sql).fetch_all(&mut *tx).await.unwrap();
+    tx.commit().await.unwrap();
+    rows.into_iter().next()
 }
 
 /// Every file under `dir` with its bytes, to tell that nothing was added, removed or changed.
@@ -47,32 +61,25 @@ fn snapshot(dir: &Path) -> Vec<(PathBuf, Vec<u8>)> {
 async fn data_written_before_a_clean_stop_is_there_after_the_next_start() {
     let dir = scratch();
     let first = open(dir.path()).await;
-    let version: String = sqlx::query("SHOW server_version")
-        .fetch_one(first.pool())
-        .await
-        .unwrap()
-        .get(0);
+    let ctx = tenant(&first).await;
+    // Same server, same transaction as the tenant's queries: its major is the one pinned.
+    let version = run(&first, &ctx, "SHOW server_version").await.unwrap();
     assert!(
         version.starts_with("18."),
         "bundled Postgres is {version}, not 18"
     );
-    sqlx::query("CREATE TABLE note (body text)")
-        .execute(first.pool())
-        .await
-        .unwrap();
-    sqlx::query("INSERT INTO note VALUES ('kept')")
-        .execute(first.pool())
-        .await
-        .unwrap();
+    run(
+        &first,
+        &ctx,
+        "CREATE TABLE note AS SELECT 'kept'::text AS body",
+    )
+    .await;
     assert!(first.health().is_up().await);
     first.close().await.unwrap();
 
     let second = open(dir.path()).await;
-    let body: String = sqlx::query("SELECT body FROM note")
-        .fetch_one(second.pool())
-        .await
-        .unwrap()
-        .get(0);
+    let ctx = tenant(&second).await;
+    let body = run(&second, &ctx, "SELECT body FROM note").await.unwrap();
     assert_eq!(body, "kept");
     second.close().await.unwrap();
 
@@ -133,14 +140,13 @@ fn settle_after_kill(dir: &Path, postmaster: &str) {
 async fn a_committed_row_survives_the_server_being_killed() {
     let dir = scratch();
     let first = open(dir.path()).await;
-    sqlx::query("CREATE TABLE note (body text)")
-        .execute(first.pool())
-        .await
-        .unwrap();
-    sqlx::query("INSERT INTO note VALUES ('committed')")
-        .execute(first.pool())
-        .await
-        .unwrap();
+    let ctx = tenant(&first).await;
+    run(
+        &first,
+        &ctx,
+        "CREATE TABLE note AS SELECT 'committed'::text AS body",
+    )
+    .await;
 
     // The first line of postmaster.pid is the postmaster's process id.
     let pid_file = fs::read_to_string(dir.path().join("pgdata/postmaster.pid")).unwrap();
@@ -157,11 +163,8 @@ async fn a_committed_row_survives_the_server_being_killed() {
     drop(first);
 
     let second = open(dir.path()).await;
-    let body: String = sqlx::query("SELECT body FROM note")
-        .fetch_one(second.pool())
-        .await
-        .unwrap()
-        .get(0);
+    let ctx = tenant(&second).await;
+    let body = run(&second, &ctx, "SELECT body FROM note").await.unwrap();
     assert_eq!(body, "committed");
     second.close().await.unwrap();
 }
