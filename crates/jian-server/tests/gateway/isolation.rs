@@ -29,6 +29,7 @@ const QUIET: Duration = Duration::from_millis(300);
 const THIS_FILE: &str = include_str!("isolation.rs");
 /// The invitation tests are in their own file, and the isolation one is among them.
 const INVITES_FILE: &str = include_str!("invites.rs");
+const PROVIDERS_FILE: &str = include_str!("providers.rs");
 
 async fn start() -> (Gateway, TwoTenants) {
     super::accounts::start(open_settings()).await
@@ -36,7 +37,9 @@ async fn start() -> (Gateway, TwoTenants) {
 
 fn is_a_test_here(name: &str) -> bool {
     let declared = format!("async fn {name}(");
-    THIS_FILE.contains(&declared) || INVITES_FILE.contains(&declared)
+    THIS_FILE.contains(&declared)
+        || INVITES_FILE.contains(&declared)
+        || PROVIDERS_FILE.contains(&declared)
 }
 
 /// Every route the router serves, and the test here that shows tenant B cannot use it on A's
@@ -60,6 +63,11 @@ const ROUTE_TESTS: &[(&str, &str)] = &[
     ("GET /v1/settings/mail", INVITES_TEST),
     ("PUT /v1/settings/mail", INVITES_TEST),
     ("DELETE /v1/settings/mail", INVITES_TEST),
+    ("GET /v1/providers", PROVIDERS_TEST),
+    ("POST /v1/providers", PROVIDERS_TEST),
+    ("POST /v1/providers/{id}/activate", PROVIDERS_TEST),
+    ("POST /v1/providers/{id}/revoke", PROVIDERS_TEST),
+    ("GET /v1/providers/models", PROVIDERS_TEST),
     (
         "GET /v1/machines/connect",
         "a_worker_of_one_tenant_neither_gets_nor_answers_the_others_tasks",
@@ -74,6 +82,9 @@ const ROUTE_TESTS: &[(&str, &str)] = &[
 /// tenant A's invitation, and that A's job sends with A's own account.
 const INVITES_TEST: &str =
     "an_invitation_is_sent_with_its_own_workspaces_mail_account_and_nobody_elses";
+
+/// The test that shows tenant B reaches no model provider account of tenant A, and no key.
+const PROVIDERS_TEST: &str = "provider_accounts_of_the_other_tenant_are_out_of_reach";
 
 /// The test that shows tenant B reaches no member, session or invitation of tenant A.
 const USERS_TEST: &str = "users_and_sessions_of_the_other_tenant_are_out_of_reach";

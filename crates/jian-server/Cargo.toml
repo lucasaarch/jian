@@ -8,6 +8,7 @@ license.workspace = true
 axum = { workspace = true, features = ["ws"] }
 futures-util.workspace = true
 jian-auth.workspace = true
+jian-core.workspace = true
 jian-mail.workspace = true
 jian-protocol.workspace = true
 jian-store.workspace = true

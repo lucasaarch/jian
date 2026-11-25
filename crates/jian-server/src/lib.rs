@@ -64,6 +64,7 @@ mod jobs;
 mod mail;
 mod mail_settings;
 mod members;
+mod providers;
 mod public_url;
 mod rate;
 mod slots;
@@ -114,6 +115,11 @@ pub const ROUTES: &[&str] = &[
     "GET /v1/settings/mail (an admin)",
     "PUT /v1/settings/mail (an admin)",
     "DELETE /v1/settings/mail (an admin)",
+    "GET /v1/providers (an admin)",
+    "POST /v1/providers (an admin)",
+    "POST /v1/providers/{id}/activate (an admin)",
+    "POST /v1/providers/{id}/revoke (an admin)",
+    "GET /v1/providers/models (a session or token)",
     "GET /v1/machines/connect (WebSocket, a machine's token)",
     "GET /v1/ws (WebSocket, the owner's or a phone's token)",
 ];
@@ -258,6 +264,13 @@ pub fn router_with(state: AppState, extra: Router<AppState>) -> Router {
                 .put(mail_settings::put)
                 .delete(mail_settings::delete),
         )
+        .route(
+            "/v1/providers",
+            get(providers::list).post(providers::create),
+        )
+        .route("/v1/providers/models", get(providers::catalog))
+        .route("/v1/providers/{id}/activate", post(providers::activate))
+        .route("/v1/providers/{id}/revoke", post(providers::revoke))
         .layer(DefaultBodyLimit::max(MAX_ACCOUNT_BODY));
     Router::new()
         .route("/health", get(health))

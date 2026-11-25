@@ -7,6 +7,7 @@
 mod accounts;
 mod invites;
 mod isolation;
+mod providers;
 mod slots;
 mod support;
 

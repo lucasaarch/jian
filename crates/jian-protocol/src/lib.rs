@@ -11,3 +11,4 @@
 pub mod auth;
 pub mod client;
 pub mod machine;
+pub mod providers;
