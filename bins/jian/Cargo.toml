@@ -1,0 +1,10 @@
+[package]
+name = "jian"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+axum.workspace = true
+jian-server = { path = "../../crates/jian-server" }
+tokio.workspace = true

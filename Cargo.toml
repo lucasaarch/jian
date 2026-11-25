@@ -1,8 +1,17 @@
-# The Rust side of the repository: the native Computer Use helper so far. Node owns everything
-# else; pnpm and the Makefile never read this file.
+# The Rust side of the repository: the native Computer Use helper, and the Rust core that will
+# replace the Node gateway. The Node apps and packages stay untouched; pnpm never reads this file.
 [workspace]
 resolver = "3"
-members = ["packages/remote-core/native"]
+members = ["packages/remote-core/native", "crates/*", "bins/*"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "Apache-2.0"
+
+[workspace.dependencies]
+axum = "0.8"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "net"] }
 
 # The helper ships as one small binary per platform.
 [profile.release]

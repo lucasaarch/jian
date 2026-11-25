@@ -1,0 +1,131 @@
+//! What each OS provides. The protocol, key chords, pointer motion and screenshot fitting are
+//! shared; reading the display, posting input and drawing the pointer differ, and they live
+//! behind these traits.
+
+use std::time::Duration;
+
+use crate::cursor::Look;
+use crate::keys::Chord;
+use crate::protocol::{Button, Direction, Failure, Point};
+use crate::screenshot::Frame;
+
+#[cfg(target_os = "macos")]
+mod macos;
+#[cfg(target_os = "macos")]
+pub use macos::{Mac as Native, run};
+
+#[cfg(target_os = "linux")]
+mod linux;
+#[cfg(target_os = "linux")]
+pub use linux::{Linux as Native, run};
+
+#[cfg(windows)]
+mod windows;
+#[cfg(windows)]
+pub use windows::{Windows as Native, run};
+
+#[cfg(not(any(target_os = "macos", target_os = "linux", windows)))]
+compile_error!("The computer helper runs on macOS, Linux (X11) and Windows.");
+
+/// The primary display: its size in points, which input uses, and in pixels, which a capture has.
+#[derive(Debug, Clone, Copy)]
+pub struct Geometry {
+    pub point_width: f64,
+    pub point_height: f64,
+    pub pixel_width: f64,
+    pub pixel_height: f64,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct SessionStatus {
+    pub locked: bool,
+    pub display_asleep: bool,
+}
+
+impl SessionStatus {
+    /// The worker reports this to the gateway, so a locked machine reads as locked, not offline.
+    pub fn state(self) -> &'static str {
+        if self.locked {
+            "locked"
+        } else if self.display_asleep {
+            "display_asleep"
+        } else {
+            "unlocked"
+        }
+    }
+}
+
+/// What a request needs the system to allow.
+#[derive(Debug, Clone, Copy)]
+pub enum Need {
+    /// Reading the display.
+    Screen,
+    /// Typing, which goes to whichever window has the keyboard.
+    Keyboard,
+    /// Clicking, dragging or scrolling at a point, which goes to the window under it. Only
+    /// Windows reads the point (a window above the helper's integrity level refuses input).
+    Mouse(#[cfg_attr(not(windows), allow(dead_code))] Point),
+}
+
+/// Lets go of a key or a button when it goes out of scope, however the code between the press
+/// and the release ends: an error half way, or a panic, must not leave it held on the user's
+/// machine, where it would drag or type into whatever comes next.
+pub struct Held<F: FnMut()>(pub F);
+
+impl<F: FnMut()> Drop for Held<F> {
+    fn drop(&mut self) {
+        (self.0)();
+    }
+}
+
+/// Reading the display and acting on it, as the user's own mouse and keyboard would.
+pub trait Platform {
+    /// One capture of the display, which `scale` may draw more than once at smaller sizes.
+    type Capture;
+
+    /// Says no before anything is tried when the system would not let it happen: a permission
+    /// the user has not given, or a window the helper may not drive. Asked before every request
+    /// that reads the display or posts input, so a refusal is known to have touched nothing.
+    fn preflight(&self, _need: Need) -> Result<(), Failure> {
+        Ok(())
+    }
+
+    fn geometry(&self) -> Result<Geometry, String>;
+    fn session_status(&self) -> SessionStatus;
+    fn capture(&self) -> Result<Self::Capture, String>;
+    fn scale(&self, capture: &Self::Capture, max_width: u32) -> Result<Frame, String>;
+    /// Where the user's own cursor is.
+    fn cursor(&self) -> Result<Point, String>;
+
+    /// Clicks at `at` and puts the user's own cursor back where it was.
+    fn click_at(&self, at: Point, button: Button, count: u8) -> Result<(), String>;
+    /// Presses at `from`, moves through `path` calling `step` at each point, releases at its end.
+    fn drag(&self, from: Point, path: &[Point], step: &mut dyn FnMut(Point)) -> Result<(), String>;
+    fn type_text(&self, text: &str) -> Result<(), String>;
+    fn key(&self, chord: Chord) -> Result<(), String>;
+    fn scroll(&self, at: Point, direction: Direction, amount: u32) -> Result<(), String>;
+}
+
+/// How strongly the agent's pointer shows: while it works, or faint between actions.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Presence {
+    Active,
+    Idle,
+}
+
+/// One agent's own pointer, drawn over everything and never taking a click: the user sees
+/// where each agent works while their own cursor stays theirs.
+pub trait Pointer {
+    /// A pointer that looks like `look`, not yet shown. Dropping it takes it off the screen.
+    fn new(look: &Look) -> Self;
+    fn show(&mut self, presence: Presence);
+    /// Hides it and forgets where it was; the next session starts at the user's cursor.
+    fn hide(&mut self);
+    /// Draws the tip at `at` at once; `motion` decides the steps in between.
+    fn place(&mut self, at: Point);
+    /// The ripple of a click under the tip.
+    fn flash(&mut self);
+    /// Lets the pointer draw for `pause` before the next step.
+    fn wait(&mut self, pause: Duration);
+    fn tip(&self) -> Option<Point>;
+}
