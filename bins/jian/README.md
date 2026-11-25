@@ -168,6 +168,30 @@ is implemented in this binary. Without it the login, invitation and add routes a
 Cloud signs people in by other means). The owner and device tokens work either way. The crate
 `jian-auth` has the sign-in flows with no HTTP, for a backend that serves them itself.
 
+## Import from the old Jian
+
+The old Node Jian's owner, secrets, machines and phones come over into the install's workspace. It
+only reads the old data. Everything else the old one held (conversations, agents, memories...) is
+listed with its row count and waits for the core to have a table for it.
+
+```sh
+# Stop the gateway first when it uses the embedded Postgres.
+jian import --from old.sql --import-master-key <base64> --import-owner-email me@example.com
+jian import status
+```
+
+- Source: a `.sql` dump made with `pg_dump` (the desktop app's PGlite database is not a native
+  Postgres, so it is exported to a dump first; see the `jian-import` crate docs), or the old
+  gateway's `postgres://` URL.
+- Keys: `--import-master-key` / `JIAN_IMPORT_MASTER_KEY` (the desktop app's key),
+  `--import-master-keys` / `JIAN_IMPORT_MASTER_KEYS` (the server's JSON). Without them the
+  secrets are skipped. The desktop app's `local-gateway.json` is read when its key is not sealed.
+- Owner: the old Jian keeps no e-mail, so `--import-owner-email` / `JIAN_IMPORT_OWNER_EMAIL`
+  makes that address the first admin, with no password; set one with `jian users reset-password`.
+- At start, `--import-from` / `JIAN_IMPORT_FROM` (or an `export.sql` in the old desktop folder)
+  imports the domains not done yet. A failure is logged and never stops the start. Running again
+  never duplicates and never overwrites a row.
+
 ## Talk to it
 
 ```bash

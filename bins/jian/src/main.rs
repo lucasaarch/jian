@@ -10,6 +10,7 @@
 #![allow(clippy::print_stdout)]
 
 mod debug_jobs;
+mod import_cli;
 mod mail_flags;
 mod owner_token;
 mod shutdown;
@@ -30,13 +31,14 @@ use jian_server::{
 use jian_store::embedded::EmbeddedConfig;
 use jian_store::secrets::{LocalKeyring, MasterKeys as _};
 use jian_store::{
-    Database, DatabaseSource, DatabaseUrl, NewJob, SlotOptions, TenantId, TenantStatus,
+    Database, DatabaseSource, DatabaseUrl, NewJob, SlotOptions, TenantCtx, TenantId, TenantStatus,
 };
 use tokio::sync::oneshot;
 use tokio_util::sync::CancellationToken;
 
 use jian_auth::{Auth, AuthPolicy, CredentialKind, PasswordParams};
 
+use crate::import_cli::{ImportArgs, ImportFlags};
 use crate::owner_token::Source;
 use crate::shutdown::Shutdown;
 use crate::users_cli::UsersAction;
@@ -136,6 +138,9 @@ struct Cli {
     public_url: Option<PublicUrl>,
 
     #[command(flatten)]
+    import: ImportFlags,
+
+    #[command(flatten)]
     mail: mail_flags::MailFlags,
 
     #[command(subcommand)]
@@ -155,6 +160,9 @@ enum Command {
         #[command(subcommand)]
         action: UsersAction,
     },
+    /// Bring the old Node Jian's data over: `--from <dump.sql | postgres://...>`, or `status`.
+    /// With the embedded Postgres, stop the gateway first: this starts that database itself.
+    Import(ImportArgs),
     /// The job queue, for trying it by hand.
     Jobs {
         #[command(subcommand)]
@@ -277,6 +285,7 @@ async fn main() -> anyhow::Result<()> {
         ..Settings::default()
     };
     let source = cli.database_source()?;
+    let data_dir = cli.data_dir()?;
     let (owner, owner_source) = owner_token::resolve(cli.api_token.as_deref(), &cli.data_dir()?)
         .context("cannot get the owner's token")?;
     match &source {
@@ -307,8 +316,12 @@ async fn main() -> anyhow::Result<()> {
         Some(Command::Jobs {
             action: JobsAction::EnqueueTest { message, work_ms },
         }) => enqueue_test(&database, &message, work_ms).await,
+        Some(Command::Import(args)) => import_command(&database, &cli, args).await,
         None => match prepare(&database, &owner).await {
-            Ok(()) => serve(&addr, &database, &owner_source, settings, &mut shutdown).await,
+            Ok(ctx) => {
+                import_cli::at_boot(&database, &ctx, &cli.import, &data_dir).await;
+                serve(&addr, &database, &owner_source, settings, &mut shutdown).await
+            }
             Err(error) => Err(error),
         },
     };
@@ -373,7 +386,7 @@ async fn enqueue_test(
 
 /// Brings the database to the latest migration and makes the one tenant of a self-hosted install.
 /// Both are safe to repeat: a second start finds nothing to do.
-async fn prepare(database: &Database, owner_token: &str) -> anyhow::Result<()> {
+async fn prepare(database: &Database, owner_token: &str) -> anyhow::Result<TenantCtx> {
     let report = database
         .migrate()
         .await
@@ -413,7 +426,16 @@ async fn prepare(database: &Database, owner_token: &str) -> anyhow::Result<()> {
         .set_owner_token(&ctx, owner_token)
         .await
         .context("cannot set the owner's token (JIAN_API_TOKEN needs at least 32 characters)")?;
-    Ok(())
+    Ok(ctx)
+}
+
+/// `jian import`: the install's tenant must exist, so the gateway has run once on this database.
+async fn import_command(database: &Database, cli: &Cli, args: ImportArgs) -> anyhow::Result<()> {
+    let ctx = database
+        .tenant(TenantId::self_hosted())
+        .await
+        .context("cannot open the tenant; has the gateway run once on this database?")?;
+    import_cli::run(database, &ctx, &cli.import, &cli.data_dir()?, args).await
 }
 
 /// Every job kind this binary runs.
@@ -713,5 +735,13 @@ mod tests {
             panic!("expected jobs enqueue-test");
         };
         assert_eq!((message.as_str(), work_ms), ("hi", Some(2000)));
+    }
+
+    #[test]
+    fn import_takes_a_source_or_status() {
+        let cli = Cli::try_parse_from(["jian", "import", "--from", "old.sql"]).unwrap();
+        assert!(matches!(cli.command, Some(Command::Import(_))));
+        let cli = Cli::try_parse_from(["jian", "import", "status"]).unwrap();
+        assert!(matches!(cli.command, Some(Command::Import(_))));
     }
 }
