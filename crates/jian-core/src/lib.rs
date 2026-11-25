@@ -10,7 +10,7 @@ mod catalog;
 mod message;
 mod provider;
 
-pub use catalog::{ModelInfo, models};
+pub use catalog::ModelInfo;
 pub use message::{
     MAX_PARTS, MAX_TEXT_BYTES, MessagePart, MessageParts, PartsError, ThreadKind, Visibility,
 };

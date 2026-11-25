@@ -71,7 +71,8 @@ impl std::fmt::Debug for CreateProviderRequest {
     }
 }
 
-/// One model the gateway knows by name.
+/// One model an account says it may call. Everything but the id may be missing: a vendor that
+/// does not say is a gap, never a guess.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[ts(export)]
 #[serde(rename_all = "camelCase")]
@@ -79,31 +80,50 @@ pub struct ModelSummary {
     /// The id a request sends.
     pub id: String,
     /// What a person calls it.
-    pub name: String,
+    pub name: Option<String>,
     /// Prompt and answer together, in tokens.
-    pub context_window: u32,
+    pub context_window: Option<u32>,
     /// The most one answer holds, in tokens.
-    pub max_output_tokens: u32,
+    pub max_output_tokens: Option<u32>,
+    /// What it reads: `text`, `image`, `pdf`, `audio`, `video`.
+    pub input_modalities: Vec<String>,
+    /// What it writes, in the same words.
+    pub output_modalities: Vec<String>,
+    /// The reasoning levels it takes, weakest first.
+    pub reasoning_efforts: Vec<String>,
+    /// The family the vendor files it under.
+    pub line: Option<String>,
+    /// Where it is in its life (`active`, `deprecated`...).
+    pub lifecycle: Option<String>,
 }
 
-/// A vendor and the models listed for it. Empty for vendors whose server names its own.
+/// One account and the models it sees.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[ts(export)]
 #[serde(rename_all = "camelCase")]
-pub struct ProviderModels {
+pub struct AccountModels {
+    /// The account.
+    pub account_id: String,
     /// The vendor.
     pub provider: String,
-    /// Its models.
+    /// How the account signs in.
+    pub mode: String,
+    /// What the owner calls it.
+    pub label: String,
+    /// Its models. Empty when `error` is set.
     pub models: Vec<ModelSummary>,
+    /// Why the account could not be listed, in words that name no key.
+    pub error: Option<String>,
 }
 
-/// `GET /v1/providers/models`: the static catalog, every vendor.
+/// `GET /v1/providers/models`: what each of the workspace's accounts sees, read from the
+/// provider and kept a few hours. Never a list from memory.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[ts(export)]
 #[serde(rename_all = "camelCase")]
 pub struct ModelCatalog {
-    /// One entry per vendor.
-    pub providers: Vec<ProviderModels>,
+    /// One entry per live account.
+    pub accounts: Vec<AccountModels>,
 }
 
 /// One usage window of a subscription.

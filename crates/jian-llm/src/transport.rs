@@ -117,6 +117,40 @@ impl Transport {
         Ok(event_stream(response, decoder, self.config.idle_timeout))
     }
 
+    /// Reads `url` as JSON, with the same retries and refusals as a stream. A body longer than
+    /// `max_bytes` is an error, not a truncated list: an address the owner typed may answer with
+    /// anything.
+    pub(crate) async fn get_json(
+        &self,
+        url: &str,
+        headers: &[(&str, &str)],
+        max_bytes: usize,
+    ) -> Result<Value, LlmError> {
+        let mut response = self.open(url, headers, None).await?;
+        let mut body = Vec::new();
+        let read = async {
+            while let Some(chunk) = response.chunk().await.map_err(|error| {
+                LlmError::Network(scrub(&error.without_url().to_string(), self.key()))
+            })? {
+                if body.len() + chunk.len() > max_bytes {
+                    return Err(LlmError::Stream(
+                        "the answer is too long to read".to_owned(),
+                    ));
+                }
+                body.extend_from_slice(&chunk);
+            }
+            Ok(())
+        };
+        tokio::time::timeout(
+            self.config.idle_timeout.max(self.config.first_byte_timeout),
+            read,
+        )
+        .await
+        .map_err(|_| LlmError::Network("the provider stopped answering".to_owned()))??;
+        serde_json::from_slice(&body)
+            .map_err(|_| LlmError::Stream("the answer is not the provider's format".to_owned()))
+    }
+
     /// The answer's headers, after as many tries as a temporary failure allows. Nothing has been
     /// read from the stream yet, so no retry can repeat output a caller already saw.
     async fn open(

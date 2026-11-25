@@ -21,18 +21,21 @@ mod error;
 mod event;
 mod gemini;
 mod limits;
+mod listing;
+mod models;
 mod openai;
 mod request;
 mod sse;
 mod transport;
 
 use futures_util::future::BoxFuture;
-use jian_core::{AccountMode, ProviderKind};
+use jian_core::{AccountMode, ModelInfo, ProviderKind};
 
 pub use decode::EventStream;
 pub use error::LlmError;
 pub use event::{Event, StopReason, ToolCall, Usage};
 pub use limits::{LimitWindow, LimitsBoard, LimitsSink, SubscriptionLimits};
+pub use models::ModelCatalog;
 pub use request::{Effort, Message, Params, Part, Request, Role, TextBlock, ToolSpec};
 pub use transport::HttpConfig;
 
@@ -42,6 +45,11 @@ pub trait Provider: Send + Sync {
     /// limits) is this call's error, and what the model says comes on the stream. Temporary
     /// failures are retried here, before any byte reaches the caller.
     fn stream<'a>(&'a self, request: &'a Request) -> BoxFuture<'a, Result<EventStream, LlmError>>;
+
+    /// What the account itself says it may call, every page of it. A vendor that cannot be
+    /// reached or read is an error: a list from memory would offer models the account may not
+    /// have.
+    fn list_models(&self) -> BoxFuture<'_, Result<Vec<ModelInfo>, LlmError>>;
 }
 
 /// The provider for an account that signs in with an API key: its vendor, its key, and the

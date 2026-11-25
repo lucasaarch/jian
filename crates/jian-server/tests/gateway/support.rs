@@ -117,7 +117,7 @@ impl Gateway {
             slots: keeper.ownership(),
             shutdown: stop.clone(),
             settings,
-            llm: jian_server::LlmAccess::default(),
+            llm: no_network(),
         };
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
@@ -496,5 +496,19 @@ impl RealWorker {
             .await
             .expect("the worker stops")
             .unwrap()
+    }
+}
+
+/// A gateway that cannot reach any provider or models.dev: a closed port answers at once, with no
+/// retry, so a test of the route's errors is quick and never leaves the machine.
+fn no_network() -> jian_server::LlmAccess {
+    let http = jian_llm::HttpConfig {
+        max_retries: 0,
+        ..jian_llm::HttpConfig::default()
+    };
+    jian_server::LlmAccess {
+        catalog: jian_llm::ModelCatalog::new("http://127.0.0.1:9/models.json", http.clone()),
+        http,
+        ..jian_server::LlmAccess::default()
     }
 }

@@ -138,6 +138,34 @@ async fn provider_accounts_of_the_other_tenant_are_out_of_reach() {
     .await;
     assert_eq!(status, 204);
 
+    // The models are read from each account of the workspace, as an admin. A's one account
+    // points at a closed port: it is listed with a reason that names no key, and no list from
+    // memory stands in. B has no accounts, so nothing of A's shows there.
+    let (status, text) =
+        http_get(gateway.addr, "/v1/providers/models", Some(&a.admin_session)).await;
+    assert_eq!(status, 200, "{text}");
+    assert!(!text.contains(KEY_A));
+    let seen: ModelCatalog = serde_json::from_str(&text).unwrap();
+    assert_eq!(seen.accounts.len(), 1);
+    assert_eq!(seen.accounts[0].account_id, made.id);
+    assert!(seen.accounts[0].models.is_empty() && seen.accounts[0].error.is_some());
+    let (status, text) =
+        http_get(gateway.addr, "/v1/providers/models", Some(&b.admin_session)).await;
+    assert_eq!(status, 200, "{text}");
+    assert!(
+        serde_json::from_str::<ModelCatalog>(&text)
+            .unwrap()
+            .accounts
+            .is_empty()
+    );
+    let (status, _) = http_get(
+        gateway.addr,
+        "/v1/providers/models",
+        Some(&a.member_session),
+    )
+    .await;
+    assert!(matches!(status, 401 | 403), "{status}");
+
     // The owner activates and revokes their own.
     let (status, text) =
         http_post(gateway.addr, &activate, Some(&a.admin_session), &json!({})).await;
@@ -151,21 +179,6 @@ async fn provider_accounts_of_the_other_tenant_are_out_of_reach() {
     assert_eq!(status, 204);
     assert!(listed(&gateway, &a.admin_session).await.is_empty());
 
-    // The catalog holds nothing of a tenant, and a signed-in member may read it.
-    let (status, text) = http_get(
-        gateway.addr,
-        "/v1/providers/models",
-        Some(&b.member_session),
-    )
-    .await;
-    assert_eq!(status, 200, "{text}");
-    let catalog: ModelCatalog = serde_json::from_str(&text).unwrap();
-    assert!(
-        catalog
-            .providers
-            .iter()
-            .any(|p| p.provider == "anthropic" && !p.models.is_empty())
-    );
     let (status, _) = http_get(gateway.addr, "/v1/providers/models", None).await;
     assert_eq!(status, 401);
     gateway.stop().await;

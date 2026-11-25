@@ -1,7 +1,7 @@
 //! What the gateway needs to reach model providers for its tenants: how long to wait, and what
 //! each subscription account's last answer said of its usage.
 
-use jian_llm::{HttpConfig, LimitsBoard};
+use jian_llm::{HttpConfig, LimitsBoard, ModelCatalog};
 
 /// Shared by every handler. Cloning shares the board.
 #[derive(Clone, Debug, Default)]
@@ -10,6 +10,8 @@ pub struct LlmAccess {
     pub http: HttpConfig,
     /// The usage windows of subscription accounts, from the answers they last gave.
     pub limits: LimitsBoard,
+    /// The models each account sees, and models.dev's capabilities, kept for a few hours.
+    pub catalog: ModelCatalog,
 }
 
 impl LlmAccess {

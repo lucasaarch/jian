@@ -5,11 +5,13 @@ mod subscription;
 use std::collections::HashMap;
 
 use futures_util::future::BoxFuture;
+use jian_core::ModelInfo;
 use serde_json::{Value, json};
 use zeroize::Zeroizing;
 
 use crate::decode::{Decoder, EventStream, count, cut_short, parse, stream_failure};
 use crate::limits::LimitsSink;
+use crate::listing;
 use crate::sse::SseEvent;
 use crate::transport::{HttpConfig, Transport};
 use crate::{Event, LlmError, Part, Provider, Request, Role, StopReason, ToolCall, Usage};
@@ -87,6 +89,13 @@ impl Provider for Anthropic {
                     AnthropicDecoder::default(),
                 )
                 .await
+        })
+    }
+
+    fn list_models(&self) -> BoxFuture<'_, Result<Vec<ModelInfo>, LlmError>> {
+        Box::pin(async move {
+            let bearer = Zeroizing::new(format!("Bearer {}", self.http.key()));
+            listing::anthropic(&self.http, &self.base_url, &self.headers(&bearer)).await
         })
     }
 }

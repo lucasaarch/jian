@@ -3,9 +3,11 @@
 use std::collections::HashMap;
 
 use futures_util::future::BoxFuture;
+use jian_core::ModelInfo;
 use serde_json::{Value, json};
 
 use crate::decode::{Decoder, EventStream, count, parse, stream_failure};
+use crate::listing;
 use crate::sse::SseEvent;
 use crate::transport::{HttpConfig, Transport};
 use crate::{Event, LlmError, Part, Provider, Request, Role, StopReason, ToolCall, Usage};
@@ -46,6 +48,13 @@ impl Provider for Gemini {
             self.http
                 .stream(&url, &headers, &body(request), GeminiDecoder::default())
                 .await
+        })
+    }
+
+    fn list_models(&self) -> BoxFuture<'_, Result<Vec<ModelInfo>, LlmError>> {
+        Box::pin(async move {
+            let headers = [("x-goog-api-key", self.http.key())];
+            listing::gemini(&self.http, &self.base_url, &headers).await
         })
     }
 }

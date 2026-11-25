@@ -4,9 +4,11 @@
 use std::collections::BTreeMap;
 
 use futures_util::future::BoxFuture;
+use jian_core::ModelInfo;
 use serde_json::{Value, json};
 
 use crate::decode::{Decoder, EventStream, count, cut_short, parse, stream_failure};
+use crate::listing;
 use crate::sse::SseEvent;
 use crate::transport::{HttpConfig, Transport};
 use crate::{Event, LlmError, Part, Provider, Request, Role, StopReason, ToolCall, Usage};
@@ -41,6 +43,20 @@ impl Provider for Compatible {
             self.http
                 .stream(&url, &headers, &body(request), ChatDecoder::default())
                 .await
+        })
+    }
+
+    fn list_models(&self) -> BoxFuture<'_, Result<Vec<ModelInfo>, LlmError>> {
+        Box::pin(async move {
+            let url = format!("{}/models", self.base_url);
+            let authorization = format!("Bearer {}", self.http.key());
+            // A local server has no key; a header with nothing after `Bearer` would be refused.
+            let headers: Vec<(&str, &str)> = if self.http.key().is_empty() {
+                Vec::new()
+            } else {
+                vec![("authorization", authorization.as_str())]
+            };
+            listing::openai_style(&self.http, &url, &headers).await
         })
     }
 }

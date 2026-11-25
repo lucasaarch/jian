@@ -126,7 +126,7 @@ pub const ROUTES: &[&str] = &[
     "POST /v1/providers/{id}/activate (an admin)",
     "POST /v1/providers/{id}/revoke (an admin)",
     "GET /v1/providers/{id}/usage (an admin)",
-    "GET /v1/providers/models (a session or token)",
+    "GET /v1/providers/models (an admin)",
     "GET /v1/agents (a member)",
     "POST /v1/agents (an admin, or a member with the agents.create grant)",
     "GET /v1/agents/{id} (a member who sees it)",

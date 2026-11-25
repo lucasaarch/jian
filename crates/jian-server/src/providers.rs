@@ -7,9 +7,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use axum::Json;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
-use jian_core::{AccountMode, ProviderKind, models};
+use jian_core::{AccountMode, ModelInfo, ProviderKind};
 use jian_protocol::providers::{
-    CreateProviderRequest, ModelCatalog, ModelSummary, ProviderAccountSummary, ProviderModels,
+    AccountModels, CreateProviderRequest, ModelCatalog, ModelSummary, ProviderAccountSummary,
     ProvidersPage, SubscriptionUsage, UsageWindow,
 };
 use jian_store::secrets::Secret;
@@ -151,35 +151,96 @@ pub(crate) async fn revoke(
         .await
         .map_err(|e| internal(&e))?
     {
-        app.llm
-            .limits
-            .forget(&LlmAccess::board_key(&principal.tenant, &id));
+        let board = LlmAccess::board_key(&principal.tenant, &id);
+        app.llm.limits.forget(&board);
+        app.llm.catalog.forget(&board);
         Ok(StatusCode::NO_CONTENT)
     } else {
         Err(not_found("provider account"))
     }
 }
 
-/// `GET /v1/providers/models`: the static catalog. Nothing of the tenant's, so any signed-in
-/// caller may read it.
-pub(crate) async fn catalog(_principal: Principal) -> Json<ModelCatalog> {
-    Json(ModelCatalog {
-        providers: ProviderKind::ALL
-            .iter()
-            .map(|kind| ProviderModels {
-                provider: kind.as_str().to_owned(),
-                models: models(*kind)
-                    .iter()
-                    .map(|model| ModelSummary {
-                        id: model.id.to_owned(),
-                        name: model.name.to_owned(),
-                        context_window: model.context_window,
-                        max_output_tokens: model.max_output_tokens,
-                    })
-                    .collect(),
-            })
-            .collect(),
-    })
+/// `GET /v1/providers/models`: what each live account of the workspace says it may call. An
+/// account the provider refuses (a revoked key, a spent plan, a server that is down) is listed
+/// with the reason; it does not hide the others, and no older list stands in for it. An admin's
+/// call, because it opens the accounts' keys.
+pub(crate) async fn catalog(
+    State(app): State<AppState>,
+    principal: Principal,
+) -> Result<Json<ModelCatalog>, Refusal> {
+    require_admin(&principal, WHAT)?;
+    let ctx = tenant_ctx(&app, &principal.tenant).await?;
+    let accounts = app
+        .db
+        .provider_accounts(&ctx)
+        .await
+        .map_err(|e| internal(&e))?;
+    let mut listed = Vec::with_capacity(accounts.len());
+    for account in accounts {
+        let key = app
+            .db
+            .provider_key(&ctx, &account.id)
+            .await
+            .map_err(|e| internal(&e))?;
+        let result = if key.is_none() && account.has_key {
+            Err("the account's key could not be read".to_owned())
+        } else {
+            list_account(&app, &principal, &account, key.as_ref()).await
+        };
+        let (models, error) = match result {
+            Ok(models) => (models.into_iter().map(model).collect(), None),
+            Err(error) => (Vec::new(), Some(error)),
+        };
+        listed.push(AccountModels {
+            account_id: account.id,
+            provider: account.provider.as_str().to_owned(),
+            mode: account.mode.as_str().to_owned(),
+            label: account.label,
+            models,
+            error,
+        });
+    }
+    Ok(Json(ModelCatalog { accounts: listed }))
+}
+
+/// One account's models, or the reason it has none. The reason is the provider error's own
+/// text, which never carries a key.
+async fn list_account(
+    app: &AppState,
+    principal: &Principal,
+    account: &ProviderAccount,
+    key: Option<&Secret>,
+) -> Result<Vec<ModelInfo>, String> {
+    let board = LlmAccess::board_key(&principal.tenant, &account.id);
+    let sink = (account.mode == AccountMode::Subscription).then(|| app.llm.limits.sink(&board));
+    let provider = jian_llm::connect_account(
+        account.provider,
+        account.mode,
+        key.map_or("", Secret::expose),
+        account.base_url.as_deref(),
+        sink,
+        &app.llm.http,
+    )
+    .map_err(|error| error.to_string())?;
+    app.llm
+        .catalog
+        .models(&board, account.provider, provider.as_ref())
+        .await
+        .map_err(|error| error.to_string())
+}
+
+fn model(info: ModelInfo) -> ModelSummary {
+    ModelSummary {
+        id: info.id,
+        name: info.name,
+        context_window: info.context_window,
+        max_output_tokens: info.max_output_tokens,
+        input_modalities: info.input_modalities,
+        output_modalities: info.output_modalities,
+        reasoning_efforts: info.reasoning_efforts,
+        line: info.line,
+        lifecycle: info.lifecycle,
+    }
 }
 
 fn window(window: jian_llm::LimitWindow) -> UsageWindow {
