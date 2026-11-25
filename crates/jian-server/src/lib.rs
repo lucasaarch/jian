@@ -56,6 +56,7 @@ mod accounts;
 mod agents;
 mod auth;
 mod client_ws;
+mod codex_login;
 mod events;
 mod http;
 mod hub;
@@ -94,7 +95,7 @@ pub use events::{BUFFER_DELTAS, EventBus, MemoryEventBus, Scope, Subscription};
 pub use hub::{DispatchError, HubCommand, MachineHub};
 pub use invite_job::{INVITE_SEND_KIND, InviteSender};
 pub use jobs::{JobContext, JobError, JobHandler, JobOptions, JobRegistry, JobRequeue, JobRunner};
-pub use llm_access::LlmAccess;
+pub use llm_access::{LlmAccess, PendingLogins};
 pub use mail::{DeployMail, MailConfig};
 pub use public_url::{InvalidPublicUrl, PublicUrl};
 pub use rate::{Clock, Limit, ManualClock, MemoryRateLimiter, RateLimiter, SystemClock, Verdict};
@@ -127,6 +128,8 @@ pub const ROUTES: &[&str] = &[
     "POST /v1/providers/{id}/revoke (an admin)",
     "GET /v1/providers/{id}/usage (an admin)",
     "GET /v1/providers/models (an admin)",
+    "POST /v1/providers/codex/start (an admin)",
+    "POST /v1/providers/codex/complete (an admin)",
     "GET /v1/agents (a member)",
     "POST /v1/agents (an admin, or a member with the agents.create grant)",
     "GET /v1/agents/{id} (a member who sees it)",
@@ -298,6 +301,8 @@ pub fn router_with(state: AppState, extra: Router<AppState>) -> Router {
             get(providers::list).post(providers::create),
         )
         .route("/v1/providers/models", get(providers::catalog))
+        .route("/v1/providers/codex/start", post(codex_login::start))
+        .route("/v1/providers/codex/complete", post(codex_login::complete))
         .route("/v1/providers/{id}/activate", post(providers::activate))
         .route("/v1/providers/{id}/revoke", post(providers::revoke))
         .route("/v1/providers/{id}/usage", get(providers::usage))

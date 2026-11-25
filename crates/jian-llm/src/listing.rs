@@ -247,3 +247,41 @@ fn without_aliases(models: Vec<ModelInfo>) -> Vec<ModelInfo> {
     }
     kept
 }
+
+/// ChatGPT's Codex list: `{"models":[{"slug":..}]}`, hidden ones left out, the backend's own
+/// order (its `priority`, then the id) kept. One page; the backend does not paginate.
+pub(crate) async fn codex(
+    http: &Transport,
+    url: &str,
+    headers: &[(&str, &str)],
+) -> Result<Vec<ModelInfo>, LlmError> {
+    let page = http.get_json(url, headers, MAX_LISTING_BYTES).await?;
+    let mut listed: Vec<(i64, ModelInfo)> = items(&page, "models")
+        .iter()
+        .filter(|model| {
+            !matches!(
+                text(model, "visibility").as_deref(),
+                Some("hide" | "hidden")
+            )
+        })
+        .filter_map(|model| {
+            let mut info = bare(model.get("slug")?.as_str()?)?;
+            info.name = text(model, "display_name");
+            info.context_window = count(model, "context_window");
+            info.reasoning_efforts = items(model, "supported_reasoning_levels")
+                .iter()
+                .filter_map(|level| level.get("effort")?.as_str())
+                .filter(|effort| EFFORTS.contains(effort))
+                .map(str::to_owned)
+                .collect();
+            let priority = model.get("priority").and_then(Value::as_i64).unwrap_or(0);
+            Some((priority, info))
+        })
+        .collect();
+    listed.sort_by(|(a, one), (b, other)| a.cmp(b).then_with(|| one.id.cmp(&other.id)));
+    Ok(listed
+        .into_iter()
+        .map(|(_, info)| info)
+        .take(MAX_MODELS)
+        .collect())
+}

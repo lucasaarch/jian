@@ -58,6 +58,19 @@ pub(crate) trait Inspect: Send + Sync {
     fn inspect(&self, status: u16, headers: &HeaderMap) -> Option<LlmError>;
 }
 
+/// The one HTTP client every call of this crate is made with, sign-in requests included.
+pub(crate) fn client(config: &HttpConfig) -> Result<reqwest::Client, LlmError> {
+    // reqwest's rustls has no crypto provider of its own here (see the workspace manifest):
+    // ring is installed before the first client. An error only means one is installed.
+    drop(rustls::crypto::ring::default_provider().install_default());
+    reqwest::Client::builder()
+        .connect_timeout(config.connect_timeout)
+        // The key must reach only the address it was given for.
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+        .map_err(|_| LlmError::Config("the HTTP client could not be built"))
+}
+
 /// A client bound to one account's key.
 pub(crate) struct Transport {
     client: reqwest::Client,
@@ -74,17 +87,8 @@ impl fmt::Debug for Transport {
 
 impl Transport {
     pub(crate) fn new(config: &HttpConfig, key: &str) -> Result<Self, LlmError> {
-        // reqwest's rustls has no crypto provider of its own here (see the workspace manifest):
-        // ring is installed before the first client. An error only means one is installed.
-        drop(rustls::crypto::ring::default_provider().install_default());
-        let client = reqwest::Client::builder()
-            .connect_timeout(config.connect_timeout)
-            // The key must reach only the address it was given for.
-            .redirect(reqwest::redirect::Policy::none())
-            .build()
-            .map_err(|_| LlmError::Config("the HTTP client could not be built"))?;
         Ok(Self {
-            client,
+            client: client(config)?,
             config: config.clone(),
             key: Zeroizing::new(key.to_owned()),
             inspector: None,

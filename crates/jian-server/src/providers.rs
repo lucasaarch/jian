@@ -13,7 +13,7 @@ use jian_protocol::providers::{
     ProvidersPage, SubscriptionUsage, UsageWindow,
 };
 use jian_store::secrets::Secret;
-use jian_store::{NewProviderAccount, ProviderAccount, StoreError};
+use jian_store::{NewProviderAccount, ProviderAccount, StoreError, TenantCtx};
 
 use crate::auth::Principal;
 use crate::http::{Refusal, internal, not_found, refuse, require_admin, store_failure, tenant_ctx};
@@ -21,7 +21,7 @@ use crate::{AppState, LlmAccess};
 
 const WHAT: &str = "manage model providers";
 
-fn summary(account: ProviderAccount) -> ProviderAccountSummary {
+pub(crate) fn summary(account: ProviderAccount) -> ProviderAccountSummary {
     ProviderAccountSummary {
         id: account.id,
         provider: account.provider.as_str().to_owned(),
@@ -185,7 +185,7 @@ pub(crate) async fn catalog(
         let result = if key.is_none() && account.has_key {
             Err("the account's key could not be read".to_owned())
         } else {
-            list_account(&app, &principal, &account, key.as_ref()).await
+            list_account(&app, &principal, &ctx, &account, key.as_ref()).await
         };
         let (models, error) = match result {
             Ok(models) => (models.into_iter().map(model).collect(), None),
@@ -208,11 +208,26 @@ pub(crate) async fn catalog(
 async fn list_account(
     app: &AppState,
     principal: &Principal,
+    ctx: &TenantCtx,
     account: &ProviderAccount,
     key: Option<&Secret>,
 ) -> Result<Vec<ModelInfo>, String> {
     let board = LlmAccess::board_key(&principal.tenant, &account.id);
     let sink = (account.mode == AccountMode::Subscription).then(|| app.llm.limits.sink(&board));
+    // A ChatGPT account's key is a pair of tokens; what the provider takes is the access token,
+    // renewed first if it has ended.
+    let access;
+    let key =
+        if account.mode == AccountMode::Subscription && account.provider == ProviderKind::OpenAi {
+            access = app
+                .llm
+                .codex_access_token(&app.db, ctx, &account.id)
+                .await
+                .map_err(|error| error.to_string())?;
+            Some(&access)
+        } else {
+            key
+        };
     let provider = jian_llm::connect_account(
         account.provider,
         account.mode,

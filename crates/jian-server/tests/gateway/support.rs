@@ -63,6 +63,15 @@ impl Gateway {
     }
 
     pub async fn start_with(settings: Settings, slots: SlotOptions) -> Self {
+        Self::start_with_llm(settings, slots, no_network()).await
+    }
+
+    /// As `start_with`, reaching providers the way `llm` says (a test's fake servers).
+    pub async fn start_with_llm(
+        settings: Settings,
+        slots: SlotOptions,
+        llm: jian_server::LlmAccess,
+    ) -> Self {
         let dir = tempfile::tempdir_in(env!("CARGO_TARGET_TMPDIR")).unwrap();
         let postgres = EmbeddedPostgres::start(&EmbeddedConfig {
             data_dir: dir.path().to_path_buf(),
@@ -84,6 +93,7 @@ impl Gateway {
             slots,
             Some(postgres),
             Some(dir),
+            llm,
         )
         .await
     }
@@ -94,7 +104,16 @@ impl Gateway {
         let db = Database::open(DatabaseSource::External(self.url.clone()))
             .await
             .unwrap();
-        Self::serve(Arc::new(db), self.url.clone(), settings, slots, None, None).await
+        Self::serve(
+            Arc::new(db),
+            self.url.clone(),
+            settings,
+            slots,
+            None,
+            None,
+            no_network(),
+        )
+        .await
     }
 
     async fn serve(
@@ -104,6 +123,7 @@ impl Gateway {
         slots: SlotOptions,
         postgres: Option<EmbeddedPostgres>,
         dir: Option<tempfile::TempDir>,
+        llm: jian_server::LlmAccess,
     ) -> Self {
         let keeper = SlotKeeper::start(db.clone(), slots).await.unwrap();
 
@@ -117,7 +137,7 @@ impl Gateway {
             slots: keeper.ownership(),
             shutdown: stop.clone(),
             settings,
-            llm: no_network(),
+            llm,
         };
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
@@ -501,7 +521,7 @@ impl RealWorker {
 
 /// A gateway that cannot reach any provider or models.dev: a closed port answers at once, with no
 /// retry, so a test of the route's errors is quick and never leaves the machine.
-fn no_network() -> jian_server::LlmAccess {
+pub fn no_network() -> jian_server::LlmAccess {
     let http = jian_llm::HttpConfig {
         max_retries: 0,
         ..jian_llm::HttpConfig::default()

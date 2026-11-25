@@ -62,7 +62,7 @@ impl Provider for OpenAi {
     }
 }
 
-fn body(request: &Request) -> Value {
+pub(crate) fn body(request: &Request) -> Value {
     let params = &request.params;
     let instructions: Vec<&str> = request.system.iter().map(|b| b.text.as_str()).collect();
     let mut body = json!({
@@ -155,7 +155,7 @@ struct PendingCall {
 }
 
 #[derive(Default)]
-struct ResponsesDecoder {
+pub(crate) struct ResponsesDecoder {
     /// Function calls being written, by their position in the response's output.
     calls: HashMap<u64, PendingCall>,
     called: bool,

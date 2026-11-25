@@ -14,6 +14,8 @@ export type { ClientMessage } from "./generated/ClientMessage";
 export type { ClientRequest } from "./generated/ClientRequest";
 export type { ClientResponse } from "./generated/ClientResponse";
 export type { ClientWelcome } from "./generated/ClientWelcome";
+export type { CodexLoginStarted } from "./generated/CodexLoginStarted";
+export type { CompleteCodexLogin } from "./generated/CompleteCodexLogin";
 export type { ComputerAction } from "./generated/ComputerAction";
 export type { ComputerErrorCode } from "./generated/ComputerErrorCode";
 export type { ComputerOutcome } from "./generated/ComputerOutcome";

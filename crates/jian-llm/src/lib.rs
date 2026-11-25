@@ -6,7 +6,8 @@
 //!
 //! Providers with an API key are here: Anthropic (Messages), OpenAI (Responses), Gemini, and any
 //! OpenAI Chat Completions server (OpenRouter, Groq, xAI, Ollama, or an address the owner
-//! gives). A Claude subscription is Anthropic's API with the token of `claude setup-token` and
+//! gives). A ChatGPT (Codex) subscription signs in with OAuth ([`CodexAuth`]) and speaks the
+//! Responses API at ChatGPT's backend. A Claude subscription is Anthropic's API with the token of `claude setup-token` and
 //! Claude Code's own headers; [`LimitsBoard`] keeps what its answers say of the usage windows.
 //! [`Provider`] is the seam every one plugs into, and nothing assumes the credential is a key.
 //!
@@ -15,6 +16,7 @@
 
 mod anthropic;
 mod classify;
+mod codex;
 mod compatible;
 mod decode;
 mod error;
@@ -31,6 +33,9 @@ mod transport;
 use futures_util::future::BoxFuture;
 use jian_core::{AccountMode, ModelInfo, ProviderKind};
 
+pub use codex::{
+    AUTH_ORIGIN as CODEX_AUTH_ORIGIN, CodexAuth, Login as CodexLogin, Tokens as CodexTokens,
+};
 pub use decode::EventStream;
 pub use error::LlmError;
 pub use event::{Event, StopReason, ToolCall, Usage};
@@ -90,6 +95,12 @@ pub fn connect_account(
                 limits,
             )?)
         }
+        // The ChatGPT sign-in: `key` is the access token, which the caller has just made fresh.
+        (ProviderKind::OpenAi, AccountMode::Subscription) => Box::new(codex::Codex::new(
+            http,
+            key,
+            base(codex::DEFAULT_BASE_URL)?,
+        )?),
         (_, AccountMode::Subscription) => {
             return Err(LlmError::Config("this vendor has no subscription sign-in"));
         }

@@ -4,6 +4,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 mod catalog;
+mod codex;
 mod subscription;
 mod support;
 mod transport;

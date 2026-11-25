@@ -70,6 +70,8 @@ pub struct Seen {
     pub path: String,
     pub headers: HeaderMap,
     pub body: Value,
+    /// The body as sent, for a form that is not JSON.
+    pub raw: String,
 }
 
 struct Inner {
@@ -143,6 +145,7 @@ async fn handle(
             .unwrap_or_default(),
         headers,
         body: serde_json::from_slice(&body).unwrap_or(Value::Null),
+        raw: String::from_utf8_lossy(&body).into_owned(),
     });
     let reply = inner.replies.lock().unwrap().pop_front();
     let builder = Response::builder();

@@ -32,6 +32,10 @@ pub enum LlmError {
     /// The key is missing, wrong, revoked or not allowed to use the model.
     #[error("the provider refused the credentials")]
     Auth,
+    /// The account's sign-in has ended and only the owner can renew it: ChatGPT refused the
+    /// refresh token, or the token does not name an account. Never retried.
+    #[error("the account's sign-in has expired; sign in again")]
+    LoginRequired,
     /// The provider refused the request itself: a parameter, a model id, a message shape.
     #[error("the provider refused the request: {0}")]
     InvalidRequest(String),

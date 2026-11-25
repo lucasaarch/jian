@@ -28,6 +28,7 @@ const QUIET: Duration = Duration::from_millis(300);
 /// This file, to check that a name in a table below is a test that exists.
 const THIS_FILE: &str = include_str!("isolation.rs");
 /// The invitation tests are in their own file, and the isolation one is among them.
+const CODEX_FILE: &str = include_str!("codex.rs");
 const INVITES_FILE: &str = include_str!("invites.rs");
 const PROVIDERS_FILE: &str = include_str!("providers.rs");
 const THREADS_FILE: &str = include_str!("threads.rs");
@@ -39,6 +40,7 @@ async fn start() -> (Gateway, TwoTenants) {
 fn is_a_test_here(name: &str) -> bool {
     let declared = format!("async fn {name}(");
     THIS_FILE.contains(&declared)
+        || CODEX_FILE.contains(&declared)
         || INVITES_FILE.contains(&declared)
         || PROVIDERS_FILE.contains(&declared)
         || THREADS_FILE.contains(&declared)
@@ -71,6 +73,8 @@ const ROUTE_TESTS: &[(&str, &str)] = &[
     ("POST /v1/providers/{id}/revoke", PROVIDERS_TEST),
     ("GET /v1/providers/{id}/usage", PROVIDERS_TEST),
     ("GET /v1/providers/models", PROVIDERS_TEST),
+    ("POST /v1/providers/codex/start", CODEX_TEST),
+    ("POST /v1/providers/codex/complete", CODEX_TEST),
     ("GET /v1/agents", THREADS_TEST),
     ("POST /v1/agents", THREADS_TEST),
     ("GET /v1/agents/{id}", THREADS_TEST),
@@ -116,6 +120,9 @@ const THREADS_TEST: &str = "agents_threads_and_messages_of_the_other_tenant_are_
 
 /// The test that shows tenant B reaches no model provider account of tenant A, and no key.
 const PROVIDERS_TEST: &str = "provider_accounts_of_the_other_tenant_are_out_of_reach";
+
+/// The test that shows a ChatGPT sign-in of tenant A cannot be finished by tenant B.
+const CODEX_TEST: &str = "a_chatgpt_sign_in_belongs_to_the_workspace_that_started_it";
 
 /// The test that shows tenant B reaches no member, session or invitation of tenant A.
 const USERS_TEST: &str = "users_and_sessions_of_the_other_tenant_are_out_of_reach";

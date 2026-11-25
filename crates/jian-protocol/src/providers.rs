@@ -154,3 +154,42 @@ pub struct SubscriptionUsage {
     /// The weekly window.
     pub weekly: Option<UsageWindow>,
 }
+
+/// `POST /v1/providers/codex/start`: where to send the person to sign in to ChatGPT.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+#[serde(rename_all = "camelCase")]
+pub struct CodexLoginStarted {
+    /// The page to open in a browser. It ends on an address that does not load (`localhost`):
+    /// that is expected, and the address is what comes back in `complete`.
+    pub authorize_url: String,
+    /// Names this sign-in; send it back with the code. Valid for ten minutes, once.
+    pub state: String,
+}
+
+/// `POST /v1/providers/codex/complete`: the end of a ChatGPT sign-in. It makes the account,
+/// inactive, with its tokens in the vault.
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+#[serde(rename_all = "camelCase")]
+pub struct CompleteCodexLogin {
+    /// The `state` of `start`.
+    pub state: String,
+    /// The `code` the browser came back with, or the whole address it landed on.
+    pub code: String,
+    /// What to call the account. Default: `ChatGPT`.
+    #[serde(default)]
+    pub label: Option<String>,
+    /// A proxy in front of ChatGPT's Codex backend. Default: the backend's own address.
+    #[serde(default)]
+    pub base_url: Option<String>,
+}
+
+impl std::fmt::Debug for CompleteCodexLogin {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("CompleteCodexLogin")
+            .field("label", &self.label)
+            .field("base_url", &self.base_url)
+            .finish_non_exhaustive()
+    }
+}

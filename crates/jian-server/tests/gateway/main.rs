@@ -5,6 +5,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 mod accounts;
+mod codex;
 mod invites;
 mod isolation;
 mod providers;
