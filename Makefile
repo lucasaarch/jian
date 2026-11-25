@@ -15,7 +15,7 @@ COMPOSE_DEV := docker compose -f compose.dev.yaml
 
 .DEFAULT_GOAL := help
 
-.PHONY: help install setup up pull down logs ps dev db-up db-stop db-reset changelog check-rust rust-check \
+.PHONY: help install setup up pull down logs ps dev db-up db-stop db-reset changelog check-rust rust-check protocol-gen protocol-check \
         check test test-integration lint format build image image-push \
         release rollback test-display image-test-display image-test-inspection image-test-network \
         preview-up preview-down preview-status preview-token
@@ -88,6 +88,15 @@ rust-check: ## The Rust workspace: format, clippy, tests and docs, as the rules 
 	cargo clippy --workspace --all-targets --locked -- -D warnings
 	cargo test --workspace --locked
 	RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --locked
+
+protocol-gen: ## Regenerate packages/protocol (the TypeScript types) from crates/jian-protocol
+	rm -rf packages/protocol/src/generated
+	cargo test -p jian-protocol
+
+protocol-check: protocol-gen ## Fail when packages/protocol differs from what the Rust types generate
+	git diff --exit-code -- packages/protocol
+	@test -z "$$(git ls-files --others --exclude-standard packages/protocol)" || \
+	  { echo "packages/protocol has generated files that are not committed:"; git ls-files --others --exclude-standard packages/protocol; exit 1; }
 
 test: ## Unit tests, no Docker and no provider
 	pnpm run test

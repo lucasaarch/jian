@@ -1,0 +1,11 @@
+{
+  "name": "@jian/protocol",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "TypeScript types of the machine protocol, generated from crates/jian-protocol (make protocol-gen). Never edit src/.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "license": "Apache-2.0"
+}

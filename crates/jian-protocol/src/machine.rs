@@ -9,6 +9,11 @@
 //! Text frames carry one JSON message each ([`WorkerMessage`] up, [`GatewayMessage`] down).
 //! Binary frames carry the bytes of a forwarded connection: a 4-byte big-endian channel id and
 //! the data (see [`encode_channel_frame`]).
+//!
+//! Every type here derives `ts_rs::TS`, and `make protocol-gen` writes them to `packages/protocol`
+//! as TypeScript, so that package is never edited by hand. A `u64` is a JSON number there, not a
+//! `bigint` (`#[ts(type = "number")]`): every one of them stays under 2^53, the largest integer a
+//! JavaScript number holds exactly, and a peer that sends more has already left the protocol.
 
 mod computer;
 mod files;
@@ -23,6 +28,7 @@ pub use ids::*;
 pub use task::*;
 
 use serde::{Deserialize, Serialize};
+use ts_rs::TS;
 
 /// Bumped on any change a peer of the other version would misread. The gateway closes with
 /// [`CLOSE_UNSUPPORTED_PROTOCOL`] a worker whose version it cannot serve.
@@ -70,7 +76,8 @@ pub const CAP_COMPUTER_LINUX: &str = "computer-linux";
 pub const CAP_COMPUTER_WINDOWS: &str = "computer-windows";
 
 /// The first message on a connection: who this worker is and what it can do.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export)]
 #[serde(rename_all = "camelCase")]
 pub struct Hello {
     /// The [`PROTOCOL_VERSION`] this worker speaks.
@@ -92,7 +99,8 @@ pub struct Hello {
 }
 
 /// The gateway's answer to [`Hello`]: the connection is the machine's from here on.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export)]
 #[serde(rename_all = "camelCase")]
 pub struct Welcome {
     /// The [`PROTOCOL_VERSION`] the gateway speaks.
@@ -105,7 +113,8 @@ pub struct Welcome {
 
 /// Whether the screen can be used: a locked machine is online, but Computer Use needs it
 /// unlocked. Only a Mac tells; elsewhere it is `unknown`.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
 #[serde(rename_all = "snake_case")]
 pub enum UiState {
     /// The screen can be used.
@@ -120,7 +129,8 @@ pub enum UiState {
 }
 
 /// Which of a command's outputs a chunk came from.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
 #[serde(rename_all = "snake_case")]
 pub enum Stream {
     /// Standard output.
@@ -131,7 +141,8 @@ pub enum Stream {
 
 /// Output of a running task as it is written, for whoever watches. Best effort: chunks
 /// written while the connection is down are not sent again; the result keeps what counts.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export)]
 #[serde(rename_all = "camelCase")]
 pub struct TaskOutput {
     /// The task the chunk belongs to.
@@ -143,7 +154,8 @@ pub struct TaskOutput {
 }
 
 /// From the worker to the gateway.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export)]
 #[serde(
     tag = "type",
     rename_all = "camelCase",
@@ -181,17 +193,20 @@ pub enum WorkerMessage {
     /// A liveness probe; the gateway answers [`GatewayMessage::Pong`] with the same nonce.
     Ping {
         /// Echoed back unchanged.
+        #[ts(type = "number")]
         nonce: u64,
     },
     /// The answer to the gateway's [`GatewayMessage::Ping`].
     Pong {
         /// The nonce of the ping it answers.
+        #[ts(type = "number")]
         nonce: u64,
     },
 }
 
 /// From the gateway to the worker.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export)]
 #[serde(
     tag = "type",
     rename_all = "camelCase",
@@ -226,11 +241,13 @@ pub enum GatewayMessage {
     /// A liveness probe; the worker answers [`WorkerMessage::Pong`] with the same nonce.
     Ping {
         /// Echoed back unchanged.
+        #[ts(type = "number")]
         nonce: u64,
     },
     /// The answer to the worker's [`WorkerMessage::Ping`].
     Pong {
         /// The nonce of the ping it answers.
+        #[ts(type = "number")]
         nonce: u64,
     },
 }

@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
+use ts_rs::TS;
 
 use super::{ComputerOutcome, ComputerTask, FilesAnswer, FilesOp, TaskId};
 
@@ -9,19 +10,22 @@ use super::{ComputerOutcome, ComputerTask, FilesAnswer, FilesOp, TaskId};
 pub const TASK_TIMEOUT_MAX_MS: u64 = 600_000;
 
 /// One thing for the machine to do. `id` is the gateway's, echoed in every output and result.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export)]
 #[serde(rename_all = "camelCase")]
 pub struct Task {
     /// The gateway's id for this task.
     pub id: TaskId,
     /// How long the task may run, in milliseconds, up to [`TASK_TIMEOUT_MAX_MS`].
+    #[ts(type = "number")]
     pub timeout_ms: u64,
     /// What to do.
     pub spec: TaskSpec,
 }
 
 /// The kind of work a [`Task`] asks for; each kind needs the matching capability.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum TaskSpec {
     /// A shell command.
@@ -47,7 +51,8 @@ impl TaskSpec {
 }
 
 /// A command in the machine's shell: `/bin/sh -lc` on Unix, PowerShell on Windows.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export)]
 #[serde(rename_all = "camelCase")]
 pub struct ShellTask {
     /// The command line, run by the shell.
@@ -62,7 +67,8 @@ pub struct ShellTask {
 }
 
 /// Bring the worker to a release: `1.2.3`, or `latest`.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export)]
 #[serde(rename_all = "camelCase")]
 pub struct UpdateTask {
     /// The release to install.
@@ -70,7 +76,8 @@ pub struct UpdateTask {
 }
 
 /// What came of a task. `exit_code` is null when the command never exited by itself.
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export)]
 #[serde(rename_all = "camelCase")]
 pub struct TaskResult {
     /// The task this result answers.
@@ -113,7 +120,8 @@ impl TaskResult {
 }
 
 /// The releases a worker moved between.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export)]
 #[serde(rename_all = "camelCase")]
 pub struct UpdateOutcome {
     /// The release the worker ran before.

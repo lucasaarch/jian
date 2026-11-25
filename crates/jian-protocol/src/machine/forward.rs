@@ -1,5 +1,6 @@
 use super::ForwardId;
 use serde::{Deserialize, Serialize};
+use ts_rs::TS;
 
 /// The ports a worker listens on, on its own loopback: first and last.
 pub const FORWARD_LOCAL_PORTS: (u16, u16) = (41_000, 41_999);
@@ -9,7 +10,8 @@ pub const FORWARD_CHUNK_MAX: usize = 64 * 1024;
 pub const FORWARD_CONNECTIONS_MAX: usize = 64;
 
 /// A port on the gateway's side, to be reachable on the machine's loopback.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
 #[serde(rename_all = "camelCase")]
 pub struct ForwardAssignment {
     /// The gateway's id for the forward.
@@ -27,7 +29,8 @@ fn loopback() -> String {
 }
 
 /// What became of a forward's listener.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
 #[serde(rename_all = "camelCase")]
 pub struct ForwardState {
     /// The forward this state is about.
@@ -38,7 +41,8 @@ pub struct ForwardState {
 }
 
 /// Whether a forward's listener is up.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
 #[serde(
     tag = "status",
     rename_all = "camelCase",

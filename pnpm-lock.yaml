@@ -359,6 +359,8 @@ importers:
         specifier: ^7.0.2
         version: 7.0.2
 
+  packages/protocol: {}
+
   packages/remote-core:
     devDependencies:
       '@jian/contracts':

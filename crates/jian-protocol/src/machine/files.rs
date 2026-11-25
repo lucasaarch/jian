@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use ts_rs::TS;
 
 /// The largest file a read may ask for, as the gateway's local file tools allow.
 pub const FILES_MAX_READ_BYTES: u64 = 20 * 1024 * 1024;
@@ -13,7 +14,8 @@ pub const FILES_MAX_SEARCH_CHARS: usize = 60_000;
 
 /// One file operation, run with the file system and git, never a shell. Every path is absolute
 /// on the machine; the worker checks the shape again, as the gateway's word is not proof.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export)]
 #[serde(tag = "op", rename_all = "kebab-case", rename_all_fields = "camelCase")]
 pub enum FilesOp {
     /// Reads a text file.
@@ -21,6 +23,7 @@ pub enum FilesOp {
         /// Absolute path of the file.
         path: String,
         /// The most bytes to read; more is refused as `too-large`.
+        #[ts(type = "number")]
         max_bytes: u64,
     },
     /// Writes a text file, creating its parents.
@@ -44,7 +47,9 @@ pub enum FilesOp {
     Find {
         /// Absolute path to search under.
         path: String,
-        /// The glob, as `**/*.rs`.
+        // A doc must not hold a star then a slash: ts-rs copies docs into JSDoc, where it ends the
+        // comment and breaks the generated file (`tsc -p packages/protocol` catches it).
+        /// The glob, as `src/*.rs`.
         pattern: String,
         /// The most paths to return.
         limit: usize,
@@ -72,6 +77,7 @@ pub enum FilesOp {
         /// Absolute path of the file.
         path: String,
         /// The most bytes to read; more is refused as `too-large`.
+        #[ts(type = "number")]
         max_bytes: u64,
     },
     /// Writes a file from base64.
@@ -98,6 +104,7 @@ pub enum FilesOp {
         /// A 40-hex commit, or `HEAD`.
         against: String,
         /// The most bytes either side may weigh.
+        #[ts(type = "number")]
         max_bytes: u64,
     },
     /// Finds the merge base of `HEAD` and `base`.
@@ -128,7 +135,8 @@ impl FilesOp {
 }
 
 /// The name of a [`FilesOp`] without its arguments.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
 #[serde(rename_all = "kebab-case")]
 pub enum FilesOpName {
     /// [`FilesOp::Read`].
@@ -154,7 +162,8 @@ pub enum FilesOpName {
 }
 
 /// What a search prints: matching lines (`rg -n`), the files with a match, or a count per file.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
 #[serde(rename_all = "kebab-case")]
 pub enum SearchOutput {
     /// Matching lines.
@@ -166,7 +175,8 @@ pub enum SearchOutput {
 }
 
 /// Why a file operation was refused, in words the agent can act on.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
 #[serde(rename_all = "kebab-case")]
 pub enum FilesProblem {
     /// The path does not exist.
@@ -192,7 +202,8 @@ pub enum FilesProblem {
 }
 
 /// The answer to a [`FilesOp`].
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export)]
 #[serde(tag = "status", rename_all = "camelCase")]
 pub enum FilesAnswer {
     /// The operation succeeded.
@@ -202,7 +213,8 @@ pub enum FilesAnswer {
 }
 
 /// A refused or failed operation.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export)]
 #[serde(rename_all = "camelCase")]
 pub struct FilesFailure {
     /// The request's, so the gateway can match the two.
@@ -214,7 +226,8 @@ pub struct FilesFailure {
 }
 
 /// What a directory entry is.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
 #[serde(rename_all = "camelCase")]
 pub enum EntryKind {
     /// A regular file.
@@ -228,7 +241,8 @@ pub enum EntryKind {
 }
 
 /// One entry of a directory listing.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
 pub struct ListEntry {
     /// The entry's file name.
     pub name: String,
@@ -237,7 +251,8 @@ pub struct ListEntry {
 }
 
 /// A successful answer; `op` repeats the request's.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export)]
 #[serde(tag = "op", rename_all = "kebab-case", rename_all_fields = "camelCase")]
 pub enum FilesDone {
     /// The file's text.
@@ -247,6 +262,7 @@ pub enum FilesDone {
         /// The modification time, in milliseconds since the epoch.
         mtime_ms: f64,
         /// The file's size, in bytes.
+        #[ts(type = "number")]
         bytes: u64,
     },
     /// The file was written.
@@ -254,6 +270,7 @@ pub enum FilesDone {
         /// The new modification time, in milliseconds since the epoch.
         mtime_ms: f64,
         /// The bytes written.
+        #[ts(type = "number")]
         bytes: u64,
         /// The file did not exist before.
         created: bool,
@@ -284,11 +301,13 @@ pub enum FilesDone {
         /// The content, base64 encoded.
         base64: String,
         /// The file's size, in bytes.
+        #[ts(type = "number")]
         bytes: u64,
     },
     /// The file was written from base64.
     WriteBytes {
         /// The bytes written.
+        #[ts(type = "number")]
         bytes: u64,
     },
     /// Raw `git status --porcelain=v1 -z` and `git diff --name-status -z`, for the gateway's

@@ -1,0 +1,4 @@
+# ts-rs writes the TypeScript types of jian-protocol wherever this says (see `make protocol-gen`).
+# Relative to the repository root, not to the crate, so every cargo command agrees.
+[env]
+TS_RS_EXPORT_DIR = { value = "packages/protocol/src/generated", relative = true }

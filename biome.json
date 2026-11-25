@@ -13,6 +13,8 @@
       "!!**/coverage",
       "!**/pnpm-lock.yaml",
       "!packages/sdk/src/generated.ts",
+      "!packages/protocol/src",
+      "!packages/protocol/check.ts",
       "!apps/gateway/migrations",
       "!packages/contracts/openapi.json",
       "!!**/.next",

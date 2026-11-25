@@ -7,13 +7,15 @@ use std::fmt;
 use std::ops::Deref;
 
 use serde::{Deserialize, Serialize};
+use ts_rs::TS;
 
-/// Declares an id: an opaque string that is compared, hashed and displayed as written.
+/// Declares an id: an opaque string that is compared, hashed and displayed as written. A serde
+/// newtype is its inner value on the wire, so no `#[serde(transparent)]`, which ts-rs does not read.
 macro_rules! string_id {
     ($($(#[$doc:meta])+ $name:ident),+ $(,)?) => {$(
         $(#[$doc])+
-        #[derive(Debug, Clone, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
-        #[serde(transparent)]
+        #[derive(Debug, Clone, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, TS)]
+        #[ts(export)]
         pub struct $name(String);
 
         impl $name {

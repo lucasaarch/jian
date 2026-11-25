@@ -1,8 +1,10 @@
 use super::SeatId;
 use serde::{Deserialize, Serialize};
+use ts_rs::TS;
 
 /// Anthropic-style computer actions on the machine's primary display.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, TS)]
+#[ts(export)]
 #[serde(rename_all = "snake_case")]
 pub enum ComputerAction {
     /// Takes a screenshot of the display.
@@ -30,7 +32,8 @@ pub enum ComputerAction {
 }
 
 /// The direction of a `scroll`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
 #[serde(rename_all = "snake_case")]
 pub enum ScrollDirection {
     /// Toward the top.
@@ -45,7 +48,8 @@ pub enum ScrollDirection {
 
 /// The conversation an action belongs to: each has its own pointer, labelled and coloured, and
 /// its own last screenshot, whose pixels its coordinates are in.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
 #[serde(rename_all = "camelCase")]
 pub struct ComputerSeat {
     /// The gateway's id for the conversation; stable across its actions.
@@ -57,16 +61,19 @@ pub struct ComputerSeat {
 }
 
 /// One action. Coordinates are pixels of the seat's last screenshot.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export)]
 #[serde(rename_all = "camelCase")]
 pub struct ComputerTask {
     /// What to do.
     pub action: ComputerAction,
     /// Where, for the actions that point; the target of a drag.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(type = "[number, number]", optional)]
     pub coordinate: Option<[i64; 2]>,
     /// Where a drag begins.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(type = "[number, number]", optional)]
     pub start_coordinate: Option<[i64; 2]>,
     /// What `type` writes.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -90,7 +97,8 @@ pub struct ComputerTask {
 
 /// Why an action failed. `screen_changed`: another agent acted on the screen since this seat's
 /// last screenshot. `policy_denied`: a key chord Jian never presses.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
 #[serde(rename_all = "snake_case")]
 pub enum ComputerErrorCode {
     /// The OS refused a permission; see [`Permission`].
@@ -109,7 +117,8 @@ pub enum ComputerErrorCode {
 
 /// Whether a failed action reached the screen: after `not_delivered` the same action can be
 /// sent again; after `uncertain` the screen has to be looked at first.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
 #[serde(rename_all = "snake_case")]
 pub enum Delivery {
     /// The action never reached the screen.
@@ -119,7 +128,8 @@ pub enum Delivery {
 }
 
 /// The OS permission a `perm_denied` action lacked.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
 #[serde(rename_all = "snake_case")]
 pub enum Permission {
     /// Controlling the pointer and keyboard.
@@ -131,7 +141,8 @@ pub enum Permission {
 }
 
 /// Display points per screenshot pixel, on each axis.
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export)]
 #[serde(rename_all = "camelCase")]
 pub struct Scale {
     /// Horizontal scale.
@@ -141,7 +152,8 @@ pub struct Scale {
 }
 
 /// A screenshot's JPEG goes in the result's `stdout`, as base64.
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export)]
 #[serde(rename_all = "camelCase")]
 pub struct ComputerOutcome {
     /// Whether the action took effect.
