@@ -1,0 +1,74 @@
+name: Rust
+
+on:
+  push:
+    paths:
+      - 'crates/**'
+      - 'bins/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'rust-toolchain*'
+      - 'deny.toml'
+      - 'rustfmt.toml'
+      - 'clippy.toml'
+      - '.github/workflows/rust.yml'
+  pull_request:
+    paths:
+      - 'crates/**'
+      - 'bins/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'rust-toolchain*'
+      - 'deny.toml'
+      - 'rustfmt.toml'
+      - 'clippy.toml'
+      - '.github/workflows/rust.yml'
+
+concurrency:
+  group: rust-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # Checks that do not depend on the OS: formatting, docs, dependency rules, unused dependencies.
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.98.0
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --all --check
+      - run: cargo doc --workspace --no-deps --locked
+        env:
+          RUSTDOCFLAGS: -D warnings
+      - uses: EmbarkStudios/cargo-deny-action@v2
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-machete
+      - run: cargo machete
+
+  # Code behind cfg(target_os) compiles, lints and tests only on its own OS, so each runs here.
+  # The Linux helper is pure Rust (x11rb), so no system packages are needed.
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.98.0
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - run: cargo test --workspace --locked
