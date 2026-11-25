@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use super::MachineSummary;
+use crate::threads::{MessageView, ParticipantChange, ThreadSummary};
 
 /// What a client can subscribe to. One topic today; each domain adds its own with its issue.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize, TS)]
@@ -12,6 +13,9 @@ use super::MachineSummary;
 pub enum Topic {
     /// Machines being made, revoked, connecting and disconnecting.
     Machines,
+    /// The threads the client is in: their messages, who comes and goes, and their changes. A
+    /// client hears only about threads it sees, so each client has a numbering of its own.
+    Threads,
 }
 
 /// Where a client left a topic: the gateway's `epoch` (it changes when the gateway restarts, and
@@ -39,6 +43,21 @@ pub struct Resume {
 pub enum DeltaPayload {
     /// A machine was made, revoked, paired again, connected or disconnected: its state now.
     Machine(MachineSummary),
+    /// A message was written in a thread of the client.
+    #[serde(rename = "message.created")]
+    MessageCreated(MessageView),
+    /// A message was edited or deleted: its state now.
+    #[serde(rename = "message.updated")]
+    MessageUpdated(MessageView),
+    /// A thread's title or last message changed, or it was just made: its state now.
+    #[serde(rename = "thread.updated")]
+    ThreadUpdated(ThreadSummary),
+    /// Someone joined a thread.
+    #[serde(rename = "participant.joined")]
+    ParticipantJoined(ParticipantChange),
+    /// Someone left a thread. The one who left hears it too, and then no more of that thread.
+    #[serde(rename = "participant.left")]
+    ParticipantLeft(ParticipantChange),
 }
 
 /// One change on a topic.

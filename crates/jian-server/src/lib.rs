@@ -53,6 +53,7 @@
 //! gateway with several replicas can put a shared store behind them without touching a handler.
 
 mod accounts;
+mod agents;
 mod auth;
 mod client_ws;
 mod events;
@@ -69,14 +70,17 @@ mod public_url;
 mod rate;
 mod slots;
 mod summary;
+mod thread_messages;
+mod threads;
 mod worker_ws;
+mod workspace;
 
 use std::sync::Arc;
 use std::time::Duration;
 
 use axum::extract::DefaultBodyLimit;
 use axum::extract::State;
-use axum::routing::{get, post};
+use axum::routing::{delete, get, patch, post};
 use axum::{Json, Router, http::StatusCode};
 use jian_auth::Auth;
 use jian_protocol::auth::Me;
@@ -85,7 +89,7 @@ use serde::Serialize;
 use tokio_util::sync::CancellationToken;
 
 pub use auth::{AuthRejection, Principal};
-pub use events::{BUFFER_DELTAS, EventBus, MemoryEventBus, Subscription};
+pub use events::{BUFFER_DELTAS, EventBus, MemoryEventBus, Scope, Subscription};
 pub use hub::{DispatchError, HubCommand, MachineHub};
 pub use invite_job::{INVITE_SEND_KIND, InviteSender};
 pub use jobs::{JobContext, JobError, JobHandler, JobOptions, JobRegistry, JobRequeue, JobRunner};
@@ -120,6 +124,25 @@ pub const ROUTES: &[&str] = &[
     "POST /v1/providers/{id}/activate (an admin)",
     "POST /v1/providers/{id}/revoke (an admin)",
     "GET /v1/providers/models (a session or token)",
+    "GET /v1/agents (a member)",
+    "POST /v1/agents (an admin, or a member with the agents.create grant)",
+    "GET /v1/agents/{id} (a member who sees it)",
+    "PATCH /v1/agents/{id} (its creator or an admin)",
+    "POST /v1/agents/{id}/archive (its creator or an admin)",
+    "GET /v1/agents/{id}/threads (a member who sees it)",
+    "GET /v1/grants (an admin)",
+    "POST /v1/grants (an admin)",
+    "POST /v1/grants/revoke (an admin)",
+    "GET /v1/threads (a member)",
+    "POST /v1/threads (a member)",
+    "GET /v1/threads/{id} (a member who sees it)",
+    "GET /v1/threads/{id}/participants (a member who sees it)",
+    "POST /v1/threads/{id}/participants (a member in it)",
+    "DELETE /v1/threads/{id}/participants/{kind}/{who} (a member in it)",
+    "GET /v1/threads/{id}/messages (a member who sees it)",
+    "POST /v1/threads/{id}/messages (a member in it)",
+    "PATCH /v1/threads/{id}/messages/{message_id} (its author)",
+    "DELETE /v1/threads/{id}/messages/{message_id} (its author)",
     "GET /v1/machines/connect (WebSocket, a machine's token)",
     "GET /v1/ws (WebSocket, the owner's or a phone's token)",
 ];
@@ -271,11 +294,39 @@ pub fn router_with(state: AppState, extra: Router<AppState>) -> Router {
         .route("/v1/providers/models", get(providers::catalog))
         .route("/v1/providers/{id}/activate", post(providers::activate))
         .route("/v1/providers/{id}/revoke", post(providers::revoke))
+        .route("/v1/agents", get(agents::list).post(agents::create))
+        .route("/v1/agents/{id}", get(agents::get).patch(agents::update))
+        .route("/v1/agents/{id}/archive", post(agents::archive))
+        .route("/v1/agents/{id}/threads", get(agents::threads))
+        .route("/v1/grants", get(agents::grants).post(agents::give))
+        .route("/v1/grants/revoke", post(agents::revoke))
+        .route("/v1/threads", get(threads::list).post(threads::create))
+        .route("/v1/threads/{id}", get(threads::get))
+        .route(
+            "/v1/threads/{id}/participants",
+            get(threads::participants).post(threads::add),
+        )
+        .route(
+            "/v1/threads/{id}/participants/{kind}/{who}",
+            delete(threads::remove),
+        )
         .layer(DefaultBodyLimit::max(MAX_ACCOUNT_BODY));
+    // A message may carry up to 64 KiB of text, which JSON escaping can double.
+    let messages = Router::new()
+        .route(
+            "/v1/threads/{id}/messages",
+            get(thread_messages::list).post(thread_messages::post),
+        )
+        .route(
+            "/v1/threads/{id}/messages/{message_id}",
+            patch(thread_messages::edit).delete(thread_messages::delete),
+        )
+        .layer(DefaultBodyLimit::max(MAX_MESSAGE_BODY));
     Router::new()
         .route("/health", get(health))
         .route("/v1/me", get(me))
         .merge(accounts)
+        .merge(messages)
         .route(
             jian_protocol::machine::CONNECT_PATH,
             get(worker_ws::connect),
@@ -287,6 +338,9 @@ pub fn router_with(state: AppState, extra: Router<AppState>) -> Router {
 
 /// The most bytes the body of an account route may have.
 const MAX_ACCOUNT_BODY: usize = 16 * 1024;
+
+/// The most bytes the body of a message route may have.
+const MAX_MESSAGE_BODY: usize = 160 * 1024;
 
 /// What `/health` answers. Only two words, never why: the endpoint is open, and a reason could
 /// carry a host name or a password.

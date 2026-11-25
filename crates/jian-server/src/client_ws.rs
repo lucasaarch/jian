@@ -309,7 +309,26 @@ impl Session {
             old.abort();
         }
         let tenant = &self.principal.tenant;
-        let subscription = self.app.events.subscribe(tenant, topic, resume).await;
+        // Threads are per member: each hears only about the threads they see.
+        let scope = if topic == Topic::Threads {
+            let Some(account) = &self.principal.account_id else {
+                return self
+                    .send(&refusal(
+                        Some(id),
+                        ErrorCode::Forbidden,
+                        "sign in as a member to follow threads",
+                    ))
+                    .await;
+            };
+            Some(account.as_str().to_owned())
+        } else {
+            None
+        };
+        let subscription = self
+            .app
+            .events
+            .subscribe_scoped(tenant, topic, scope.as_deref(), resume)
+            .await;
         let answer = ServerMessage::Reply {
             id,
             response: ClientResponse::Subscribed(Subscribed {
@@ -332,6 +351,7 @@ impl Session {
             self.app.clone(),
             tenant.clone(),
             topic,
+            scope,
             subscription.live,
             self.out.clone(),
         ));
@@ -346,6 +366,7 @@ async fn forward(
     app: AppState,
     tenant: TenantId,
     topic: Topic,
+    scope: Option<String>,
     mut live: broadcast::Receiver<jian_protocol::client::Delta>,
     out: mpsc::Sender<Message>,
 ) {
@@ -353,7 +374,10 @@ async fn forward(
         let message = match live.recv().await {
             Ok(delta) => ServerMessage::Delta(delta),
             Err(broadcast::error::RecvError::Lagged(_)) => {
-                let fresh = app.events.subscribe(&tenant, topic, None).await;
+                let fresh = app
+                    .events
+                    .subscribe_scoped(&tenant, topic, scope.as_deref(), None)
+                    .await;
                 live = fresh.live;
                 ServerMessage::Resync(Resync {
                     topic,

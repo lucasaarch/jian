@@ -604,7 +604,8 @@ async fn only_an_admin_or_the_owner_manages_members_and_invitations() {
             ids,
             [
                 side.admin.account_id.as_str(),
-                side.member.account_id.as_str()
+                side.member.account_id.as_str(),
+                side.peer.account_id.as_str()
             ]
         );
     }
@@ -646,7 +647,7 @@ async fn there_is_no_way_to_sign_oneself_up() {
         .list_members(&tenants.a.ctx, None, 100)
         .await
         .unwrap();
-    assert_eq!(page.items.len(), 2);
+    assert_eq!(page.items.len(), 3);
     assert!(
         gateway
             .db

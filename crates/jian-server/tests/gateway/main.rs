@@ -10,6 +10,7 @@ mod isolation;
 mod providers;
 mod slots;
 mod support;
+mod threads;
 
 use std::time::Duration;
 
@@ -39,7 +40,9 @@ fn tenant(id: &str) -> TenantId {
 }
 
 fn machine_of(payload: DeltaPayload) -> MachineSummary {
-    let DeltaPayload::Machine(machine) = payload;
+    let DeltaPayload::Machine(machine) = payload else {
+        panic!("expected a machine");
+    };
     machine
 }
 

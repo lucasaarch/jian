@@ -34,25 +34,54 @@ pub struct Subscription {
     pub live: broadcast::Receiver<Delta>,
 }
 
+/// Whose deltas a feed carries. `None` is the tenant's shared feed; `Some(account)` is one
+/// member's own, for topics where each member sees different things (threads): each has its own
+/// numbering, so a member never sees a gap left by what they could not see.
+pub type Scope<'a> = Option<&'a str>;
+
 /// Numbers changes and hands them to whoever follows the topic.
 pub trait EventBus: Send + Sync {
-    /// Records a change and sends it to every subscriber of the tenant's topic. The tenant is a
+    /// Records a change in a feed and sends it to every subscriber of it. The tenant is a
     /// parameter, not part of the payload: a subscription only ever sees its own tenant's.
+    fn publish_scoped<'a>(
+        &'a self,
+        tenant: &'a TenantId,
+        topic: Topic,
+        scope: Scope<'a>,
+        payload: DeltaPayload,
+    ) -> BoxFuture<'a, ()>;
+
+    /// Starts following a feed of a tenant, catching up from `resume` when it still can.
+    fn subscribe_scoped<'a>(
+        &'a self,
+        tenant: &'a TenantId,
+        topic: Topic,
+        scope: Scope<'a>,
+        resume: Option<&'a Resume>,
+    ) -> BoxFuture<'a, Subscription>;
+
+    /// [`publish_scoped`](EventBus::publish_scoped) to the tenant's shared feed.
     fn publish<'a>(
         &'a self,
         tenant: &'a TenantId,
         topic: Topic,
         payload: DeltaPayload,
-    ) -> BoxFuture<'a, ()>;
+    ) -> BoxFuture<'a, ()> {
+        self.publish_scoped(tenant, topic, None, payload)
+    }
 
-    /// Starts following a topic of a tenant, catching up from `resume` when it still can.
+    /// [`subscribe_scoped`](EventBus::subscribe_scoped) to the tenant's shared feed.
     fn subscribe<'a>(
         &'a self,
         tenant: &'a TenantId,
         topic: Topic,
         resume: Option<&'a Resume>,
-    ) -> BoxFuture<'a, Subscription>;
+    ) -> BoxFuture<'a, Subscription> {
+        self.subscribe_scoped(tenant, topic, None, resume)
+    }
 }
+
+type Key = (TenantId, Topic, Option<String>);
 
 struct Channel {
     seq: u64,
@@ -73,7 +102,7 @@ impl Channel {
 /// Deltas kept in this process's memory.
 pub struct MemoryEventBus {
     epoch: String,
-    channels: Mutex<HashMap<(TenantId, Topic), Channel>>,
+    channels: Mutex<HashMap<Key, Channel>>,
 }
 
 impl MemoryEventBus {
@@ -89,7 +118,7 @@ impl MemoryEventBus {
         }
     }
 
-    fn lock(&self) -> std::sync::MutexGuard<'_, HashMap<(TenantId, Topic), Channel>> {
+    fn lock(&self) -> std::sync::MutexGuard<'_, HashMap<Key, Channel>> {
         self.channels
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -103,16 +132,17 @@ impl Default for MemoryEventBus {
 }
 
 impl EventBus for MemoryEventBus {
-    fn publish<'a>(
+    fn publish_scoped<'a>(
         &'a self,
         tenant: &'a TenantId,
         topic: Topic,
+        scope: Scope<'a>,
         payload: DeltaPayload,
     ) -> BoxFuture<'a, ()> {
         Box::pin(async move {
             let mut channels = self.lock();
             let channel = channels
-                .entry((tenant.clone(), topic))
+                .entry((tenant.clone(), topic, scope.map(str::to_owned)))
                 .or_insert_with(Channel::new);
             channel.seq += 1;
             let delta = Delta {
@@ -129,16 +159,17 @@ impl EventBus for MemoryEventBus {
         })
     }
 
-    fn subscribe<'a>(
+    fn subscribe_scoped<'a>(
         &'a self,
         tenant: &'a TenantId,
         topic: Topic,
+        scope: Scope<'a>,
         resume: Option<&'a Resume>,
     ) -> BoxFuture<'a, Subscription> {
         Box::pin(async move {
             let mut channels = self.lock();
             let channel = channels
-                .entry((tenant.clone(), topic))
+                .entry((tenant.clone(), topic, scope.map(str::to_owned)))
                 .or_insert_with(Channel::new);
             // Taken under the lock that publish holds, so no delta falls between the replay and
             // the live feed, and none is in both.

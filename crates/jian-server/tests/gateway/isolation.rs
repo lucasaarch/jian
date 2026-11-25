@@ -30,6 +30,7 @@ const THIS_FILE: &str = include_str!("isolation.rs");
 /// The invitation tests are in their own file, and the isolation one is among them.
 const INVITES_FILE: &str = include_str!("invites.rs");
 const PROVIDERS_FILE: &str = include_str!("providers.rs");
+const THREADS_FILE: &str = include_str!("threads.rs");
 
 async fn start() -> (Gateway, TwoTenants) {
     super::accounts::start(open_settings()).await
@@ -40,6 +41,7 @@ fn is_a_test_here(name: &str) -> bool {
     THIS_FILE.contains(&declared)
         || INVITES_FILE.contains(&declared)
         || PROVIDERS_FILE.contains(&declared)
+        || THREADS_FILE.contains(&declared)
 }
 
 /// Every route the router serves, and the test here that shows tenant B cannot use it on A's
@@ -68,6 +70,31 @@ const ROUTE_TESTS: &[(&str, &str)] = &[
     ("POST /v1/providers/{id}/activate", PROVIDERS_TEST),
     ("POST /v1/providers/{id}/revoke", PROVIDERS_TEST),
     ("GET /v1/providers/models", PROVIDERS_TEST),
+    ("GET /v1/agents", THREADS_TEST),
+    ("POST /v1/agents", THREADS_TEST),
+    ("GET /v1/agents/{id}", THREADS_TEST),
+    ("PATCH /v1/agents/{id}", THREADS_TEST),
+    ("POST /v1/agents/{id}/archive", THREADS_TEST),
+    ("GET /v1/agents/{id}/threads", THREADS_TEST),
+    ("GET /v1/grants", THREADS_TEST),
+    ("POST /v1/grants", THREADS_TEST),
+    ("POST /v1/grants/revoke", THREADS_TEST),
+    ("GET /v1/threads", THREADS_TEST),
+    ("POST /v1/threads", THREADS_TEST),
+    ("GET /v1/threads/{id}", THREADS_TEST),
+    ("GET /v1/threads/{id}/participants", THREADS_TEST),
+    ("POST /v1/threads/{id}/participants", THREADS_TEST),
+    (
+        "DELETE /v1/threads/{id}/participants/{kind}/{who}",
+        THREADS_TEST,
+    ),
+    ("GET /v1/threads/{id}/messages", THREADS_TEST),
+    ("POST /v1/threads/{id}/messages", THREADS_TEST),
+    ("PATCH /v1/threads/{id}/messages/{message_id}", THREADS_TEST),
+    (
+        "DELETE /v1/threads/{id}/messages/{message_id}",
+        THREADS_TEST,
+    ),
     (
         "GET /v1/machines/connect",
         "a_worker_of_one_tenant_neither_gets_nor_answers_the_others_tasks",
@@ -82,6 +109,9 @@ const ROUTE_TESTS: &[(&str, &str)] = &[
 /// tenant A's invitation, and that A's job sends with A's own account.
 const INVITES_TEST: &str =
     "an_invitation_is_sent_with_its_own_workspaces_mail_account_and_nobody_elses";
+
+/// The test that shows tenant B reaches no agent, thread or message of tenant A.
+const THREADS_TEST: &str = "agents_threads_and_messages_of_the_other_tenant_are_out_of_reach";
 
 /// The test that shows tenant B reaches no model provider account of tenant A, and no key.
 const PROVIDERS_TEST: &str = "provider_accounts_of_the_other_tenant_are_out_of_reach";
@@ -113,6 +143,7 @@ fn request_test(request: &ClientRequest) -> &'static str {
 fn topic_test(topic: Topic) -> &'static str {
     match topic {
         Topic::Machines => "a_delta_reaches_only_its_own_tenants_subscribers",
+        Topic::Threads => "a_member_hears_only_the_threads_they_are_in",
     }
 }
 
@@ -184,6 +215,7 @@ async fn every_route_request_and_topic_has_an_isolation_test() {
         );
     }
     assert!(is_a_test_here(topic_test(Topic::Machines)));
+    assert!(is_a_test_here(topic_test(Topic::Threads)));
     // Compiling this is the check: a new worker message must be listed in `worker_message_test`.
     let _: fn(&WorkerMessage) -> &'static str = worker_message_test;
     gateway.stop().await;
@@ -407,7 +439,9 @@ async fn a_delta_reaches_only_its_own_tenants_subscribers() {
         let worker = RawWorker::welcomed(addr, &token, &["shell"]).await;
         // The machine is issued, then comes online.
         for _ in 0..2 {
-            let DeltaPayload::Machine(seen) = owner.delta().await.payload;
+            let DeltaPayload::Machine(seen) = owner.delta().await.payload else {
+                panic!("expected a machine");
+            };
             assert_eq!(seen.id.as_str(), machine.id.as_str());
         }
         assert!(

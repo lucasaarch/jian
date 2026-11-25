@@ -163,6 +163,18 @@ fn examples_the_rust_side_wrote_satisfy_the_typescript_types() {
                              "system": null, "workerVersion": null, "capabilities": [],
                              "createdAt": "2026-01-01T00:00:00.000Z", "lastSeenAt": null } }),
         json!({ "type": "resync", "topic": "machines", "epoch": "e2", "seq": 0 }),
+        json!({ "type": "delta", "topic": "threads", "seq": 1,
+                "payload": { "type": "message.created", "id": "msg_1", "threadId": "thr_1",
+                             "seq": 1, "author": { "kind": "member", "id": "acc_1",
+                             "label": null },
+                             "parts": [{ "type": "text", "text": "hi" }],
+                             "replyTo": null, "clientKey": "k1",
+                             "createdAt": "2026-01-01T00:00:00.000Z", "editedAt": null,
+                             "deleted": false } }),
+        json!({ "type": "delta", "topic": "threads", "seq": 2,
+                "payload": { "type": "participant.left", "threadId": "thr_1",
+                             "participant": { "kind": "member", "id": "acc_2",
+                             "label": null, "joinedAt": "2026-01-01T00:00:00.000Z" } } }),
     ];
 
     let check = format!(
