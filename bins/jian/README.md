@@ -117,11 +117,54 @@ instance that takes all 1024 slots when it starts, in one statement; the log say
   backoff after any close it was not told to give up on, and `4004` is not one of those.
 - **An instance that dies** stops renewing, and its slots are taken by another one when the lease
   runs out (up to 30 s). It stops serving them before that, on its own monotonic clock.
-- **SIGTERM / SIGINT** drains: the instance stops serving tenants (open sockets get `4004`), stops
-  accepting, hands unfinished runs back (there is no queue of runs yet, so none), releases its
-  leases so another instance takes the slots on its next round without waiting, and only then
-  stops the embedded Postgres. The log shows each step: `stop signal received; draining`,
-  `no longer serving tenants`, `slot leases released released=<n>`, `embedded Postgres stopped`.
+- **SIGTERM / SIGINT** drains: the instance stops serving tenants (open sockets get `4004`) and
+  taking jobs, stops accepting, waits up to 8 s for the jobs that are running, stops the ones
+  still running and puts them back in the queue, releases its leases so another instance takes
+  the slots on its next round without waiting, and only then stops the embedded Postgres. The log
+  shows each step: `stop signal received; draining`, `no longer serving tenants`,
+  `job runner stopped aborted=<n>`, `slot leases released released=<n> requeued=<n>`,
+  `embedded Postgres stopped`.
+
+## The job queue
+
+Work that must survive a restart (runs, schedules, channel deliveries, webhooks) is a row in
+`platform.jobs`, in the same Postgres, and nothing else: no Redis, no separate queue. Each
+instance runs the jobs of the slots it owns, so a tenant's jobs and its sockets are on one
+instance.
+
+- A job has a `kind` (`run.start`, `channel.deliver`), a JSON `payload` of **ids and small
+  parameters, never a secret**, an optional **idempotency key** (the same key for the same tenant
+  and kind is one job, also after it ran, until its `done` row is cleaned up) and `max_attempts`
+  (default 5).
+- Failure: the handler returns a retryable error and the job waits `5 s * 2^(attempt-1)`, capped
+  at 15 minutes, lowered by up to half at random, then runs again; after the last attempt, or at
+  once for a permanent error, it is `dead` and stays for inspection. A job whose instance dies is
+  taken back when its 60 s deadline passes (a slow handler keeps it with a heartbeat every 20 s);
+  a late answer from the instance that lost the job is refused.
+- The queue is **at-least-once**: a handler's effect must be safe to repeat.
+- `done` jobs are deleted after 7 days. Jobs of the old Node gateway's pg-boss are not imported.
+- The instance wakes on a Postgres `NOTIFY` when a job is enqueued and polls every second as a
+  guarantee (this also takes back the jobs of dead instances). It runs 4 jobs at a time.
+
+**Registering a handler** (for the domains, from M3): implement `jian_server::JobHandler` for a
+kind, add it to the `JobRegistry` the binary passes to `JobRunner::start`, and enqueue with
+`Database::enqueue_job(&tenant, NewJob::new("kind", json!({ "id": id })).idempotent(key))`. An
+instance claims only the kinds it has a handler for. The module docs of `jian-server`'s `jobs`
+have an example. Until a domain has one, the binary registers a single `debug.log` kind.
+
+**Try it**: with `make rust-dev` running, enqueue a job on its Postgres (the port is the fourth
+line of `.jian-dev/pgdata/postmaster.pid`) and read the gateway's log:
+
+```bash
+cargo run -p jian -- --data-dir .jian-dev jobs enqueue-test --message hello --work-ms 3000 \
+  --database-url postgres://postgres:$(cat .jian-dev/password)@127.0.0.1:<port>/postgres
+# enqueued job 0b0e...
+# gateway log: debug job started ... debug job finished
+```
+
+Without `--database-url` the command starts the embedded Postgres itself, so the gateway must be
+stopped first. `--work-ms` keeps the job running long enough to `kill -TERM` the gateway and see
+it handed back (`requeued=1`).
 
 ## Another address or another Postgres
 

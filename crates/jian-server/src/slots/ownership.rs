@@ -83,6 +83,28 @@ impl SlotOwnership {
             .count()
     }
 
+    /// The slots served now, each with its epoch: what the job queue claims from. Empty while
+    /// draining, so a draining instance takes no new job.
+    #[must_use]
+    pub fn held(&self) -> Vec<HeldSlot> {
+        if self.is_draining() {
+            return Vec::new();
+        }
+        let now = Instant::now();
+        self.read()
+            .iter()
+            .enumerate()
+            .filter_map(|(index, lease)| {
+                let lease = lease.filter(|lease| lease.until > now)?;
+                let slot = SlotId::new(u16::try_from(index).ok()?)?;
+                Some(HeldSlot {
+                    slot,
+                    epoch: lease.epoch,
+                })
+            })
+            .collect()
+    }
+
     /// Whether the instance has been told to stop: it serves nothing and takes nothing back.
     #[must_use]
     pub fn is_draining(&self) -> bool {

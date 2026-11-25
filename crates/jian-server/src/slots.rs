@@ -35,9 +35,9 @@ pub use ownership::SlotOwnership;
 /// Hands back the runs this instance started and did not finish, so that whichever instance
 /// takes the tenant's slot can start them again.
 ///
-/// Called once, by the drain, before the leases are released. There is no queue of runs yet (the
-/// agent runtime that makes them is not built), so [`NoRunQueue`] is all there is; the queue
-/// brings its own implementation and the binary passes it to the drain instead.
+/// Called once, by the drain, before the leases are released. The job queue's is
+/// [`JobRequeue`](crate::JobRequeue), which the gateway binary passes; [`NoRunQueue`] is for a
+/// server with no queue.
 pub trait RunRequeue: Send + Sync {
     /// Puts every unfinished run of `instance` back on the queue and returns how many. A run
     /// that cannot be put back is the implementation's to log: the drain goes on, because the

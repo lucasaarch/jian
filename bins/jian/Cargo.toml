@@ -9,8 +9,10 @@ axum.workspace = true
 anyhow.workspace = true
 clap.workspace = true
 directories.workspace = true
+futures-util.workspace = true
 jian-server.workspace = true
 jian-store.workspace = true
+serde_json.workspace = true
 tokio = { workspace = true, features = ["signal", "sync", "time"] }
 tokio-util.workspace = true
 tracing.workspace = true

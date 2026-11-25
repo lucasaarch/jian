@@ -28,6 +28,13 @@
 //! client to the right replica is the edge's job (M6); this crate guarantees only that no two
 //! instances serve a tenant at once.
 //!
+//! # Jobs
+//!
+//! Work that must survive a restart (runs, schedules, channel deliveries, webhooks) is a row in
+//! `platform.jobs` and not a task in memory (`jobs`). Each instance runs the jobs of the slots it
+//! owns, with the handlers the domains register by kind; the queue is at-least-once, with retry,
+//! backoff and idempotency keys, and a drain hands back what it did not finish.
+//!
 //! # What is behind a trait
 //!
 //! The [`EventBus`] and the [`RateLimiter`] keep their state in this process. Both are traits so a
@@ -37,6 +44,7 @@ mod auth;
 mod client_ws;
 mod events;
 mod hub;
+mod jobs;
 mod rate;
 mod slots;
 mod summary;
@@ -55,6 +63,7 @@ use tokio_util::sync::CancellationToken;
 pub use auth::{AuthRejection, Principal};
 pub use events::{BUFFER_DELTAS, EventBus, MemoryEventBus, Subscription};
 pub use hub::{DispatchError, HubCommand, MachineHub};
+pub use jobs::{JobContext, JobError, JobHandler, JobOptions, JobRegistry, JobRequeue, JobRunner};
 pub use rate::{Clock, Limit, ManualClock, MemoryRateLimiter, RateLimiter, SystemClock, Verdict};
 pub use slots::{DrainReport, NoRunQueue, RunRequeue, SlotKeeper, SlotOwnership};
 

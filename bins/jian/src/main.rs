@@ -9,6 +9,7 @@
 // What a server prints at start-up is this binary's interface to whoever runs it.
 #![allow(clippy::print_stdout)]
 
+mod debug_jobs;
 mod owner_token;
 mod shutdown;
 
@@ -16,14 +17,16 @@ use std::future::IntoFuture as _;
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use anyhow::Context as _;
 use clap::{Parser, Subcommand};
-use jian_server::{AppState, NoRunQueue, Settings, SlotKeeper};
+use jian_server::{AppState, JobOptions, JobRequeue, JobRunner, Settings, SlotKeeper};
 use jian_store::embedded::EmbeddedConfig;
 use jian_store::secrets::{LocalKeyring, MasterKeys as _};
-use jian_store::{Database, DatabaseSource, DatabaseUrl, SlotOptions, TenantId, TenantStatus};
+use jian_store::{
+    Database, DatabaseSource, DatabaseUrl, NewJob, SlotOptions, TenantId, TenantStatus,
+};
 use tokio::sync::oneshot;
 use tokio_util::sync::CancellationToken;
 
@@ -117,6 +120,27 @@ enum Command {
     Keys {
         #[command(subcommand)]
         action: KeysAction,
+    },
+    /// The job queue, for trying it by hand.
+    Jobs {
+        #[command(subcommand)]
+        action: JobsAction,
+    },
+}
+
+#[derive(Subcommand)]
+enum JobsAction {
+    /// Enqueue a `debug.log` job for the install's tenant: the running gateway picks it up and
+    /// logs the message. The gateway must have run once on this database. With the embedded
+    /// Postgres, stop the gateway first, because the command starts that database itself; with
+    /// `DATABASE_URL` or `--database-url` it runs beside the gateway.
+    EnqueueTest {
+        /// What the job logs.
+        #[arg(long, default_value = "hello from the queue")]
+        message: String,
+        /// How many milliseconds the job pretends to work, so a SIGTERM can find it running.
+        #[arg(long, value_name = "MS")]
+        work_ms: Option<u64>,
     },
 }
 
@@ -234,6 +258,9 @@ async fn main() -> anyhow::Result<()> {
         Some(Command::Keys {
             action: KeysAction::Rotate,
         }) => rotate(&database).await,
+        Some(Command::Jobs {
+            action: JobsAction::EnqueueTest { message, work_ms },
+        }) => enqueue_test(&database, &message, work_ms).await,
         None => match prepare(&database, &owner).await {
             Ok(()) => serve(&addr, &database, &owner_source, &mut shutdown).await,
             Err(error) => Err(error),
@@ -273,6 +300,28 @@ async fn rotate(database: &Database) -> anyhow::Result<()> {
         "data keys rewrapped: {}, already on the active key: {}",
         report.rewrapped, report.already_current
     );
+    Ok(())
+}
+
+/// `jian jobs enqueue-test`: puts one `debug.log` job on the queue and prints its id.
+async fn enqueue_test(
+    database: &Database,
+    message: &str,
+    work_ms: Option<u64>,
+) -> anyhow::Result<()> {
+    let tenant = database
+        .tenant(TenantId::self_hosted())
+        .await
+        .context("cannot open the tenant; has the gateway run once on this database?")?;
+    let mut payload = serde_json::json!({ "message": message });
+    if let Some(work_ms) = work_ms {
+        payload["workMs"] = work_ms.into();
+    }
+    let made = database
+        .enqueue_job(&tenant, NewJob::new(debug_jobs::KIND, payload))
+        .await
+        .context("cannot enqueue the job")?;
+    println!("enqueued job {}", made.job.id);
     Ok(())
 }
 
@@ -357,6 +406,15 @@ async fn serve(
         slots = slots.count(),
         "this instance serves its slots"
     );
+    // After the slots: the runner takes jobs only from slots this instance holds.
+    let runner = JobRunner::start(
+        database.clone(),
+        keeper.instance().clone(),
+        slots.clone(),
+        debug_jobs::registry(),
+        JobOptions::default(),
+    )
+    .await;
     let closing = CancellationToken::new();
     let state = AppState::new(
         database.clone(),
@@ -381,9 +439,12 @@ async fn serve(
         .into_future(),
     );
 
+    // Until when the jobs that are running may finish: the same deadline as the requests.
+    let mut jobs_until = Instant::now() + DRAIN_DEADLINE;
     let outcome = tokio::select! {
         () = shutdown.wait() => {
             tracing::info!("stop signal received; draining");
+            jobs_until = Instant::now() + DRAIN_DEADLINE;
             // Open sockets are told to reconnect first, because a graceful stop waits for them.
             keeper.begin_drain().await;
             tracing::info!("no longer serving tenants; open connections told to reconnect");
@@ -408,12 +469,19 @@ async fn serve(
                 .and_then(|ended| ended.context("the server stopped"))
         }
     };
+    // No new job is taken (the slots are no longer served); the ones running get until the
+    // deadline, and what is left is stopped and handed back to the queue below.
+    let stopped = runner.shutdown(jobs_until).await;
     // Nothing serves a tenant now, so the slots can go to another instance without waiting for
-    // their leases to run out. There is no queue of runs yet, so none is handed back.
-    match keeper.finish_drain(&NoRunQueue).await {
+    // their leases to run out, once the jobs still running are back in the queue.
+    match keeper
+        .finish_drain(&JobRequeue::new(database.clone()))
+        .await
+    {
         Ok(report) => tracing::info!(
             released = report.released,
             requeued = report.requeued,
+            stopped,
             "slot leases released"
         ),
         Err(error) => {
@@ -540,5 +608,26 @@ mod tests {
                 action: KeysAction::Rotate
             })
         ));
+    }
+
+    #[test]
+    fn jobs_enqueue_test_is_a_subcommand() {
+        let cli = Cli::try_parse_from([
+            "jian",
+            "jobs",
+            "enqueue-test",
+            "--message",
+            "hi",
+            "--work-ms",
+            "2000",
+        ])
+        .unwrap();
+        let Some(Command::Jobs {
+            action: JobsAction::EnqueueTest { message, work_ms },
+        }) = cli.command
+        else {
+            panic!("expected jobs enqueue-test");
+        };
+        assert_eq!((message.as_str(), work_ms), ("hi", Some(2000)));
     }
 }
