@@ -16,6 +16,10 @@ pub struct Shutdown {
 
 impl Shutdown {
     /// Registers the handlers.
+    #[cfg_attr(
+        not(unix),
+        allow(clippy::unnecessary_wraps, reason = "only Unix registration can fail")
+    )]
     pub fn install() -> io::Result<Self> {
         #[cfg(unix)]
         {
@@ -32,6 +36,10 @@ impl Shutdown {
     }
 
     /// Returns when the first stop signal arrives.
+    #[cfg_attr(
+        not(unix),
+        allow(clippy::unused_self, reason = "the Unix signals live in self")
+    )]
     pub async fn wait(&mut self) {
         #[cfg(unix)]
         tokio::select! {
