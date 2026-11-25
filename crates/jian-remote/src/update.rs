@@ -134,6 +134,7 @@ fn checked(url: &str) -> Result<Url, UpdateError> {
 }
 
 fn client() -> Result<reqwest::Client, UpdateError> {
+    crate::tls::install_provider();
     reqwest::Client::builder()
         .user_agent(concat!("jian-remote/", env!("CARGO_PKG_VERSION")))
         .timeout(REQUEST_TIMEOUT)

@@ -7,13 +7,14 @@ license.workspace = true
 [dependencies]
 futures-util.workspace = true
 reqwest.workspace = true
-serde.workspace = true
-serde_json.workspace = true
+resend-rs.workspace = true
+rustls.workspace = true
 thiserror.workspace = true
 zeroize.workspace = true
 
 [dev-dependencies]
 axum.workspace = true
+serde_json.workspace = true
 tokio = { workspace = true, features = ["rt-multi-thread", "sync"] }
 
 [lints]

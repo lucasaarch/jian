@@ -14,8 +14,9 @@
 //!
 //! # Parts
 //!
-//! - [`Mailer`]: the trait. [`ResendMailer`] posts to Resend's HTTP API; [`NoMailer`] is what
-//!   a deploy without e-mail has, and refuses with a permanent error.
+//! - [`Mailer`]: the trait. [`ResendMailer`] sends through Resend's HTTP API (the `resend-rs`
+//!   crate); [`NoMailer`] is what a deploy without e-mail has, and refuses with a permanent
+//!   error.
 //! - [`Mailbox`]: a validated sender (`Name <a@b>` or `a@b`).
 //! - [`invite_message`]: the invitation, in English, as text and HTML with every user-supplied
 //!   value escaped.

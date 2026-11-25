@@ -28,6 +28,9 @@ allow = [
   "MPL-2.0",
   "IJG",
   "CDLA-Permissive-2.0",
+  # mailparse and quoted_printable, which resend-rs uses: a public-domain-like license with no
+  # conditions at all.
+  "0BSD",
   # postgresql_embedded and its siblings: "(Apache-2.0 OR MIT) AND PostgreSQL". The PostgreSQL
   # license is a short permissive one, like MIT, and covers the bundled server too.
   "PostgreSQL",

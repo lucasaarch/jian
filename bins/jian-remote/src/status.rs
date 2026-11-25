@@ -20,6 +20,7 @@ struct Ping {
 
 async fn ping(gateway: &str) -> Ping {
     let started = Instant::now();
+    jian_remote::tls::install_provider();
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(5))
         .redirect(reqwest::redirect::Policy::none())

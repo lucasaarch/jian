@@ -17,6 +17,7 @@ pub mod result;
 pub mod shell;
 pub mod state;
 pub mod system;
+pub mod tls;
 pub mod transport;
 pub mod update;
 pub mod worker;

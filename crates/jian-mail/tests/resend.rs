@@ -91,11 +91,13 @@ async fn a_refusal_about_the_key_or_the_sender_is_permanent_and_never_echoes_the
     let (url, fake) = serve().await;
     let mailer = ResendMailer::new(KEY, &url).unwrap();
     for status in [400, 401, 403, 422] {
-        // A provider that quotes the key back, as a misbehaving proxy might.
+        // Resend's error shape, with a reason that quotes the key back, as a proxy might.
         answer(
             &fake,
             status,
-            &format!(r#"{{"message":"The domain is not verified for {KEY}"}}"#),
+            &format!(
+                r#"{{"statusCode":{status},"name":"validation_error","message":"The domain is not verified for {KEY}"}}"#
+            ),
         );
         let error = mailer.send(&message()).await.unwrap_err();
         assert!(error.is_permanent(), "{status}: {error}");
@@ -118,6 +120,18 @@ async fn a_busy_or_broken_provider_is_temporary() {
             "{status}: {error}"
         );
     }
+}
+
+#[tokio::test]
+async fn an_accepted_message_with_an_unreadable_answer_is_not_sent_again() {
+    let (url, fake) = serve().await;
+    answer(&fake, 200, "accepted");
+    let receipt = ResendMailer::new(KEY, &url)
+        .unwrap()
+        .send(&message())
+        .await
+        .unwrap();
+    assert_eq!(receipt.message_id, None);
 }
 
 #[tokio::test]
