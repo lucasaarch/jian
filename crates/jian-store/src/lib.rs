@@ -121,6 +121,7 @@
 mod accounts;
 mod agents;
 mod backup;
+mod checkpoints;
 mod credentials;
 mod database;
 mod devices;
@@ -165,6 +166,7 @@ pub use agents::{
     can_manage_agent,
 };
 pub use backup::tenant_dump_args;
+pub use checkpoints::{Checkpoint, HistoryRow, MAX_HISTORY_PAGE, TailSize};
 pub use credentials::{CredentialKind, PasswordCredential};
 pub use database::{Database, DatabaseHealth, DatabaseSource, DatabaseUrl};
 pub use devices::Device;

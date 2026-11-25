@@ -34,6 +34,7 @@ jian-llm = { path = "crates/jian-llm" }
 jian-mail = { path = "crates/jian-mail" }
 jian-protocol = { path = "crates/jian-protocol" }
 jian-remote = { path = "crates/jian-remote" }
+jian-runtime = { path = "crates/jian-runtime" }
 jian-server = { path = "crates/jian-server" }
 jian-store = { path = "crates/jian-store" }
 # Test fixtures only: a crate lists it under [dev-dependencies].

@@ -26,7 +26,8 @@ use anyhow::Context as _;
 use clap::{Parser, Subcommand};
 use jian_server::{
     AppState, INVITE_SEND_KIND, InviteSender, JobOptions, JobRegistry, JobRequeue, JobRunner,
-    PublicUrl, SCHEDULE_FIRE_KIND, ScheduleFirer, Settings, SlotKeeper,
+    Model, ModelSource, PublicUrl, SCHEDULE_FIRE_KIND, ScheduleFirer, Settings, SlotKeeper,
+    THREAD_COMPACT_KIND, ThreadCompactor,
 };
 use jian_store::embedded::EmbeddedConfig;
 use jian_store::secrets::{LocalKeyring, MasterKeys as _};
@@ -438,11 +439,25 @@ async fn import_command(database: &Database, cli: &Cli, args: ImportArgs) -> any
     import_cli::run(database, &ctx, &cli.import, &cli.data_dir()?, args).await
 }
 
+/// No tenant has a model to summarize with yet: they come from the provider accounts when the
+/// agent loop lands. Until then a `thread.compact` job ends as dead, with that reason.
+struct NoModels;
+
+impl ModelSource for NoModels {
+    fn model(&self, _: &TenantCtx) -> futures_util::future::BoxFuture<'_, Option<Model>> {
+        Box::pin(async { None })
+    }
+}
+
 /// Every job kind this binary runs.
 fn job_registry(settings: &Settings) -> JobRegistry {
     debug_jobs::registry()
         .register(INVITE_SEND_KIND, Arc::new(InviteSender::new(settings)))
         .register(SCHEDULE_FIRE_KIND, Arc::new(ScheduleFirer))
+        .register(
+            THREAD_COMPACT_KIND,
+            Arc::new(ThreadCompactor::new(Arc::new(NoModels))),
+        )
 }
 
 /// Serves until a stop signal, then drains: it stops serving tenants (every open socket is told

@@ -5,6 +5,17 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+futures-util.workspace = true
+jian-core.workspace = true
+jian-llm.workspace = true
+jian-store.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+jian-testkit.workspace = true
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 
 [lints]
 workspace = true

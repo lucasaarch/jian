@@ -207,7 +207,7 @@ pub(crate) fn encode_parts(parts: &[MessagePart]) -> String {
     serde_json::Value::Array(list).to_string()
 }
 
-fn decode_parts(text: &str) -> Result<Vec<MessagePart>, StoreError> {
+pub(crate) fn decode_parts(text: &str) -> Result<Vec<MessagePart>, StoreError> {
     const BAD: StoreError = StoreError::InvalidWorkspace("a stored message has unreadable parts");
     let value: serde_json::Value = serde_json::from_str(text).map_err(|_| BAD)?;
     let list = value.as_array().ok_or(BAD)?;
