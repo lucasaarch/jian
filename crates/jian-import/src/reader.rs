@@ -4,7 +4,10 @@ use std::fs;
 use std::path::PathBuf;
 
 use jian_store::embedded::EmbeddedPostgres;
-use jian_store::{LegacyDevice, LegacyMachine, LegacyProvider};
+use jian_store::{
+    LegacyAgent, LegacyChat, LegacyDevice, LegacyMachine, LegacyMessage, LegacyProvider,
+    LegacyThread,
+};
 use sqlx::{AssertSqlSafe, Connection as _, PgConnection};
 
 use crate::ImportError;
@@ -114,6 +117,103 @@ impl LegacyReader {
                         last_seen_at,
                         revoked_at,
                     }
+                },
+            )
+            .collect())
+    }
+
+    pub(crate) async fn agents(&mut self) -> Result<Vec<LegacyAgent>, ImportError> {
+        let rows: Vec<(String, String, String, String, Option<String>, String)> = sqlx::query_as(
+            "SELECT id::text, name, instructions, summary, avatar, created_at::text \
+             FROM profiles ORDER BY created_at, id",
+        )
+        .fetch_all(&mut self.connection)
+        .await
+        .map_err(ImportError::Source)?;
+        Ok(rows
+            .into_iter()
+            .map(
+                |(id, name, instructions, summary, avatar, created_at)| LegacyAgent {
+                    id,
+                    name,
+                    instructions,
+                    summary,
+                    avatar,
+                    created_at,
+                },
+            )
+            .collect())
+    }
+
+    /// The sessions with a person (not those between two agents), with the chat of the channel
+    /// each one carried: the first contact that points at it.
+    pub(crate) async fn threads(&mut self) -> Result<Vec<LegacyThread>, ImportError> {
+        let rows: Vec<ThreadRow> = sqlx::query_as(
+            "SELECT s.id::text, s.profile_id::text, s.title, s.created_at::text, \
+                    c.kind, c.chat_id, c.title \
+             FROM sessions s LEFT JOIN LATERAL ( \
+                SELECT ch.type::text AS kind, k.chat_id, k.title FROM contacts k \
+                JOIN channels ch ON ch.id = k.channel_id WHERE k.session_id = s.id \
+                ORDER BY k.created_at, k.id LIMIT 1) c ON true \
+             WHERE s.peer_profile_id IS NULL ORDER BY s.created_at, s.id",
+        )
+        .fetch_all(&mut self.connection)
+        .await
+        .map_err(ImportError::Source)?;
+        Ok(rows
+            .into_iter()
+            .map(
+                |(id, agent_id, title, created_at, kind, chat_id, chat_title)| LegacyThread {
+                    id,
+                    agent_id,
+                    title,
+                    created_at,
+                    chat: kind.zip(chat_id).map(|(channel, chat_id)| LegacyChat {
+                        channel,
+                        chat_id,
+                        title: chat_title,
+                    }),
+                },
+            )
+            .collect())
+    }
+
+    pub(crate) async fn sessions_between_agents(&mut self) -> Result<i64, ImportError> {
+        sqlx::query_scalar("SELECT count(*) FROM sessions WHERE peer_profile_id IS NOT NULL")
+            .fetch_one(&mut self.connection)
+            .await
+            .map_err(ImportError::Source)
+    }
+
+    /// One session's messages, oldest first: by the old order, then time, then id. What the core
+    /// has no part for goes together into `extras`, as JSON.
+    pub(crate) async fn messages(
+        &mut self,
+        session: &str,
+    ) -> Result<Vec<LegacyMessage>, ImportError> {
+        let rows: Vec<MessageRow> = sqlx::query_as(
+            "SELECT id::text, role::text, content, created_at::text, author_id, author_name, \
+                NULLIF(jsonb_strip_nulls(jsonb_build_object( \
+                    'reactions', NULLIF(reactions, '[]'::jsonb), \
+                    'channelMessage', channel_message, 'call', call, 'purpose', purpose)), \
+                    '{}'::jsonb)::text \
+             FROM messages WHERE session_id = $1::uuid ORDER BY seq, created_at, id",
+        )
+        .bind(session)
+        .fetch_all(&mut self.connection)
+        .await
+        .map_err(ImportError::Source)?;
+        Ok(rows
+            .into_iter()
+            .map(
+                |(id, role, content, created_at, author_id, author_name, extras)| LegacyMessage {
+                    id,
+                    role,
+                    content,
+                    created_at,
+                    author_id,
+                    author_name,
+                    extras,
                 },
             )
             .collect())
@@ -255,4 +355,24 @@ type ProviderRow = (
     Option<String>,
     bool,
     String,
+);
+
+type ThreadRow = (
+    String,
+    String,
+    Option<String>,
+    String,
+    Option<String>,
+    Option<String>,
+    Option<String>,
+);
+
+type MessageRow = (
+    String,
+    String,
+    String,
+    String,
+    Option<String>,
+    Option<String>,
+    Option<String>,
 );

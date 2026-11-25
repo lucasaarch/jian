@@ -6,7 +6,7 @@ use jian_store::secrets::LocalKeyring;
 use jian_store::{Database, ImportResult, ImportStatus, TenantCtx};
 
 use crate::reader::{LegacyReader, LegacyTable};
-use crate::{ImportError, Source, machines, owner, providers, secrets};
+use crate::{ImportError, Source, conversations, machines, owner, providers, secrets};
 
 /// A part of the old Jian that has a table in the core, imported on its own: one marker, one
 /// result.
@@ -22,16 +22,25 @@ pub enum Domain {
     Machines,
     /// Phones and their tokens.
     Devices,
+    /// The old profiles, as agents everyone in the workspace sees. Needs the owner.
+    Agents,
+    /// The old sessions, as direct chats and channel threads. Needs the owner and the agents.
+    Threads,
+    /// The messages of those sessions. Needs the threads.
+    Messages,
 }
 
 impl Domain {
     /// Every domain, in the order a run takes them.
-    pub const ALL: [Self; 5] = [
+    pub const ALL: [Self; 8] = [
         Self::Owner,
         Self::Secrets,
         Self::Providers,
         Self::Machines,
         Self::Devices,
+        Self::Agents,
+        Self::Threads,
+        Self::Messages,
     ];
 
     /// The name in a marker and in the report.
@@ -42,6 +51,9 @@ impl Domain {
             Self::Providers => "providers",
             Self::Machines => "machines",
             Self::Devices => "devices",
+            Self::Agents => "agents",
+            Self::Threads => "threads",
+            Self::Messages => "messages",
         }
     }
 
@@ -53,6 +65,9 @@ impl Domain {
             Self::Providers => &["providers"],
             Self::Machines => &["remote_machines"],
             Self::Devices => &["devices"],
+            Self::Agents => &["profiles"],
+            Self::Threads => &["sessions", "contacts"],
+            Self::Messages => &["messages"],
         }
     }
 }
@@ -211,6 +226,18 @@ impl<'a> Importer<'a> {
             }
             Domain::Machines => machines::machines(self.db, self.ctx, reader).await,
             Domain::Devices => machines::devices(self.db, self.ctx, reader).await,
+            Domain::Agents => {
+                let email = self.options.owner_email.as_deref();
+                conversations::agents(self.db, self.ctx, reader, email).await
+            }
+            Domain::Threads => {
+                let email = self.options.owner_email.as_deref();
+                conversations::threads(self.db, self.ctx, reader, email).await
+            }
+            Domain::Messages => {
+                let email = self.options.owner_email.as_deref();
+                conversations::messages(self.db, self.ctx, reader, email).await
+            }
         }
     }
 }

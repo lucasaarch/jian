@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 use jian_import::{Domain, ImportOptions, ImportReport, Importer, Scope, Source};
 use jian_store::embedded::{EmbeddedConfig, EmbeddedPostgres};
 use jian_store::secrets::LocalKeyring;
-use jian_store::{Database, ImportStatus, TenantCtx, TenantId};
+use jian_store::{Author, Database, ImportStatus, TenantCtx, TenantId, Viewer, Who, Window};
 use jian_testkit::{TestDb, TwoTenants};
 use sqlx::Connection as _;
 
@@ -29,7 +29,13 @@ const GROQ: &str = "gsk-test-synthetic-0002";
 /// What each domain writes from the fixture: the secrets are the OpenAI key, the Groq key and the
 /// Telegram token; the providers are a Groq account (a ChatGPT sign-in is left behind).
 fn rows(which: Domain) -> u32 {
-    if which == Domain::Secrets { 3 } else { 1 }
+    match which {
+        Domain::Secrets => 3,
+        // Two sessions with a person (the one between two agents is left); five messages.
+        Domain::Threads => 2,
+        Domain::Messages => 5,
+        _ => 1,
+    }
 }
 
 fn keys(key: &str) -> LocalKeyring {
@@ -144,15 +150,16 @@ async fn a_dump_of_the_old_desktop_database_comes_over_once() {
     assert!(!members[0].has_password);
     // What has no table yet is listed, with its rows; what was imported is not.
     let left: Vec<&str> = first.not_imported.iter().map(|t| t.name.as_str()).collect();
-    assert!(left.contains(&"profiles"));
+    assert!(!left.contains(&"profiles") && !left.contains(&"sessions"));
+    assert!(!left.contains(&"messages") && !left.contains(&"contacts"));
     assert!(!left.contains(&"remote_machines") && !left.contains(&"secrets"));
     assert!(!left.contains(&"providers"));
+    let threads = domain(&first, Domain::Threads).detail.clone().unwrap();
     assert!(
-        first
-            .not_imported
-            .iter()
-            .any(|t| t.name == "profiles" && t.rows == 1)
+        threads.contains("1 sessions between two agents"),
+        "{threads}"
     );
+    owners_chats_came_over(&new.db, &ctx, &members[0].account_id).await;
     // The scratch server is gone with its directory.
     assert!(!dir.path().join("scratch").exists());
 
@@ -185,7 +192,7 @@ async fn a_dump_of_the_old_desktop_database_comes_over_once() {
         .unwrap();
     assert!(pending.domains.is_empty());
     let markers = new.db.imports(&ctx).await.unwrap();
-    assert_eq!(markers.len(), 5);
+    assert_eq!(markers.len(), 8);
     assert!(markers.iter().all(|m| m.status == ImportStatus::Done));
     new.stop().await;
 }
@@ -219,6 +226,11 @@ async fn reading_a_live_old_database_changes_nothing_in_it() {
     assert_eq!(domain(&report, Domain::Providers).imported, 1);
     // No address was given: the owner is skipped, and a later run with one takes it.
     assert_eq!(domain(&report, Domain::Owner).status, ImportStatus::Skipped);
+    for which in [Domain::Agents, Domain::Threads, Domain::Messages] {
+        let result = domain(&report, which);
+        assert_eq!(result.status, ImportStatus::Skipped, "{which:?}");
+        assert!(result.detail.as_deref().unwrap().contains("owner"));
+    }
     assert_eq!(counts(&old).await, before);
     new.stop().await;
     old.stop().await.unwrap();
@@ -262,7 +274,21 @@ async fn a_run_that_stopped_or_lacked_a_key_is_finished_by_the_next() {
         .await
         .unwrap();
     let ran: Vec<Domain> = second.domains.iter().map(|d| d.domain).collect();
-    assert_eq!(ran, [Domain::Owner, Domain::Secrets, Domain::Providers]);
+    assert_eq!(
+        ran,
+        [
+            Domain::Owner,
+            Domain::Secrets,
+            Domain::Providers,
+            Domain::Agents,
+            Domain::Threads,
+            Domain::Messages
+        ]
+    );
+    // No owner address was given, so the chats wait for one and say so.
+    for which in [Domain::Agents, Domain::Threads, Domain::Messages] {
+        assert_eq!(domain(&second, which).status, ImportStatus::Skipped);
+    }
     assert_eq!(domain(&second, Domain::Secrets).imported, 3);
     assert_eq!(
         new.db
@@ -319,7 +345,28 @@ async fn another_tenant_is_never_touched_and_an_existing_owner_is_kept() {
             .contains("already has members")
     );
     assert_eq!(domain(&report, Domain::Machines).imported, 1);
+    // Their address is not a member of A, so there is no one to make the agents and chats.
+    assert_eq!(
+        domain(&report, Domain::Agents).status,
+        ImportStatus::Skipped
+    );
     assert_eq!(new.db.imports(&two.b.ctx).await.unwrap().len(), 0);
+    let admin_b = Viewer {
+        account: two.b.admin.account_id.clone(),
+        admin: true,
+    };
+    let nothing = new
+        .db
+        .list_agents(&two.b.ctx, &admin_b, None, 10)
+        .await
+        .unwrap();
+    assert!(nothing.items.is_empty());
+    let nothing = new
+        .db
+        .list_threads(&two.b.ctx, &admin_b, None, None, 10)
+        .await
+        .unwrap();
+    assert!(nothing.items.is_empty());
     assert_eq!(
         new.db
             .list_machines(&two.b.ctx, None, 10)
@@ -360,4 +407,83 @@ fn a_pglite_directory_and_a_missing_file_are_refused_with_the_way_out() {
     assert!(error.contains("PGlite"), "{error}");
     let missing: PathBuf = dir.path().join("nope.sql");
     assert!(Source::parse(missing.to_str().unwrap()).is_err());
+}
+
+/// What the fixture's profile, sessions and messages became, in order.
+async fn owners_chats_came_over(db: &Database, ctx: &TenantCtx, owner: &jian_store::AccountId) {
+    let viewer = Viewer {
+        account: owner.clone(),
+        admin: true,
+    };
+    let agents = db.list_agents(ctx, &viewer, None, 10).await.unwrap().items;
+    assert_eq!(agents.len(), 1);
+    assert_eq!(agents[0].name, "Synthetic");
+    assert_eq!(&agents[0].created_by, owner);
+    assert_eq!(agents[0].visibility.as_str(), "workspace");
+
+    // Newest first: the WhatsApp group (a channel thread of the agent, with Ana outside), then
+    // the first chat (a direct chat of the owner).
+    let threads = db
+        .list_threads(ctx, &viewer, None, None, 10)
+        .await
+        .unwrap()
+        .items;
+    let kinds: Vec<&str> = threads.iter().map(|t| t.kind.as_str()).collect();
+    assert_eq!(kinds, ["channel", "dm"]);
+    let channel = &threads[0];
+    let origin = channel.origin.as_ref().unwrap();
+    assert_eq!(
+        (origin.channel.as_str(), origin.external_id.as_str()),
+        ("whatsapp", "120363000000000001@g.us")
+    );
+    let dm = &threads[1];
+    assert_eq!(dm.title.as_deref(), Some("First chat"));
+    assert!(
+        dm.participants
+            .iter()
+            .any(|p| p.who == Who::Member(owner.clone()))
+    );
+
+    // The old order is kept as `seq`, whatever the clocks said; authors and times are kept.
+    let page = db
+        .list_messages(ctx, &viewer, &dm.id, Window::Latest, 10)
+        .await
+        .unwrap()
+        .unwrap();
+    let said: Vec<(i64, &str)> = page
+        .items
+        .iter()
+        .map(|m| match &m.parts[0] {
+            jian_core::MessagePart::Text(text) => (m.seq, text.as_str()),
+            other @ jian_core::MessagePart::Legacy { .. } => panic!("{other:?}"),
+        })
+        .collect();
+    assert_eq!(
+        said,
+        [
+            (1, "hello"),
+            (2, "hi, how can I help?"),
+            (3, "third, with an old clock")
+        ]
+    );
+    assert!(matches!(page.items[0].author, Author::Member(_)));
+    assert!(matches!(page.items[1].author, Author::Agent(_)));
+    assert!(page.items[0].created_at.starts_with("2026-11-25T18:00:01"));
+
+    // A channel message keeps its author, and what the core has no part for is kept whole.
+    let page = db
+        .list_messages(ctx, &viewer, &channel.id, Window::Latest, 10)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(matches!(&page.items[0].author, Author::External { label, .. } if label == "Ana"));
+    assert_eq!(page.items[1].parts.len(), 2);
+    let jian_core::MessagePart::Legacy { kind, json } = &page.items[1].parts[1] else {
+        panic!("expected the extras");
+    };
+    assert_eq!(kind, "message-extras");
+    assert!(
+        json.contains("wamid-1") && json.contains("reactions"),
+        "{json}"
+    );
 }

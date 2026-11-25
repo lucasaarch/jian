@@ -1475,6 +1475,16 @@ INSERT INTO public.gateway_secrets VALUES ('provider:aaaaaaaa-aaaa-4aaa-8aaa-aaa
 --
 
 INSERT INTO public.profiles VALUES ('11111111-1111-4111-8111-111111111111', 'Synthetic', 'x', '', NULL, '{}', '{}', '{}', 1, '2026-11-25 17:45:03.571+00', '2026-11-25 17:45:03.571+00', true);
+INSERT INTO public.sessions (id, profile_id, title, channel, created_at) VALUES ('51111111-1111-4111-8111-111111111111', '11111111-1111-4111-8111-111111111111', 'First chat', 'desktop', '2026-11-25 18:00:00+00');
+INSERT INTO public.sessions (id, profile_id, title, channel, created_at) VALUES ('52222222-2222-4222-8222-222222222222', '11111111-1111-4111-8111-111111111111', NULL, 'whatsapp', '2026-11-25 18:05:00+00');
+INSERT INTO public.sessions (id, profile_id, title, channel, peer_profile_id, created_at) VALUES ('53333333-3333-4333-8333-333333333333', '11111111-1111-4111-8111-111111111111', 'Agent to agent', 'agent', '11111111-1111-4111-8111-111111111111', '2026-11-25 18:06:00+00');
+INSERT INTO public.channels (id, profile_id, type, address, webhook_token_hash, created_at) VALUES ('61111111-1111-4111-8111-111111111111', '11111111-1111-4111-8111-111111111111', 'whatsapp', NULL, 'cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc', '2026-11-25 18:01:00+00');
+INSERT INTO public.contacts (id, profile_id, channel_id, scope, chat_id, actor_id, title, status, session_id, created_at, updated_at) VALUES ('71111111-1111-4111-8111-111111111111', '11111111-1111-4111-8111-111111111111', '61111111-1111-4111-8111-111111111111', 'group', '120363000000000001@g.us', 'actor-1', 'Family group', 'approved', '52222222-2222-4222-8222-222222222222', '2026-11-25 18:05:00+00', '2026-11-25 18:05:00+00');
+INSERT INTO public.messages (id, profile_id, session_id, role, content, created_at, seq) VALUES ('81111111-1111-4111-8111-111111111111', '11111111-1111-4111-8111-111111111111', '51111111-1111-4111-8111-111111111111', 'user', 'hello', '2026-11-25 18:00:01+00', 1);
+INSERT INTO public.messages (id, profile_id, session_id, role, content, created_at, seq) VALUES ('82222222-2222-4222-8222-222222222222', '11111111-1111-4111-8111-111111111111', '51111111-1111-4111-8111-111111111111', 'assistant', 'hi, how can I help?', '2026-11-25 18:00:02+00', 2);
+INSERT INTO public.messages (id, profile_id, session_id, role, content, created_at, seq) VALUES ('83333333-3333-4333-8333-333333333333', '11111111-1111-4111-8111-111111111111', '51111111-1111-4111-8111-111111111111', 'user', 'third, with an old clock', '2026-11-25 17:00:00+00', 3);
+INSERT INTO public.messages (id, profile_id, session_id, role, content, created_at, author_id, author_name, seq) VALUES ('84444444-4444-4444-8444-444444444444', '11111111-1111-4111-8111-111111111111', '52222222-2222-4222-8222-222222222222', 'user', 'oi gente', '2026-11-25 18:05:01+00', '5511999990001@s.whatsapp.net', 'Ana', 1);
+INSERT INTO public.messages (id, profile_id, session_id, role, content, created_at, reactions, channel_message, seq) VALUES ('85555555-5555-4555-8555-555555555555', '11111111-1111-4111-8111-111111111111', '52222222-2222-4222-8222-222222222222', 'assistant', 'oi Ana', '2026-11-25 18:05:02+00', '[{"emoji": "x", "by": "Ana"}]', '{"id": "wamid-1"}', 2);
 
 
 --

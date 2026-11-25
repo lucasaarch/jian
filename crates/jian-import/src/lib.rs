@@ -1,5 +1,5 @@
-//! The import of the old Node Jian: its owner, secrets, machines and phones, into the one tenant
-//! of a self-hosted install.
+//! The import of the old Node Jian: its owner, secrets, machines, phones, agents and chats, into
+//! the one tenant of a self-hosted install.
 //!
 //! It reads the old data (never writes it), maps what has a table in the core today and records,
 //! per domain, how it went (`platform.imports`, kept by `jian-store`). It has no HTTP, reads no
@@ -46,11 +46,13 @@
 //!
 //! # Not imported
 //!
-//! Conversations, agents, memories, skills, schedules, channels and the rest have no
-//! table in the core yet. Each run lists those tables of the old database with their rows
+//! Memories, skills, schedules, channel settings, runs and the rest have no table in the core
+//! yet. Each run lists those tables of the old database with their rows
 //! ([`ImportReport::not_imported`]); the issue that creates a domain's table adds its import
-//! here.
+//! here. (Profiles, sessions, contacts and messages do have one: the `agents`, `threads` and
+//! `messages` domains, which need the owner imported first.)
 
+mod conversations;
 mod error;
 mod machines;
 mod outcome;
