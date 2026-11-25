@@ -76,7 +76,7 @@ pub fn refresh_bundle(version: &str) -> Result<(), UpdateError> {
     #[cfg(target_os = "macos")]
     {
         let app = paths::macos_app_root();
-        macos::write_bundle(&app, version)?;
+        macos::write_bundle(&app, version).map_err(|error| UpdateError(format!("{error:#}")))?;
         macos::sign(&app, &paths::installed_binary());
     }
     let _ = version;
