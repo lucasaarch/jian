@@ -103,6 +103,10 @@ pub(crate) async fn create(
         Some(thread) => Some(seen_thread(&app, &ctx, &viewer, thread).await?),
         None => None,
     };
+    app.db
+        .check_disk_quota(&ctx)
+        .await
+        .map_err(|e| failure(&e))?;
     let schedule = app
         .db
         .create_schedule(

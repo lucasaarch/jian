@@ -170,6 +170,10 @@ pub(crate) async fn put(
         None => None,
     };
     app.db
+        .check_disk_quota(&ctx)
+        .await
+        .map_err(|e| failure(&e))?;
+    app.db
         .write_memory(
             &ctx,
             &agent,

@@ -14,5 +14,6 @@ pub mod machine;
 pub mod memories;
 pub mod projects;
 pub mod providers;
+pub mod quotas;
 pub mod schedules;
 pub mod threads;

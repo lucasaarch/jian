@@ -191,6 +191,10 @@ pub enum StoreError {
     /// can see: what they cannot see is "not found", never this.
     #[error("not allowed: {0}")]
     Denied(&'static str),
+    /// The tenant has used up a limit it is held to: runs at the same time, tokens this month, or
+    /// disk. The text names which.
+    #[error("quota exceeded: {0}")]
+    QuotaExceeded(&'static str),
     /// A write expected another version of a row than the one stored: someone wrote in between.
     /// `current` is the stored version, `0` for none.
     #[error("the stored version is {current}, not the one expected")]

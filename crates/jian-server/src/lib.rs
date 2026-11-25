@@ -78,6 +78,7 @@ mod slots;
 mod summary;
 mod thread_messages;
 mod threads;
+mod usage;
 mod worker_ws;
 mod workspace;
 
@@ -160,6 +161,7 @@ pub const ROUTES: &[&str] = &[
     "PATCH /v1/agents/{id}/schedules/{scheduleId} (a member who sees the agent)",
     "DELETE /v1/agents/{id}/schedules/{scheduleId} (a member who sees the agent)",
     "GET /v1/agents/{id}/inbox (a member who sees the agent)",
+    "GET /v1/usage (an admin)",
     "GET /v1/grants (an admin)",
     "POST /v1/grants (an admin)",
     "POST /v1/grants/revoke (an admin)",
@@ -356,6 +358,7 @@ pub fn router_with(state: AppState, extra: Router<AppState>) -> Router {
                 .delete(schedules::delete),
         )
         .route("/v1/agents/{id}/inbox", get(schedules::inbox))
+        .route("/v1/usage", get(usage::get))
         .route("/v1/projects", get(projects::list).post(projects::create))
         .route(
             "/v1/projects/{id}",

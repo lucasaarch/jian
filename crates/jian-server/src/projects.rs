@@ -64,6 +64,10 @@ pub(crate) async fn create(
 ) -> Result<(StatusCode, Json<ProjectView>), Refusal> {
     let viewer = viewer(&principal)?;
     let ctx = tenant_ctx(&app, &principal.tenant).await?;
+    app.db
+        .check_disk_quota(&ctx)
+        .await
+        .map_err(|e| failure(&e))?;
     let project = app
         .db
         .create_project(

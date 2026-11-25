@@ -34,6 +34,7 @@ const PROVIDERS_FILE: &str = include_str!("providers.rs");
 const MEMORIES_FILE: &str = include_str!("memories.rs");
 const SCHEDULES_FILE: &str = include_str!("schedules.rs");
 const THREADS_FILE: &str = include_str!("threads.rs");
+const USAGE_FILE: &str = include_str!("usage.rs");
 
 async fn start() -> (Gateway, TwoTenants) {
     super::accounts::start(open_settings()).await
@@ -47,6 +48,7 @@ fn is_a_test_here(name: &str) -> bool {
         || PROVIDERS_FILE.contains(&declared)
         || MEMORIES_FILE.contains(&declared)
         || SCHEDULES_FILE.contains(&declared)
+        || USAGE_FILE.contains(&declared)
         || THREADS_FILE.contains(&declared)
 }
 
@@ -116,6 +118,7 @@ const ROUTE_TESTS: &[(&str, &str)] = &[
         SCHEDULES_TEST,
     ),
     ("GET /v1/agents/{id}/inbox", SCHEDULES_TEST),
+    ("GET /v1/usage", USAGE_TEST),
     ("GET /v1/grants", THREADS_TEST),
     ("POST /v1/grants", THREADS_TEST),
     ("POST /v1/grants/revoke", THREADS_TEST),
@@ -156,6 +159,9 @@ const MEMORIES_TEST: &str = "memories_and_projects_of_the_other_tenant_are_out_o
 /// The test that shows tenant B reaches no schedule or inbox event of tenant A.
 const SCHEDULES_TEST: &str =
     "a_schedule_fires_into_its_agents_inbox_once_and_never_into_another_tenants";
+
+/// The test that shows a workspace's usage and limits are its own and bind only it.
+const USAGE_TEST: &str = "usage_is_each_workspaces_own_and_a_workspace_over_its_limit_is_refused";
 
 /// The test that shows tenant B reaches no agent, thread or message of tenant A.
 const THREADS_TEST: &str = "agents_threads_and_messages_of_the_other_tenant_are_out_of_reach";

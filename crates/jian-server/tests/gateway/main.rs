@@ -14,6 +14,7 @@ mod schedules;
 mod slots;
 mod support;
 mod threads;
+mod usage;
 
 use std::time::Duration;
 

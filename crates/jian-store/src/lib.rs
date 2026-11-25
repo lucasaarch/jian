@@ -145,6 +145,7 @@ mod orphan;
 mod platform;
 mod projects;
 mod providers;
+mod quotas;
 mod schedules;
 mod schema_version;
 pub mod secrets;
@@ -201,6 +202,7 @@ pub use providers::{
     LegacyProvider, MAX_ACCOUNTS, MAX_LABEL_CHARS, NewProviderAccount, ProviderAccount,
     ProviderImport, provider_secret_owner,
 };
+pub use quotas::{QuotaUsage, Quotas, RunLease};
 pub use schedules::{
     Due, Fired, InboxEvent, MAX_SCHEDULE_INSTRUCTION_CHARS, MAX_SCHEDULE_NAME_CHARS,
     MAX_SCHEDULES_PER_AGENT, NewSchedule, SCHEDULE_EVENT, Schedule, ScheduleId, SchedulePatch,

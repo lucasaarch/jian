@@ -45,6 +45,11 @@ pub(crate) fn failure(error: &StoreError) -> Refusal {
         StoreError::Denied(why) => forbidden(why),
         StoreError::InvalidWorkspace(why) => refuse(StatusCode::BAD_REQUEST, "invalid_input", why),
         StoreError::InvalidImport(_) => internal(error),
+        StoreError::QuotaExceeded(what) => refuse(
+            StatusCode::TOO_MANY_REQUESTS,
+            "quota_exceeded",
+            &format!("this workspace has used its limit of {what}"),
+        ),
         StoreError::VersionConflict { current } => refuse(
             StatusCode::CONFLICT,
             "version_conflict",

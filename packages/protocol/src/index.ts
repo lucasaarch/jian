@@ -117,6 +117,7 @@ export type { UpdateOutcome } from "./generated/UpdateOutcome";
 export type { UpdateProjectRequest } from "./generated/UpdateProjectRequest";
 export type { UpdateScheduleRequest } from "./generated/UpdateScheduleRequest";
 export type { UpdateTask } from "./generated/UpdateTask";
+export type { UsageView } from "./generated/UsageView";
 export type { UsageWindow } from "./generated/UsageWindow";
 export type { Welcome } from "./generated/Welcome";
 export type { WorkerMessage } from "./generated/WorkerMessage";
