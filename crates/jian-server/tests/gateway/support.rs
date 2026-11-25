@@ -23,9 +23,11 @@ use jian_remote::log::Logger;
 use jian_remote::state::StateFile;
 use jian_remote::transport::WsTransport;
 use jian_remote::worker::{Exit, Timings, Worker, WorkerConfig};
-use jian_server::{AppState, ManualClock, MemoryEventBus, MemoryRateLimiter, Settings};
+use jian_server::{
+    AppState, ManualClock, MemoryEventBus, MemoryRateLimiter, NoRunQueue, Settings, SlotKeeper,
+};
 use jian_store::embedded::{EmbeddedConfig, EmbeddedPostgres};
-use jian_store::{Database, DatabaseSource, TenantCtx, TenantId};
+use jian_store::{Database, DatabaseSource, DatabaseUrl, SlotOptions, TenantCtx, TenantId};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tokio::task::JoinHandle;
@@ -44,14 +46,23 @@ pub struct Gateway {
     pub db: Arc<Database>,
     pub state: AppState,
     pub clock: Arc<ManualClock>,
+    pub url: DatabaseUrl,
     stop: CancellationToken,
     server: JoinHandle<()>,
-    postgres: EmbeddedPostgres,
-    _dir: tempfile::TempDir,
+    keeper: Option<SlotKeeper>,
+    /// Only the gateway that started the database has it to stop.
+    postgres: Option<EmbeddedPostgres>,
+    _dir: Option<tempfile::TempDir>,
 }
 
 impl Gateway {
+    /// A gateway on a database of its own, with the default lease timing: the one instance, with
+    /// every slot.
     pub async fn start(settings: Settings) -> Self {
+        Self::start_with(settings, SlotOptions::default()).await
+    }
+
+    pub async fn start_with(settings: Settings, slots: SlotOptions) -> Self {
         let dir = tempfile::tempdir_in(env!("CARGO_TARGET_TMPDIR")).unwrap();
         let postgres = EmbeddedPostgres::start(&EmbeddedConfig {
             data_dir: dir.path().to_path_buf(),
@@ -59,11 +70,40 @@ impl Gateway {
         })
         .await
         .unwrap();
-        let db = Database::open(DatabaseSource::External(postgres.url().clone()))
+        let url = postgres.url().clone();
+        let db = Database::open(DatabaseSource::External(url.clone()))
             .await
             .unwrap();
         db.migrate().await.unwrap();
-        let db = Arc::new(db);
+        Self::serve(
+            Arc::new(db),
+            url,
+            settings,
+            slots,
+            Some(postgres),
+            Some(dir),
+        )
+        .await
+    }
+
+    /// A second gateway on the same database, as another replica would be: its own pool, its own
+    /// listener, its own slot keeper.
+    pub async fn join(&self, settings: Settings, slots: SlotOptions) -> Self {
+        let db = Database::open(DatabaseSource::External(self.url.clone()))
+            .await
+            .unwrap();
+        Self::serve(Arc::new(db), self.url.clone(), settings, slots, None, None).await
+    }
+
+    async fn serve(
+        db: Arc<Database>,
+        url: DatabaseUrl,
+        settings: Settings,
+        slots: SlotOptions,
+        postgres: Option<EmbeddedPostgres>,
+        dir: Option<tempfile::TempDir>,
+    ) -> Self {
+        let keeper = SlotKeeper::start(db.clone(), slots).await.unwrap();
 
         let clock = Arc::new(ManualClock::default());
         let stop = CancellationToken::new();
@@ -72,6 +112,7 @@ impl Gateway {
             hub: jian_server::MachineHub::new(),
             events: Arc::new(MemoryEventBus::new()),
             limiter: Arc::new(MemoryRateLimiter::new(clock.clone())),
+            slots: keeper.ownership(),
             shutdown: stop.clone(),
             settings,
         };
@@ -91,11 +132,34 @@ impl Gateway {
             db,
             state,
             clock,
+            url,
             stop,
             server,
+            keeper: Some(keeper),
             postgres,
             _dir: dir,
         }
+    }
+
+    /// What this gateway serves.
+    pub fn slots(&self) -> jian_server::SlotOwnership {
+        self.state.slots.clone()
+    }
+
+    /// The first half of a SIGTERM drain: stops serving, so every socket is told to reconnect.
+    pub async fn begin_drain(&mut self) {
+        self.keeper.as_mut().unwrap().begin_drain().await;
+    }
+
+    /// The second half: lets go of the leases.
+    pub async fn finish_drain(&mut self) -> jian_server::DrainReport {
+        let keeper = self.keeper.take().unwrap();
+        keeper.finish_drain(&NoRunQueue).await.unwrap()
+    }
+
+    /// What a crash looks like to the others: nothing more is renewed and nothing is released.
+    pub fn crash(&mut self) {
+        self.keeper = None;
     }
 
     /// The URL a worker is given.
@@ -113,7 +177,11 @@ impl Gateway {
         (token, ctx)
     }
 
-    pub async fn stop(self) {
+    pub async fn stop(mut self) {
+        if let Some(mut keeper) = self.keeper.take() {
+            keeper.begin_drain().await;
+            keeper.finish_drain(&NoRunQueue).await.unwrap();
+        }
         self.stop.cancel();
         tokio::time::timeout(WAIT, self.server)
             .await
@@ -131,7 +199,9 @@ impl Gateway {
             }
             tokio::time::sleep(Duration::from_millis(50)).await;
         }
-        self.postgres.stop().await.unwrap();
+        if let Some(postgres) = self.postgres {
+            postgres.stop().await.unwrap();
+        }
     }
 }
 

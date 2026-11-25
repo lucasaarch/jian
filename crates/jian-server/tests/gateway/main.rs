@@ -4,6 +4,7 @@
 // clippy.toml excuses `#[test]` bodies, not the helpers they call.
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
+mod slots;
 mod support;
 
 use std::time::Duration;

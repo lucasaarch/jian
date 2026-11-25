@@ -91,6 +91,38 @@ in a header, `websocat -H "Authorization: Bearer $TOKEN" ws://127.0.0.1:4410/v1/
 message is `{"type":"hello","protocolVersion":1}`. A browser cannot set that header; the panel's
 own login comes later.
 
+## Slots, several instances and stopping
+
+Tenants are spread over 1024 fixed slots by a stable hash of their id, and each slot is leased to
+one gateway instance at a time (`platform.slot_leases`, a 30 s lease renewed every 10 s, timed by
+the database's clock). No two instances serve a tenant at once. A self-hosted install is one
+instance that takes all 1024 slots when it starts, in one statement; the log says
+`slots ... held=1024 target=1024 instances=1`.
+
+- **A second instance** on the same database takes its half: the first lets go of up to 128 slots
+  per renewal until each holds 512, and a socket of a tenant that moves is closed with code `4004`
+  (reconnect). Both instances need the same master key and owner token, because each start writes
+  the owner token it knows:
+
+  ```bash
+  JIAN_API_TOKEN=$(cat .jian-dev/owner.token) JIAN_MASTER_KEY=$(cat .jian-dev/master.key) \
+    cargo run -p jian -- --addr 127.0.0.1:4411 --data-dir .jian-dev-2 \
+    --database-url postgres://postgres:$(cat .jian-dev/password)@127.0.0.1:<port>/postgres
+  ```
+
+  `<port>` is the fourth line of `.jian-dev/pgdata/postmaster.pid`. Delete `.jian-dev-2/` after.
+- **A socket for a tenant this instance does not serve** is closed at once with `4004`. Nothing
+  routes it to the right instance yet (the edge router is M6): behind a load balancer the client
+  just reconnects until it lands on the owner. The Jian Remote worker already retries with its
+  backoff after any close it was not told to give up on, and `4004` is not one of those.
+- **An instance that dies** stops renewing, and its slots are taken by another one when the lease
+  runs out (up to 30 s). It stops serving them before that, on its own monotonic clock.
+- **SIGTERM / SIGINT** drains: the instance stops serving tenants (open sockets get `4004`), stops
+  accepting, hands unfinished runs back (there is no queue of runs yet, so none), releases its
+  leases so another instance takes the slots on its next round without waiting, and only then
+  stops the embedded Postgres. The log shows each step: `stop signal received; draining`,
+  `no longer serving tenants`, `slot leases released released=<n>`, `embedded Postgres stopped`.
+
 ## Another address or another Postgres
 
 Flags, each with an environment variable: `--addr` / `JIAN_ADDR`, `--data-dir` / `JIAN_DATA_DIR`,

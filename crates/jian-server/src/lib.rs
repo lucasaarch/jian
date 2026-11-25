@@ -20,6 +20,14 @@
 //! - `/v1/ws` is the client's (`client_ws`): requests with ids, paged lists, and subscriptions to
 //!   topics fed by the [`EventBus`]. Its protocol is `jian_protocol::client`.
 //!
+//! # Which instance serves a tenant
+//!
+//! Tenants are spread over 1024 slots, and each slot is leased to one gateway instance at a
+//! time (`slots`). A socket whose tenant is not served by this instance is closed with
+//! `CLOSE_RECONNECT`, and so is one whose slot is lost or whose instance drains. Routing the
+//! client to the right replica is the edge's job (M6); this crate guarantees only that no two
+//! instances serve a tenant at once.
+//!
 //! # What is behind a trait
 //!
 //! The [`EventBus`] and the [`RateLimiter`] keep their state in this process. Both are traits so a
@@ -30,6 +38,7 @@ mod client_ws;
 mod events;
 mod hub;
 mod rate;
+mod slots;
 mod summary;
 mod worker_ws;
 
@@ -47,6 +56,7 @@ pub use auth::{AuthRejection, Principal};
 pub use events::{BUFFER_DELTAS, EventBus, MemoryEventBus, Subscription};
 pub use hub::{DispatchError, HubCommand, MachineHub};
 pub use rate::{Clock, Limit, ManualClock, MemoryRateLimiter, RateLimiter, SystemClock, Verdict};
+pub use slots::{DrainReport, NoRunQueue, RunRequeue, SlotKeeper, SlotOwnership};
 
 /// The routes `router` serves, for the binary to print at start-up: there is no panel yet to
 /// show what is reachable. Keep it in step with `router`.
@@ -99,6 +109,8 @@ pub struct AppState {
     pub events: Arc<dyn EventBus>,
     /// Decides who must wait.
     pub limiter: Arc<dyn RateLimiter>,
+    /// Which tenants this instance serves. The keeper that fills it in is the binary's.
+    pub slots: SlotOwnership,
     /// Cancelled when the gateway stops: every open socket closes with "going away".
     pub shutdown: CancellationToken,
     /// The timings and limits.
@@ -106,11 +118,17 @@ pub struct AppState {
 }
 
 impl AppState {
-    /// A state with this process's own hub, bus and limiter.
+    /// A state with this process's own hub, bus and limiter, serving the slots `slots` says.
     #[must_use]
-    pub fn new(db: Arc<Database>, shutdown: CancellationToken, settings: Settings) -> Self {
+    pub fn new(
+        db: Arc<Database>,
+        slots: SlotOwnership,
+        shutdown: CancellationToken,
+        settings: Settings,
+    ) -> Self {
         Self {
             db,
+            slots,
             hub: MachineHub::new(),
             events: Arc::new(MemoryEventBus::new()),
             limiter: Arc::new(MemoryRateLimiter::new(SystemClock::new())),

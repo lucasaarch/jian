@@ -18,9 +18,9 @@ use axum::response::{IntoResponse, Response};
 use futures_util::stream::SplitSink;
 use futures_util::{SinkExt, StreamExt};
 use jian_protocol::client::{
-    ApiError, CLIENT_PROTOCOL_VERSION, CLOSE_TOKEN_REVOKED, CLOSE_UNSUPPORTED_PROTOCOL,
-    ClientMessage, ClientRequest, ClientResponse, ClientWelcome, ErrorCode, MAX_CLIENT_FRAME_BYTES,
-    RequestId, Resume, Resync, ServerMessage, Subscribed, Topic,
+    ApiError, CLIENT_PROTOCOL_VERSION, CLOSE_RECONNECT, CLOSE_TOKEN_REVOKED,
+    CLOSE_UNSUPPORTED_PROTOCOL, ClientMessage, ClientRequest, ClientResponse, ClientWelcome,
+    ErrorCode, MAX_CLIENT_FRAME_BYTES, RequestId, Resume, Resync, ServerMessage, Subscribed, Topic,
 };
 use jian_store::{Subject, TenantCtx, TenantId};
 use tokio::sync::{broadcast, mpsc};
@@ -39,6 +39,9 @@ const CLOSE_GOING_AWAY: u16 = 1001;
 const CLOSE_POLICY: u16 = 1008;
 /// The gateway could not set the connection up.
 const CLOSE_INTERNAL: u16 = 1011;
+
+/// What the client is told when this instance does not (or no longer does) serve its tenant.
+const RECONNECT_REASON: &str = "reconnect: another instance serves this tenant";
 
 /// What may wait to be written to one client before the senders slow down.
 const OUT_QUEUE: usize = 256;
@@ -151,9 +154,15 @@ impl Session {
     }
 
     async fn run(&mut self, stream: &mut futures_util::stream::SplitStream<WebSocket>) {
+        if !self.app.slots.owns(&self.principal.tenant) {
+            self.close(CLOSE_RECONNECT, RECONNECT_REASON).await;
+            return;
+        }
         if !self.greet(stream).await {
             return;
         }
+        let lost = self.app.slots.lost(&self.principal.tenant);
+        tokio::pin!(lost);
         let mut tick = tokio::time::interval(self.app.settings.recheck_interval);
         tick.set_missed_tick_behavior(MissedTickBehavior::Delay);
         tick.tick().await;
@@ -177,6 +186,10 @@ impl Session {
                         self.close(CLOSE_TOKEN_REVOKED, "token revoked").await;
                         return;
                     }
+                }
+                () = &mut lost => {
+                    self.close(CLOSE_RECONNECT, RECONNECT_REASON).await;
+                    return;
                 }
                 () = self.app.shutdown.cancelled() => {
                     self.close(CLOSE_GOING_AWAY, "gateway stopping").await;

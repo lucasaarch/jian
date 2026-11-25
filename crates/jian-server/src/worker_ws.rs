@@ -15,8 +15,8 @@ use axum::extract::ws::{CloseFrame, Message, WebSocket, WebSocketUpgrade};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use jian_protocol::machine::{
-    CLOSE_REPLACED, CLOSE_TOKEN_REVOKED, CLOSE_UNSUPPORTED_PROTOCOL, GatewayMessage, Hello,
-    MAX_TEXT_FRAME_BYTES, PROTOCOL_VERSION, Welcome, WorkerMessage,
+    CLOSE_RECONNECT, CLOSE_REPLACED, CLOSE_TOKEN_REVOKED, CLOSE_UNSUPPORTED_PROTOCOL,
+    GatewayMessage, Hello, MAX_TEXT_FRAME_BYTES, PROTOCOL_VERSION, Welcome, WorkerMessage,
 };
 use jian_store::{MachineId, MachineReport, Subject, TenantId};
 use tokio::time::{Instant, MissedTickBehavior};
@@ -31,6 +31,8 @@ const CLOSE_GOING_AWAY: u16 = 1001;
 const CLOSE_INTERNAL: u16 = 1011;
 /// The worker broke the protocol.
 const CLOSE_POLICY: u16 = 1008;
+/// What the worker is told when this instance does not (or no longer does) serve its tenant.
+const RECONNECT_REASON: &str = "reconnect: another instance serves this tenant";
 
 pub(crate) async fn connect(
     State(app): State<AppState>,
@@ -100,6 +102,11 @@ fn report(hello: &Hello) -> MachineReport {
 
 async fn session(app: AppState, principal: Principal, machine: MachineId, mut socket: WebSocket) {
     let tenant = principal.tenant.clone();
+    // Before anything is recorded: a tenant that another instance serves is none of this one's.
+    if !app.slots.owns(&tenant) {
+        close(&mut socket, CLOSE_RECONNECT, RECONNECT_REASON).await;
+        return;
+    }
     let Some(hello) = read_hello(&app, &mut socket).await else {
         return;
     };
@@ -180,6 +187,8 @@ async fn run(
     tick.tick().await;
     let idle = tokio::time::sleep(app.settings.idle_timeout);
     tokio::pin!(idle);
+    let lost = app.slots.lost(tenant);
+    tokio::pin!(lost);
     loop {
         tokio::select! {
             frame = socket.recv() => {
@@ -241,6 +250,10 @@ async fn run(
             }
             () = &mut idle => {
                 close(socket, CLOSE_GOING_AWAY, "no activity").await;
+                return;
+            }
+            () = &mut lost => {
+                close(socket, CLOSE_RECONNECT, RECONNECT_REASON).await;
                 return;
             }
             () = app.shutdown.cancelled() => {

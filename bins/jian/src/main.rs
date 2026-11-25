@@ -20,10 +20,10 @@ use std::time::Duration;
 
 use anyhow::Context as _;
 use clap::{Parser, Subcommand};
-use jian_server::{AppState, Settings};
+use jian_server::{AppState, NoRunQueue, Settings, SlotKeeper};
 use jian_store::embedded::EmbeddedConfig;
 use jian_store::secrets::{LocalKeyring, MasterKeys as _};
-use jian_store::{Database, DatabaseSource, DatabaseUrl, TenantId, TenantStatus};
+use jian_store::{Database, DatabaseSource, DatabaseUrl, SlotOptions, TenantId, TenantStatus};
 use tokio::sync::oneshot;
 use tokio_util::sync::CancellationToken;
 
@@ -321,8 +321,11 @@ async fn prepare(database: &Database, owner_token: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Serves until a stop signal, then drains. Returns `Ok` after a clean drain or a drain that hit
-/// the deadline; an error only when the address cannot be bound or the server fails by itself.
+/// Serves until a stop signal, then drains: it stops serving tenants (every open socket is told
+/// to reconnect), stops accepting, gives the slot leases back and returns, and only then does the
+/// caller stop the database. Returns `Ok` after a clean drain or a drain that hit the deadline; an
+/// error only when the address cannot be bound, the slots cannot be taken or the server fails by
+/// itself.
 async fn serve(
     addr: &str,
     database: &Arc<Database>,
@@ -343,9 +346,21 @@ async fn serve(
         println!("  {method} http://{addr}{path}");
     }
 
+    // Before the first request: a lone instance (every self-hosted install) takes all the slots in
+    // this one round, and a replica of a fleet takes its share.
+    let mut keeper = SlotKeeper::start(database.clone(), SlotOptions::default())
+        .await
+        .context("cannot take the slot leases")?;
+    let slots = keeper.ownership();
+    tracing::info!(
+        instance = %keeper.instance(),
+        slots = slots.count(),
+        "this instance serves its slots"
+    );
     let closing = CancellationToken::new();
     let state = AppState::new(
         database.clone(),
+        slots,
         closing.clone(),
         Settings {
             gateway_version: Some(env!("CARGO_PKG_VERSION").to_owned()),
@@ -366,23 +381,46 @@ async fn serve(
         .into_future(),
     );
 
-    tokio::select! {
+    let outcome = tokio::select! {
         () = shutdown.wait() => {
-            tracing::info!("stop signal received; draining requests");
-            // Open sockets close first: a graceful stop waits for them.
-            closing.cancel();
+            tracing::info!("stop signal received; draining");
+            // Open sockets are told to reconnect first, because a graceful stop waits for them.
+            keeper.begin_drain().await;
+            tracing::info!("no longer serving tenants; open connections told to reconnect");
             // The receiver is gone only if the server already ended, which is what we want anyway.
             let _ = stop.send(());
             if let Ok(joined) = tokio::time::timeout(DRAIN_DEADLINE, &mut server).await {
-                joined.context("the server task failed")?.context("the server stopped")
+                tracing::info!("accepting stopped; connections closed");
+                joined
+                    .context("the server task failed")
+                    .and_then(|ended| ended.context("the server stopped"))
             } else {
                 tracing::warn!(?DRAIN_DEADLINE, "requests still running at the deadline; cutting them off");
+                closing.cancel();
                 server.abort();
                 Ok(())
             }
         }
-        joined = &mut server => joined.context("the server task failed")?.context("the server stopped"),
+        joined = &mut server => {
+            keeper.begin_drain().await;
+            joined
+                .context("the server task failed")
+                .and_then(|ended| ended.context("the server stopped"))
+        }
+    };
+    // Nothing serves a tenant now, so the slots can go to another instance without waiting for
+    // their leases to run out. There is no queue of runs yet, so none is handed back.
+    match keeper.finish_drain(&NoRunQueue).await {
+        Ok(report) => tracing::info!(
+            released = report.released,
+            requeued = report.requeued,
+            "slot leases released"
+        ),
+        Err(error) => {
+            tracing::warn!(%error, "could not release the slot leases; they run out on their own");
+        }
     }
+    outcome
 }
 
 #[cfg(test)]
