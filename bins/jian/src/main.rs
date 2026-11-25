@@ -12,6 +12,7 @@
 mod debug_jobs;
 mod owner_token;
 mod shutdown;
+mod users_cli;
 
 use std::future::IntoFuture as _;
 use std::net::SocketAddr;
@@ -30,8 +31,11 @@ use jian_store::{
 use tokio::sync::oneshot;
 use tokio_util::sync::CancellationToken;
 
+use jian_auth::{Auth, AuthPolicy, CredentialKind, PasswordParams};
+
 use crate::owner_token::Source;
 use crate::shutdown::Shutdown;
+use crate::users_cli::UsersAction;
 
 /// Where the gateway listens when nothing says otherwise: loopback only, so an unconfigured
 /// install is not reachable from the network.
@@ -110,6 +114,17 @@ struct Cli {
     )]
     api_token: Option<String>,
 
+    /// How people sign in: a comma-separated list of `password`, `github`, `email_link`,
+    /// `passkey`, `totp`. Only `password` is implemented; a self-hosted install has no other
+    /// way in besides the tokens. Without `password` the sign-in routes are a 404.
+    #[arg(
+        long,
+        env = "JIAN_AUTH_METHODS",
+        default_value = "password",
+        value_name = "LIST"
+    )]
+    auth_methods: AuthPolicy,
+
     #[command(subcommand)]
     command: Option<Command>,
 }
@@ -120,6 +135,12 @@ enum Command {
     Keys {
         #[command(subcommand)]
         action: KeysAction,
+    },
+    /// The people who can sign in. With the embedded Postgres, stop the gateway first: this
+    /// starts that database itself.
+    Users {
+        #[command(subcommand)]
+        action: UsersAction,
     },
     /// The job queue, for trying it by hand.
     Jobs {
@@ -233,6 +254,7 @@ async fn main() -> anyhow::Result<()> {
     let addr = cli.addr.clone();
     let keys = cli.master_keys()?;
     let command = cli.command.take();
+    let auth = Auth::new(cli.auth_methods.clone(), PasswordParams::default());
     let source = cli.database_source()?;
     let (owner, owner_source) = owner_token::resolve(cli.api_token.as_deref(), &cli.data_dir()?)
         .context("cannot get the owner's token")?;
@@ -258,11 +280,12 @@ async fn main() -> anyhow::Result<()> {
         Some(Command::Keys {
             action: KeysAction::Rotate,
         }) => rotate(&database).await,
+        Some(Command::Users { action }) => users_cli::run(&database, &auth, action).await,
         Some(Command::Jobs {
             action: JobsAction::EnqueueTest { message, work_ms },
         }) => enqueue_test(&database, &message, work_ms).await,
         None => match prepare(&database, &owner).await {
-            Ok(()) => serve(&addr, &database, &owner_source, &mut shutdown).await,
+            Ok(()) => serve(&addr, &database, &owner_source, auth, &mut shutdown).await,
             Err(error) => Err(error),
         },
     };
@@ -379,6 +402,7 @@ async fn serve(
     addr: &str,
     database: &Arc<Database>,
     owner_source: &Source,
+    auth: Auth,
     shutdown: &mut Shutdown,
 ) -> anyhow::Result<()> {
     let listener = tokio::net::TcpListener::bind(addr)
@@ -390,6 +414,15 @@ async fn serve(
         Source::NewFile(path) => println!("owner token: generated into {}", path.display()),
         Source::File(path) => println!("owner token: in {}", path.display()),
     }
+    println!(
+        "sign-in methods: {}{}",
+        auth.policy(),
+        if auth.policy().allows(CredentialKind::Password) {
+            " (add the first admin with `jian users add --admin --email ... --password-stdin`)"
+        } else {
+            ""
+        }
+    );
     for route in jian_server::ROUTES {
         let (method, path) = route.split_once(' ').unwrap_or(("GET", route));
         println!("  {method} http://{addr}{path}");
@@ -422,6 +455,7 @@ async fn serve(
         closing.clone(),
         Settings {
             gateway_version: Some(env!("CARGO_PKG_VERSION").to_owned()),
+            auth,
             ..Settings::default()
         },
     );
@@ -596,6 +630,37 @@ mod tests {
             .master_keys()
             .unwrap_err();
         assert!(format!("{error:#}").contains("JIAN_MASTER_KEY is not usable"));
+    }
+
+    #[test]
+    fn sign_in_methods_default_to_a_password_and_can_be_changed() {
+        // JIAN_AUTH_METHODS may be set where the tests run; the flag wins over it.
+        let policy = |list: &str| {
+            Cli::try_parse_from(["jian", "--auth-methods", list]).map(|cli| cli.auth_methods)
+        };
+        assert!(policy("password").unwrap().allows(CredentialKind::Password));
+        assert!(!policy("github").unwrap().allows(CredentialKind::Password));
+        assert!(policy("telepathy").is_err());
+    }
+
+    #[test]
+    fn users_add_is_a_subcommand() {
+        let cli = Cli::try_parse_from([
+            "jian",
+            "users",
+            "add",
+            "--email",
+            "a@b.test",
+            "--admin",
+            "--password-stdin",
+        ])
+        .unwrap();
+        assert!(matches!(
+            cli.command,
+            Some(Command::Users {
+                action: UsersAction::Add(_)
+            })
+        ));
     }
 
     #[test]

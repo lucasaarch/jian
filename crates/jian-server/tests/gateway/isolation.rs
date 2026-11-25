@@ -8,17 +8,19 @@
 use std::time::Duration;
 
 use futures_util::SinkExt;
+use jian_protocol::auth::{InviteCreated, MembersPage};
 use jian_protocol::client::{
     ClientRequest, ClientResponse, DeltaPayload, ErrorCode, Resume, Topic,
 };
 use jian_protocol::machine::{GatewayMessage, TaskResult, WorkerMessage};
-use jian_server::{DispatchError, ROUTES, Settings};
+use jian_server::{DispatchError, ROUTES};
 use jian_testkit::TwoTenants;
 use tokio_tungstenite::tungstenite::Message;
 use tokio_util::sync::CancellationToken;
 
+use super::accounts::open_settings;
 use super::shell;
-use super::support::{Client, Gateway, RawWorker, http_get};
+use super::support::{Client, Gateway, RawWorker, http_get, http_post};
 
 /// Not a fixed wait for something to happen: how long to watch for something that must not.
 const QUIET: Duration = Duration::from_millis(300);
@@ -27,9 +29,7 @@ const QUIET: Duration = Duration::from_millis(300);
 const THIS_FILE: &str = include_str!("isolation.rs");
 
 async fn start() -> (Gateway, TwoTenants) {
-    let gateway = Gateway::start(Settings::default()).await;
-    let tenants = TwoTenants::seed(&gateway.db).await;
-    (gateway, tenants)
+    super::accounts::start(open_settings()).await
 }
 
 fn is_a_test_here(name: &str) -> bool {
@@ -41,6 +41,17 @@ fn is_a_test_here(name: &str) -> bool {
 const ROUTE_TESTS: &[(&str, &str)] = &[
     ("GET /health", "health_says_nothing_about_any_tenant"),
     ("GET /v1/me", "a_token_names_only_its_own_tenant_over_http"),
+    ("POST /v1/auth/login", USERS_TEST),
+    ("POST /v1/auth/logout", USERS_TEST),
+    ("POST /v1/auth/password", USERS_TEST),
+    ("POST /v1/auth/invite/accept", USERS_TEST),
+    ("GET /v1/members", USERS_TEST),
+    ("POST /v1/members", USERS_TEST),
+    ("POST /v1/members/{account_id}/disable", USERS_TEST),
+    ("POST /v1/members/{account_id}/reset-password", USERS_TEST),
+    ("GET /v1/invites", USERS_TEST),
+    ("POST /v1/invites", USERS_TEST),
+    ("POST /v1/invites/{id}/revoke", USERS_TEST),
     (
         "GET /v1/machines/connect",
         "a_worker_of_one_tenant_neither_gets_nor_answers_the_others_tasks",
@@ -50,6 +61,9 @@ const ROUTE_TESTS: &[(&str, &str)] = &[
         "client_requests_aimed_at_the_other_tenant_find_nothing",
     ),
 ];
+
+/// The test that shows tenant B reaches no member, session or invitation of tenant A.
+const USERS_TEST: &str = "users_and_sessions_of_the_other_tenant_are_out_of_reach";
 
 /// Which test here covers a client request. No wildcard arm: a new `ClientRequest` does not
 /// compile until it is listed, and the listing has to name a test that exists (a sample of it
@@ -502,5 +516,130 @@ async fn a_worker_of_one_tenant_neither_gets_nor_answers_the_others_tasks() {
         assert_eq!(result.exit_code, Some(0));
         assert_ne!(result.stderr, "forged");
     }
+    gateway.stop().await;
+}
+
+#[tokio::test]
+async fn users_and_sessions_of_the_other_tenant_are_out_of_reach() {
+    let (gateway, tenants) = start().await;
+    let addr = gateway.addr;
+    let empty = serde_json::json!({});
+    for (actor, victim) in tenants.crossings() {
+        let session = &actor.admin_session;
+
+        // The list holds the actor's own members. Accounts are global, so the ids are what
+        // tells the sides apart.
+        let (status, body) = http_get(addr, "/v1/members", Some(session)).await;
+        assert_eq!(status, 200, "{body}");
+        let page: MembersPage = serde_json::from_str(&body).unwrap();
+        let ids: Vec<&str> = page.items.iter().map(|m| m.account_id.as_str()).collect();
+        // (The first crossing's accepted invitation made the second tenant a member more.)
+        assert_eq!(
+            ids[..2],
+            [
+                actor.admin.account_id.as_str(),
+                actor.member.account_id.as_str()
+            ]
+        );
+        for theirs in [&victim.admin, &victim.member] {
+            assert!(!ids.contains(&theirs.account_id.as_str()));
+        }
+
+        // The victim's id is "no such member", word for word what an id that never existed gets.
+        for (path, body) in [
+            ("disable", empty.clone()),
+            (
+                "reset-password",
+                serde_json::json!({ "password": "twelve chars long" }),
+            ),
+        ] {
+            let aimed = format!("/v1/members/{}/{path}", victim.member.account_id);
+            let never = format!("/v1/members/acc_never_existed/{path}");
+            let refused = http_post(addr, &aimed, Some(session), &body).await;
+            assert_eq!(refused.0, 404, "{path}: {}", refused.1);
+            assert_eq!(refused, http_post(addr, &never, Some(session), &body).await);
+        }
+
+        // The victim is as it was: enabled, with its password and its session.
+        let (_, body) = http_get(addr, "/v1/members", Some(&victim.admin_session)).await;
+        let page: MembersPage = serde_json::from_str(&body).unwrap();
+        let kept = page
+            .items
+            .iter()
+            .find(|m| m.account_id == victim.member.account_id.as_str())
+            .unwrap();
+        assert!(!kept.disabled && !kept.must_change_password);
+        assert_eq!(
+            http_get(addr, "/v1/me", Some(&victim.member_session))
+                .await
+                .0,
+            200
+        );
+
+        // An invitation of the victim is not in the actor's list, and revoking it by id is
+        // "no such invitation", the same as an id that never existed.
+        let invited = format!("invited@{}.test", victim.id);
+        let (status, body) = http_post(
+            addr,
+            "/v1/invites",
+            Some(&victim.admin_session),
+            &serde_json::json!({ "email": invited, "role": "member" }),
+        )
+        .await;
+        assert_eq!(status, 201, "{body}");
+        let invite: InviteCreated = serde_json::from_str(&body).unwrap();
+        let (_, body) = http_get(addr, "/v1/invites", Some(session)).await;
+        assert!(!body.contains(&invite.invite.id), "{body}");
+        let aimed = format!("/v1/invites/{}/revoke", invite.invite.id);
+        let refused = http_post(addr, &aimed, Some(session), &empty).await;
+        assert_eq!(refused.0, 404, "{}", refused.1);
+        let never = "/v1/invites/never_existed/revoke";
+        assert_eq!(refused, http_post(addr, never, Some(session), &empty).await);
+        // It still opens, and for its own tenant only.
+        let (status, body) = http_post(
+            addr,
+            "/v1/auth/invite/accept",
+            None,
+            &serde_json::json!({ "token": invite.token, "password": "twelve chars long" }),
+        )
+        .await;
+        assert_eq!(status, 200, "{body}");
+        assert!(
+            body.contains(&format!(r#""tenant":"{}""#, victim.id)),
+            "{body}"
+        );
+        let (_, body) = http_get(addr, "/v1/members", Some(session)).await;
+        assert!(!body.contains(&invited), "{body}");
+
+        // What the actor's session names is the actor's tenant, whatever the query says.
+        let path = format!("/v1/me?tenant={}", victim.id);
+        let (_, body) = http_get(addr, &path, Some(&actor.member_session)).await;
+        assert!(
+            body.contains(&format!(r#""tenant":"{}""#, actor.id)),
+            "{body}"
+        );
+        assert!(!body.contains(victim.id.as_str()), "{body}");
+    }
+
+    // Signing in can name a workspace; one the account is not in is a wrong password, not an
+    // open door.
+    let (a, b) = (&tenants.a, &tenants.b);
+    let credentials = |password: &str, tenant: Option<&str>| serde_json::json!({ "email": a.admin.email, "password": password, "tenant": tenant });
+    let wrong = http_post(
+        addr,
+        "/v1/auth/login",
+        None,
+        &credentials("not the password at all", None),
+    )
+    .await;
+    let aimed = http_post(
+        addr,
+        "/v1/auth/login",
+        None,
+        &credentials(jian_testkit::PASSWORD, Some(b.id.as_str())),
+    )
+    .await;
+    assert_eq!(wrong.0, 401, "{}", wrong.1);
+    assert_eq!(wrong, aimed);
     gateway.stop().await;
 }

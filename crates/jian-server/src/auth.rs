@@ -12,7 +12,7 @@ use axum::http::header::{AUTHORIZATION, RETRY_AFTER, WWW_AUTHENTICATE};
 use axum::http::request::Parts;
 use axum::http::{HeaderValue, StatusCode};
 use axum::response::{IntoResponse, Response};
-use jian_store::{Subject, TenantId, TokenHash, TokenKind};
+use jian_store::{AccountId, Role, Subject, TenantId, TokenHash, TokenKind};
 
 use crate::AppState;
 use crate::rate::{Limit, Verdict};
@@ -36,6 +36,25 @@ pub struct Principal {
     pub subject: Subject,
     /// The token's hash, to check again later that it is still valid.
     pub token: TokenHash,
+    /// The account behind the token: whoever signed in for a session, and the owner of a machine's
+    /// or a phone's token when it has one. The owner's token belongs to nobody.
+    pub account_id: Option<AccountId>,
+    /// What a signed-in member may do; `None` for every other kind of token.
+    pub role: Option<Role>,
+    /// A session of someone whose password an admin chose: it opens nothing but the routes in
+    /// `MAY_CHANGE_PASSWORD`.
+    pub must_change_password: bool,
+}
+
+/// The paths a session that must change its password may still call. Every other route (and the
+/// WebSocket) answers 403 `password_change_required`, so a new route is shut by default.
+const MAY_CHANGE_PASSWORD: &[&str] = &["/v1/me", "/v1/auth/password", "/v1/auth/logout"];
+
+impl Principal {
+    /// Whether this caller manages the tenant: its owner's token, or a signed-in admin.
+    pub fn is_admin(&self) -> bool {
+        self.kind == TokenKind::Owner || self.role == Some(Role::Admin)
+    }
 }
 
 /// Why a request was not let in.
@@ -45,6 +64,8 @@ pub enum AuthRejection {
     Unauthorized,
     /// Too many attempts from this address.
     TooMany(Duration),
+    /// The token is a session that must change its password first.
+    PasswordChangeRequired,
     /// The token could not be checked; the cause is in the log.
     Unavailable,
 }
@@ -59,6 +80,12 @@ impl IntoResponse for AuthRejection {
                     .insert(WWW_AUTHENTICATE, HeaderValue::from_static("Bearer"));
                 response
             }
+            Self::PasswordChangeRequired => crate::http::refuse(
+                StatusCode::FORBIDDEN,
+                "password_change_required",
+                "change your password first",
+            )
+            .into_response(),
             Self::TooMany(wait) => {
                 let mut response = StatusCode::TOO_MANY_REQUESTS.into_response();
                 if let Ok(seconds) = HeaderValue::from_str(&wait.as_secs().max(1).to_string()) {
@@ -78,6 +105,28 @@ fn bearer(parts: &Parts) -> Option<&str> {
     (scheme.eq_ignore_ascii_case("bearer") && !token.trim().is_empty()).then(|| token.trim())
 }
 
+/// The caller's address, or `unknown` when the server was started without connect info.
+fn caller_address(parts: &Parts) -> String {
+    parts
+        .extensions
+        .get::<ConnectInfo<SocketAddr>>()
+        .map_or_else(|| "unknown".to_owned(), |info| info.0.ip().to_string())
+}
+
+/// The caller's address, for routes that have no token to count by.
+pub(crate) struct Address(pub String);
+
+impl FromRequestParts<AppState> for Address {
+    type Rejection = std::convert::Infallible;
+
+    fn from_request_parts(
+        parts: &mut Parts,
+        _: &AppState,
+    ) -> impl Future<Output = Result<Self, Self::Rejection>> {
+        std::future::ready(Ok(Self(caller_address(parts))))
+    }
+}
+
 impl FromRequestParts<AppState> for Principal {
     type Rejection = AuthRejection;
 
@@ -87,10 +136,7 @@ impl FromRequestParts<AppState> for Principal {
     ) -> Result<Self, Self::Rejection> {
         // By address, when the server was started with connect info. Behind a reverse proxy that
         // is the proxy's, so the bucket is shared by everyone behind it: size it for that.
-        let from = parts
-            .extensions
-            .get::<ConnectInfo<SocketAddr>>()
-            .map_or_else(|| "unknown".to_owned(), |info| info.0.ip().to_string());
+        let from = caller_address(parts);
         if let Verdict::Limited { retry_after } =
             state.limiter.take(&format!("auth:{from}"), ATTEMPTS).await
         {
@@ -98,12 +144,20 @@ impl FromRequestParts<AppState> for Principal {
         }
         let token = bearer(parts).ok_or(AuthRejection::Unauthorized)?;
         match state.db.authenticate(token).await {
-            Ok(Some(found)) => Ok(Self {
-                tenant: found.tenant,
-                kind: found.subject.kind(),
-                subject: found.subject,
-                token: found.token,
-            }),
+            Ok(Some(found)) => {
+                if found.must_change_password && !MAY_CHANGE_PASSWORD.contains(&parts.uri.path()) {
+                    return Err(AuthRejection::PasswordChangeRequired);
+                }
+                Ok(Self {
+                    tenant: found.tenant,
+                    kind: found.subject.kind(),
+                    subject: found.subject,
+                    token: found.token,
+                    account_id: found.account_id,
+                    role: found.role,
+                    must_change_password: found.must_change_password,
+                })
+            }
             Ok(None) => Err(AuthRejection::Unauthorized),
             Err(error) => {
                 tracing::error!(%error, "could not check a token");

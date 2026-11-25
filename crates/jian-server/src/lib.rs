@@ -12,6 +12,18 @@
 //! thing that names the tenant, so a handler never reads one from a path, header or body. A bad or
 //! missing token is a 401 with no reason.
 //!
+//! # People
+//!
+//! A person is an account (one per email address) and a member of each workspace they belong to
+//! (`jian-auth` and `jian-store` say how). The sign-in methods a gateway accepts are
+//! [`Settings::auth`]'s policy: a server install allows a password, the Cloud does not, and
+//! `/v1/auth/*` is then a 404. `POST /v1/auth/login` answers a session token, an opaque `js_`
+//! bearer that opens one workspace, expires, and ends on logout, on a password change (the other
+//! sessions, in every workspace), on a reset, and when the member is disabled (in that
+//! workspace). [`Principal`] then carries the account id and the role. An admin, or the owner's
+//! token, adds and disables members, resets passwords and invites (`members`); nobody can sign
+//! themselves up. A member whose password an admin chose may do nothing but change it.
+//!
 //! # The two sockets
 //!
 //! - `/v1/machines/connect` is where Jian Remote's worker connects (`worker_ws`): it says hello,
@@ -40,11 +52,14 @@
 //! The [`EventBus`] and the [`RateLimiter`] keep their state in this process. Both are traits so a
 //! gateway with several replicas can put a shared store behind them without touching a handler.
 
+mod accounts;
 mod auth;
 mod client_ws;
 mod events;
+mod http;
 mod hub;
 mod jobs;
+mod members;
 mod rate;
 mod slots;
 mod summary;
@@ -53,9 +68,12 @@ mod worker_ws;
 use std::sync::Arc;
 use std::time::Duration;
 
+use axum::extract::DefaultBodyLimit;
 use axum::extract::State;
-use axum::routing::get;
+use axum::routing::{get, post};
 use axum::{Json, Router, http::StatusCode};
+use jian_auth::Auth;
+use jian_protocol::auth::Me;
 use jian_store::{Database, Subject};
 use serde::Serialize;
 use tokio_util::sync::CancellationToken;
@@ -72,6 +90,17 @@ pub use slots::{DrainReport, NoRunQueue, RunRequeue, SlotKeeper, SlotOwnership};
 pub const ROUTES: &[&str] = &[
     "GET /health",
     "GET /v1/me",
+    "POST /v1/auth/login (no token; the password sign-in must be on)",
+    "POST /v1/auth/logout (a session)",
+    "POST /v1/auth/password (a session)",
+    "POST /v1/auth/invite/accept (no token; the password sign-in must be on)",
+    "GET /v1/members (an admin)",
+    "POST /v1/members (an admin)",
+    "POST /v1/members/{account_id}/disable (an admin)",
+    "POST /v1/members/{account_id}/reset-password (an admin)",
+    "GET /v1/invites (an admin)",
+    "POST /v1/invites (an admin)",
+    "POST /v1/invites/{id}/revoke (an admin)",
     "GET /v1/machines/connect (WebSocket, a machine's token)",
     "GET /v1/ws (WebSocket, the owner's or a phone's token)",
 ];
@@ -90,6 +119,19 @@ pub struct Settings {
     pub recheck_interval: Duration,
     /// How many messages a client may send, per token.
     pub messages: Limit,
+    /// Which ways of signing in exist, and the lifetimes of sessions and invitations. A
+    /// self-hosted install allows a password; the Cloud signs people in by other means and its
+    /// policy has none, which makes `/v1/auth/*` a 404.
+    pub auth: Auth,
+    /// How many logins one network address may try, and how fast it earns them back.
+    pub login_per_address: Limit,
+    /// How many logins one email address may take from anyone: the lockout. Wide, because anyone
+    /// who knows an address can spend it for its owner.
+    pub login_per_email: Limit,
+    /// How many logins one caller may try for one email address; the stricter bucket, the one a
+    /// guesser hits first. Also bounds guessing a current password with a stolen session. Every
+    /// try counts, right or wrong: a bucket cannot tell.
+    pub login_per_email_and_address: Limit,
 }
 
 impl Default for Settings {
@@ -102,6 +144,19 @@ impl Default for Settings {
             messages: Limit {
                 burst: 60,
                 per_second: 20.0,
+            },
+            auth: Auth::default(),
+            login_per_address: Limit {
+                burst: 30,
+                per_second: 0.5,
+            },
+            login_per_email: Limit {
+                burst: 20,
+                per_second: 1.0 / 30.0,
+            },
+            login_per_email_and_address: Limit {
+                burst: 5,
+                per_second: 1.0 / 60.0,
             },
         }
     }
@@ -157,9 +212,28 @@ pub fn router(state: AppState) -> Router {
 /// [`Principal`] the same way, or leave it out when the caller has no token, as a webhook has
 /// none.
 pub fn router_with(state: AppState, extra: Router<AppState>) -> Router {
+    // Small bodies: these are a handful of short fields, and some need no token to send.
+    let accounts = Router::new()
+        .route("/v1/auth/login", post(accounts::login))
+        .route("/v1/auth/logout", post(accounts::logout))
+        .route("/v1/auth/password", post(accounts::change_password))
+        .route("/v1/auth/invite/accept", post(accounts::accept_invite))
+        .route("/v1/members", get(members::list).post(members::add))
+        .route("/v1/members/{account_id}/disable", post(members::disable))
+        .route(
+            "/v1/members/{account_id}/reset-password",
+            post(members::reset_password),
+        )
+        .route(
+            "/v1/invites",
+            get(members::list_invites).post(members::create_invite),
+        )
+        .route("/v1/invites/{id}/revoke", post(members::revoke_invite))
+        .layer(DefaultBodyLimit::max(MAX_ACCOUNT_BODY));
     Router::new()
         .route("/health", get(health))
         .route("/v1/me", get(me))
+        .merge(accounts)
         .route(
             jian_protocol::machine::CONNECT_PATH,
             get(worker_ws::connect),
@@ -168,6 +242,9 @@ pub fn router_with(state: AppState, extra: Router<AppState>) -> Router {
         .merge(extra)
         .with_state(state)
 }
+
+/// The most bytes the body of an account route may have.
+const MAX_ACCOUNT_BODY: usize = 16 * 1024;
 
 /// What `/health` answers. Only two words, never why: the endpoint is open, and a reason could
 /// carry a host name or a password.
@@ -200,23 +277,19 @@ async fn health(State(state): State<AppState>) -> (StatusCode, Json<Health>) {
 }
 
 /// Who the token is, for a client to check what it holds.
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-struct Me {
-    tenant: String,
-    kind: &'static str,
-    subject: Option<String>,
-}
-
 async fn me(principal: Principal) -> Json<Me> {
     let (kind, subject) = match &principal.subject {
         Subject::Owner => ("owner", None),
         Subject::Machine(id) => ("machine", Some(id.to_string())),
         Subject::Device(id) => ("device", Some(id.to_string())),
+        Subject::Account(id) => ("session", Some(id.to_string())),
     };
     Json(Me {
         tenant: principal.tenant.to_string(),
-        kind,
+        kind: kind.to_owned(),
         subject,
+        account_id: principal.account_id.as_ref().map(ToString::to_string),
+        role: principal.role.map(summary::role_summary),
+        must_change_password: principal.must_change_password,
     })
 }

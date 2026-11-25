@@ -5,7 +5,7 @@ use jian_protocol::client::{
     ApiError, ClientRequest, ClientResponse, ErrorCode, MAX_PAGE_ITEMS, Page,
 };
 use jian_protocol::machine::CLOSE_TOKEN_REVOKED;
-use jian_store::{DeviceId, MachineId, StoreError, TenantCtx, TokenKind};
+use jian_store::{DeviceId, MachineId, StoreError, TenantCtx};
 
 use crate::AppState;
 use crate::auth::Principal;
@@ -63,12 +63,12 @@ pub(super) async fn handle(
 ) -> Result<ClientResponse, ApiError> {
     let tenant = &principal.tenant;
     let owner_only = || {
-        if principal.kind == TokenKind::Owner {
+        if principal.is_admin() {
             Ok(())
         } else {
             Err(refuse(
                 ErrorCode::Forbidden,
-                "only the owner's token may do this",
+                "only the owner's token or an admin may do this",
             ))
         }
     };

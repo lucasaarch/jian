@@ -1,7 +1,7 @@
 # jian (Rust gateway)
 
 The Jian gateway as one binary, with its own Postgres 18 inside. It serves `GET /health`,
-`GET /v1/me` and two WebSockets, behind bearer tokens. There is no panel yet.
+`GET /v1/me`, the sign-in, members and invitations routes and two WebSockets, behind bearer tokens. There is no panel yet.
 
 ## Run it for development
 
@@ -60,6 +60,7 @@ SHA-256 of a token.
 | `jo_`... (any string of 32+ characters for the owner) | the owner | `/v1/ws`, `/v1/me` |
 | `jrm_` | a machine's worker | `/v1/machines/connect` |
 | `jd_` | a phone or other device | `/v1/ws` (cannot issue tokens) |
+| `js_` | a person who signed in with a password | `/v1/ws`, `/v1/me`, `/v1/auth/*`, and `/v1/members` and `/v1/invites` for an admin; see [People](#people) |
 
 The owner token is `JIAN_API_TOKEN` / `--api-token` when set (at least 32 characters). Otherwise it
 is generated on the first start into `owner.token` in the data directory (mode 0600 on Unix) and
@@ -68,13 +69,78 @@ token. Machine and device tokens are issued, listed and revoked by the owner ove
 is shown once. A missing or wrong token gets a bare 401, a token of the wrong kind a 403, and
 guessing from one address is slowed down with a 429 and `Retry-After`.
 
+## People
+
+A person is one **account** (one per email address, with its own name and password) and a
+**member** of each workspace they belong to, with a role there (`admin` or `member`). The
+gateway has **no sign-up**: an account exists because an admin, the owner's token or the command
+line added it, or because an invitation was accepted. A session opens one workspace. A
+self-hosted install has one workspace; the Cloud has many, and an account may be in several.
+Agents, conversations and memories are not a member's yet.
+
+The first admin comes from the command line, because there is nobody to ask yet. The password is
+read from standard input so it is not in the process list or the shell history, and with the
+embedded Postgres the gateway must be stopped first (the command starts that database itself),
+after it has run once so that the database and the workspace exist:
+
+```bash
+printf '%s\n' 'a password of twelve or more' | \
+  cargo run -p jian -- --data-dir .jian-dev users add --email admin@example.com --admin --password-stdin
+cargo run -p jian -- --data-dir .jian-dev users list
+```
+
+The first member must be an admin and keeps the password given; later ones get a provisional
+password they must replace at their first sign-in. `users add --invite` makes an invitation
+instead (a token, shown once, that works once for seven days). `users disable --email ...` ends
+that member's sessions here, and `users reset-password --email ... --password-stdin` sets a
+provisional password. The owner's token also adds members over HTTP, so an install can get its
+first admin without the command line: `POST /v1/members`.
+
+```bash
+curl -s -H 'Content-Type: application/json' http://127.0.0.1:4410/v1/auth/login \
+  -d '{"email":"admin@example.com","password":"a password of twelve or more"}'
+# {"token":"js_...","expiresAt":"...","tenant":"local","member":{"accountId":"acc_...","role":"admin",...}}
+curl -H "Authorization: Bearer $SESSION" http://127.0.0.1:4410/v1/me
+# {"tenant":"local","kind":"session","subject":"acc_...","accountId":"acc_...","role":"admin","mustChangePassword":false}
+```
+
+| Route | Who | What |
+| --- | --- | --- |
+| `POST /v1/auth/login` | nobody yet | `{email, password, tenant?}` gives a session of 30 days; `tenant` is needed only when the account is in several workspaces (`400 tenant_required`) |
+| `POST /v1/auth/logout` | a session | ends that session |
+| `POST /v1/auth/password` | a session | `{current, new}`; every other session of the account ends, in every workspace |
+| `POST /v1/auth/invite/accept` | nobody yet | `{token, password, name?}`: a new address chooses its password; an existing account gives its current one, which stays |
+| `GET /v1/members`, `POST /v1/members` | an admin or the owner's token | list; add with a provisional `password` (ignored when the account exists) |
+| `POST /v1/members/{account_id}/disable` | an admin or the owner's token | cannot open this workspace; its sessions here end at once, not those in other workspaces |
+| `POST /v1/members/{account_id}/reset-password` | an admin or the owner's token | `{password}`, provisional; `409 account_in_other_workspaces` when the account is in another workspace too |
+| `GET /v1/invites`, `POST /v1/invites` | an admin or the owner's token | pending ones; `{email, role}` returns the token once, and a new one for the same address revokes the old |
+| `POST /v1/invites/{id}/revoke` | an admin or the owner's token | the token stops working |
+
+An id of another workspace is a `404`, word for word what an id that never existed gets. An
+address is stored trimmed and in lower case. A password has 12 characters at least and 256 bytes
+at most, and is kept as an argon2id hash (19 MiB, 2 passes, 1 lane). A wrong password, an
+unknown address, a disabled member, an account that is not in the workspace asked for and a
+malformed address all get the same `401 invalid_credentials`, and cost the same time. Guessing
+is slowed three ways (`429`, `Retry-After`): per network address, per email address from anyone
+(20 tries, then one every 30 seconds), and per email address and network address together (five
+tries, then one a minute). The per-email limit means someone who knows an address can lock it
+out for a while; that is the price of stopping a guesser who changes address. A session whose
+password an admin chose can call only `/v1/me`, `/v1/auth/password` and `/v1/auth/logout` until
+it changes it. A session is an opaque token whose SHA-256 is all the database keeps.
+
+`--auth-methods` (`JIAN_AUTH_METHODS`) says how people may sign in: a comma-separated list of
+`password`, `github`, `email_link`, `passkey` and `totp`, `password` by default. Only `password`
+is implemented in this binary. Without it the login, invitation and add routes answer 404 (the
+Cloud signs people in by other means). The owner and device tokens work either way. The crate
+`jian-auth` has the sign-in flows with no HTTP, for a backend that serves them itself.
+
 ## Talk to it
 
 ```bash
 curl -i http://127.0.0.1:4410/health
 # {"status":"ok","database":"up"}   (503 and "unavailable" when the database does not answer)
 curl -H "Authorization: Bearer $(cat .jian-dev/owner.token)" http://127.0.0.1:4410/v1/me
-# {"tenant":"local","kind":"owner","subject":null}
+# {"tenant":"local","kind":"owner","subject":null,"accountId":null,"role":null,"mustChangePassword":false}
 ```
 
 `/v1/ws` speaks the client protocol of `jian-protocol` (`ClientMessage` / `ServerMessage`,
@@ -169,7 +235,7 @@ it handed back (`requeued=1`).
 ## Another address or another Postgres
 
 Flags, each with an environment variable: `--addr` / `JIAN_ADDR`, `--data-dir` / `JIAN_DATA_DIR`,
-`--database-url` / `DATABASE_URL`.
+`--database-url` / `DATABASE_URL`, `--auth-methods` / `JIAN_AUTH_METHODS` (`password` by default).
 
 ```bash
 make rust-dev DATABASE_URL=postgres://user:pass@127.0.0.1:5432/jian
