@@ -50,5 +50,5 @@ pub mod coverage;
 mod database;
 mod tenants;
 
-pub use database::{TestDb, master_keys, sql_error_code};
+pub use database::{TestDb, job_rows, master_keys, sql_error_code};
 pub use tenants::{JOB_KIND, PASSWORD, SECRET_OWNER, SHARED_KEY, Side, TwoTenants};

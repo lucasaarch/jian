@@ -143,6 +143,27 @@ impl Gateway {
         }
     }
 
+    /// Starts the job runner of this gateway, with short intervals so a test waits for conditions
+    /// and not for the production pace.
+    pub async fn run_jobs(&self, registry: jian_server::JobRegistry) -> jian_server::JobRunner {
+        let options = jian_server::JobOptions {
+            poll_every: Duration::from_millis(40),
+            retry: jian_store::RetryPolicy {
+                base: Duration::from_millis(30),
+                cap: Duration::from_millis(30),
+            },
+            ..jian_server::JobOptions::default()
+        };
+        jian_server::JobRunner::start(
+            self.db.clone(),
+            self.keeper.as_ref().unwrap().instance().clone(),
+            self.state.slots.clone(),
+            registry,
+            options,
+        )
+        .await
+    }
+
     /// What this gateway serves.
     pub fn slots(&self) -> jian_server::SlotOwnership {
         self.state.slots.clone()
@@ -243,7 +264,7 @@ pub async fn closed_with(socket: &mut Socket) -> Option<u16> {
 
 /// A GET over plain HTTP: the status and the body.
 pub async fn http_get(addr: SocketAddr, path: &str, token: Option<&str>) -> (u16, String) {
-    http_send(addr, "GET", path, token, None).await
+    http_request(addr, "GET", path, token, None).await
 }
 
 /// A POST with a JSON body over plain HTTP: the status and the body.
@@ -253,10 +274,10 @@ pub async fn http_post(
     token: Option<&str>,
     json: &serde_json::Value,
 ) -> (u16, String) {
-    http_send(addr, "POST", path, token, Some(&json.to_string())).await
+    http_request(addr, "POST", path, token, Some(&json.to_string())).await
 }
 
-async fn http_send(
+pub async fn http_request(
     addr: SocketAddr,
     method: &str,
     path: &str,

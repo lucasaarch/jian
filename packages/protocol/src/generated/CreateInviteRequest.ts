@@ -13,4 +13,11 @@ email: string,
 /**
  * What they will be able to do.
  */
-role: MemberRole, };
+role: MemberRole, 
+/**
+ * Whether to send the invitation by e-mail. Left out: yes when the gateway can send and
+ * has a public URL, no otherwise. `true` without either is a 409 (`mail_not_configured`,
+ * `public_url_missing`). A send replaces the token, so the answer has no link: ask for one
+ * with `POST /v1/invites/{id}/link`.
+ */
+send: boolean | null, };

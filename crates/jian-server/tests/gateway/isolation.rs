@@ -27,13 +27,16 @@ const QUIET: Duration = Duration::from_millis(300);
 
 /// This file, to check that a name in a table below is a test that exists.
 const THIS_FILE: &str = include_str!("isolation.rs");
+/// The invitation tests are in their own file, and the isolation one is among them.
+const INVITES_FILE: &str = include_str!("invites.rs");
 
 async fn start() -> (Gateway, TwoTenants) {
     super::accounts::start(open_settings()).await
 }
 
 fn is_a_test_here(name: &str) -> bool {
-    THIS_FILE.contains(&format!("async fn {name}("))
+    let declared = format!("async fn {name}(");
+    THIS_FILE.contains(&declared) || INVITES_FILE.contains(&declared)
 }
 
 /// Every route the router serves, and the test here that shows tenant B cannot use it on A's
@@ -52,6 +55,11 @@ const ROUTE_TESTS: &[(&str, &str)] = &[
     ("GET /v1/invites", USERS_TEST),
     ("POST /v1/invites", USERS_TEST),
     ("POST /v1/invites/{id}/revoke", USERS_TEST),
+    ("POST /v1/invites/{id}/link", INVITES_TEST),
+    ("POST /v1/invites/{id}/resend", INVITES_TEST),
+    ("GET /v1/settings/mail", INVITES_TEST),
+    ("PUT /v1/settings/mail", INVITES_TEST),
+    ("DELETE /v1/settings/mail", INVITES_TEST),
     (
         "GET /v1/machines/connect",
         "a_worker_of_one_tenant_neither_gets_nor_answers_the_others_tasks",
@@ -61,6 +69,11 @@ const ROUTE_TESTS: &[(&str, &str)] = &[
         "client_requests_aimed_at_the_other_tenant_find_nothing",
     ),
 ];
+
+/// The test that shows tenant B reaches no mail account and cannot replace or resend the token of
+/// tenant A's invitation, and that A's job sends with A's own account.
+const INVITES_TEST: &str =
+    "an_invitation_is_sent_with_its_own_workspaces_mail_account_and_nobody_elses";
 
 /// The test that shows tenant B reaches no member, session or invitation of tenant A.
 const USERS_TEST: &str = "users_and_sessions_of_the_other_tenant_are_out_of_reach";
@@ -600,7 +613,7 @@ async fn users_and_sessions_of_the_other_tenant_are_out_of_reach() {
             addr,
             "/v1/auth/invite/accept",
             None,
-            &serde_json::json!({ "token": invite.token, "password": "twelve chars long" }),
+            &serde_json::json!({ "token": invite.token.as_deref().unwrap(), "password": "twelve chars long" }),
         )
         .await;
         assert_eq!(status, 200, "{body}");

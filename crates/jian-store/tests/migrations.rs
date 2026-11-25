@@ -131,6 +131,11 @@ async fn a_migration_changed_after_it_was_applied_is_refused_and_says_which() {
         "/migrations/platform/0006_accounts.sql"
     ))
     .unwrap();
+    let seventh = std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/migrations/platform/0007_invite_delivery.sql"
+    ))
+    .unwrap();
     let altered = migrator(
         server.dir.path(),
         "platform-edited",
@@ -144,6 +149,7 @@ async fn a_migration_changed_after_it_was_applied_is_refused_and_says_which() {
             ("0004_slot_leases.sql", &fourth),
             ("0005_jobs.sql", &fifth),
             ("0006_accounts.sql", &sixth),
+            ("0007_invite_delivery.sql", &seventh),
         ],
     )
     .await;

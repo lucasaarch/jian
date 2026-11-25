@@ -91,7 +91,9 @@ cargo run -p jian -- --data-dir .jian-dev users list
 
 The first member must be an admin and keeps the password given; later ones get a provisional
 password they must replace at their first sign-in. `users add --invite` makes an invitation
-instead (a token, shown once, that works once for seven days). `users disable --email ...` ends
+instead: a link when `--public-url` is set, a token when not, shown once, that works once for seven
+days. This command never sends e-mail (it does not run the job queue, and the admin at the
+keyboard can hand the link over); sending is `POST /v1/invites`. `users disable --email ...` ends
 that member's sessions here, and `users reset-password --email ... --password-stdin` sets a
 provisional password. The owner's token also adds members over HTTP, so an install can get its
 first admin without the command line: `POST /v1/members`.
@@ -113,8 +115,40 @@ curl -H "Authorization: Bearer $SESSION" http://127.0.0.1:4410/v1/me
 | `GET /v1/members`, `POST /v1/members` | an admin or the owner's token | list; add with a provisional `password` (ignored when the account exists) |
 | `POST /v1/members/{account_id}/disable` | an admin or the owner's token | cannot open this workspace; its sessions here end at once, not those in other workspaces |
 | `POST /v1/members/{account_id}/reset-password` | an admin or the owner's token | `{password}`, provisional; `409 account_in_other_workspaces` when the account is in another workspace too |
-| `GET /v1/invites`, `POST /v1/invites` | an admin or the owner's token | pending ones; `{email, role}` returns the token once, and a new one for the same address revokes the old |
+| `GET /v1/invites`, `POST /v1/invites` | an admin or the owner's token | pending ones, each with `sendStatus` (`none`, `pending`, `sent`, `failed`), `sendError`, `sentAt`, `providerMessageId`; `{email, role, send?}` makes one (`send` defaults to yes when e-mail and a public URL are set up) and a new one for the same address revokes the old. Sent: `201` without a token, the job e-mails it. Not sent: `201` with the `token` and the `link`, once |
+| `POST /v1/invites/{id}/link` | an admin or the owner's token | copy the link: a new token for the same invitation, the old one (also the one in an e-mail already sent) stops working; the link comes once |
+| `POST /v1/invites/{id}/resend` | an admin or the owner's token | `202`: kills the current token and queues an e-mail with a new one |
 | `POST /v1/invites/{id}/revoke` | an admin or the owner's token | the token stops working |
+| `GET`, `PUT`, `DELETE /v1/settings/mail` | an admin or the owner's token | the workspace's own Resend account, see [E-mail](#e-mail) |
+
+## E-mail
+
+E-mail is only transactional, from the platform: today the invitation. It is not the agents'
+mailbox. The link is always available, so an invitation works with no e-mail at all.
+
+| Flag | Variable | What |
+| --- | --- | --- |
+| `--public-url` | `JIAN_PUBLIC_URL` | Where the panel is on the internet (`https://jian.example.com`; http or https, no user, query or fragment). The link is `<url>/invite#token=<token>`: the token is in the fragment so a browser never sends it to a server, a proxy log or a `Referer`. Without it, `send` and `/link` are `409 public_url_missing` and an invitation is a token only |
+| `--mail-resend-key` | `JIAN_RESEND_API_KEY` | The **deploy's** Resend key, for a hosted deployment: it sends for every workspace, and no workspace can read or change it. Needs `--mail-from` |
+| `--mail-from` | `JIAN_MAIL_FROM` | The deploy's sender, `name@example.com` or `Name <name@example.com>`, on a domain verified at Resend |
+| `--workspace-name` | `JIAN_WORKSPACE_NAME` | What the e-mail calls the workspace (`Jian`); workspaces have no name of their own yet |
+
+Which account sends, first match wins: the deploy's (`--mail-resend-key`), then the workspace's
+own, then none. A self-hosted install uses its own: an admin sets it with
+`PUT /v1/settings/mail {"resendApiKey": "re_...", "from": "Name <name@example.com>"}`, which
+keeps the key in the workspace's encrypted vault (leave `resendApiKey` out to change only the
+sender); `GET` says the provider, the sender and whether a key is stored, never the key;
+`DELETE` forgets both. When the deploy has an account, `GET` says `managedByDeploy` and `PUT` and
+`DELETE` are `409 mail_managed_by_deploy`. `send: true` with no account is `409 mail_not_configured`.
+
+Sending is a job (`invite.send`) with the invitation's id as its whole payload. It makes a new token,
+e-mails the link and records the result on the invitation. A refusal that waiting cannot fix (an
+invalid key, a sender Resend has not verified) ends as `sendStatus: failed` with the reason and no
+retry; a provider outage or a network error is retried by the queue, and `failed` when the
+attempts run out. Fix the cause and `resend`. Copying the link while an e-mail is on its way kills
+that e-mail's token: the person who clicks it is told it is no longer valid, and the admin
+holds the working link. E-mail has no exactly-once, so a message delivered before a timeout can
+arrive twice, and only the last carries a working link.
 
 An id of another workspace is a `404`, word for word what an id that never existed gets. An
 address is stored trimmed and in lower case. A password has 12 characters at least and 256 bytes

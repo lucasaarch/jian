@@ -1,8 +1,8 @@
 //! Rows of the store as the protocol shows them, and the delta that says a machine changed.
 
-use jian_protocol::auth::{InviteSummary, MemberRole, MemberSummary};
+use jian_protocol::auth::{InviteSendStatus, InviteSummary, MemberRole, MemberSummary};
 use jian_protocol::client::{DeltaPayload, DeviceSummary, MachineStatus, MachineSummary, Topic};
-use jian_store::{Device, Invite, Machine, MachineId, Member, Role, TenantId};
+use jian_store::{Device, Invite, Machine, MachineId, Member, Role, SendStatus, TenantId};
 
 use crate::AppState;
 
@@ -95,5 +95,14 @@ pub(crate) fn invite_summary(invite: &Invite) -> InviteSummary {
         role: role_summary(invite.role),
         created_at: invite.created_at.clone(),
         expires_at: invite.expires_at.clone(),
+        send_status: match invite.send_status {
+            SendStatus::Unsent => InviteSendStatus::None,
+            SendStatus::Pending => InviteSendStatus::Pending,
+            SendStatus::Sent => InviteSendStatus::Sent,
+            SendStatus::Failed => InviteSendStatus::Failed,
+        },
+        send_error: invite.send_error.clone(),
+        sent_at: invite.sent_at.clone(),
+        provider_message_id: invite.provider_message_id.clone(),
     }
 }

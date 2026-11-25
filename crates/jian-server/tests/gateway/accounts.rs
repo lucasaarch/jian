@@ -332,12 +332,12 @@ async fn an_invitation_gives_one_person_one_account_once() {
         let addr = gateway.addr;
         async move { http_post(addr, "/v1/auth/invite/accept", None, &body).await }
     };
-    let (status, revoked) = accept(&first.token, "chosen by the person").await;
+    let (status, revoked) = accept(first.token.as_deref().unwrap(), "chosen by the person").await;
     assert_eq!(
         (status, error_of(&revoked).as_str()),
         (400, "invalid_invite")
     );
-    let (status, body) = accept(&second.token, "chosen by the person").await;
+    let (status, body) = accept(second.token.as_deref().unwrap(), "chosen by the person").await;
     assert_eq!(status, 200, "{body}");
     let session: LoginResponse = serde_json::from_str(&body).unwrap();
     assert_eq!(session.member.name, "Invited Person");
@@ -345,7 +345,7 @@ async fn an_invitation_gives_one_person_one_account_once() {
     assert_eq!(me(&gateway, &session.token).await.0, 200);
 
     // Used, revoked or made up: the same answer, word for word.
-    let (_, spent) = accept(&second.token, "another one entirely").await;
+    let (_, spent) = accept(second.token.as_deref().unwrap(), "another one entirely").await;
     let (_, made_up) = accept("ji_made-up", "another one entirely").await;
     assert_eq!(spent, revoked);
     assert_eq!(spent, made_up);
@@ -363,7 +363,12 @@ async fn an_invitation_gives_one_person_one_account_once() {
     let path = format!("/v1/invites/{}/revoke", third.invite.id);
     assert_eq!(post(&gateway, &path, admin, json!({})).await.0, 204);
     assert_eq!(post(&gateway, &path, admin, json!({})).await.0, 404);
-    assert_eq!(accept(&third.token, "chosen by the person").await.0, 400);
+    assert_eq!(
+        accept(third.token.as_deref().unwrap(), "chosen by the person")
+            .await
+            .0,
+        400
+    );
     gateway.stop().await;
 }
 
@@ -382,7 +387,7 @@ async fn an_invitation_for_an_existing_account_needs_its_password_and_keeps_it()
     assert_eq!(status, 201, "{body}");
     let invite: InviteCreated = serde_json::from_str(&body).unwrap();
     let accept = |password: &str| {
-        let body = json!({ "token": invite.token, "password": password });
+        let body = json!({ "token": invite.token.as_deref().unwrap(), "password": password });
         let addr = gateway.addr;
         async move { http_post(addr, "/v1/auth/invite/accept", None, &body).await }
     };

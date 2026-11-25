@@ -10,6 +10,7 @@
 #![allow(clippy::print_stdout)]
 
 mod debug_jobs;
+mod mail_flags;
 mod owner_token;
 mod shutdown;
 mod users_cli;
@@ -22,7 +23,10 @@ use std::time::{Duration, Instant};
 
 use anyhow::Context as _;
 use clap::{Parser, Subcommand};
-use jian_server::{AppState, JobOptions, JobRequeue, JobRunner, Settings, SlotKeeper};
+use jian_server::{
+    AppState, INVITE_SEND_KIND, InviteSender, JobOptions, JobRegistry, JobRequeue, JobRunner,
+    PublicUrl, Settings, SlotKeeper,
+};
 use jian_store::embedded::EmbeddedConfig;
 use jian_store::secrets::{LocalKeyring, MasterKeys as _};
 use jian_store::{
@@ -124,6 +128,15 @@ struct Cli {
         value_name = "LIST"
     )]
     auth_methods: AuthPolicy,
+
+    /// Where the panel is on the internet, such as `https://jian.example.com`: what the link in
+    /// an invitation points at. Without it an invitation is only a token, and sending one by
+    /// e-mail is refused.
+    #[arg(long, env = "JIAN_PUBLIC_URL", value_name = "URL", value_parser = PublicUrl::parse, global = true)]
+    public_url: Option<PublicUrl>,
+
+    #[command(flatten)]
+    mail: mail_flags::MailFlags,
 
     #[command(subcommand)]
     command: Option<Command>,
@@ -255,6 +268,14 @@ async fn main() -> anyhow::Result<()> {
     let keys = cli.master_keys()?;
     let command = cli.command.take();
     let auth = Auth::new(cli.auth_methods.clone(), PasswordParams::default());
+    let settings = Settings {
+        gateway_version: Some(env!("CARGO_PKG_VERSION").to_owned()),
+        auth: auth.clone(),
+        public_url: cli.public_url.clone(),
+        mail: cli.mail.config()?,
+        workspace_name: cli.mail.workspace_name.clone(),
+        ..Settings::default()
+    };
     let source = cli.database_source()?;
     let (owner, owner_source) = owner_token::resolve(cli.api_token.as_deref(), &cli.data_dir()?)
         .context("cannot get the owner's token")?;
@@ -280,12 +301,14 @@ async fn main() -> anyhow::Result<()> {
         Some(Command::Keys {
             action: KeysAction::Rotate,
         }) => rotate(&database).await,
-        Some(Command::Users { action }) => users_cli::run(&database, &auth, action).await,
+        Some(Command::Users { action }) => {
+            users_cli::run(&database, &auth, cli.public_url.as_ref(), action).await
+        }
         Some(Command::Jobs {
             action: JobsAction::EnqueueTest { message, work_ms },
         }) => enqueue_test(&database, &message, work_ms).await,
         None => match prepare(&database, &owner).await {
-            Ok(()) => serve(&addr, &database, &owner_source, auth, &mut shutdown).await,
+            Ok(()) => serve(&addr, &database, &owner_source, settings, &mut shutdown).await,
             Err(error) => Err(error),
         },
     };
@@ -393,6 +416,11 @@ async fn prepare(database: &Database, owner_token: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Every job kind this binary runs.
+fn job_registry(settings: &Settings) -> JobRegistry {
+    debug_jobs::registry().register(INVITE_SEND_KIND, Arc::new(InviteSender::new(settings)))
+}
+
 /// Serves until a stop signal, then drains: it stops serving tenants (every open socket is told
 /// to reconnect), stops accepting, gives the slot leases back and returns, and only then does the
 /// caller stop the database. Returns `Ok` after a clean drain or a drain that hit the deadline; an
@@ -402,7 +430,7 @@ async fn serve(
     addr: &str,
     database: &Arc<Database>,
     owner_source: &Source,
-    auth: Auth,
+    settings: Settings,
     shutdown: &mut Shutdown,
 ) -> anyhow::Result<()> {
     let listener = tokio::net::TcpListener::bind(addr)
@@ -416,8 +444,8 @@ async fn serve(
     }
     println!(
         "sign-in methods: {}{}",
-        auth.policy(),
-        if auth.policy().allows(CredentialKind::Password) {
+        settings.auth.policy(),
+        if settings.auth.policy().allows(CredentialKind::Password) {
             " (add the first admin with `jian users add --admin --email ... --password-stdin`)"
         } else {
             ""
@@ -444,21 +472,12 @@ async fn serve(
         database.clone(),
         keeper.instance().clone(),
         slots.clone(),
-        debug_jobs::registry(),
+        job_registry(&settings),
         JobOptions::default(),
     )
     .await;
     let closing = CancellationToken::new();
-    let state = AppState::new(
-        database.clone(),
-        slots,
-        closing.clone(),
-        Settings {
-            gateway_version: Some(env!("CARGO_PKG_VERSION").to_owned()),
-            auth,
-            ..Settings::default()
-        },
-    );
+    let state = AppState::new(database.clone(), slots, closing.clone(), settings);
     let (stop, stopped) = oneshot::channel::<()>();
     let mut server = tokio::spawn(
         // Connect info is how the server tells callers apart for its rate limit.

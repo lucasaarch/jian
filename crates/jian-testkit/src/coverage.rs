@@ -9,7 +9,13 @@
 /// A job kind a binary registers, and the test that shows its jobs run as their own tenant and
 /// see nothing of another's. `debug.log` is a stand-in that logs ids; the runner-level test
 /// stands for it until a real handler brings its own.
-pub const JOB_KINDS: &[(&str, &str)] = &[(
-    "debug.log",
-    "jian-server/tests/jobs.rs: a_job_runs_as_its_own_tenant_and_a_handler_sees_nothing_of_another",
-)];
+pub const JOB_KINDS: &[(&str, &str)] = &[
+    (
+        "debug.log",
+        "jian-server/tests/jobs.rs: a_job_runs_as_its_own_tenant_and_a_handler_sees_nothing_of_another",
+    ),
+    (
+        "invite.send",
+        "jian-server/tests/gateway/invites.rs: an_invitation_is_sent_with_its_own_workspaces_mail_account_and_nobody_elses",
+    ),
+];

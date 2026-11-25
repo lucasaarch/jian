@@ -38,6 +38,23 @@ impl Auth {
             .await?)
     }
 
+    /// Replaces the token of a live invitation with a new one that works for a full time to
+    /// live, and kills the old one. The id, address and role stay: this is "copy the link" and
+    /// "send it again" for the invitation the admin already sees. `None` when the workspace has
+    /// no live invitation with this id. See [`Database::rotate_invite`] for
+    /// `cancel_pending_send`.
+    pub async fn rotate_invite(
+        &self,
+        db: &Database,
+        ctx: &TenantCtx,
+        id: &str,
+        cancel_pending_send: bool,
+    ) -> Result<Option<IssuedInvite>, AuthError> {
+        Ok(db
+            .rotate_invite(ctx, id, self.invite_ttl, cancel_pending_send)
+            .await?)
+    }
+
     /// Spends an invitation and signs the person in to the workspace it was for.
     ///
     /// For a new address the account is made with the password given. For an address that

@@ -1,12 +1,14 @@
 //! Invitations: how someone an admin names becomes a member without the admin knowing a
 //! password.
 //!
-//! An invitation is a random token of 256 bits, shown once to the admin, who passes it on (sending
-//! it by email is not done here). The database keeps its SHA-256, which doubles as the
-//! invitation's id for listing and revoking, an expiry, and whether it was used or revoked. It
-//! works once. Issuing another for the same address in the same tenant revokes the first, which
-//! is what "copy the link" and "send it again" are. A token that is unknown, used, revoked or
-//! expired is the same refusal, [`StoreError::InvalidInvite`].
+//! An invitation is a random token of 256 bits, shown once to the admin, who passes it on, by
+//! link or by e-mail (the e-mail is `jian-server`'s job, which records how it went here). The
+//! database keeps the token's SHA-256, an expiry, and whether it was used or revoked. The
+//! invitation has an id of its own that does not change: "copy the link" and "send it again"
+//! replace the token of the same invitation ([`Database::rotate_invite`]), so the admin sees one
+//! invitation per address and the old token dies. It works once. Issuing a new invitation for
+//! the same address in the same tenant revokes the first. A token that is unknown, used,
+//! revoked or expired is the same refusal, [`StoreError::InvalidInvite`].
 
 use std::time::Duration;
 
@@ -16,7 +18,7 @@ use crate::accounts::{NewAccount, find_or_create_account, normalize_email};
 use crate::machines::iso;
 use crate::members::{Member, Role, insert_member, member_in};
 use crate::secrets::Secret;
-use crate::tokens::{AccountId, TokenHash, generate_prefixed};
+use crate::tokens::{AccountId, TokenHash, generate_prefixed, random_id};
 use crate::{Database, StoreError, TenantCtx, TenantId};
 
 /// The longest an invitation token is taken to be, in bytes. A real one is 46.
@@ -35,10 +37,64 @@ pub enum InviteStatus {
     Expired,
 }
 
+/// How sending an invitation by e-mail stands. It says nothing about whether the person read it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SendStatus {
+    /// No e-mail was sent for this token: a link only, or the link was copied while a send waited.
+    Unsent,
+    /// A job is to send it.
+    Pending,
+    /// The provider took it.
+    Sent,
+    /// It will not be sent; [`Invite::send_error`] says why.
+    Failed,
+}
+
+impl SendStatus {
+    /// The word the database keeps.
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Unsent => "none",
+            Self::Pending => "pending",
+            Self::Sent => "sent",
+            Self::Failed => "failed",
+        }
+    }
+
+    fn parse(text: &str) -> Self {
+        match text {
+            "pending" => Self::Pending,
+            "sent" => Self::Sent,
+            "failed" => Self::Failed,
+            _ => Self::Unsent,
+        }
+    }
+}
+
+/// How a send ended, for [`Database::finish_invite_send`].
+#[derive(Clone, Copy, Debug)]
+pub enum SendOutcome<'a> {
+    /// The provider took it, and maybe said its id for the message.
+    Sent {
+        /// The provider's id.
+        message_id: Option<&'a str>,
+    },
+    /// It will not be sent. The reason is short and holds no key or message body.
+    Failed {
+        /// Why.
+        reason: &'a str,
+    },
+}
+
+/// The longest `send_error` kept, in characters.
+const MAX_SEND_ERROR_CHARS: usize = 300;
+
 /// One invitation as listed. The token is not in it: it was shown once, when it was made.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Invite {
-    /// The SHA-256 of the token, in hex: what names it to list and revoke.
+    /// What names it to list, revoke, copy and resend. It stays the same when its token is
+    /// replaced.
     pub id: String,
     /// The address invited, trimmed and lower case.
     pub email: String,
@@ -52,6 +108,14 @@ pub struct Invite {
     pub expires_at: String,
     /// Where it stands.
     pub status: InviteStatus,
+    /// How sending it by e-mail stands.
+    pub send_status: SendStatus,
+    /// Why the last send failed, short; cleared when a new send is queued.
+    pub send_error: Option<String>,
+    /// When the provider took the e-mail, UTC ISO 8601.
+    pub sent_at: Option<String>,
+    /// The provider's id for that e-mail, when it gave one.
+    pub provider_message_id: Option<String>,
 }
 
 #[derive(sqlx::FromRow)]
@@ -63,6 +127,10 @@ struct InviteRow {
     created_at: String,
     expires_at: String,
     status: String,
+    send_status: String,
+    send_error: Option<String>,
+    sent_at: Option<String>,
+    provider_message_id: Option<String>,
 }
 
 impl From<InviteRow> for Invite {
@@ -80,19 +148,28 @@ impl From<InviteRow> for Invite {
                 "expired" => InviteStatus::Expired,
                 _ => InviteStatus::Pending,
             },
+            send_status: SendStatus::parse(&row.send_status),
+            send_error: row.send_error,
+            sent_at: row.sent_at,
+            provider_message_id: row.provider_message_id,
         }
     }
 }
 
 const INVITE_COLUMNS: &str = concat!(
-    "token_hash AS id, email, role, invited_by, ",
+    "id, email, role, invited_by, ",
     iso!("created_at"),
     " AS created_at, ",
     iso!("expires_at"),
     " AS expires_at, CASE WHEN used_at IS NOT NULL THEN 'used' \
      WHEN revoked_at IS NOT NULL THEN 'revoked' WHEN expires_at <= now() THEN 'expired' \
-     ELSE 'pending' END AS status"
+     ELSE 'pending' END AS status, send_status, send_error, ",
+    iso!("sent_at"),
+    " AS sent_at, provider_message_id"
 );
+
+/// What makes an invitation live: not used, not revoked, not expired.
+const LIVE: &str = "used_at IS NULL AND revoked_at IS NULL AND expires_at > now()";
 
 /// An invitation just made, and the token that accepts it.
 #[derive(Debug)]
@@ -165,8 +242,8 @@ impl Database {
         .await
         .map_err(StoreError::query(ACTION))?;
         let row: InviteRow = sqlx::query_as(AssertSqlSafe(format!(
-            "INSERT INTO invites (token_hash, tenant_id, email, role, invited_by, expires_at) \
-             VALUES ($1, $2, $3, $4, $5, now() + make_interval(secs => $6)) \
+            "INSERT INTO invites (id, token_hash, tenant_id, email, role, invited_by, expires_at) \
+             VALUES ($7, $1, $2, $3, $4, $5, now() + make_interval(secs => $6)) \
              RETURNING {INVITE_COLUMNS}"
         )))
         .bind(hash.as_str())
@@ -175,6 +252,7 @@ impl Database {
         .bind(role.as_str())
         .bind(invited_by.map(AccountId::as_str))
         .bind(ttl.as_secs_f64())
+        .bind(random_id("inv_")?)
         .fetch_one(&mut *tx)
         .await
         .map_err(StoreError::query(ACTION))?;
@@ -207,11 +285,119 @@ impl Database {
         const ACTION: &str = "revoke an invitation";
         let mut tx = self.platform_tx(ACTION).await?;
         let done = sqlx::query(
-            "UPDATE invites SET revoked_at = now() WHERE tenant_id = $1 AND token_hash = $2 \
+            "UPDATE invites SET revoked_at = now() WHERE tenant_id = $1 AND id = $2 \
              AND used_at IS NULL AND revoked_at IS NULL AND expires_at > now()",
         )
         .bind(ctx.id().as_str())
         .bind(id)
+        .execute(&mut *tx)
+        .await
+        .map_err(StoreError::query(ACTION))?
+        .rows_affected();
+        tx.commit().await.map_err(StoreError::query(ACTION))?;
+        Ok(done > 0)
+    }
+
+    /// Replaces the token of a live invitation of the tenant with a new one and gives the expiry
+    /// a new `ttl`, so the old token stops working at once. The id, the address and the role stay.
+    /// `None` when the tenant has no such live invitation (another tenant's is none). This is
+    /// what "copy the link" and "send it again" do.
+    ///
+    /// `cancel_pending_send`: a send that was waiting is set to [`SendStatus::Unsent`], because
+    /// the token it was going to mail is the one that just died. A send that is itself rotating
+    /// passes `false`.
+    pub async fn rotate_invite(
+        &self,
+        ctx: &TenantCtx,
+        id: &str,
+        ttl: Duration,
+        cancel_pending_send: bool,
+    ) -> Result<Option<IssuedInvite>, StoreError> {
+        const ACTION: &str = "replace an invitation's token";
+        let token = generate_prefixed("ji_")?;
+        let hash = TokenHash::of(token.expose());
+        let mut tx = self.platform_tx(ACTION).await?;
+        let row: Option<InviteRow> = sqlx::query_as(AssertSqlSafe(format!(
+            "UPDATE invites SET token_hash = $3, expires_at = now() + make_interval(secs => $4), \
+             send_status = CASE WHEN $5 AND send_status = 'pending' THEN 'none' ELSE send_status END \
+             WHERE tenant_id = $1 AND id = $2 AND {LIVE} RETURNING {INVITE_COLUMNS}"
+        )))
+        .bind(ctx.id().as_str())
+        .bind(id)
+        .bind(hash.as_str())
+        .bind(ttl.as_secs_f64())
+        .bind(cancel_pending_send)
+        .fetch_optional(&mut *tx)
+        .await
+        .map_err(StoreError::query(ACTION))?;
+        tx.commit().await.map_err(StoreError::query(ACTION))?;
+        Ok(row.map(|row| IssuedInvite {
+            invite: row.into(),
+            token,
+        }))
+    }
+
+    /// Marks a live invitation of the tenant as waiting for its e-mail to be sent, and clears
+    /// the last error. `None` when the tenant has no such live invitation. Call it before
+    /// queueing the job, so the job's result is never overwritten by this.
+    pub async fn queue_invite_send(
+        &self,
+        ctx: &TenantCtx,
+        id: &str,
+    ) -> Result<Option<Invite>, StoreError> {
+        const ACTION: &str = "queue an invitation's e-mail";
+        let mut tx = self.platform_tx(ACTION).await?;
+        let row: Option<InviteRow> = sqlx::query_as(AssertSqlSafe(format!(
+            "UPDATE invites SET send_status = 'pending', send_error = NULL \
+             WHERE tenant_id = $1 AND id = $2 AND {LIVE} RETURNING {INVITE_COLUMNS}"
+        )))
+        .bind(ctx.id().as_str())
+        .bind(id)
+        .fetch_optional(&mut *tx)
+        .await
+        .map_err(StoreError::query(ACTION))?;
+        tx.commit().await.map_err(StoreError::query(ACTION))?;
+        Ok(row.map(Invite::from))
+    }
+
+    /// Records how a send ended, only while the invitation is still waiting for it
+    /// ([`SendStatus::Pending`]) and, when `generation` is given, still has that token: a token
+    /// replaced since (the link was copied, the invitation was sent again) belongs to a newer
+    /// send or to none, and this one's result must not overwrite it. `false` when nothing was
+    /// recorded for either reason.
+    pub async fn finish_invite_send(
+        &self,
+        ctx: &TenantCtx,
+        id: &str,
+        generation: Option<&TokenHash>,
+        outcome: SendOutcome<'_>,
+    ) -> Result<bool, StoreError> {
+        const ACTION: &str = "record an invitation's e-mail";
+        let (status, error, message_id) = match outcome {
+            SendOutcome::Sent { message_id } => (SendStatus::Sent, None, message_id),
+            SendOutcome::Failed { reason } => (SendStatus::Failed, Some(reason), None),
+        };
+        let error: Option<String> = error.map(|reason| {
+            reason
+                .chars()
+                .map(|c| if c.is_control() { ' ' } else { c })
+                .take(MAX_SEND_ERROR_CHARS)
+                .collect()
+        });
+        let mut tx = self.platform_tx(ACTION).await?;
+        let done = sqlx::query(
+            "UPDATE invites SET send_status = $3, send_error = $4, \
+             sent_at = CASE WHEN $3 = 'sent' THEN now() ELSE sent_at END, \
+             provider_message_id = $5 \
+             WHERE tenant_id = $1 AND id = $2 AND send_status = 'pending' \
+             AND ($6::text IS NULL OR token_hash = $6)",
+        )
+        .bind(ctx.id().as_str())
+        .bind(id)
+        .bind(status.as_str())
+        .bind(error)
+        .bind(message_id)
+        .bind(generation.map(TokenHash::as_str))
         .execute(&mut *tx)
         .await
         .map_err(StoreError::query(ACTION))?

@@ -1,4 +1,4 @@
-//! Managing the workspace's members and invitations, for an admin: `/v1/members`, `/v1/invites`.
+//! Managing the workspace's members, for an admin: `/v1/members`. Invitations are in `invites`.
 //!
 //! The caller is the owner's token or a signed-in admin; a member, a phone and a machine get 403.
 //! Every call runs as the caller's own tenant, taken from the token, so another workspace's
@@ -9,8 +9,7 @@ use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use jian_auth::AddMember;
 use jian_protocol::auth::{
-    AddMemberRequest, AddMemberResponse, CreateInviteRequest, InviteCreated, InvitesPage,
-    MemberSummary, MembersPage, ResetPasswordRequest,
+    AddMemberRequest, AddMemberResponse, MemberSummary, MembersPage, ResetPasswordRequest,
 };
 use jian_store::AccountId;
 use serde::Deserialize;
@@ -18,10 +17,9 @@ use serde::Deserialize;
 use crate::AppState;
 use crate::auth::Principal;
 use crate::http::{
-    Refusal, auth_failure, forbidden, internal, not_found, refuse, require_password, store_failure,
-    tenant_ctx,
+    Refusal, auth_failure, forbidden, internal, not_found, refuse, require_password, tenant_ctx,
 };
-use crate::summary::{invite_summary, member_summary, role_of};
+use crate::summary::{member_summary, role_of};
 
 /// How many members a page holds when the caller does not say.
 const DEFAULT_PAGE: u32 = 50;
@@ -146,68 +144,4 @@ pub(crate) async fn reset_password(
         .map_err(|error| auth_failure(&error))?
         .ok_or_else(|| not_found("member"))?;
     Ok(Json(member_summary(&member)))
-}
-
-/// `GET /v1/invites`: the pending ones.
-pub(crate) async fn list_invites(
-    State(app): State<AppState>,
-    principal: Principal,
-) -> Result<Json<InvitesPage>, Refusal> {
-    admin_only(&principal)?;
-    let ctx = tenant_ctx(&app, &principal.tenant).await?;
-    let invites = app.db.list_invites(&ctx).await.map_err(|e| internal(&e))?;
-    Ok(Json(InvitesPage {
-        items: invites.iter().map(invite_summary).collect(),
-    }))
-}
-
-/// `POST /v1/invites`: the token is in the answer, once. Inviting an address that has a live
-/// invitation revokes it.
-pub(crate) async fn create_invite(
-    State(app): State<AppState>,
-    principal: Principal,
-    Json(body): Json<CreateInviteRequest>,
-) -> Result<(StatusCode, Json<InviteCreated>), Refusal> {
-    admin_only(&principal)?;
-    require_password(&app)?;
-    let ctx = tenant_ctx(&app, &principal.tenant).await?;
-    let issued = app
-        .settings
-        .auth
-        .invite(
-            &app.db,
-            &ctx,
-            &body.email,
-            role_of(body.role),
-            principal.account_id.as_ref(),
-        )
-        .await
-        .map_err(|error| auth_failure(&error))?;
-    Ok((
-        StatusCode::CREATED,
-        Json(InviteCreated {
-            invite: invite_summary(&issued.invite),
-            token: issued.token.expose().to_owned(),
-        }),
-    ))
-}
-
-/// `POST /v1/invites/{id}/revoke`.
-pub(crate) async fn revoke_invite(
-    State(app): State<AppState>,
-    principal: Principal,
-    Path(id): Path<String>,
-) -> Result<StatusCode, Refusal> {
-    admin_only(&principal)?;
-    let ctx = tenant_ctx(&app, &principal.tenant).await?;
-    if app
-        .db
-        .revoke_invite(&ctx, &id)
-        .await
-        .map_err(|e| store_failure(&e))?
-    {
-        Ok(StatusCode::NO_CONTENT)
-    } else {
-        Err(not_found("invitation"))
-    }
 }

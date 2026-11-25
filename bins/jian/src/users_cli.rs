@@ -14,6 +14,7 @@ use std::io::BufRead as _;
 use anyhow::Context as _;
 use clap::{ArgGroup, Args, Subcommand};
 use jian_auth::{AddMember, Auth, AuthError, Role};
+use jian_server::PublicUrl;
 use jian_store::{Database, StoreError, TenantCtx, TenantId};
 
 #[derive(Subcommand)]
@@ -56,8 +57,9 @@ pub struct AddArgs {
     /// Read their password from the first line of standard input.
     #[arg(long)]
     password_stdin: bool,
-    /// Make an invitation instead: print a token, shown once, that they use to choose their own
-    /// password at `POST /v1/auth/invite/accept`.
+    /// Make an invitation instead: print a link (a token, when there is no `--public-url`),
+    /// shown once, that they use to choose their own password. It is never sent by e-mail from
+    /// here; an admin does that from the panel or `POST /v1/invites`.
     #[arg(long)]
     invite: bool,
 }
@@ -81,13 +83,18 @@ fn read_password() -> anyhow::Result<String> {
     Ok(first_line(line))
 }
 
-pub async fn run(database: &Database, auth: &Auth, action: UsersAction) -> anyhow::Result<()> {
+pub async fn run(
+    database: &Database,
+    auth: &Auth,
+    public_url: Option<&PublicUrl>,
+    action: UsersAction,
+) -> anyhow::Result<()> {
     let ctx = database
         .tenant(TenantId::self_hosted())
         .await
         .context("cannot open the tenant; has the gateway run once on this database?")?;
     match action {
-        UsersAction::Add(args) => add(database, auth, &ctx, args).await,
+        UsersAction::Add(args) => add(database, auth, public_url, &ctx, args).await,
         UsersAction::List => list(database, &ctx).await,
         UsersAction::Disable { email } => {
             let member = database
@@ -132,6 +139,7 @@ fn describe(error: AuthError) -> anyhow::Error {
 async fn add(
     database: &Database,
     auth: &Auth,
+    public_url: Option<&PublicUrl>,
     ctx: &TenantCtx,
     args: AddArgs,
 ) -> anyhow::Result<()> {
@@ -151,7 +159,12 @@ async fn add(
             .await
             .map_err(describe)?;
         println!("invited {} ({})", issued.invite.email, role.as_str());
-        println!("invitation token (shown once): {}", issued.token.expose());
+        // This command never sends e-mail: it does not run the job queue, and the person at the
+        // keyboard can hand the link over. The e-mail is `POST /v1/invites`.
+        match public_url.and_then(|public| public.invite_link(issued.token.expose())) {
+            Some(link) => println!("invitation link (shown once): {link}"),
+            None => println!("invitation token (shown once): {}", issued.token.expose()),
+        }
         println!("it works once, until {}", issued.invite.expires_at);
         return Ok(());
     }

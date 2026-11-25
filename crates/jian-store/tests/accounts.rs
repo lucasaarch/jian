@@ -10,7 +10,8 @@ mod support;
 use std::time::Duration;
 
 use jian_store::{
-    AddedMember, Database, NewAccount, NewMember, Role, StoreError, TenantCtx, TokenHash,
+    AddedMember, Database, NewAccount, NewMember, Role, SendOutcome, SendStatus, StoreError,
+    TenantCtx, TokenHash,
 };
 use support::{Server, tenant};
 
@@ -481,5 +482,110 @@ async fn accepting_with_an_existing_account_adds_the_member_and_changes_no_crede
         Err(StoreError::InvalidInvite)
     ));
     assert_eq!(db.list_invites(&b).await.unwrap().len(), 1);
+    server.stop().await;
+}
+
+#[tokio::test]
+async fn a_new_token_keeps_the_invitation_and_a_stale_send_never_overwrites_a_newer_one() {
+    let server = Server::start().await;
+    let db = migrated(&server).await;
+    let a = tenant(&db, "alpha").await;
+    let b = tenant(&db, "beta").await;
+    let made = db
+        .create_invite(&a, "new@example.test", Role::Member, None, TTL)
+        .await
+        .unwrap();
+    let id = made.invite.id.clone();
+    assert_eq!(made.invite.send_status, SendStatus::Unsent);
+
+    // Another tenant can neither replace the token, queue a send nor record one.
+    assert!(
+        db.rotate_invite(&b, &id, TTL, true)
+            .await
+            .unwrap()
+            .is_none()
+    );
+    assert!(db.queue_invite_send(&b, &id).await.unwrap().is_none());
+    let sent = SendOutcome::Sent { message_id: None };
+    assert!(!db.finish_invite_send(&b, &id, None, sent).await.unwrap());
+    assert!(
+        db.live_invite(&TokenHash::of(made.token.expose()))
+            .await
+            .unwrap()
+            .is_some()
+    );
+
+    // The send waits; copying the link meanwhile replaces the token, keeps the id and cancels
+    // the wait, because the e-mail it was for now carries a dead token.
+    db.queue_invite_send(&a, &id).await.unwrap().unwrap();
+    let copied = db.rotate_invite(&a, &id, TTL, true).await.unwrap().unwrap();
+    assert_eq!(copied.invite.id, id);
+    assert_eq!(copied.invite.send_status, SendStatus::Unsent);
+    assert!(
+        db.live_invite(&TokenHash::of(made.token.expose()))
+            .await
+            .unwrap()
+            .is_none()
+    );
+    assert_eq!(db.list_invites(&a).await.unwrap().len(), 1);
+
+    // A job that rotated for its own send, then lost the race to a copy, records nothing.
+    db.queue_invite_send(&a, &id).await.unwrap().unwrap();
+    let mine = db
+        .rotate_invite(&a, &id, TTL, false)
+        .await
+        .unwrap()
+        .unwrap();
+    let mine = TokenHash::of(mine.token.expose());
+    let theirs = db
+        .rotate_invite(&a, &id, TTL, false)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(
+        !db.finish_invite_send(&a, &id, Some(&mine), sent)
+            .await
+            .unwrap()
+    );
+    let listed = &db.list_invites(&a).await.unwrap()[0];
+    assert_eq!(listed.send_status, SendStatus::Pending);
+    // The one that holds the current token records, once; control characters and length are cut.
+    let theirs = TokenHash::of(theirs.token.expose());
+    let reason = format!("line one\nline two {}", "x".repeat(500));
+    let failed = SendOutcome::Failed { reason: &reason };
+    assert!(
+        db.finish_invite_send(&a, &id, Some(&theirs), failed)
+            .await
+            .unwrap()
+    );
+    assert!(
+        !db.finish_invite_send(&a, &id, Some(&theirs), sent)
+            .await
+            .unwrap()
+    );
+    let listed = &db.list_invites(&a).await.unwrap()[0];
+    assert_eq!(listed.send_status, SendStatus::Failed);
+    let error = listed.send_error.as_deref().unwrap();
+    assert!(!error.contains('\n') && error.chars().count() == 300);
+    // Queueing again clears it, and a send is recorded as sent with the provider's id.
+    db.queue_invite_send(&a, &id).await.unwrap().unwrap();
+    let with_id = SendOutcome::Sent {
+        message_id: Some("msg_9"),
+    };
+    assert!(db.finish_invite_send(&a, &id, None, with_id).await.unwrap());
+    let listed = &db.list_invites(&a).await.unwrap()[0];
+    assert_eq!(listed.send_status, SendStatus::Sent);
+    assert!(listed.send_error.is_none() && listed.sent_at.is_some());
+    assert_eq!(listed.provider_message_id.as_deref(), Some("msg_9"));
+
+    // A revoked invitation cannot be replaced, queued or recorded.
+    assert!(db.revoke_invite(&a, &id).await.unwrap());
+    assert!(
+        db.rotate_invite(&a, &id, TTL, true)
+            .await
+            .unwrap()
+            .is_none()
+    );
+    assert!(db.queue_invite_send(&a, &id).await.unwrap().is_none());
     server.stop().await;
 }

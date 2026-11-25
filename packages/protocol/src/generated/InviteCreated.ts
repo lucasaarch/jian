@@ -2,7 +2,8 @@
 import type { InviteSummary } from "./InviteSummary";
 
 /**
- * The answer to [`CreateInviteRequest`]: the invitation and its token, once.
+ * The answer to creating an invitation or copying its link: the invitation and its token,
+ * once.
  */
 export type InviteCreated = { 
 /**
@@ -11,6 +12,12 @@ export type InviteCreated = {
 invite: InviteSummary, 
 /**
  * What the person gives to `POST /v1/auth/invite/accept`. Works once, and is not shown
- * again: the gateway keeps its hash.
+ * again: the gateway keeps its hash. Absent when an e-mail was queued instead (the token
+ * is the one in the e-mail).
  */
-token: string, };
+token: string | null, 
+/**
+ * The page that accepts it, `<public URL>/invite#token=<token>`. Absent when there is no
+ * token, and when the gateway has no public URL (then only the token is given).
+ */
+link: string | null, };

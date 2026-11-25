@@ -48,7 +48,7 @@ pub fn registry() -> JobRegistry {
 
 #[cfg(test)]
 mod tests {
-    use super::registry;
+    use jian_server::Settings;
 
     /// A job kind registered here runs code as a tenant; it must come with a test that shows it
     /// sees nothing of another tenant.
@@ -58,7 +58,7 @@ mod tests {
             .iter()
             .map(|(kind, _)| *kind)
             .collect();
-        for kind in registry().kinds() {
+        for kind in crate::job_registry(&Settings::default()).kinds() {
             assert!(
                 listed.contains(&kind.as_str()),
                 "job kind {kind:?} has no isolation test: write one (see crates/AGENTS.md) and \

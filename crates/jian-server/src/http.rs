@@ -17,6 +17,7 @@ use jian_protocol::auth::ErrorBody;
 use jian_store::{StoreError, TenantCtx, TenantId};
 
 use crate::AppState;
+use crate::auth::Principal;
 use crate::rate::{Limit, Verdict};
 
 /// A refusal, ready to send. Boxed so that `Result<_, Refusal>` stays small: a [`Response`] is
@@ -58,6 +59,16 @@ pub(crate) fn not_found(what: &str) -> Refusal {
 
 pub(crate) fn forbidden(message: &str) -> Refusal {
     refuse(StatusCode::FORBIDDEN, "forbidden", message)
+}
+
+/// The caller must be the owner's token or a signed-in admin; `what` finishes "only an admin
+/// may ...".
+pub(crate) fn require_admin(principal: &Principal, what: &str) -> Result<(), Refusal> {
+    if principal.is_admin() {
+        Ok(())
+    } else {
+        Err(forbidden(&format!("only an admin may {what}")))
+    }
 }
 
 /// The store failed for a reason the caller cannot fix: logged here, said as nothing to probe.

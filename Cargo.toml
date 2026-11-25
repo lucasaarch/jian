@@ -28,6 +28,7 @@ getrandom = "0.3"
 globset = { version = "0.4", default-features = false }
 jian-auth = { path = "crates/jian-auth" }
 jian-computer-use = { path = "crates/jian-computer-use" }
+jian-mail = { path = "crates/jian-mail" }
 jian-protocol = { path = "crates/jian-protocol" }
 jian-remote = { path = "crates/jian-remote" }
 jian-server = { path = "crates/jian-server" }

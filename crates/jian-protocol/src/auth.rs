@@ -220,6 +220,27 @@ pub struct CreateInviteRequest {
     pub email: String,
     /// What they will be able to do.
     pub role: MemberRole,
+    /// Whether to send the invitation by e-mail. Left out: yes when the gateway can send and
+    /// has a public URL, no otherwise. `true` without either is a 409 (`mail_not_configured`,
+    /// `public_url_missing`). A send replaces the token, so the answer has no link: ask for one
+    /// with `POST /v1/invites/{id}/link`.
+    #[serde(default)]
+    pub send: Option<bool>,
+}
+
+/// How sending an invitation by e-mail stands. Nothing here says the person read it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+#[serde(rename_all = "camelCase")]
+pub enum InviteSendStatus {
+    /// No e-mail was sent for the current token: a link only, or the link was copied.
+    None,
+    /// An e-mail is waiting to be sent.
+    Pending,
+    /// The provider took the e-mail.
+    Sent,
+    /// It will not be sent; `sendError` says why. Fix the cause and send it again.
+    Failed,
 }
 
 /// A pending invitation, as an admin lists it. There is no token in it: that was shown once.
@@ -227,7 +248,8 @@ pub struct CreateInviteRequest {
 #[ts(export)]
 #[serde(rename_all = "camelCase")]
 pub struct InviteSummary {
-    /// Names it in `POST /v1/invites/{id}/revoke`.
+    /// Names it in `POST /v1/invites/{id}/revoke`, `/link` and `/resend`. It does not change
+    /// when the token does.
     pub id: String,
     /// Who is invited.
     pub email: String,
@@ -237,9 +259,18 @@ pub struct InviteSummary {
     pub created_at: String,
     /// When it stops working, UTC ISO 8601.
     pub expires_at: String,
+    /// How sending it by e-mail stands.
+    pub send_status: InviteSendStatus,
+    /// Why the last send failed: short, never a key.
+    pub send_error: Option<String>,
+    /// When the provider took the e-mail, UTC ISO 8601.
+    pub sent_at: Option<String>,
+    /// The provider's id for the e-mail, when it gave one.
+    pub provider_message_id: Option<String>,
 }
 
-/// The answer to [`CreateInviteRequest`]: the invitation and its token, once.
+/// The answer to creating an invitation or copying its link: the invitation and its token,
+/// once.
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[ts(export)]
 #[serde(rename_all = "camelCase")]
@@ -247,14 +278,56 @@ pub struct InviteCreated {
     /// The invitation.
     pub invite: InviteSummary,
     /// What the person gives to `POST /v1/auth/invite/accept`. Works once, and is not shown
-    /// again: the gateway keeps its hash.
-    pub token: String,
+    /// again: the gateway keeps its hash. Absent when an e-mail was queued instead (the token
+    /// is the one in the e-mail).
+    pub token: Option<String>,
+    /// The page that accepts it, `<public URL>/invite#token=<token>`. Absent when there is no
+    /// token, and when the gateway has no public URL (then only the token is given).
+    pub link: Option<String>,
 }
 
 impl std::fmt::Debug for InviteCreated {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("InviteCreated")
             .field("invite", &self.invite)
+            .finish_non_exhaustive()
+    }
+}
+
+/// What `GET /v1/settings/mail` says about how the workspace sends e-mail. The API key is never
+/// in it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+#[serde(rename_all = "camelCase")]
+pub struct MailSettings {
+    /// `resend` when e-mail can be sent, `none` otherwise.
+    pub provider: String,
+    /// The sender, when there is one.
+    pub from: Option<String>,
+    /// Whether a key is stored. True when the deploy's own is used.
+    pub has_key: bool,
+    /// The deploy sends for every workspace with its own account: this workspace cannot change
+    /// it (`PUT` and `DELETE` are a 409 `mail_managed_by_deploy`).
+    pub managed_by_deploy: bool,
+}
+
+/// `PUT /v1/settings/mail`, for an admin: the workspace's own Resend account.
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+#[serde(rename_all = "camelCase")]
+pub struct PutMailSettingsRequest {
+    /// The Resend API key. Left out: keep the one stored (the first time it is required).
+    #[serde(default)]
+    pub resend_api_key: Option<String>,
+    /// The sender: `name@example.com` or `Name <name@example.com>`, on a domain verified at
+    /// Resend.
+    pub from: String,
+}
+
+impl std::fmt::Debug for PutMailSettingsRequest {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PutMailSettingsRequest")
+            .field("from", &self.from)
             .finish_non_exhaustive()
     }
 }

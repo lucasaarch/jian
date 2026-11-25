@@ -85,3 +85,19 @@ pub async fn sql_error_code(
         Err(other) => panic!("not a database error: {other}"),
     }
 }
+
+/// The jobs of one kind as the platform table holds them: state, attempts and payload text. For a
+/// test that must see what is in the queue's row, such as "no secret in the payload".
+pub async fn job_rows(url: &jian_store::DatabaseUrl, kind: &str) -> Vec<(String, i32, String)> {
+    use sqlx::{Connection as _, PgConnection};
+    let mut conn = PgConnection::connect(url.expose()).await.unwrap();
+    let rows = sqlx::query_as(
+        "SELECT state, attempts, payload::text FROM platform.jobs WHERE kind = $1 ORDER BY created_at",
+    )
+    .bind(kind)
+    .fetch_all(&mut conn)
+    .await
+    .unwrap();
+    conn.close().await.unwrap();
+    rows
+}

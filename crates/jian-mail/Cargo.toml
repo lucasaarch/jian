@@ -1,0 +1,20 @@
+[package]
+name = "jian-mail"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+futures-util.workspace = true
+reqwest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+zeroize.workspace = true
+
+[dev-dependencies]
+axum.workspace = true
+tokio = { workspace = true, features = ["rt-multi-thread", "sync"] }
+
+[lints]
+workspace = true

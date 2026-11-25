@@ -133,7 +133,8 @@ pub use database::{Database, DatabaseHealth, DatabaseSource, DatabaseUrl};
 pub use devices::Device;
 pub use error::StoreError;
 pub use invites::{
-    Accepted, Invite, InviteStatus, InviteTarget, IssuedInvite, MAX_INVITE_TOKEN_LEN,
+    Accepted, Invite, InviteStatus, InviteTarget, IssuedInvite, MAX_INVITE_TOKEN_LEN, SendOutcome,
+    SendStatus,
 };
 pub use jobs::{
     Enqueued, Failure, Job, JobId, JobState, JobWakeups, MAX_ATTEMPTS, MAX_ERROR_CHARS,

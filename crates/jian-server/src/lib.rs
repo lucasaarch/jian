@@ -58,8 +58,13 @@ mod client_ws;
 mod events;
 mod http;
 mod hub;
+mod invite_job;
+mod invites;
 mod jobs;
+mod mail;
+mod mail_settings;
 mod members;
+mod public_url;
 mod rate;
 mod slots;
 mod summary;
@@ -81,7 +86,10 @@ use tokio_util::sync::CancellationToken;
 pub use auth::{AuthRejection, Principal};
 pub use events::{BUFFER_DELTAS, EventBus, MemoryEventBus, Subscription};
 pub use hub::{DispatchError, HubCommand, MachineHub};
+pub use invite_job::{INVITE_SEND_KIND, InviteSender};
 pub use jobs::{JobContext, JobError, JobHandler, JobOptions, JobRegistry, JobRequeue, JobRunner};
+pub use mail::{DeployMail, MailConfig};
+pub use public_url::{InvalidPublicUrl, PublicUrl};
 pub use rate::{Clock, Limit, ManualClock, MemoryRateLimiter, RateLimiter, SystemClock, Verdict};
 pub use slots::{DrainReport, NoRunQueue, RunRequeue, SlotKeeper, SlotOwnership};
 
@@ -101,6 +109,11 @@ pub const ROUTES: &[&str] = &[
     "GET /v1/invites (an admin)",
     "POST /v1/invites (an admin)",
     "POST /v1/invites/{id}/revoke (an admin)",
+    "POST /v1/invites/{id}/link (an admin)",
+    "POST /v1/invites/{id}/resend (an admin)",
+    "GET /v1/settings/mail (an admin)",
+    "PUT /v1/settings/mail (an admin)",
+    "DELETE /v1/settings/mail (an admin)",
     "GET /v1/machines/connect (WebSocket, a machine's token)",
     "GET /v1/ws (WebSocket, the owner's or a phone's token)",
 ];
@@ -132,6 +145,14 @@ pub struct Settings {
     /// guesser hits first. Also bounds guessing a current password with a stolen session. Every
     /// try counts, right or wrong: a bucket cannot tell.
     pub login_per_email_and_address: Limit,
+    /// Where the panel is on the internet: what a link in an e-mail points at. Without it a
+    /// link cannot be made, so an invitation can only be handed over as a token.
+    pub public_url: Option<PublicUrl>,
+    /// Where e-mail comes from: the deploy's own Resend account, or each workspace's.
+    pub mail: MailConfig,
+    /// How the e-mail names the workspace. Workspaces have no name of their own yet, so one
+    /// name is said for all of them.
+    pub workspace_name: String,
 }
 
 impl Default for Settings {
@@ -158,6 +179,9 @@ impl Default for Settings {
                 burst: 5,
                 per_second: 1.0 / 60.0,
             },
+            public_url: None,
+            mail: MailConfig::default(),
+            workspace_name: "Jian".to_owned(),
         }
     }
 }
@@ -224,11 +248,16 @@ pub fn router_with(state: AppState, extra: Router<AppState>) -> Router {
             "/v1/members/{account_id}/reset-password",
             post(members::reset_password),
         )
+        .route("/v1/invites", get(invites::list).post(invites::create))
+        .route("/v1/invites/{id}/revoke", post(invites::revoke))
+        .route("/v1/invites/{id}/link", post(invites::link))
+        .route("/v1/invites/{id}/resend", post(invites::resend))
         .route(
-            "/v1/invites",
-            get(members::list_invites).post(members::create_invite),
+            "/v1/settings/mail",
+            get(mail_settings::get)
+                .put(mail_settings::put)
+                .delete(mail_settings::delete),
         )
-        .route("/v1/invites/{id}/revoke", post(members::revoke_invite))
         .layer(DefaultBodyLimit::max(MAX_ACCOUNT_BODY));
     Router::new()
         .route("/health", get(health))

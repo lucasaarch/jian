@@ -1306,6 +1306,7 @@ dependencies = [
  "directories",
  "futures-util",
  "jian-auth",
+ "jian-mail",
  "jian-server",
  "jian-store",
  "jian-testkit",
@@ -1387,6 +1388,20 @@ name = "jian-llm"
 version = "0.1.0"
 
 [[package]]
+name = "jian-mail"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "futures-util",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
+ "zeroize",
+]
+
+[[package]]
 name = "jian-protocol"
 version = "0.1.0"
 dependencies = [
@@ -1446,6 +1461,7 @@ dependencies = [
  "axum",
  "futures-util",
  "jian-auth",
+ "jian-mail",
  "jian-protocol",
  "jian-remote",
  "jian-store",
@@ -1458,6 +1474,7 @@ dependencies = [
  "tokio-tungstenite",
  "tokio-util",
  "tracing",
+ "url",
 ]
 
 [[package]]
