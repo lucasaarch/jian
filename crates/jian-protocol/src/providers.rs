@@ -25,6 +25,9 @@ pub struct ProviderAccountSummary {
     pub active: bool,
     /// Whether a key is stored. The key itself is never sent.
     pub has_key: bool,
+    /// Whether the account must sign in again: its ChatGPT refresh token was refused. Only a
+    /// ChatGPT subscription can be; no token is revealed by it.
+    pub needs_login: bool,
     /// When it was made, UTC ISO 8601.
     pub created_at: String,
 }

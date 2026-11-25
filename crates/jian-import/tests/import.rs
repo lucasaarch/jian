@@ -31,13 +31,13 @@ const CODEX: &str =
 const CLAUDE_ID: &str = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 const CLAUDE: &str = "sk-ant-oat01-synthetic-0005";
 
-/// What each domain writes from the fixture: the secrets are the OpenAI key, the Groq key, the
-/// ChatGPT tokens, the Claude token and the Telegram token; the providers are a Groq account, a
-/// ChatGPT sign-in and a Claude subscription.
+/// What each domain writes from the fixture: the secrets are the OpenAI key, the Groq key and the
+/// Telegram token (the ChatGPT and Claude tokens come with their accounts); the providers are a
+/// Groq account, a ChatGPT sign-in and a Claude subscription.
 fn rows(which: Domain) -> u32 {
     match which {
-        Domain::Secrets | Domain::Messages => 5,
-        Domain::Providers => 3,
+        Domain::Secrets | Domain::Providers => 3,
+        Domain::Messages => 5,
         // Two sessions with a person (the one between two agents is left).
         Domain::Threads => 2,
         _ => 1,
@@ -240,7 +240,7 @@ async fn reading_a_live_old_database_changes_nothing_in_it() {
     assert!(!report.source.contains('@'));
     assert_eq!(domain(&report, Domain::Machines).imported, 1);
     assert_eq!(domain(&report, Domain::Devices).imported, 1);
-    assert_eq!(domain(&report, Domain::Secrets).imported, 5);
+    assert_eq!(domain(&report, Domain::Secrets).imported, 3);
     assert_eq!(domain(&report, Domain::Providers).imported, 3);
     // No address was given: the owner is skipped, and a later run with one takes it.
     assert_eq!(domain(&report, Domain::Owner).status, ImportStatus::Skipped);
@@ -279,7 +279,7 @@ async fn a_run_that_stopped_or_lacked_a_key_is_finished_by_the_next() {
     let secrets = domain(&first, Domain::Secrets);
     assert_eq!(
         (secrets.status, secrets.failed, secrets.imported),
-        (ImportStatus::Failed, 5, 0)
+        (ImportStatus::Failed, 3, 0)
     );
     let markers = format!("{:?}", new.db.imports(&ctx).await.unwrap());
     assert!(!markers.contains(OPENAI) && !markers.contains(TELEGRAM));
@@ -308,7 +308,7 @@ async fn a_run_that_stopped_or_lacked_a_key_is_finished_by_the_next() {
     for which in [Domain::Agents, Domain::Threads, Domain::Messages] {
         assert_eq!(domain(&second, which).status, ImportStatus::Skipped);
     }
-    assert_eq!(domain(&second, Domain::Secrets).imported, 5);
+    assert_eq!(domain(&second, Domain::Secrets).imported, 3);
     assert_eq!(
         new.db
             .list_machines(&ctx, None, 10)
@@ -505,4 +505,56 @@ async fn owners_chats_came_over(db: &Database, ctx: &TenantCtx, owner: &jian_sto
         json.contains("wamid-1") && json.contains("reactions"),
         "{json}"
     );
+}
+
+/// `{broken`, sealed as the old gateway sealed the secret of `provider:` + [`CODEX_ID`] under
+/// [`OLD_KEY`]: it opens, and is not the tokens' JSON.
+const BROKEN_CODEX: &str = r#"{"iv":"CQkJCQkJCQkJCQkJ","tag":"T4umcnOKlwRJIm1iAF+W5A==","keyId":"local","version":1,"ciphertext":"XOf2+9WVrw=="}"#;
+
+#[tokio::test]
+async fn a_chatgpt_sign_in_that_does_not_parse_is_skipped_and_leaves_nothing() {
+    let new = TestDb::start(SCRATCH).await;
+    let ctx = fresh(&new.db).await;
+    let dir = tempfile::tempdir_in(SCRATCH).unwrap();
+    let old = old_server(dir.path()).await;
+    let mut connection = sqlx::PgConnection::connect(old.url().expose())
+        .await
+        .unwrap();
+    sqlx::query("UPDATE gateway_secrets SET envelope = $1::text::jsonb WHERE name = $2")
+        .bind(BROKEN_CODEX)
+        .bind(format!("provider:{CODEX_ID}"))
+        .execute(&mut connection)
+        .await
+        .unwrap();
+    connection.close().await.unwrap();
+    let source = Source::Postgres(old.url().clone());
+    let opts = options(dir.path(), None, Some(keys(OLD_KEY)));
+
+    let report = Importer::new(&new.db, &ctx, &opts)
+        .run(&source, Scope::All)
+        .await
+        .unwrap();
+
+    // The other two accounts come; this one is a row with a reason and nothing else.
+    let providers = domain(&report, Domain::Providers);
+    assert_eq!((providers.imported, providers.failed), (2, 1));
+    let detail = providers.detail.clone().unwrap();
+    assert!(
+        detail.contains(CODEX_ID) && detail.contains("not readable"),
+        "{detail}"
+    );
+    assert!(!detail.contains("broken"), "{detail}");
+    let ids: Vec<String> = new
+        .db
+        .provider_accounts(&ctx)
+        .await
+        .unwrap()
+        .into_iter()
+        .map(|account| account.id)
+        .collect();
+    assert_eq!(ids, [GROQ_ID, CLAUDE_ID]);
+    let owner = format!("provider:{CODEX_ID}");
+    assert!(new.db.vault().read(&ctx, &owner).await.unwrap().is_none());
+    new.stop().await;
+    old.stop().await.unwrap();
 }

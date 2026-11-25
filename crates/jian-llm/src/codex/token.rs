@@ -94,6 +94,13 @@ impl Tokens {
         self.needs_login
     }
 
+    /// The ChatGPT account the access token belongs to, which is who signed in. Signing in again
+    /// as the same account must refresh its entry, not add a twin. `None` when the token does
+    /// not say.
+    pub fn chatgpt_account_id(&self) -> Option<String> {
+        account_of(&self.access).id
+    }
+
     pub(crate) fn marked(mut self) -> Self {
         self.needs_login = true;
         self

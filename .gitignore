@@ -34,3 +34,6 @@ apps/desktop/release/
 apps/desktop/.gateway/
 # A copy of Electron named Jian, for running the app from source on macOS.
 apps/desktop/.dev/
+
+# Local dev data of `make rust-dev`.
+.jian-dev/

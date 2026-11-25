@@ -57,7 +57,12 @@ pub(crate) async fn import(
             .find(|secret| secret.profile_id.is_none() && secret.owner == owner);
         let outcome = async {
             if let Some(key) = key {
-                secrets::one(db, ctx, keys, key, &owner).await?;
+                let readable = if prepared.is_chatgpt_sign_in() {
+                    chatgpt_readable
+                } else {
+                    |_: &str| true
+                };
+                secrets::one(db, ctx, keys, key, &owner, readable).await?;
             }
             db.import_provider(ctx, &prepared).await
         }
@@ -72,4 +77,18 @@ pub(crate) async fn import(
         }
     }
     Ok(tally.finish(None))
+}
+
+/// Whether a ChatGPT sign-in holds the two tokens the Codex provider reads. Nothing of the text
+/// leaves this function.
+fn chatgpt_readable(text: &str) -> bool {
+    let Ok(value) = serde_json::from_str::<serde_json::Value>(text) else {
+        return false;
+    };
+    ["access_token", "refresh_token"].iter().all(|key| {
+        value
+            .get(key)
+            .and_then(serde_json::Value::as_str)
+            .is_some_and(|token| !token.is_empty())
+    })
 }

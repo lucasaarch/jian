@@ -5,10 +5,12 @@ use axum::Json;
 use axum::extract::State;
 use axum::http::StatusCode;
 use jian_core::{AccountMode, ProviderKind};
-use jian_llm::LlmError;
+use jian_llm::{CodexTokens, LlmError};
 use jian_protocol::providers::{CodexLoginStarted, CompleteCodexLogin, ProviderAccountSummary};
-use jian_store::secrets::Secret;
-use jian_store::{NewProviderAccount, StoreError};
+use jian_store::secrets::{RefreshError, Secret};
+use jian_store::{
+    NewProviderAccount, ProviderAccount, StoreError, TenantCtx, provider_secret_owner,
+};
 use url::Url;
 
 use crate::AppState;
@@ -84,7 +86,53 @@ fn code_of(pasted: &str, state: &str) -> Result<String, Refusal> {
     param("code").ok_or_else(|| invalid("the address has no code"))
 }
 
-/// `POST /v1/providers/codex/complete`: 201 with the new, inactive account.
+/// The tenant's ChatGPT account of this identity, if it has one, with its tokens replaced (and
+/// `needs_login` cleared with them). The swap runs under the vault's row lock, so it cannot
+/// interleave with a refresh that would write the old refresh token back.
+async fn renew(
+    app: &AppState,
+    ctx: &TenantCtx,
+    identity: &str,
+    tokens: &CodexTokens,
+) -> Result<Option<ProviderAccount>, Refusal> {
+    let accounts = app
+        .db
+        .provider_accounts(ctx)
+        .await
+        .map_err(|error| store_failure(&error))?;
+    for account in accounts {
+        if account.provider != ProviderKind::OpenAi || account.mode != AccountMode::Subscription {
+            continue;
+        }
+        let Ok(Some(stored)) = app.db.provider_key(ctx, &account.id).await else {
+            continue;
+        };
+        let same = CodexTokens::parse(stored.expose())
+            .is_ok_and(|old| old.chatgpt_account_id().as_deref() == Some(identity));
+        if !same {
+            continue;
+        }
+        let fresh = Secret::new(tokens.to_secret().as_str());
+        let swapped = app
+            .db
+            .vault()
+            .refresh(ctx, &provider_secret_owner(&account.id), |_| async move {
+                Ok::<_, std::convert::Infallible>(fresh)
+            })
+            .await;
+        return match swapped {
+            Ok(true) => Ok(Some(account)),
+            // Revoked between the read and the lock: the sign-in makes a new account.
+            Ok(false) => Ok(None),
+            Err(RefreshError::Store(error)) => Err(store_failure(&error)),
+            Err(RefreshError::Transform(never)) => match never {},
+        };
+    }
+    Ok(None)
+}
+
+/// `POST /v1/providers/codex/complete`: 201 with the new, inactive account; 200 with the
+/// account that was already this ChatGPT account, its tokens renewed.
 pub(crate) async fn complete(
     State(app): State<AppState>,
     principal: Principal,
@@ -108,6 +156,13 @@ pub(crate) async fn complete(
         .exchange(&code, verifier.expose())
         .await
         .map_err(|error| failure(&error))?;
+    let ctx = tenant_ctx(&app, &principal.tenant).await?;
+    // The same ChatGPT account signing in again gets its tokens replaced, not a second entry.
+    if let Some(identity) = tokens.chatgpt_account_id()
+        && let Some(account) = renew(&app, &ctx, &identity, &tokens).await?
+    {
+        return Ok((StatusCode::OK, Json(summary(&app, &ctx, account).await)));
+    }
     let new = NewProviderAccount {
         provider: ProviderKind::OpenAi,
         mode: AccountMode::Subscription,
@@ -115,7 +170,6 @@ pub(crate) async fn complete(
         base_url: body.base_url,
         key: Some(Secret::new(tokens.to_secret().as_str())),
     };
-    let ctx = tenant_ctx(&app, &principal.tenant).await?;
     let account =
         app.db
             .create_provider_account(&ctx, &new)
@@ -124,5 +178,8 @@ pub(crate) async fn complete(
                 StoreError::InvalidProvider(message) => invalid(message),
                 other => store_failure(&other),
             })?;
-    Ok((StatusCode::CREATED, Json(summary(account))))
+    Ok((
+        StatusCode::CREATED,
+        Json(summary(&app, &ctx, account).await),
+    ))
 }

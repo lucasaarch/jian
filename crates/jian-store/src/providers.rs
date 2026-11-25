@@ -387,6 +387,11 @@ impl ProviderImport {
     pub fn mode(&self) -> AccountMode {
         self.mode
     }
+
+    /// Whether it is a ChatGPT (Codex) sign-in, whose key is a JSON of tokens.
+    pub fn is_chatgpt_sign_in(&self) -> bool {
+        self.provider == ProviderKind::OpenAi && self.mode == AccountMode::Subscription
+    }
 }
 
 impl LegacyProvider {

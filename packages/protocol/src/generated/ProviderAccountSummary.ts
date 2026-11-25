@@ -34,6 +34,11 @@ active: boolean,
  */
 hasKey: boolean, 
 /**
+ * Whether the account must sign in again: its ChatGPT refresh token was refused. Only a
+ * ChatGPT subscription can be; no token is revealed by it.
+ */
+needsLogin: boolean, 
+/**
  * When it was made, UTC ISO 8601.
  */
 createdAt: string, };

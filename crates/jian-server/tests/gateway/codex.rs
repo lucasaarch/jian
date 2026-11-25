@@ -3,7 +3,7 @@
 //! fake server here; nothing leaves the machine.
 
 use std::net::SocketAddr;
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -15,7 +15,9 @@ use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
-use jian_protocol::providers::{CodexLoginStarted, ModelCatalog, ProviderAccountSummary};
+use jian_protocol::providers::{
+    CodexLoginStarted, ModelCatalog, ProviderAccountSummary, ProvidersPage,
+};
 use jian_store::SlotOptions;
 use jian_testkit::TwoTenants;
 use serde_json::{Value, json};
@@ -34,11 +36,11 @@ fn unix_now() -> u64 {
 }
 
 /// A token shaped like ChatGPT's, ending `seconds_left` from now (negative: already ended).
-fn jwt(seconds_left: i64, tag: &str) -> String {
+fn jwt(seconds_left: i64, tag: &str, account: &str) -> String {
     let claims = json!({
         "exp": unix_now().saturating_add_signed(seconds_left),
         "tag": tag,
-        "https://api.openai.com/auth": { "chatgpt_account_id": "acct-fake" },
+        "https://api.openai.com/auth": { "chatgpt_account_id": account },
     });
     format!(
         "e30.{}.sig",
@@ -49,7 +51,9 @@ fn jwt(seconds_left: i64, tag: &str) -> String {
 /// What the fake OpenAI does and has seen.
 struct Openai {
     /// The access token a code's exchange gives: how long it lives.
-    first_token_lives: i64,
+    first_token_lives: AtomicI64,
+    /// The ChatGPT account a code's exchange signs in.
+    signs_in_as: Mutex<String>,
     /// Whether a refresh is refused.
     refuse_refresh: AtomicBool,
     refreshes: AtomicUsize,
@@ -70,7 +74,11 @@ async fn token(State(openai): State<Shared>, body: Bytes) -> Response {
         Some("authorization_code") => {
             *openai.verifier.lock().unwrap() = field("code_verifier");
             axum::Json(json!({
-                "access_token": jwt(openai.first_token_lives, "first"),
+                "access_token": jwt(
+                    openai.first_token_lives.load(Ordering::SeqCst),
+                    "first",
+                    &openai.signs_in_as.lock().unwrap(),
+                ),
                 "refresh_token": REFRESH_TOKEN,
             }))
             .into_response()
@@ -82,7 +90,8 @@ async fn token(State(openai): State<Shared>, body: Bytes) -> Response {
             if openai.refuse_refresh.load(Ordering::SeqCst) {
                 return (StatusCode::BAD_REQUEST, "{\"error\":\"invalid_grant\"}").into_response();
             }
-            axum::Json(json!({ "access_token": jwt(3600, "refreshed") })).into_response()
+            axum::Json(json!({ "access_token": jwt(3600, "refreshed", "acct-fake") }))
+                .into_response()
         }
         _ => StatusCode::BAD_REQUEST.into_response(),
     }
@@ -101,7 +110,8 @@ async fn models(headers: HeaderMap) -> Response {
 
 async fn fake_openai(first_token_lives: i64) -> (String, Shared) {
     let openai = Arc::new(Openai {
-        first_token_lives,
+        first_token_lives: AtomicI64::new(first_token_lives),
+        signs_in_as: Mutex::new("acct-fake".to_owned()),
         refuse_refresh: AtomicBool::new(false),
         refreshes: AtomicUsize::new(0),
         verifier: Mutex::new(None),
@@ -149,8 +159,12 @@ async fn start_login(gateway: &Gateway, session: &str) -> CodexLoginStarted {
     serde_json::from_str(&text).unwrap()
 }
 
-/// Signs in as `session` and returns the new account.
-async fn sign_in(gateway: &Gateway, session: &str, fake: &str) -> ProviderAccountSummary {
+/// Signs in as `session` and returns the account and the status (201 new, 200 renewed).
+async fn sign_in_again(
+    gateway: &Gateway,
+    session: &str,
+    fake: &str,
+) -> (u16, ProviderAccountSummary) {
     let started = start_login(gateway, session).await;
     let body = json!({ "state": started.state, "code": "the-code", "baseUrl": fake });
     let (status, text) = http_post(
@@ -160,8 +174,21 @@ async fn sign_in(gateway: &Gateway, session: &str, fake: &str) -> ProviderAccoun
         &body,
     )
     .await;
-    assert_eq!(status, 201, "{text}");
-    serde_json::from_str(&text).unwrap()
+    assert!(matches!(status, 200 | 201), "{text}");
+    (status, serde_json::from_str(&text).unwrap())
+}
+
+/// Signs in as `session` and returns the new account.
+async fn sign_in(gateway: &Gateway, session: &str, fake: &str) -> ProviderAccountSummary {
+    let (status, account) = sign_in_again(gateway, session, fake).await;
+    assert_eq!(status, 201);
+    account
+}
+
+async fn listed(gateway: &Gateway, session: &str) -> Vec<ProviderAccountSummary> {
+    let (status, text) = http_get(gateway.addr, "/v1/providers", Some(session)).await;
+    assert_eq!(status, 200, "{text}");
+    serde_json::from_str::<ProvidersPage>(&text).unwrap().items
 }
 
 async fn catalog(gateway: &Gateway, session: &str) -> ModelCatalog {
@@ -336,5 +363,48 @@ async fn a_refused_refresh_token_asks_for_a_new_sign_in_and_is_not_asked_again()
         assert!(seen.accounts[0].models.is_empty());
     }
     assert_eq!(openai.refreshes.load(Ordering::SeqCst), 1);
+    gateway.stop().await;
+}
+
+#[tokio::test]
+async fn signing_in_again_as_the_same_chatgpt_account_renews_it() {
+    // The first sign-in's token is over and its refresh is refused: the account needs a login.
+    let (fake, openai) = fake_openai(-60).await;
+    openai.refuse_refresh.store(true, Ordering::SeqCst);
+    let (gateway, tenants) = gateway_for(&fake).await;
+    let a = &tenants.a;
+    let first = sign_in(&gateway, &a.admin_session, &fake).await;
+    assert!(!first.needs_login);
+    catalog(&gateway, &a.admin_session).await;
+    let before = listed(&gateway, &a.admin_session).await;
+    assert!(before[0].needs_login, "the refused refresh is not shown");
+    assert_eq!(openai.refreshes.load(Ordering::SeqCst), 1);
+
+    // The same ChatGPT account again, now with a token that lives: one account, renewed.
+    openai.first_token_lives.store(3600, Ordering::SeqCst);
+    let (status, again) = sign_in_again(&gateway, &a.admin_session, &fake).await;
+    assert_eq!((status, again.id.as_str()), (200, first.id.as_str()));
+    assert!(!again.needs_login);
+    let after = listed(&gateway, &a.admin_session).await;
+    assert_eq!(after.len(), 1);
+    assert!(!after[0].needs_login);
+    // The new tokens are the ones in use: the models come with no further refresh.
+    let seen = catalog(&gateway, &a.admin_session).await;
+    assert!(seen.accounts[0].error.is_none(), "{:?}", seen.accounts[0]);
+    assert_eq!(openai.refreshes.load(Ordering::SeqCst), 1);
+
+    // Another ChatGPT account is another account.
+    *openai.signs_in_as.lock().unwrap() = "acct-other".to_owned();
+    let (status, other) = sign_in_again(&gateway, &a.admin_session, &fake).await;
+    assert_eq!(status, 201);
+    assert_ne!(other.id, first.id);
+    assert_eq!(listed(&gateway, &a.admin_session).await.len(), 2);
+
+    // And never across workspaces: B signing in as A's account gets its own.
+    *openai.signs_in_as.lock().unwrap() = "acct-fake".to_owned();
+    let (status, theirs) = sign_in_again(&gateway, &tenants.b.admin_session, &fake).await;
+    assert_eq!(status, 201);
+    assert_ne!(theirs.id, first.id);
+    assert_eq!(listed(&gateway, &a.admin_session).await.len(), 2);
     gateway.stop().await;
 }

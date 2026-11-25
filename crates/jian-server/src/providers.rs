@@ -8,6 +8,7 @@ use axum::Json;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use jian_core::{AccountMode, ModelInfo, ProviderKind};
+use jian_llm::CodexTokens;
 use jian_protocol::providers::{
     AccountModels, CreateProviderRequest, ModelCatalog, ModelSummary, ProviderAccountSummary,
     ProvidersPage, SubscriptionUsage, UsageWindow,
@@ -21,8 +22,23 @@ use crate::{AppState, LlmAccess};
 
 const WHAT: &str = "manage model providers";
 
-pub(crate) fn summary(account: ProviderAccount) -> ProviderAccountSummary {
+/// An account as listed. A ChatGPT sign-in says whether it must be done again, read from its
+/// vault entry; an entry that cannot be read says nothing rather than failing the list.
+pub(crate) async fn summary(
+    app: &AppState,
+    ctx: &TenantCtx,
+    account: ProviderAccount,
+) -> ProviderAccountSummary {
+    let needs_login = account.provider == ProviderKind::OpenAi
+        && account.mode == AccountMode::Subscription
+        && match app.db.provider_key(ctx, &account.id).await {
+            Ok(Some(stored)) => {
+                CodexTokens::parse(stored.expose()).is_ok_and(|tokens| tokens.needs_login())
+            }
+            _ => false,
+        };
     ProviderAccountSummary {
+        needs_login,
         id: account.id,
         provider: account.provider.as_str().to_owned(),
         mode: account.mode.as_str().to_owned(),
@@ -76,9 +92,11 @@ pub(crate) async fn list(
         .provider_accounts(&ctx)
         .await
         .map_err(|e| internal(&e))?;
-    Ok(Json(ProvidersPage {
-        items: accounts.into_iter().map(summary).collect(),
-    }))
+    let mut items = Vec::with_capacity(accounts.len());
+    for account in accounts {
+        items.push(summary(&app, &ctx, account).await);
+    }
+    Ok(Json(ProvidersPage { items }))
 }
 
 /// `POST /v1/providers`: 201 with the new, inactive account.
@@ -117,7 +135,10 @@ pub(crate) async fn create(
         .create_provider_account(&ctx, &new)
         .await
         .map_err(|e| failure(&e))?;
-    Ok((StatusCode::CREATED, Json(summary(account))))
+    Ok((
+        StatusCode::CREATED,
+        Json(summary(&app, &ctx, account).await),
+    ))
 }
 
 /// `POST /v1/providers/{id}/activate`: it takes the place of the active account of its vendor
@@ -129,12 +150,13 @@ pub(crate) async fn activate(
 ) -> Result<Json<ProviderAccountSummary>, Refusal> {
     require_admin(&principal, WHAT)?;
     let ctx = tenant_ctx(&app, &principal.tenant).await?;
-    app.db
+    let account = app
+        .db
         .activate_provider_account(&ctx, &id)
         .await
         .map_err(|e| internal(&e))?
-        .map(|account| Json(summary(account)))
-        .ok_or_else(|| not_found("provider account"))
+        .ok_or_else(|| not_found("provider account"))?;
+    Ok(Json(summary(&app, &ctx, account).await))
 }
 
 /// `POST /v1/providers/{id}/revoke`: forgets the account and deletes its key.
