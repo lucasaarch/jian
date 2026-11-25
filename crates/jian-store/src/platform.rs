@@ -192,7 +192,9 @@ impl Database {
     }
 }
 
-async fn scope_to_platform(tx: &mut Transaction<'static, Postgres>) -> Result<(), StoreError> {
+pub(crate) async fn scope_to_platform(
+    tx: &mut Transaction<'static, Postgres>,
+) -> Result<(), StoreError> {
     sqlx::query("SET LOCAL ROLE jian_platform")
         .execute(&mut **tx)
         .await

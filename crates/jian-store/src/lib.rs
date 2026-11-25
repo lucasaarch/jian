@@ -71,21 +71,32 @@
 
 mod backup;
 mod database;
+mod devices;
 pub mod embedded;
 mod error;
+mod legacy;
+mod machines;
 mod migrate;
 #[cfg(unix)]
 mod orphan;
 mod platform;
 mod schema_version;
 pub mod secrets;
+mod subjects;
 mod tenant;
 mod tenants;
+mod tokens;
 
 pub use backup::tenant_dump_args;
 pub use database::{Database, DatabaseHealth, DatabaseSource, DatabaseUrl};
+pub use devices::Device;
 pub use error::StoreError;
+pub use legacy::{DeviceImport, ImportOutcome, LegacyDevice, LegacyMachine, MachineImport};
+pub use machines::{MAX_PAGE, Machine, MachineReport, Page};
 pub use migrate::{MigrateOptions, MigrationReport, Migrations};
 pub use schema_version::{SchemaState, TenantVersion};
 pub use tenant::{TenantCtx, TenantId};
 pub use tenants::TenantStatus;
+pub use tokens::{
+    Authenticated, DeviceId, MachineId, Subject, TokenHash, TokenKind, generate_token,
+};

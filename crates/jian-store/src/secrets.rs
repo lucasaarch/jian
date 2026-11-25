@@ -27,6 +27,7 @@ mod keys;
 mod secret;
 mod vault;
 
+pub(crate) use cipher::random_bytes;
 pub(crate) use deks::DekCache;
 pub use deks::RotationReport;
 pub use keys::{Dek, LOCAL_KEY_ID, LocalKeyring, MasterKeys, WrappedDek};

@@ -132,6 +132,24 @@ pub enum StoreError {
     /// An envelope is not in a format this build reads (truncated, or a version it does not know).
     #[error("malformed secret envelope: {0}")]
     MalformedEnvelope(&'static str),
+    /// Text that is not a token hash: 64 hexadecimal digits.
+    #[error("a token hash is 64 hexadecimal digits")]
+    InvalidTokenHash,
+    /// A name that is empty, too long or has control characters.
+    #[error("a name has 1 to {0} characters and no control characters")]
+    InvalidName(usize),
+    /// An owner token shorter than the least accepted.
+    #[error("the owner token must have at least {0} characters")]
+    OwnerTokenTooShort(usize),
+    /// The token's hash already belongs to another tenant or kind of token.
+    #[error("that token already belongs to something else")]
+    TokenInUse,
+    /// A row of the old gateway cannot be imported; the text says which part is wrong.
+    #[error("cannot import: {0}")]
+    InvalidImport(&'static str),
+    /// A row written a moment ago is gone: another request deleted it in between.
+    #[error("the row was deleted while it was being read")]
+    Vanished,
     /// The operating system could not give random bytes.
     #[error("the operating system has no random bytes to give: {0}")]
     Random(getrandom::Error),
