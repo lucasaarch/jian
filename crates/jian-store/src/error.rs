@@ -150,6 +150,10 @@ pub enum StoreError {
     /// A row written a moment ago is gone: another request deleted it in between.
     #[error("the row was deleted while it was being read")]
     Vanished,
+    /// A job that is not allowed (a kind, key or payload the queue refuses), or a stored one this
+    /// build cannot read.
+    #[error("invalid job: {0}")]
+    InvalidJob(&'static str),
     /// The operating system could not give random bytes.
     #[error("the operating system has no random bytes to give: {0}")]
     Random(getrandom::Error),

@@ -96,16 +96,8 @@ impl InstanceId {
     }
 
     /// The instance Postgres printed for a `uuid` column; `None` for anything else.
-    fn from_row(text: &str) -> Option<Self> {
-        let shape = text.len() == 36
-            && text.bytes().enumerate().all(|(index, byte)| {
-                if matches!(index, 8 | 13 | 18 | 23) {
-                    byte == b'-'
-                } else {
-                    byte.is_ascii_hexdigit()
-                }
-            });
-        shape.then(|| Self(text.to_ascii_lowercase()))
+    pub(crate) fn from_row(text: &str) -> Option<Self> {
+        is_uuid_text(text).then(|| Self(text.to_ascii_lowercase()))
     }
 
     /// The UUID as text.
@@ -119,6 +111,19 @@ impl fmt::Display for InstanceId {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str(&self.0)
     }
+}
+
+/// Whether the text has the shape Postgres prints a `uuid` in: 36 characters, hexadecimal digits
+/// and four dashes.
+pub(crate) fn is_uuid_text(text: &str) -> bool {
+    text.len() == 36
+        && text.bytes().enumerate().all(|(index, byte)| {
+            if matches!(index, 8 | 13 | 18 | 23) {
+                byte == b'-'
+            } else {
+                byte.is_ascii_hexdigit()
+            }
+        })
 }
 
 fn format_uuid(bytes: &[u8; 16]) -> String {

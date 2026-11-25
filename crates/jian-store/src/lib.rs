@@ -28,6 +28,15 @@
 //! renewed and stopping to serve when one is lost is `jian-server`'s. The tables are ephemeral
 //! coordination state, so there is nothing of the old Jian to import into them.
 //!
+//! # Jobs
+//!
+//! The durable job queue is the table `platform.jobs` ([`Database::enqueue_job`],
+//! [`Database::claim_jobs`] and the calls that answer for a job). An instance takes only the jobs
+//! of the slots it owns, with `FOR UPDATE SKIP LOCKED`, and an answer counts only from the
+//! instance and attempt that holds the job. A payload holds ids and never a secret. The polling
+//! loop, the handlers and the drain are `jian-server`'s. Jobs of the old Node gateway's pg-boss
+//! are not imported.
+//!
 //! # Migrations and schema versions
 //!
 //! [`Database::migrate`] brings the platform and then every tenant to the last migration, a few
@@ -82,6 +91,7 @@ mod database;
 mod devices;
 pub mod embedded;
 mod error;
+mod jobs;
 mod legacy;
 mod machines;
 mod migrate;
@@ -100,6 +110,10 @@ pub use backup::tenant_dump_args;
 pub use database::{Database, DatabaseHealth, DatabaseSource, DatabaseUrl};
 pub use devices::Device;
 pub use error::StoreError;
+pub use jobs::{
+    Enqueued, Failure, Job, JobId, JobState, JobWakeups, MAX_ATTEMPTS, MAX_ERROR_CHARS,
+    MAX_PAYLOAD_BYTES, NewJob, PURGE_BATCH, RetryPolicy,
+};
 pub use legacy::{DeviceImport, ImportOutcome, LegacyDevice, LegacyMachine, MachineImport};
 pub use machines::{MAX_PAGE, Machine, MachineReport, Page};
 pub use migrate::{MigrateOptions, MigrationReport, Migrations};
