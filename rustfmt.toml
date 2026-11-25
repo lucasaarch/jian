@@ -1,0 +1,3 @@
+# The defaults, written down so the width does not change with a toolchain.
+edition = "2024"
+max_width = 100

@@ -9,40 +9,68 @@ publish = false
 [[bin]]
 name = "computer-helper"
 path = "src/main.rs"
+# The workspace also holds the Node package's helper under the same bin name; their docs would
+# collide on one path.
+doc = false
 
 [dependencies]
-base64 = "0.23.1"
-jpeg-encoder = "0.7.1"
-serde = { version = "1.0.229", features = ["derive"] }
-serde_json = "1.0.154"
+base64.workspace = true
+jpeg-encoder.workspace = true
+serde.workspace = true
+serde_json.workspace = true
 
 [target.'cfg(target_os = "macos")'.dependencies]
-core-foundation = "0.10.1"
-core-graphics = { version = "0.25.0", features = ["highsierra"] }
-dispatch2 = "0.3.1"
-objc2 = "0.6.5"
-objc2-core-foundation = { version = "0.3.2", features = ["CFCGTypes"] }
-objc2-core-graphics = { version = "0.3.2", features = ["CGColor"] }
-objc2-app-kit = { version = "0.3.2", features = ["NSApplication", "NSResponder", "NSWindow", "NSView", "NSScreen", "NSImage", "NSColor", "NSFont", "NSFontDescriptor", "NSGraphics", "NSRunningApplication", "objc2-core-graphics", "objc2-quartz-core"] }
-objc2-foundation = { version = "0.3.2", features = ["NSData", "NSDate", "NSRunLoop", "NSGeometry", "NSString", "NSValue", "NSObjCRuntime"] }
-objc2-quartz-core = { version = "0.3.2", features = ["CALayer", "CATextLayer", "CAAnimation", "CAMediaTiming", "CATransaction", "CAMediaTimingFunction", "objc2-core-foundation", "objc2-core-graphics"] }
+core-foundation.workspace = true
+core-graphics.workspace = true
+dispatch2.workspace = true
+objc2.workspace = true
+objc2-core-foundation.workspace = true
+objc2-core-graphics.workspace = true
+objc2-app-kit.workspace = true
+objc2-foundation.workspace = true
+objc2-quartz-core.workspace = true
 # The pointer is drawn in Rust and handed to AppKit as an image.
-png = "0.18.1"
+png.workspace = true
 
 # Pure Rust, no libxcb or libX11: the binary links statically against musl and runs on any distro.
 [target.'cfg(target_os = "linux")'.dependencies]
-x11rb = { version = "0.14.0", features = ["dpms", "shape", "xfixes", "xtest"] }
+x11rb.workspace = true
 
 # Raw Win32 bindings, linked through raw-dylib: no import libraries and no COM wrappers to carry.
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.61.2", features = [
-  "Win32_Foundation",
-  "Win32_Graphics_Gdi",
-  "Win32_Security",
-  "Win32_System_LibraryLoader",
-  "Win32_System_StationsAndDesktops",
-  "Win32_System_Threading",
-  "Win32_UI_HiDpi",
-  "Win32_UI_Input_KeyboardAndMouse",
-  "Win32_UI_WindowsAndMessaging",
-] }
+windows-sys.workspace = true
+
+# Not `workspace = true`: this crate alone talks to the OS through FFI, and Cargo cannot override
+# one inherited lint. Keep the rest of these tables equal to `[workspace.lints]`.
+[lints.rust]
+unsafe_code = "allow"
+missing_docs = "deny"
+unused_must_use = "deny"
+
+[lints.clippy]
+undocumented_unsafe_blocks = "deny"
+pedantic = { level = "warn", priority = -1 }
+# Errors are values: a library returns them, and only a test may unwrap one.
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+todo = "deny"
+unimplemented = "deny"
+dbg_macro = "deny"
+# Output goes through the log or the caller; only a binary's user interface may print.
+# Not denied here: the helper's stdout is its protocol and its stderr is read by the worker.
+# Pedantic lints that are noise here, not rules:
+# a `jian_remote::remote::Worker` style name is how this code reads at the call site.
+module_name_repetitions = "allow"
+# `#[must_use]` on every getter hides the few that matter.
+must_use_candidate = "allow"
+# The `# Errors` and `# Panics` sections repeat the error type's own docs.
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+# A request handler is one `match` over every kind of request; splitting it hides the list.
+too_many_lines = "allow"
+# Wire formats and OS APIs mix integer widths; each cast that matters is checked where it is made.
+cast_possible_truncation = "allow"
+cast_sign_loss = "allow"
+cast_possible_wrap = "allow"
+cast_precision_loss = "allow"

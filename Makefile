@@ -15,7 +15,7 @@ COMPOSE_DEV := docker compose -f compose.dev.yaml
 
 .DEFAULT_GOAL := help
 
-.PHONY: help install setup up pull down logs ps dev db-up db-stop db-reset changelog check-rust \
+.PHONY: help install setup up pull down logs ps dev db-up db-stop db-reset changelog check-rust rust-check \
         check test test-integration lint format build image image-push \
         release rollback test-display image-test-display image-test-inspection image-test-network \
         preview-up preview-down preview-status preview-token
@@ -82,6 +82,12 @@ check-rust: ## Format, lint and test the Rust helper for this machine's OS
 	cargo fmt --check
 	cargo clippy --all-targets --locked -- -D warnings
 	cargo test --locked
+
+rust-check: ## The Rust workspace: format, clippy, tests and docs, as the rules in crates/AGENTS.md ask
+	cargo fmt --all --check
+	cargo clippy --workspace --all-targets --locked -- -D warnings
+	cargo test --workspace --locked
+	RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --locked
 
 test: ## Unit tests, no Docker and no provider
 	pnpm run test

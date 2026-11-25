@@ -9,9 +9,98 @@ version = "0.1.0"
 edition = "2024"
 license = "Apache-2.0"
 
+# Every dependency version lives here; a crate says `name.workspace = true`, and adds only the
+# features it needs. Internal crates are listed too, so a path is written once.
 [workspace.dependencies]
+anyhow = "1"
 axum = "0.8"
+base64 = "0.23.1"
+futures-util = { version = "0.3.31", default-features = false, features = ["sink", "std"] }
+globset = { version = "0.4", default-features = false }
+jian-computer-use = { path = "crates/jian-computer-use" }
+jian-protocol = { path = "crates/jian-protocol" }
+jian-remote = { path = "crates/jian-remote" }
+jian-server = { path = "crates/jian-server" }
+jpeg-encoder = "0.7.1"
+regex = "1.11"
+# Safe wrappers over the Unix calls the worker and its CLI make (signals, uid, termios), so
+# neither needs `unsafe`.
+rustix = { version = "1", default-features = false, features = ["std"] }
+# ring, not aws-lc: no cmake or Go to build it, and the same provider for both TLS clients.
+reqwest = { version = "0.12.28", default-features = false, features = ["rustls-tls", "json"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+sha2 = "0.10.9"
+thiserror = "2"
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "net"] }
+tokio-tungstenite = { version = "0.29", default-features = false, features = ["connect", "rustls-tls-webpki-roots"] }
+tokio-util = { version = "0.7.15", default-features = false }
+url = "2.5"
+webpki-roots = "1.0"
+
+# Computer Use helper, per platform. The macOS set is the AppKit and Quartz bindings the pointer
+# overlay and input need; the Linux one is pure Rust (no libxcb, no libX11) so the binary links
+# statically against musl; the Windows one is raw bindings through raw-dylib, no COM wrappers.
+core-foundation = "0.10.1"
+core-graphics = { version = "0.25.0", features = ["highsierra"] }
+dispatch2 = "0.3.1"
+objc2 = "0.6.5"
+objc2-core-foundation = { version = "0.3.2", features = ["CFCGTypes"] }
+objc2-core-graphics = { version = "0.3.2", features = ["CGColor"] }
+objc2-app-kit = { version = "0.3.2", features = ["NSApplication", "NSResponder", "NSWindow", "NSView", "NSScreen", "NSImage", "NSColor", "NSFont", "NSFontDescriptor", "NSGraphics", "NSRunningApplication", "objc2-core-graphics", "objc2-quartz-core"] }
+objc2-foundation = { version = "0.3.2", features = ["NSData", "NSDate", "NSRunLoop", "NSGeometry", "NSString", "NSValue", "NSObjCRuntime"] }
+objc2-quartz-core = { version = "0.3.2", features = ["CALayer", "CATextLayer", "CAAnimation", "CAMediaTiming", "CATransaction", "CAMediaTimingFunction", "objc2-core-foundation", "objc2-core-graphics"] }
+png = "0.18.1"
+x11rb = { version = "0.14.0", features = ["dpms", "shape", "xfixes", "xtest"] }
+windows-sys = { version = "0.61.2", features = [
+  "Win32_Foundation",
+  "Win32_Graphics_Gdi",
+  "Win32_Security",
+  "Win32_System_LibraryLoader",
+  "Win32_System_StationsAndDesktops",
+  "Win32_System_Threading",
+  "Win32_UI_HiDpi",
+  "Win32_UI_Input_KeyboardAndMouse",
+  "Win32_UI_WindowsAndMessaging",
+] }
+
+# The rules every crate in `crates/` and `bins/` is held to, through `[lints] workspace = true`.
+# `make rust-check` runs clippy with `-D warnings`, so a warning here fails the build.
+[workspace.lints.rust]
+# Only jian-computer-use needs FFI; it carries its own table (see its Cargo.toml).
+unsafe_code = "forbid"
+# Every public item says what it is for.
+missing_docs = "deny"
+unused_must_use = "deny"
+
+[workspace.lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+# Errors are values: a library returns them, and only a test may unwrap one.
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+todo = "deny"
+unimplemented = "deny"
+dbg_macro = "deny"
+# Output goes through the log or the caller; only a binary's user interface may print.
+print_stdout = "deny"
+print_stderr = "deny"
+# Pedantic lints that are noise here, not rules:
+# a `jian_remote::remote::Worker` style name is how this code reads at the call site.
+module_name_repetitions = "allow"
+# `#[must_use]` on every getter hides the few that matter.
+must_use_candidate = "allow"
+# The `# Errors` and `# Panics` sections repeat the error type's own docs.
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+# A request handler is one `match` over every kind of request; splitting it hides the list.
+too_many_lines = "allow"
+# Wire formats and OS APIs mix integer widths; each cast that matters is checked where it is made.
+cast_possible_truncation = "allow"
+cast_sign_loss = "allow"
+cast_possible_wrap = "allow"
+cast_precision_loss = "allow"
 
 # The helper ships as one small binary per platform.
 [profile.release]
