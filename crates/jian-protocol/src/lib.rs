@@ -7,4 +7,5 @@
 //! gateway already expects, so a change that a peer of the other version would misread bumps
 //! [`machine::PROTOCOL_VERSION`].
 
+pub mod client;
 pub mod machine;

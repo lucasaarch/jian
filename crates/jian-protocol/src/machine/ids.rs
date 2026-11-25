@@ -3,18 +3,12 @@
 //! Each is a distinct type, so a task's id cannot be passed where a forward's is wanted. On the
 //! wire every one is the plain string the gateway wrote: the types change nothing in the JSON.
 
-use std::fmt;
-use std::ops::Deref;
-
-use serde::{Deserialize, Serialize};
-use ts_rs::TS;
-
 /// Declares an id: an opaque string that is compared, hashed and displayed as written. A serde
 /// newtype is its inner value on the wire, so no `#[serde(transparent)]`, which ts-rs does not read.
 macro_rules! string_id {
     ($($(#[$doc:meta])+ $name:ident),+ $(,)?) => {$(
         $(#[$doc])+
-        #[derive(Debug, Clone, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, TS)]
+        #[derive(Debug, Clone, Default, PartialEq, Eq, PartialOrd, Ord, Hash, ::serde::Serialize, ::serde::Deserialize, ::ts_rs::TS)]
         #[ts(export)]
         pub struct $name(String);
 
@@ -26,7 +20,7 @@ macro_rules! string_id {
             }
         }
 
-        impl Deref for $name {
+        impl ::std::ops::Deref for $name {
             type Target = str;
 
             fn deref(&self) -> &str {
@@ -34,8 +28,8 @@ macro_rules! string_id {
             }
         }
 
-        impl fmt::Display for $name {
-            fn fmt(&self, out: &mut fmt::Formatter<'_>) -> fmt::Result {
+        impl ::std::fmt::Display for $name {
+            fn fmt(&self, out: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
                 out.write_str(&self.0)
             }
         }
@@ -82,3 +76,5 @@ string_id! {
     /// The id the gateway gave a machine.
     MachineId,
 }
+
+pub(crate) use string_id;

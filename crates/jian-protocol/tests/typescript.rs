@@ -14,6 +14,7 @@ use std::fmt::Write as _;
 use std::fs;
 use std::path::PathBuf;
 
+use jian_protocol::client::{ClientMessage, ServerMessage};
 use jian_protocol::machine::{GatewayMessage, WorkerMessage};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
@@ -121,15 +122,62 @@ fn examples_the_rust_side_wrote_satisfy_the_typescript_types() {
         json!({ "type": "pong", "nonce": 9 }),
     ];
 
+    let machine = json!({ "id": "m1", "name": "Studio", "status": "online", "os": "linux",
+                "arch": "x86_64", "hostname": "box", "system": "Ubuntu", "workerVersion": "1.2.3",
+                "capabilities": ["shell"], "createdAt": "2026-01-01T00:00:00.000Z",
+                "lastSeenAt": null });
+    let client = [
+        json!({ "type": "hello", "protocolVersion": 1 }),
+        json!({ "type": "request", "id": "r1",
+                "request": { "method": "listMachines", "cursor": null, "limit": 50 } }),
+        json!({ "type": "request", "id": "r2",
+                "request": { "method": "issueMachine", "name": "Studio" } }),
+        json!({ "type": "request", "id": "r3",
+                "request": { "method": "revokeDevice", "id": "d1" } }),
+        json!({ "type": "request", "id": "r4",
+                "request": { "method": "subscribe", "topic": "machines",
+                             "resume": { "epoch": "e1", "seq": 7 } } }),
+        json!({ "type": "request", "id": "r5",
+                "request": { "method": "unsubscribe", "topic": "machines" } }),
+    ];
+    let server = [
+        json!({ "type": "welcome", "protocolVersion": 1, "gatewayVersion": "1.2.3" }),
+        json!({ "type": "reply", "id": "r1", "response": { "type": "machines",
+                "items": [machine.clone()], "nextCursor": "42" } }),
+        json!({ "type": "reply", "id": "r2", "response": { "type": "machineToken",
+                "machine": machine.clone(), "token": "jrm_x" } }),
+        json!({ "type": "reply", "id": "r3", "response": { "type": "device",
+                "id": "d1", "name": "Pixel", "platform": "android",
+                "createdAt": "2026-01-01T00:00:00.000Z", "lastSeenAt": null,
+                "revoked": true } }),
+        json!({ "type": "reply", "id": "r4", "response": { "type": "subscribed",
+                "topic": "machines", "epoch": "e1", "seq": 7, "replayed": 0,
+                "resync": false } }),
+        json!({ "type": "reply", "id": "r5", "response": { "type": "unsubscribed" } }),
+        json!({ "type": "error", "id": null,
+                "error": { "code": "rateLimited", "message": "slow down",
+                           "retryAfterMs": 250 } }),
+        json!({ "type": "delta", "topic": "machines", "seq": 8,
+                "payload": { "type": "machine", "id": "m1", "name": "Studio",
+                             "status": "offline", "os": null, "arch": null, "hostname": null,
+                             "system": null, "workerVersion": null, "capabilities": [],
+                             "createdAt": "2026-01-01T00:00:00.000Z", "lastSeenAt": null } }),
+        json!({ "type": "resync", "topic": "machines", "epoch": "e2", "seq": 0 }),
+    ];
+
     let check = format!(
         "{HEADER}\
          // Each message below was parsed and written back by the Rust types, then has to satisfy\n\
          // the generated TypeScript type: `tsc --noEmit -p packages/protocol` checks it.\n\
-         import type {{ GatewayMessage, WorkerMessage }} from \"./src/index\";\n\n\
+         import type {{ ClientMessage, GatewayMessage, ServerMessage, WorkerMessage }} from \"./src/index\";\n\n\
          export const workerMessages = {} satisfies WorkerMessage[];\n\n\
-         export const gatewayMessages = {} satisfies GatewayMessage[];\n",
+         export const gatewayMessages = {} satisfies GatewayMessage[];\n\n\
+         export const clientMessages = {} satisfies ClientMessage[];\n\n\
+         export const serverMessages = {} satisfies ServerMessage[];\n",
         list::<WorkerMessage>(&worker),
         list::<GatewayMessage>(&gateway),
+        list::<ClientMessage>(&client),
+        list::<ServerMessage>(&server),
     );
     fs::write(package().join("check.ts"), check).unwrap();
 }
