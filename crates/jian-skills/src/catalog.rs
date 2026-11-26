@@ -15,10 +15,16 @@ pub struct BuiltinSkill {
 
 /// The core's built-in skills, from `skills/builtin/` at the repository's root. A new file there
 /// is listed here; a test fails when the two differ.
-pub const CORE_BUILTINS: &[BuiltinSkill] = &[BuiltinSkill {
-    name: "about-jian",
-    markdown: include_str!("../../../skills/builtin/about-jian.md"),
-}];
+pub const CORE_BUILTINS: &[BuiltinSkill] = &[
+    BuiltinSkill {
+        name: "about-jian",
+        markdown: include_str!("../../../skills/builtin/about-jian.md"),
+    },
+    BuiltinSkill {
+        name: "coding",
+        markdown: include_str!("../../../skills/builtin/coding.md"),
+    },
+];
 
 /// A skill one run offers to an agent.
 #[derive(Clone, Debug, PartialEq, Eq)]

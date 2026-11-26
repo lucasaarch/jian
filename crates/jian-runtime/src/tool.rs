@@ -4,6 +4,7 @@
 //! loop can act before it calls: whether the tool needs a machine (so the run wakes one only when
 //! the first such tool is called) and whether a person must allow the call.
 
+use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
@@ -29,6 +30,22 @@ pub struct MachineSlot {
     /// Machine time the run spent in earlier jobs (it was parked on a subagent and resumed):
     /// each job has its own slot, and the run's recorded time must only ever grow.
     base_ms: u64,
+    /// The version (mtime in ms) of each file this run read or wrote, by the path the model
+    /// gave: an edit of a file that changed since is refused.
+    versions: Mutex<HashMap<String, f64>>,
+    /// Background commands this run started. Only the run that started one can read or stop it:
+    /// ids are numbered here and a log is named after the run's own counter and the clock.
+    jobs: Mutex<Vec<Job>>,
+}
+
+/// A command left running in the background of the run's machine.
+#[derive(Clone, Debug)]
+pub(crate) struct Job {
+    pub(crate) id: String,
+    /// The process group the job runs in, to ask whether it lives and to stop it.
+    pub(crate) group: String,
+    /// Where it prints, and where it leaves its exit code (`<log>.exit`).
+    pub(crate) log: String,
 }
 
 impl MachineSlot {
@@ -41,7 +58,40 @@ impl MachineSlot {
             machine: OnceCell::new(),
             woke_at: Mutex::new(None),
             base_ms: 0,
+            versions: Mutex::default(),
+            jobs: Mutex::default(),
         }
+    }
+
+    pub(crate) fn version(&self, path: &str) -> Option<f64> {
+        self.versions.lock().ok()?.get(path).copied()
+    }
+
+    pub(crate) fn set_version(&self, path: &str, mtime_ms: f64) {
+        if let Ok(mut versions) = self.versions.lock() {
+            versions.insert(path.to_owned(), mtime_ms);
+        }
+    }
+
+    /// Records a job and gives it the next id of this run.
+    pub(crate) fn add_job(&self, group: String, log: String) -> Option<Job> {
+        let mut jobs = self.jobs.lock().ok()?;
+        let job = Job {
+            id: format!("job-{}", jobs.len() + 1),
+            group,
+            log,
+        };
+        jobs.push(job.clone());
+        Some(job)
+    }
+
+    pub(crate) fn job(&self, id: &str) -> Option<Job> {
+        self.jobs
+            .lock()
+            .ok()?
+            .iter()
+            .find(|job| job.id == id)
+            .cloned()
     }
 
     /// The same slot for a run that already held a machine for `ms` before this job.

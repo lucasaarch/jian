@@ -8,6 +8,7 @@ license.workspace = true
 futures-util.workspace = true
 jian-core.workspace = true
 jian-exec.workspace = true
+jian-protocol.workspace = true
 jian-llm.workspace = true
 jian-skills.workspace = true
 jian-store.workspace = true
@@ -17,6 +18,7 @@ tokio = { workspace = true, features = ["sync", "time"] }
 tracing.workspace = true
 
 [dev-dependencies]
+tempfile.workspace = true
 jian-testkit.workspace = true
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 

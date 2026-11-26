@@ -1,5 +1,5 @@
-//! The tools every run has: `shell`, `read_file` and `write_file` on the run's machine, and
-//! `remember` and `skill`, which need none.
+//! The tools every run has: `shell` and the programming tools (`code_tools`) on the run's
+//! machine, and `remember` and `skill`, which need none.
 
 use std::sync::Arc;
 
@@ -9,25 +9,21 @@ use jian_store::MemoryWrite;
 use serde_json::{Value, json};
 
 use crate::artifact_tools::artifact_tools;
+use crate::code_tools::code_tools;
 use crate::objective_tools::objective_tools;
+use crate::script_ops;
 use crate::subagent_tools::subagent_tools;
 use crate::tool::{Tool, ToolEnv, Tools};
 use crate::wake_tools::wake_tools;
 
-/// The longest a shell command may run, in milliseconds, whatever the model asks.
-const SHELL_LIMIT_MS: u64 = 120_000;
-/// What a command gets when the model says nothing.
-const SHELL_DEFAULT_MS: u64 = 30_000;
-
-/// The standard set. `shell` and `write_file` wait for a person; the rest run at once. The
-/// objective and subagent tools are in it; a run that must not have them drops them with
-/// `Tools::without`.
+/// The standard set. The tools that change something on the machine wait for a person; the
+/// rest run at once. The objective and subagent tools are in it; a run that must not have them
+/// drops them with `Tools::without`.
 #[must_use]
 pub fn standard_tools() -> Tools {
     Tools::new()
         .with(Arc::new(Shell))
-        .with(Arc::new(ReadFile))
-        .with(Arc::new(WriteFile))
+        .with_all(code_tools())
         .with(Arc::new(Remember))
         .with(Arc::new(OpenSkill))
         .with_all(objective_tools())
@@ -62,12 +58,13 @@ impl Tool for Shell {
     fn spec(&self) -> ToolSpec {
         spec(
             "shell",
-            "Runs a shell command on the run's machine and returns what it printed.",
+            "Runs a shell command on the run's machine and returns what it printed. With `background: true` it starts a job and answers at once with its id: use it for a build or a test that takes long, and read it with process_output. To change files use edit_file or apply_patch, not a command.",
             json!({
                 "type": "object",
                 "properties": {
                     "command": { "type": "string" },
-                    "timeout_ms": { "type": "integer", "description": "At most 120000." }
+                    "timeout_ms": { "type": "integer", "description": "At most 120000; ignored in the background." },
+                    "background": { "type": "boolean" }
                 },
                 "required": ["command"]
             }),
@@ -84,106 +81,12 @@ impl Tool for Shell {
         env: &'a ToolEnv<'a>,
     ) -> BoxFuture<'a, Result<String, String>> {
         Box::pin(async move {
-            let command = text(input, "command")?;
-            let timeout = input
-                .get("timeout_ms")
-                .and_then(Value::as_u64)
-                .unwrap_or(SHELL_DEFAULT_MS)
-                .min(SHELL_LIMIT_MS);
             let machine = env.machine.get().await.map_err(|e| e.to_string())?;
-            let done = machine
-                .shell(command, timeout)
-                .await
-                .map_err(|e| e.to_string())?;
-            match done.exit_code {
-                Some(0) => Ok(done.output),
-                Some(code) => Err(format!("exit code {code}\n{}", done.output)),
-                None => Err(format!("ended by a signal\n{}", done.output)),
+            if input.get("background").and_then(Value::as_bool) == Some(true) {
+                script_ops::start(machine, env.machine, env.run, input).await
+            } else {
+                script_ops::run_command(machine, input).await
             }
-        })
-    }
-}
-
-struct ReadFile;
-
-impl Tool for ReadFile {
-    fn name(&self) -> &'static str {
-        "read_file"
-    }
-
-    fn spec(&self) -> ToolSpec {
-        spec(
-            "read_file",
-            "Reads a text file on the run's machine.",
-            json!({
-                "type": "object",
-                "properties": { "path": { "type": "string" } },
-                "required": ["path"]
-            }),
-        )
-    }
-
-    fn needs_machine(&self) -> bool {
-        true
-    }
-
-    fn read_only(&self) -> bool {
-        true
-    }
-
-    fn call<'a>(
-        &'a self,
-        input: &'a Value,
-        env: &'a ToolEnv<'a>,
-    ) -> BoxFuture<'a, Result<String, String>> {
-        Box::pin(async move {
-            let path = text(input, "path")?;
-            let machine = env.machine.get().await.map_err(|e| e.to_string())?;
-            machine.read_file(path).await.map_err(|e| e.to_string())
-        })
-    }
-}
-
-struct WriteFile;
-
-impl Tool for WriteFile {
-    fn name(&self) -> &'static str {
-        "write_file"
-    }
-
-    fn spec(&self) -> ToolSpec {
-        spec(
-            "write_file",
-            "Writes a text file on the run's machine, replacing it.",
-            json!({
-                "type": "object",
-                "properties": {
-                    "path": { "type": "string" },
-                    "content": { "type": "string" }
-                },
-                "required": ["path", "content"]
-            }),
-        )
-    }
-
-    fn needs_machine(&self) -> bool {
-        true
-    }
-
-    fn call<'a>(
-        &'a self,
-        input: &'a Value,
-        env: &'a ToolEnv<'a>,
-    ) -> BoxFuture<'a, Result<String, String>> {
-        Box::pin(async move {
-            let path = text(input, "path")?;
-            let content = text(input, "content")?;
-            let machine = env.machine.get().await.map_err(|e| e.to_string())?;
-            machine
-                .write_file(path, content)
-                .await
-                .map_err(|e| e.to_string())?;
-            Ok(format!("wrote {} bytes to {path}", content.len()))
         })
     }
 }

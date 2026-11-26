@@ -248,7 +248,15 @@ async fn a_chat_is_answered_in_the_thread_with_the_tools_and_the_instructions_in
         [
             "shell",
             "read_file",
+            "list_directory",
+            "find_files",
+            "search_files",
+            "edit_file",
             "write_file",
+            "apply_patch",
+            "run_script",
+            "process_output",
+            "stop_process",
             "remember",
             "skill",
             "set_objective",
@@ -556,7 +564,7 @@ async fn crossing_the_limit_lets_the_running_tool_finish_and_refuses_the_next() 
 
     assert_eq!(parts.executor.commands(), ["read /a"]);
     let results = tool_results(&thread_parts(&set).await);
-    assert_eq!(results[0], ("contents".to_owned(), false));
+    assert_eq!(results[0], ("     1\tcontents\n".to_owned(), false));
     assert!(
         results[1].1 && results[1].0.contains("machine minutes used up"),
         "{results:?}"

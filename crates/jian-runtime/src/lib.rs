@@ -10,10 +10,16 @@
 //! the loop itself ([`Runner`]).
 
 mod artifact_tools;
+#[cfg(test)]
+mod code_tests;
+mod code_tools;
 mod compact;
 mod context;
+mod file_ops;
 mod objective_tools;
+mod patch;
 mod run;
+mod script_ops;
 mod subagent_tools;
 mod tool;
 mod tools;

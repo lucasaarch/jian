@@ -635,10 +635,21 @@ async fn a_wake_run_calls_a_machine_tool_at_once_and_never_waits_for_a_person() 
     assert!(answered);
 }
 
-const READS: [&str; 2] = ["read_file", "skill"];
-const CHANGES: [&str; 6] = [
+const READS: [&str; 5] = [
+    "read_file",
+    "list_directory",
+    "find_files",
+    "search_files",
+    "skill",
+];
+const CHANGES: [&str; 11] = [
     "shell",
+    "edit_file",
     "write_file",
+    "apply_patch",
+    "run_script",
+    "process_output",
+    "stop_process",
     "remember",
     "spawn_subagent",
     "set_objective",
