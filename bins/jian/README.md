@@ -163,9 +163,18 @@ password an admin chose can call only `/v1/me`, `/v1/auth/password` and `/v1/aut
 it changes it. A session is an opaque token whose SHA-256 is all the database keeps.
 
 `--auth-methods` (`JIAN_AUTH_METHODS`) says how people may sign in: a comma-separated list of
-`password`, `github`, `email_link`, `passkey` and `totp`, `password` by default. Only `password`
-is implemented in this binary. Without it the login, invitation and add routes answer 404 (the
-Cloud signs people in by other means). The owner and device tokens work either way. The crate
+`password`, `github`, `email_link`, `passkey` and `totp`, `password` by default. `password`,
+`github` and `email_link` are implemented. Leaving `password` out is the "password off" switch:
+the login and invitation routes answer 404. Whatever is allowed, GitHub and the e-mailed link only
+let in people who are already members; nobody signs themselves up.
+
+`github` needs `--public-url` and `--github-client-id` / `--github-client-secret`
+(`JIAN_GITHUB_CLIENT_ID`, `JIAN_GITHUB_CLIENT_SECRET`), an OAuth App whose callback URL is
+`<public-url>/login/github`; the secret is held in memory and sent only to GitHub's token endpoint.
+`email_link` needs `--public-url` and a way to send e-mail (`--mail-resend-key` and `--mail-from`,
+or the workspace's own Resend account); `--mail-log` writes e-mails to the log instead, for a
+laptop. The panel's pages `/login/github` and `/login/link` hand the `code`, `state` and `token`
+they receive to `/v1/auth/github/callback` and `/v1/auth/magic-link/redeem`. The owner and device tokens work either way. The crate
 `jian-auth` has the sign-in flows with no HTTP, for a backend that serves them itself.
 
 ## Import from the old Jian

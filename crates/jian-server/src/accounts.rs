@@ -34,7 +34,7 @@ use crate::summary::member_summary;
 /// The longest email text counted as a key: more than any address, so nobody is held to a prefix.
 const MAX_KEY_CHARS: usize = 254;
 
-fn login_response(session: Session) -> Json<LoginResponse> {
+pub(crate) fn login_response(session: Session) -> Json<LoginResponse> {
     Json(LoginResponse {
         token: session.token.expose().to_owned(),
         expires_at: session.expires_at,
@@ -44,7 +44,7 @@ fn login_response(session: Session) -> Json<LoginResponse> {
 }
 
 /// The address as the rate limiter keys it: trimmed, lower case, capped.
-fn email_key(email: &str) -> String {
+pub(crate) fn email_key(email: &str) -> String {
     email
         .trim()
         .to_lowercase()
@@ -115,7 +115,7 @@ pub(crate) async fn logout(
 }
 
 /// The account a session belongs to; anything else (the owner's token, a machine's) is refused.
-fn only_a_session(principal: &Principal) -> Result<&AccountId, Refusal> {
+pub(crate) fn only_a_session(principal: &Principal) -> Result<&AccountId, Refusal> {
     match (&principal.kind, &principal.account_id) {
         (TokenKind::Session, Some(account)) => Ok(account),
         _ => Err(refuse(

@@ -10,6 +10,7 @@
 #![allow(clippy::print_stdout)]
 
 mod debug_jobs;
+mod github_flags;
 mod import_cli;
 mod mail_flags;
 mod owner_token;
@@ -26,8 +27,8 @@ use anyhow::Context as _;
 use clap::{Parser, Subcommand};
 use jian_server::{
     AppState, INVITE_SEND_KIND, InviteSender, JobOptions, JobRegistry, JobRequeue, JobRunner,
-    Model, ModelSource, PublicUrl, SCHEDULE_FIRE_KIND, ScheduleFirer, Settings, SlotKeeper,
-    THREAD_COMPACT_KIND, ThreadCompactor,
+    LOGIN_LINK_SEND_KIND, LoginLinkSender, Model, ModelSource, PublicUrl, SCHEDULE_FIRE_KIND,
+    ScheduleFirer, Settings, SlotKeeper, THREAD_COMPACT_KIND, ThreadCompactor,
 };
 use jian_store::embedded::EmbeddedConfig;
 use jian_store::secrets::{LocalKeyring, MasterKeys as _};
@@ -123,8 +124,10 @@ struct Cli {
     api_token: Option<String>,
 
     /// How people sign in: a comma-separated list of `password`, `github`, `email_link`,
-    /// `passkey`, `totp`. Only `password` is implemented; a self-hosted install has no other
-    /// way in besides the tokens. Without `password` the sign-in routes are a 404.
+    /// `passkey`, `totp`. `password`, `github` (needs the `--github-*` flags and `--public-url`)
+    /// and `email_link` (needs `--public-url` and e-mail) are implemented. Leaving `password`
+    /// out turns password sign-in off; a method that is off is a 404. GitHub and the link only
+    /// let in people who are already members.
     #[arg(
         long,
         env = "JIAN_AUTH_METHODS",
@@ -144,6 +147,9 @@ struct Cli {
 
     #[command(flatten)]
     mail: mail_flags::MailFlags,
+
+    #[command(flatten)]
+    github: github_flags::GithubFlags,
 
     #[command(subcommand)]
     command: Option<Command>,
@@ -277,7 +283,10 @@ async fn main() -> anyhow::Result<()> {
     let addr = cli.addr.clone();
     let keys = cli.master_keys()?;
     let command = cli.command.take();
-    let auth = Auth::new(cli.auth_methods.clone(), PasswordParams::default());
+    let mut auth = Auth::new(cli.auth_methods.clone(), PasswordParams::default());
+    if let Some(app) = cli.github.app(cli.public_url.as_ref())? {
+        auth = auth.with_github(app);
+    }
     let settings = Settings {
         gateway_version: Some(env!("CARGO_PKG_VERSION").to_owned()),
         auth: auth.clone(),
@@ -455,6 +464,10 @@ impl ModelSource for NoModels {
 fn job_registry(settings: &Settings) -> JobRegistry {
     debug_jobs::registry()
         .register(INVITE_SEND_KIND, Arc::new(InviteSender::new(settings)))
+        .register(
+            LOGIN_LINK_SEND_KIND,
+            Arc::new(LoginLinkSender::new(settings)),
+        )
         .register(SCHEDULE_FIRE_KIND, Arc::new(ScheduleFirer))
         .register(
             THREAD_COMPACT_KIND,

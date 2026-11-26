@@ -4,7 +4,8 @@ use std::sync::Arc;
 
 use anyhow::Context as _;
 use clap::Args;
-use jian_mail::{DEFAULT_BASE_URL, Mailbox, ResendMailer};
+use futures_util::future::BoxFuture;
+use jian_mail::{DEFAULT_BASE_URL, MailError, Mailbox, Mailer, Message, ResendMailer, SendReceipt};
 use jian_server::{DeployMail, MailConfig};
 
 /// E-mail and how the workspace is called in it.
@@ -34,6 +35,12 @@ pub struct MailFlags {
     )]
     mail_from: Option<Mailbox>,
 
+    /// For trying a gateway on a laptop: "sends" every e-mail by writing it, link and all, to
+    /// the log. Never use it where anyone else can read the log. Ignored when a Resend key is
+    /// given.
+    #[arg(long = "mail-log", env = "JIAN_MAIL_LOG")]
+    log_only: bool,
+
     /// What an e-mail calls the workspace. Workspaces have no names of their own yet.
     #[arg(
         long,
@@ -55,11 +62,29 @@ impl MailFlags {
                 ),
                 from: from.clone(),
             }),
+            _ if self.log_only => Some(DeployMail {
+                mailer: Arc::new(LogMailer),
+                from: Mailbox::parse("Jian <dev@jian.invalid>")
+                    .context("the log sender is not valid")?,
+            }),
             _ => None,
         };
         Ok(MailConfig {
             deploy,
             ..MailConfig::default()
+        })
+    }
+}
+
+/// Writes each message to the log instead of sending it: a development stand-in for Resend.
+#[derive(Debug)]
+struct LogMailer;
+
+impl Mailer for LogMailer {
+    fn send<'a>(&'a self, message: &'a Message) -> BoxFuture<'a, Result<SendReceipt, MailError>> {
+        Box::pin(async move {
+            tracing::info!(to = %message.to, subject = %message.subject, "mail (not sent):\n{}", message.text);
+            Ok(SendReceipt { message_id: None })
         })
     }
 }

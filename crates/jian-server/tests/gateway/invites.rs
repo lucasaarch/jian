@@ -23,24 +23,24 @@ use super::support::{Gateway, http_get, http_post, http_request};
 
 /// A mailer that records what it was asked to send and fails as scripted.
 #[derive(Debug, Default)]
-struct Outbox {
+pub(super) struct Outbox {
     sent: Mutex<Vec<Message>>,
     failures: Mutex<VecDeque<MailError>>,
 }
 
 impl Outbox {
-    fn failing(failures: impl IntoIterator<Item = MailError>) -> Arc<Self> {
+    pub(super) fn failing(failures: impl IntoIterator<Item = MailError>) -> Arc<Self> {
         Arc::new(Self {
             sent: Mutex::default(),
             failures: Mutex::new(failures.into_iter().collect()),
         })
     }
 
-    fn count(&self) -> usize {
+    pub(super) fn count(&self) -> usize {
         self.sent.lock().unwrap().len()
     }
 
-    fn last(&self) -> Message {
+    pub(super) fn last(&self) -> Message {
         self.sent.lock().unwrap().last().unwrap().clone()
     }
 }
@@ -146,7 +146,7 @@ async fn accept(gateway: &Gateway, token: &str) -> (u16, String) {
     http_post(gateway.addr, "/v1/auth/invite/accept", None, &body).await
 }
 
-async fn stop(gateway: Gateway, runner: jian_server::JobRunner) {
+pub(super) async fn stop(gateway: Gateway, runner: jian_server::JobRunner) {
     runner
         .shutdown(Instant::now() + Duration::from_secs(5))
         .await;

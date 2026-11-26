@@ -26,4 +26,8 @@ pub const JOB_KINDS: &[(&str, &str)] = &[
         "invite.send",
         "jian-server/tests/gateway/invites.rs: an_invitation_is_sent_with_its_own_workspaces_mail_account_and_nobody_elses",
     ),
+    (
+        "login_link.send",
+        "jian-server/tests/gateway/sign_in.rs: a_magic_link_opens_only_the_workspace_and_member_it_was_made_for",
+    ),
 ];

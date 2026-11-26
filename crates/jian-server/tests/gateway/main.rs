@@ -12,6 +12,7 @@ mod memories;
 mod projects;
 mod providers;
 mod schedules;
+mod sign_in;
 mod slots;
 mod support;
 mod threads;

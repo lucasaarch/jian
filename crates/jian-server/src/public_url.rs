@@ -49,12 +49,31 @@ impl PublicUrl {
     /// URL-safe (the store makes only URL-safe ones) is not put in a link.
     #[must_use]
     pub fn invite_link(&self, token: &str) -> Option<String> {
+        self.fragment_link("invite", token)
+    }
+
+    /// The page that signs somebody in from an e-mailed link, with the token in the fragment for
+    /// the same reasons as [`invite_link`](Self::invite_link). The page posts it to
+    /// `/v1/auth/magic-link/redeem`.
+    #[must_use]
+    pub fn login_link(&self, token: &str) -> Option<String> {
+        self.fragment_link("login/link", token)
+    }
+
+    /// Where GitHub sends the person back to: a page of the panel that hands the `code` and
+    /// `state` to `/v1/auth/github/callback`.
+    #[must_use]
+    pub fn github_callback(&self) -> String {
+        format!("{}/login/github", self.0)
+    }
+
+    fn fragment_link(&self, page: &str, token: &str) -> Option<String> {
         let safe = !token.is_empty()
             && token.len() <= MAX_TOKEN_BYTES
             && token
                 .bytes()
                 .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-');
-        safe.then(|| format!("{}/invite#token={token}", self.0))
+        safe.then(|| format!("{}/{page}#token={token}", self.0))
     }
 }
 
@@ -75,6 +94,20 @@ mod tests {
         assert_eq!(
             under_path.invite_link("ji_x").as_deref(),
             Some("http://localhost:3000/app/invite#token=ji_x")
+        );
+    }
+
+    #[test]
+    fn the_sign_in_link_and_the_github_callback_sit_under_the_same_base() {
+        let base = PublicUrl::parse("https://jian.example.com/").unwrap();
+        assert_eq!(
+            base.login_link("jll_x").as_deref(),
+            Some("https://jian.example.com/login/link#token=jll_x")
+        );
+        assert_eq!(base.login_link("a b"), None);
+        assert_eq!(
+            base.github_callback(),
+            "https://jian.example.com/login/github"
         );
     }
 

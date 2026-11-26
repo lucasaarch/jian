@@ -34,6 +34,7 @@ const PROVIDERS_FILE: &str = include_str!("providers.rs");
 const MEMORIES_FILE: &str = include_str!("memories.rs");
 const PROJECTS_FILE: &str = include_str!("projects.rs");
 const SCHEDULES_FILE: &str = include_str!("schedules.rs");
+const SIGN_IN_FILE: &str = include_str!("sign_in.rs");
 const THREADS_FILE: &str = include_str!("threads.rs");
 const USAGE_FILE: &str = include_str!("usage.rs");
 
@@ -50,6 +51,7 @@ fn is_a_test_here(name: &str) -> bool {
         || MEMORIES_FILE.contains(&declared)
         || PROJECTS_FILE.contains(&declared)
         || SCHEDULES_FILE.contains(&declared)
+        || SIGN_IN_FILE.contains(&declared)
         || USAGE_FILE.contains(&declared)
         || THREADS_FILE.contains(&declared)
 }
@@ -63,6 +65,14 @@ const ROUTE_TESTS: &[(&str, &str)] = &[
     ("POST /v1/auth/logout", USERS_TEST),
     ("POST /v1/auth/password", USERS_TEST),
     ("POST /v1/auth/invite/accept", USERS_TEST),
+    ("POST /v1/auth/github/start", GITHUB_TEST),
+    ("POST /v1/auth/github/callback", GITHUB_TEST),
+    ("GET /v1/auth/github", GITHUB_TEST),
+    ("DELETE /v1/auth/github", GITHUB_TEST),
+    ("POST /v1/auth/github/link", GITHUB_TEST),
+    ("POST /v1/auth/github/link/complete", GITHUB_TEST),
+    ("POST /v1/auth/magic-link", MAGIC_LINK_TEST),
+    ("POST /v1/auth/magic-link/redeem", MAGIC_LINK_TEST),
     ("GET /v1/members", USERS_TEST),
     ("POST /v1/members", USERS_TEST),
     ("POST /v1/members/{account_id}/disable", USERS_TEST),
@@ -191,6 +201,13 @@ const CODEX_TEST: &str = "a_chatgpt_sign_in_belongs_to_the_workspace_that_starte
 
 /// The test that shows tenant B reaches no member, session or invitation of tenant A.
 const USERS_TEST: &str = "users_and_sessions_of_the_other_tenant_are_out_of_reach";
+
+/// The test that shows a GitHub sign-in opens no workspace its account is not a member of, and a
+/// state belongs to the account that began it.
+const GITHUB_TEST: &str = "github_never_lets_in_a_stranger_or_another_workspace";
+
+/// The test that shows a sign-in link opens only the workspace and member it was made for.
+const MAGIC_LINK_TEST: &str = "a_magic_link_opens_only_the_workspace_and_member_it_was_made_for";
 
 /// Which test here covers a client request. No wildcard arm: a new `ClientRequest` does not
 /// compile until it is listed, and the listing has to name a test that exists (a sample of it

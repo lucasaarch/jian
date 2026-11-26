@@ -341,6 +341,103 @@ pub struct InvitesPage {
     pub items: Vec<InviteSummary>,
 }
 
+/// `POST /v1/auth/github/start`: begins a sign-in with GitHub.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+#[serde(rename_all = "camelCase")]
+pub struct GithubStartRequest {
+    /// The workspace to open. May be left out when the account belongs to exactly one.
+    #[serde(default)]
+    pub tenant: Option<String>,
+}
+
+/// Where to send the person next: the answer of the routes that start a GitHub round trip.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+#[serde(rename_all = "camelCase")]
+pub struct AuthorizeUrlResponse {
+    /// GitHub's authorize page, with the one-time `state` and the PKCE challenge in it.
+    pub authorize_url: String,
+}
+
+/// `POST /v1/auth/github/callback` and `POST /v1/auth/github/link/complete`: what GitHub's
+/// redirect brought back to the panel.
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+#[serde(rename_all = "camelCase")]
+pub struct GithubCallbackRequest {
+    /// The `code` GitHub put in the redirect.
+    pub code: String,
+    /// The `state` it carried back. Works once, for ten minutes.
+    pub state: String,
+}
+
+impl std::fmt::Debug for GithubCallbackRequest {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("GithubCallbackRequest")
+            .finish_non_exhaustive()
+    }
+}
+
+/// A GitHub user linked to an account.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+#[serde(rename_all = "camelCase")]
+pub struct GithubAccount {
+    /// GitHub's numeric user id, as text: what identifies them.
+    pub id: String,
+    /// Their login when it was linked, only to show.
+    pub login: String,
+}
+
+/// `GET /v1/auth/github`: the GitHub linked to the signed-in account, if any.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+#[serde(rename_all = "camelCase")]
+pub struct GithubStatus {
+    /// `null` when none is linked.
+    pub linked: Option<GithubAccount>,
+}
+
+/// `POST /v1/auth/magic-link`: asks for a sign-in link by e-mail.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+#[serde(rename_all = "camelCase")]
+pub struct MagicLinkRequest {
+    /// The address, whatever its case and surrounding spaces.
+    pub email: String,
+    /// The workspace to open. May be left out when the gateway has exactly one.
+    #[serde(default)]
+    pub tenant: Option<String>,
+}
+
+/// The answer to a magic-link request, the same whether or not the address is a member's: a link
+/// is sent only to a member.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+#[serde(rename_all = "camelCase")]
+pub struct MagicLinkAccepted {
+    /// Always `true`: the request was taken.
+    pub accepted: bool,
+}
+
+/// `POST /v1/auth/magic-link/redeem`: the token the e-mailed link carries. The answer is a
+/// [`LoginResponse`].
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+#[serde(rename_all = "camelCase")]
+pub struct MagicLinkRedeemRequest {
+    /// The token from the link's fragment. Works once, for fifteen minutes.
+    pub token: String,
+}
+
+impl std::fmt::Debug for MagicLinkRedeemRequest {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("MagicLinkRedeemRequest")
+            .finish_non_exhaustive()
+    }
+}
+
 /// `GET /v1/me`: who the token is.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[ts(export)]

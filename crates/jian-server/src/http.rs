@@ -101,6 +101,16 @@ pub(crate) fn store_failure(error: &StoreError) -> Refusal {
         StoreError::MemberExists => {
             refuse(StatusCode::CONFLICT, "already_a_member", &error.to_string())
         }
+        StoreError::GithubTaken => refuse(
+            StatusCode::CONFLICT,
+            "github_taken",
+            "that GitHub account is linked to somebody else",
+        ),
+        StoreError::GithubAlreadyLinked => refuse(
+            StatusCode::CONFLICT,
+            "github_already_linked",
+            "another GitHub account is already linked: unlink it first",
+        ),
         StoreError::InvalidInvite => refuse(
             StatusCode::BAD_REQUEST,
             "invalid_invite",
@@ -124,7 +134,47 @@ pub(crate) fn auth_failure(error: &AuthError) -> Refusal {
             "tenant_required",
             "this account belongs to several workspaces: say which one",
         ),
-        AuthError::MethodDisabled(_) => method_disabled(),
+        AuthError::MethodDisabled(kind) | AuthError::NotConfigured(kind) => method_off(*kind),
+        AuthError::InvalidState => refuse(
+            StatusCode::BAD_REQUEST,
+            "invalid_state",
+            "this sign-in has expired or was already used: start again",
+        ),
+        AuthError::GithubRefused => refuse(
+            StatusCode::BAD_REQUEST,
+            "github_refused",
+            "GitHub did not accept the sign-in: start again",
+        ),
+        AuthError::GithubUnavailable(_) => refuse(
+            StatusCode::BAD_GATEWAY,
+            "github_unavailable",
+            "GitHub could not be reached: try again later",
+        ),
+        AuthError::GithubNotAMember => refuse(
+            StatusCode::FORBIDDEN,
+            "not_a_member",
+            "no member of this workspace has a verified address on that GitHub account",
+        ),
+        AuthError::InvalidLink => refuse(
+            StatusCode::BAD_REQUEST,
+            "invalid_link",
+            "the sign-in link is not valid: ask for a new one",
+        ),
+        AuthError::LastSignInMethod => refuse(
+            StatusCode::CONFLICT,
+            "last_sign_in_method",
+            "this is the last way you have to sign in",
+        ),
+        AuthError::NotLinked => refuse(
+            StatusCode::NOT_FOUND,
+            "not_linked",
+            "no GitHub account is linked",
+        ),
+        AuthError::UnknownTenant => refuse(
+            StatusCode::BAD_REQUEST,
+            "invalid_input",
+            "that is not a workspace id",
+        ),
         AuthError::InvalidInvite => store_failure(&StoreError::InvalidInvite),
         AuthError::InvalidPassword { .. } => {
             refuse(StatusCode::BAD_REQUEST, "invalid_input", &error.to_string())
@@ -153,6 +203,23 @@ pub(crate) fn method_disabled() -> Refusal {
         "password_login_disabled",
         "this gateway does not sign in with a password",
     )
+}
+
+/// 404: this sign-in method is off here (or, for GitHub, not set up).
+pub(crate) fn method_off(kind: CredentialKind) -> Refusal {
+    match kind {
+        CredentialKind::Password => method_disabled(),
+        CredentialKind::Github => refuse(
+            StatusCode::NOT_FOUND,
+            "github_login_disabled",
+            "this gateway does not sign in with GitHub",
+        ),
+        _ => refuse(
+            StatusCode::NOT_FOUND,
+            "magic_link_disabled",
+            "this gateway does not sign in with an e-mailed link",
+        ),
+    }
 }
 
 /// Answers 404 when the policy has no password sign-in, before any work or any counting.

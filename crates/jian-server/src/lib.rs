@@ -16,8 +16,10 @@
 //!
 //! A person is an account (one per email address) and a member of each workspace they belong to
 //! (`jian-auth` and `jian-store` say how). The sign-in methods a gateway accepts are
-//! [`Settings::auth`]'s policy: a server install allows a password, the Cloud does not, and
-//! `/v1/auth/*` is then a 404. `POST /v1/auth/login` answers a session token, an opaque `js_`
+//! [`Settings::auth`]'s policy: a server install allows a password (and `github` and
+//! `email_link` when it is told to), the Cloud only the last two, and a route of a method that is
+//! off is a 404. GitHub and the e-mailed link only let in somebody who is already a member
+//! (`sign_in`). `POST /v1/auth/login` answers a session token, an opaque `js_`
 //! bearer that opens one workspace, expires, and ends on logout, on a password change (the other
 //! sessions, in every workspace), on a reset, and when the member is disabled (in that
 //! workspace). [`Principal`] then carries the account id and the role. An admin, or the owner's
@@ -65,6 +67,7 @@ mod invite_job;
 mod invites;
 mod jobs;
 mod llm_access;
+mod login_link_job;
 mod mail;
 mod mail_settings;
 mod members;
@@ -78,6 +81,7 @@ mod public_url;
 mod rate;
 mod schedule_job;
 mod schedules;
+mod sign_in;
 mod slots;
 mod summary;
 mod thread_messages;
@@ -107,6 +111,7 @@ pub use invite_job::{INVITE_SEND_KIND, InviteSender};
 pub use jian_runtime::THREAD_COMPACT_KIND;
 pub use jobs::{JobContext, JobError, JobHandler, JobOptions, JobRegistry, JobRequeue, JobRunner};
 pub use llm_access::{LlmAccess, PendingLogins};
+pub use login_link_job::{LOGIN_LINK_SEND_KIND, LoginLinkSender};
 pub use mail::{DeployMail, MailConfig};
 pub use public_url::{InvalidPublicUrl, PublicUrl};
 pub use rate::{Clock, Limit, ManualClock, MemoryRateLimiter, RateLimiter, SystemClock, Verdict};
@@ -122,6 +127,14 @@ pub const ROUTES: &[&str] = &[
     "POST /v1/auth/logout (a session)",
     "POST /v1/auth/password (a session)",
     "POST /v1/auth/invite/accept (no token; the password sign-in must be on)",
+    "POST /v1/auth/github/start (no token; GitHub sign-in must be on)",
+    "POST /v1/auth/github/callback (no token; GitHub sign-in must be on)",
+    "GET /v1/auth/github (a session; GitHub sign-in must be on)",
+    "DELETE /v1/auth/github (a session; GitHub sign-in must be on)",
+    "POST /v1/auth/github/link (a session; GitHub sign-in must be on)",
+    "POST /v1/auth/github/link/complete (a session; GitHub sign-in must be on)",
+    "POST /v1/auth/magic-link (no token; the e-mailed link must be on)",
+    "POST /v1/auth/magic-link/redeem (no token; the e-mailed link must be on)",
     "GET /v1/members (an admin)",
     "POST /v1/members (an admin)",
     "POST /v1/members/{account_id}/disable (an admin)",
@@ -320,6 +333,22 @@ pub fn router_with(state: AppState, extra: Router<AppState>) -> Router {
         .route("/v1/auth/logout", post(accounts::logout))
         .route("/v1/auth/password", post(accounts::change_password))
         .route("/v1/auth/invite/accept", post(accounts::accept_invite))
+        .route("/v1/auth/github/start", post(sign_in::github_start))
+        .route("/v1/auth/github/callback", post(sign_in::github_callback))
+        .route(
+            "/v1/auth/github",
+            get(sign_in::github_status).delete(sign_in::github_unlink),
+        )
+        .route("/v1/auth/github/link", post(sign_in::github_link_start))
+        .route(
+            "/v1/auth/github/link/complete",
+            post(sign_in::github_link_complete),
+        )
+        .route("/v1/auth/magic-link", post(sign_in::magic_link_request))
+        .route(
+            "/v1/auth/magic-link/redeem",
+            post(sign_in::magic_link_redeem),
+        )
         .route("/v1/members", get(members::list).post(members::add))
         .route("/v1/members/{account_id}/disable", post(members::disable))
         .route(
