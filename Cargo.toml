@@ -29,6 +29,7 @@ globset = { version = "0.4", default-features = false }
 jian-auth = { path = "crates/jian-auth" }
 jian-computer-use = { path = "crates/jian-computer-use" }
 jian-core = { path = "crates/jian-core" }
+jian-exec = { path = "crates/jian-exec" }
 jian-import = { path = "crates/jian-import" }
 jian-llm = { path = "crates/jian-llm" }
 jian-mail = { path = "crates/jian-mail" }

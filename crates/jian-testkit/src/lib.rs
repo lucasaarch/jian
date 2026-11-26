@@ -48,7 +48,9 @@
 
 pub mod coverage;
 mod database;
+mod fakes;
 mod tenants;
 
 pub use database::{TestDb, job_rows, master_keys, sql_error_code};
+pub use fakes::{FakeExecutor, FakeMachineScript, FakeProvider, Gate, Script, call, say};
 pub use tenants::{JOB_KIND, PASSWORD, SECRET_OWNER, SHARED_KEY, Side, TwoTenants};

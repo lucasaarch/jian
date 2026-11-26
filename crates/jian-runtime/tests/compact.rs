@@ -163,6 +163,7 @@ impl History for Endless {
             .map(|seq| HistoryRow {
                 seq,
                 from_agent: false,
+                agent: None,
                 text: "forty bytes of text, more or less....".to_owned(),
             })
             .collect();

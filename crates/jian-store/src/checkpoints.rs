@@ -39,6 +39,9 @@ pub struct HistoryRow {
     pub seq: i64,
     /// Whether the thread's agent wrote it; every other author reads as the user.
     pub from_agent: bool,
+    /// Which agent wrote it, when an agent did. A run reads its own agent's messages as its
+    /// own and every other author's as the user's.
+    pub agent: Option<String>,
     /// The text of its text parts, joined by a blank line.
     pub text: String,
 }
@@ -101,8 +104,8 @@ impl Database {
     ) -> Result<Vec<HistoryRow>, StoreError> {
         let limit = i64::from(limit.clamp(1, MAX_HISTORY_PAGE));
         let mut tx = self.begin(ctx).await?;
-        let rows: Vec<(i64, String, String)> = sqlx::query_as(
-            "SELECT seq, author_kind, parts::text FROM messages \
+        let rows: Vec<(i64, String, Option<String>, String)> = sqlx::query_as(
+            "SELECT seq, author_kind, author_agent, parts::text FROM messages \
              WHERE thread_id = $1 AND seq > $2 AND seq < COALESCE($3, 9223372036854775807) \
                AND deleted_at IS NULL ORDER BY seq DESC LIMIT $4",
         )
@@ -114,7 +117,7 @@ impl Database {
         .await
         .map_err(StoreError::query("read the history"))?;
         let mut out = Vec::with_capacity(rows.len());
-        for (seq, author, parts) in rows {
+        for (seq, author, agent, parts) in rows {
             let text = decode_parts(&parts)?
                 .into_iter()
                 .filter_map(|part| match part {
@@ -136,6 +139,7 @@ impl Database {
             out.push(HistoryRow {
                 seq,
                 from_agent: author == "agent",
+                agent,
                 text,
             });
         }

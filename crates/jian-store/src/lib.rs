@@ -154,6 +154,7 @@ mod project_threads;
 mod projects;
 mod providers;
 mod quotas;
+mod runs;
 mod schedules;
 mod schema_version;
 pub mod secrets;
@@ -227,6 +228,7 @@ pub use providers::{
     ProviderImport, provider_secret_owner,
 };
 pub use quotas::{QuotaUsage, Quotas, RunLease};
+pub use runs::{Approval, ApprovalState, Run, RunState};
 pub use schedules::{
     Due, Fired, InboxEvent, MAX_SCHEDULE_INSTRUCTION_CHARS, MAX_SCHEDULE_NAME_CHARS,
     MAX_SCHEDULES_PER_AGENT, NewSchedule, SCHEDULE_EVENT, Schedule, ScheduleId, SchedulePatch,

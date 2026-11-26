@@ -316,6 +316,24 @@ impl Database {
         row.map(Agent::try_from).transpose()
     }
 
+    /// One agent, with no viewer: what the agent loop reads of the agent it runs. Never
+    /// reachable from a request, which goes through [`agent`](Self::agent).
+    pub async fn agent_for_run(
+        &self,
+        ctx: &TenantCtx,
+        id: &AgentId,
+    ) -> Result<Option<Agent>, StoreError> {
+        let mut tx = self.begin(ctx).await?;
+        let row: Option<Row> = sqlx::query_as(AssertSqlSafe(format!(
+            "SELECT {AGENT_COLUMNS} FROM agents a WHERE a.id = $1"
+        )))
+        .bind(id.as_str())
+        .fetch_optional(&mut *tx)
+        .await
+        .map_err(StoreError::query("read an agent for a run"))?;
+        row.map(Agent::try_from).transpose()
+    }
+
     /// Whether the viewer may see this agent and it is not archived: the question to ask before
     /// putting it in a thread.
     pub async fn can_see_agent(

@@ -1475,6 +1475,10 @@ dependencies = [
 [[package]]
 name = "jian-exec"
 version = "0.1.0"
+dependencies = [
+ "futures-util",
+ "thiserror",
+]
 
 [[package]]
 name = "jian-import"
@@ -1582,7 +1586,9 @@ version = "0.1.0"
 dependencies = [
  "futures-util",
  "jian-core",
+ "jian-exec",
  "jian-llm",
+ "jian-skills",
  "jian-store",
  "jian-testkit",
  "serde_json",
@@ -1659,10 +1665,15 @@ dependencies = [
 name = "jian-testkit"
 version = "0.1.0"
 dependencies = [
+ "futures-util",
+ "jian-core",
+ "jian-exec",
+ "jian-llm",
  "jian-store",
  "serde_json",
  "sqlx",
  "tempfile",
+ "tokio",
 ]
 
 [[package]]
