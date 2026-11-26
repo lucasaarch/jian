@@ -201,6 +201,10 @@ pub enum StoreError {
     /// can see: what they cannot see is "not found", never this.
     #[error("not allowed: {0}")]
     Denied(&'static str),
+    /// The request is fine but clashes with what is stored: a name that is taken, or a library
+    /// that is full. The text says which and carries no value.
+    #[error("conflict: {0}")]
+    Conflict(&'static str),
     /// The tenant has used up a limit it is held to: runs at the same time, tokens this month, or
     /// disk. The text names which.
     #[error("quota exceeded: {0}")]

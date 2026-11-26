@@ -136,6 +136,7 @@ mod jobs;
 mod legacy;
 mod legacy_memories;
 mod legacy_schedules;
+mod legacy_skills;
 mod legacy_threads;
 mod logins;
 mod machines;
@@ -157,6 +158,7 @@ mod schedules;
 mod schema_version;
 pub mod secrets;
 mod sessions;
+mod skills;
 mod slots;
 mod subjects;
 mod tenant;
@@ -192,6 +194,7 @@ pub use jobs::{
 pub use legacy::{DeviceImport, ImportOutcome, LegacyDevice, LegacyMachine, MachineImport};
 pub use legacy_memories::{LegacyMemory, LegacyMemoryLink, LegacyProject};
 pub use legacy_schedules::LegacySchedule;
+pub use legacy_skills::LegacySkill;
 pub use legacy_threads::{LegacyAgent, LegacyChat, LegacyMessage, LegacyThread};
 pub use logins::{
     GithubLink, LiveLoginLink, LoginPurpose, MAX_LOGIN_VALUE_LEN, NewLoginState, UsedLoginState,
@@ -231,6 +234,12 @@ pub use schedules::{
 };
 pub use schema_version::{SchemaState, TenantVersion};
 pub use sessions::{LoginCandidate, NewSession};
+pub use skills::{
+    AgentSkills, MAX_LIBRARY_SKILLS, MAX_SKILL_DESCRIPTION_CHARS, MAX_SKILL_INSTRUCTIONS_CHARS,
+    MAX_SKILL_LICENSE_CHARS, MAX_SKILL_NAME_CHARS, MAX_SKILL_REQUIRED_TOOLS, MAX_SKILL_TOOL_CHARS,
+    Skill, SkillDraft, SkillId, SkillSource, SkillText, SkillVersion, can_manage_skill,
+    text_problem as skill_text_problem, valid_skill_name,
+};
 pub use slots::{
     HeldSlot, InstanceId, SLOT_COUNT, SlotClaim, SlotId, SlotOptions, SlotRow, slot_of,
 };
