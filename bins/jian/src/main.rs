@@ -32,7 +32,8 @@ use jian_server::{
 use jian_store::embedded::EmbeddedConfig;
 use jian_store::secrets::{LocalKeyring, MasterKeys as _};
 use jian_store::{
-    Database, DatabaseSource, DatabaseUrl, NewJob, SlotOptions, TenantCtx, TenantId, TenantStatus,
+    Database, DatabaseSource, DatabaseUrl, DiskBlobs, NewJob, SlotOptions, TenantCtx, TenantId,
+    TenantStatus,
 };
 use tokio::sync::oneshot;
 use tokio_util::sync::CancellationToken;
@@ -304,7 +305,8 @@ async fn main() -> anyhow::Result<()> {
         Database::open(source)
             .await
             .context("cannot open the database")?
-            .with_master_keys(Arc::new(keys)),
+            .with_master_keys(Arc::new(keys))
+            .with_blobs(Arc::new(DiskBlobs::new(data_dir.join("files")))),
     );
     // From here the database is up, so every way out goes through `close` below.
     let served = match command {

@@ -202,6 +202,19 @@ pub enum StoreError {
         /// What is stored now.
         current: i64,
     },
+    /// A file is bigger than a project accepts.
+    #[error("the file is over the limit of {max} bytes")]
+    FileTooLarge {
+        /// The most bytes one file may have.
+        max: u64,
+    },
+    /// This database was opened with no place to keep files
+    /// ([`Database::with_blobs`](crate::Database::with_blobs)).
+    #[error("this gateway has no file storage configured")]
+    NoFileStorage,
+    /// The place the bytes of a file live failed.
+    #[error(transparent)]
+    Blob(#[from] crate::BlobError),
     /// The operating system could not give random bytes.
     #[error("the operating system has no random bytes to give: {0}")]
     Random(getrandom::Error),

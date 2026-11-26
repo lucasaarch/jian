@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use super::MachineSummary;
+use crate::projects::{ProjectFileChange, ProjectGone, ProjectThreadChange, ProjectView};
 use crate::threads::{MessageView, ParticipantChange, ThreadSummary};
 
 /// What a client can subscribe to. One topic today; each domain adds its own with its issue.
@@ -16,6 +17,9 @@ pub enum Topic {
     /// The threads the client is in: their messages, who comes and goes, and their changes. A
     /// client hears only about threads it sees, so each client has a numbering of its own.
     Threads,
+    /// The projects the client sees: their changes, files and threads. A client hears only about
+    /// projects it sees, so each client has a numbering of its own.
+    Projects,
 }
 
 /// Where a client left a topic: the gateway's `epoch` (it changes when the gateway restarts, and
@@ -58,6 +62,21 @@ pub enum DeltaPayload {
     /// Someone left a thread. The one who left hears it too, and then no more of that thread.
     #[serde(rename = "participant.left")]
     ParticipantLeft(ParticipantChange),
+    /// A project was made or changed: its state now, as the client sees it.
+    #[serde(rename = "project.updated")]
+    ProjectUpdated(ProjectView),
+    /// A project was deleted, or the client no longer sees it.
+    #[serde(rename = "project.deleted")]
+    ProjectDeleted(ProjectGone),
+    /// A file was added to a project.
+    #[serde(rename = "project.file.added")]
+    ProjectFileAdded(ProjectFileChange),
+    /// A file was removed from a project.
+    #[serde(rename = "project.file.removed")]
+    ProjectFileRemoved(ProjectFileChange),
+    /// A thread came into a project or left it.
+    #[serde(rename = "project.thread.changed")]
+    ProjectThreadChanged(ProjectThreadChange),
 }
 
 /// One change on a topic.

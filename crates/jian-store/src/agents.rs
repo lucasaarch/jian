@@ -181,7 +181,7 @@ pub(crate) const AGENT_COLUMNS: &str = concat!(
     " AS updated_at, a.archived_at IS NOT NULL AS archived"
 );
 
-fn clean(text: &str, max: usize, what: &'static str) -> Result<String, StoreError> {
+pub(crate) fn clean(text: &str, max: usize, what: &'static str) -> Result<String, StoreError> {
     let text = text.trim();
     if text.chars().count() > max
         || text
@@ -473,7 +473,10 @@ impl Database {
 }
 
 /// The viewers without repeats and without the creator, who sees their own agent anyway.
-fn distinct_viewers(list: &[AccountId], creator: &AccountId) -> Result<Vec<AccountId>, StoreError> {
+pub(crate) fn distinct_viewers(
+    list: &[AccountId],
+    creator: &AccountId,
+) -> Result<Vec<AccountId>, StoreError> {
     let mut seen: Vec<AccountId> = Vec::new();
     for account in list {
         if account != creator && !seen.contains(account) {

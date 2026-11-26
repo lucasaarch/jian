@@ -9,10 +9,26 @@ export type UpdateProjectRequest = {
  */
 name: string | null, 
 /**
- * A new repository; an empty text removes it.
+ * A new description.
  */
-repositoryUrl: string | null, 
+description: string | null, 
 /**
  * New instructions.
  */
-instructions: string | null, };
+instructions: string | null, 
+/**
+ * A new icon; an empty text removes it.
+ */
+icon: string | null, 
+/**
+ * A new color; an empty text removes it.
+ */
+color: string | null, 
+/**
+ * A new visibility.
+ */
+visibility: string | null, 
+/**
+ * The new list of viewers, replacing the old one.
+ */
+viewers: Array<string> | null, };

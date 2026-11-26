@@ -55,6 +55,16 @@ pub(crate) fn failure(error: &StoreError) -> Refusal {
             "version_conflict",
             &format!("the stored version is {current}: read it again and retry"),
         ),
+        StoreError::FileTooLarge { max } => refuse(
+            StatusCode::PAYLOAD_TOO_LARGE,
+            "file_too_large",
+            &format!("a file may have at most {max} bytes"),
+        ),
+        StoreError::NoFileStorage => refuse(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "no_file_storage",
+            "this gateway has no place to keep files",
+        ),
         other => store_failure(other),
     }
 }

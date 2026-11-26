@@ -8,7 +8,7 @@ use sqlx::postgres::PgPoolOptions;
 use crate::embedded::{EmbeddedConfig, EmbeddedPostgres};
 use crate::schema_version::VerifiedTenants;
 use crate::secrets::{DekCache, MasterKeys};
-use crate::{Migrations, NoObserver, StoreError, ThreadObserver};
+use crate::{BlobStore, Migrations, NoObserver, StoreError, ThreadObserver};
 
 /// The longest a caller waits for a connection from the pool, and so for the first `SELECT 1`.
 const ACQUIRE_TIMEOUT: Duration = Duration::from_secs(5);
@@ -63,6 +63,7 @@ pub struct Database {
     pub(crate) master_keys: Option<Arc<dyn MasterKeys>>,
     pub(crate) deks: DekCache,
     pub(crate) observer: Arc<dyn ThreadObserver>,
+    pub(crate) blobs: Option<Arc<dyn BlobStore>>,
     embedded: Option<EmbeddedPostgres>,
 }
 
@@ -87,6 +88,7 @@ impl Database {
                 master_keys: None,
                 deks: DekCache::default(),
                 observer: Arc::new(NoObserver),
+                blobs: None,
                 embedded,
             }),
             Err(error) => {
@@ -105,6 +107,14 @@ impl Database {
     pub fn with_migrations(mut self, migrations: Migrations) -> Self {
         self.migrations = migrations;
         self.verified.clear();
+        self
+    }
+
+    /// Where the bytes of project files are kept. Without it a file cannot be added or read
+    /// ([`StoreError::NoFileStorage`]); everything else works.
+    #[must_use]
+    pub fn with_blobs(mut self, blobs: Arc<dyn BlobStore>) -> Self {
+        self.blobs = Some(blobs);
         self
     }
 

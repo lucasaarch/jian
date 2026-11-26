@@ -6,6 +6,6 @@ import type { ProjectView } from "./ProjectView";
  */
 export type ThreadProject = { 
 /**
- * The project, or `null` when the thread is about none.
+ * The project, or `null` when the thread is in none.
  */
 project: ProjectView | null, };

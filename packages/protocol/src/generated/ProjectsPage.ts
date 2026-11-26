@@ -6,7 +6,7 @@ import type { ProjectView } from "./ProjectView";
  */
 export type ProjectsPage = { 
 /**
- * The projects, oldest first.
+ * The projects the caller sees, oldest first.
  */
 items: Array<ProjectView>, 
 /**

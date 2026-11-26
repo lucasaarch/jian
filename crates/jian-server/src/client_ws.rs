@@ -309,14 +309,14 @@ impl Session {
             old.abort();
         }
         let tenant = &self.principal.tenant;
-        // Threads are per member: each hears only about the threads they see.
-        let scope = if topic == Topic::Threads {
+        // Threads and projects are per member: each hears only about what they see.
+        let scope = if matches!(topic, Topic::Threads | Topic::Projects) {
             let Some(account) = &self.principal.account_id else {
                 return self
                     .send(&refusal(
                         Some(id),
                         ErrorCode::Forbidden,
-                        "sign in as a member to follow threads",
+                        "sign in as a member to follow threads and projects",
                     ))
                     .await;
             };

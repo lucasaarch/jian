@@ -69,6 +69,9 @@ mod mail;
 mod mail_settings;
 mod members;
 mod memories;
+mod project_events;
+mod project_files;
+mod project_repos;
 mod projects;
 mod providers;
 mod public_url;
@@ -151,11 +154,19 @@ pub const ROUTES: &[&str] = &[
     "DELETE /v1/agents/{id}/memories/{key} (a member who sees the agent)",
     "PUT /v1/agents/{id}/memories/{key}/links/{other} (a member who sees the agent)",
     "DELETE /v1/agents/{id}/memories/{key}/links/{other} (a member who sees the agent)",
-    "GET /v1/projects (a member)",
+    "GET /v1/projects (a member: the ones they see)",
     "POST /v1/projects (a member)",
-    "GET /v1/projects/{id} (a member)",
+    "GET /v1/projects/{id} (a member who sees it)",
     "PATCH /v1/projects/{id} (its creator or an admin)",
     "DELETE /v1/projects/{id} (its creator or an admin)",
+    "GET /v1/projects/{id}/threads (a member who sees it)",
+    "GET /v1/projects/{id}/repositories (a member who sees it)",
+    "POST /v1/projects/{id}/repositories (its creator or an admin)",
+    "DELETE /v1/projects/{id}/repositories/{repository_id} (its creator or an admin)",
+    "GET /v1/projects/{id}/files (a member who sees it)",
+    "POST /v1/projects/{id}/files (its creator or an admin)",
+    "GET /v1/projects/{id}/files/{file_id} (a member who sees it)",
+    "DELETE /v1/projects/{id}/files/{file_id} (its creator or an admin)",
     "GET /v1/threads/{id}/project (a member who sees it)",
     "PUT /v1/threads/{id}/project (a member in it)",
     "GET /v1/agents/{id}/schedules (a member who sees the agent)",
@@ -369,6 +380,19 @@ pub fn router_with(state: AppState, extra: Router<AppState>) -> Router {
                 .patch(projects::update)
                 .delete(projects::delete),
         )
+        .route("/v1/projects/{id}/threads", get(projects::threads))
+        .route(
+            "/v1/projects/{id}/repositories",
+            get(project_repos::list).post(project_repos::attach),
+        )
+        .route(
+            "/v1/projects/{id}/repositories/{repository_id}",
+            delete(project_repos::detach),
+        )
+        .route(
+            "/v1/projects/{id}/files/{file_id}",
+            get(project_files::download).delete(project_files::delete),
+        )
         .route(
             "/v1/threads/{id}/project",
             get(projects::of_thread).put(projects::set_for_thread),
@@ -397,11 +421,20 @@ pub fn router_with(state: AppState, extra: Router<AppState>) -> Router {
             patch(thread_messages::edit).delete(thread_messages::delete),
         )
         .layer(DefaultBodyLimit::max(MAX_MESSAGE_BODY));
+    // A file is held in memory up to its limit, and the body is read by the handler, which
+    // answers a clear 413 (the layer would answer plain text).
+    let files = Router::new()
+        .route(
+            "/v1/projects/{id}/files",
+            get(project_files::list).post(project_files::upload),
+        )
+        .layer(DefaultBodyLimit::disable());
     Router::new()
         .route("/health", get(health))
         .route("/v1/me", get(me))
         .merge(accounts)
         .merge(messages)
+        .merge(files)
         .route(
             jian_protocol::machine::CONNECT_PATH,
             get(worker_ws::connect),

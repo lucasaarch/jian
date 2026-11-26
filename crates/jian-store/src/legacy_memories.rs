@@ -191,15 +191,17 @@ impl Database {
         }
         let url = Some(project.repository_url.trim()).filter(|u| !u.is_empty());
         let mut tx = self.begin(ctx).await?;
+        // Everyone saw every project in the old app, so it stays the workspace's. Its repository
+        // becomes an attachment, made only with the project row: a second run adds neither.
+        let id = random_id("prj_")?;
         let done = sqlx::query(
-            "INSERT INTO projects (id, name, repository_url, created_by, created_at, updated_at, \
+            "INSERT INTO projects (id, name, visibility, created_by, created_at, updated_at, \
                 legacy_id) \
-             VALUES ($1, $2, $3, $4, $5::timestamptz, $5::timestamptz, $6) \
+             VALUES ($1, $2, 'workspace', $3, $4::timestamptz, $4::timestamptz, $5) \
              ON CONFLICT (legacy_id) DO NOTHING",
         )
-        .bind(random_id("prj_")?)
+        .bind(&id)
         .bind(name)
-        .bind(url)
         .bind(owner.as_str())
         .bind(&project.created_at)
         .bind(&project.id)
@@ -207,6 +209,19 @@ impl Database {
         .await
         .map_err(StoreError::query(ACTION))?
         .rows_affected();
+        if let (1.., Some(url)) = (done, url) {
+            sqlx::query(
+                "INSERT INTO project_repositories (id, project_id, url, created_at) \
+                 VALUES ($1, $2, $3, $4::timestamptz) ON CONFLICT DO NOTHING",
+            )
+            .bind(random_id("rep_")?)
+            .bind(&id)
+            .bind(url)
+            .bind(&project.created_at)
+            .execute(&mut *tx)
+            .await
+            .map_err(StoreError::query(ACTION))?;
+        }
         tx.commit().await.map_err(StoreError::query(ACTION))?;
         Ok(outcome(done))
     }

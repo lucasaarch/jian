@@ -25,7 +25,7 @@ pub(crate) struct ListQuery {
     limit: Option<u32>,
 }
 
-fn visibility(text: &str) -> Result<Visibility, Refusal> {
+pub(crate) fn visibility(text: &str) -> Result<Visibility, Refusal> {
     Visibility::parse(text).ok_or_else(|| {
         refuse(
             StatusCode::BAD_REQUEST,
@@ -35,7 +35,7 @@ fn visibility(text: &str) -> Result<Visibility, Refusal> {
     })
 }
 
-fn accounts(ids: Vec<String>) -> Vec<AccountId> {
+pub(crate) fn accounts(ids: Vec<String>) -> Vec<AccountId> {
     ids.into_iter().map(AccountId::new).collect()
 }
 

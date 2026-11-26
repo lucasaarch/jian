@@ -9,10 +9,26 @@ export type CreateProjectRequest = {
  */
 name: string, 
 /**
- * The repository.
+ * What it is about; up to 500 characters.
  */
-repositoryUrl: string | null, 
+description: string, 
 /**
  * What to keep in mind.
  */
-instructions: string, };
+instructions: string, 
+/**
+ * An emoji or an icon name.
+ */
+icon: string | null, 
+/**
+ * A color name or `#rrggbb`.
+ */
+color: string | null, 
+/**
+ * `private` (the default), `members` or `workspace`.
+ */
+visibility: string | null, 
+/**
+ * Accounts that see it besides the creator, for `members`.
+ */
+viewers: Array<string>, };

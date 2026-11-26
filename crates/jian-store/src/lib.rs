@@ -121,6 +121,7 @@
 mod accounts;
 mod agents;
 mod backup;
+mod blobs;
 mod checkpoints;
 mod credentials;
 mod database;
@@ -144,6 +145,9 @@ mod migrate;
 #[cfg(unix)]
 mod orphan;
 mod platform;
+mod project_files;
+mod project_repos;
+mod project_threads;
 mod projects;
 mod providers;
 mod quotas;
@@ -166,6 +170,7 @@ pub use agents::{
     can_manage_agent,
 };
 pub use backup::tenant_dump_args;
+pub use blobs::{BlobError, BlobKey, BlobStore, DiskBlobs};
 pub use checkpoints::{Checkpoint, HistoryRow, MAX_HISTORY_PAGE, TailSize};
 pub use credentials::{CredentialKind, PasswordCredential};
 pub use database::{Database, DatabaseHealth, DatabaseSource, DatabaseUrl};
@@ -196,9 +201,17 @@ pub use messages::{
     NoObserver, Posted, ThreadObserver, Window,
 };
 pub use migrate::{MigrateOptions, MigrationReport, Migrations};
+pub use project_files::{
+    MAX_PROJECT_FILE_BYTES, MAX_PROJECT_FILE_NAME_CHARS, MAX_PROJECT_FILES, ProjectFile,
+    ProjectFileId,
+};
+pub use project_repos::{
+    MAX_PROJECT_BRANCH_CHARS, MAX_PROJECT_REPOSITORIES, MAX_PROJECT_URL_CHARS, ProjectRepository,
+};
+pub use project_threads::ProjectContext;
 pub use projects::{
-    MAX_PROJECT_INSTRUCTIONS_CHARS, MAX_PROJECT_NAME_CHARS, MAX_PROJECT_URL_CHARS, NewProject,
-    Project, ProjectId, ProjectPatch,
+    MAX_PROJECT_DESCRIPTION_CHARS, MAX_PROJECT_INSTRUCTIONS_CHARS, MAX_PROJECT_NAME_CHARS,
+    NewProject, Project, ProjectId, ProjectPatch, ThreadMove, can_manage_project,
 };
 pub use providers::{
     LegacyProvider, MAX_ACCOUNTS, MAX_LABEL_CHARS, NewProviderAccount, ProviderAccount,

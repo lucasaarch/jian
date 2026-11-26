@@ -20,7 +20,9 @@
 //! is to be called **before** a provider is: the call that crosses the limit is the last one
 //! allowed, not a refused one. Disk is the size of the tenant's schema, tables, indexes and
 //! TOAST, which Postgres knows exactly; [`Database::check_disk_quota`] refuses writes that grow
-//! data once it reaches the limit.
+//! data once it reaches the limit. The bytes of project files live outside Postgres, so they are
+//! added to that size from `project_files`, and [`Database::check_disk_room`] refuses a file that
+//! would take the total past the limit.
 
 use sqlx::AssertSqlSafe;
 
@@ -243,8 +245,22 @@ impl Database {
         Ok(())
     }
 
-    /// The bytes the tenant's schema takes: tables, indexes and TOAST.
+    /// The bytes the tenant takes: its schema (tables, indexes and TOAST) and its project files.
     pub async fn disk_bytes(&self, ctx: &TenantCtx) -> Result<u64, StoreError> {
+        let files: i64 = {
+            let mut tx = self.begin(ctx).await?;
+            sqlx::query_scalar("SELECT COALESCE(sum(size_bytes), 0)::bigint FROM project_files")
+                .fetch_one(&mut *tx)
+                .await
+                .map_err(StoreError::query("measure the disk"))?
+        };
+        Ok(self
+            .schema_bytes(ctx)
+            .await?
+            .saturating_add(unsigned(files)))
+    }
+
+    async fn schema_bytes(&self, ctx: &TenantCtx) -> Result<u64, StoreError> {
         let mut tx = self.platform_tx("measure the disk").await?;
         let bytes: i64 = sqlx::query_scalar(
             "SELECT COALESCE(sum(pg_total_relation_size(c.oid)), 0)::bigint FROM pg_class c \
@@ -264,6 +280,17 @@ impl Database {
             return Ok(());
         };
         if self.disk_bytes(ctx).await? >= limit {
+            return Err(StoreError::QuotaExceeded("disk"));
+        }
+        Ok(())
+    }
+
+    /// Refuses with [`StoreError::QuotaExceeded`] when `extra` more bytes would pass the limit.
+    pub async fn check_disk_room(&self, ctx: &TenantCtx, extra: u64) -> Result<(), StoreError> {
+        let Some(limit) = self.quotas(ctx).await?.disk_bytes else {
+            return Ok(());
+        };
+        if self.disk_bytes(ctx).await?.saturating_add(extra) > limit {
             return Err(StoreError::QuotaExceeded("disk"));
         }
         Ok(())
