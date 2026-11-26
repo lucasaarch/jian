@@ -96,7 +96,8 @@ impl AgentRunner {
             agent: run.agent.to_string(),
             run: run.id.clone(),
         };
-        let machine = MachineSlot::new(self.executor.clone(), scope);
+        let machine = MachineSlot::new(self.executor.clone(), scope)
+            .with_base_ms(u64::try_from(run.machine_ms).unwrap_or(0));
         let tools = tools_for(db, ctx, run).await;
         let listener = Listener {
             db,

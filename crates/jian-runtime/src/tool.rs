@@ -24,6 +24,9 @@ pub struct MachineSlot {
     scope: Scope,
     machine: OnceCell<Box<dyn Machine>>,
     woke_at: Mutex<Option<Instant>>,
+    /// Machine time the run spent in earlier jobs (it was parked on an approval and resumed):
+    /// each job has its own slot, and the run's recorded time must only ever grow.
+    base_ms: u64,
 }
 
 impl MachineSlot {
@@ -35,7 +38,15 @@ impl MachineSlot {
             scope,
             machine: OnceCell::new(),
             woke_at: Mutex::new(None),
+            base_ms: 0,
         }
+    }
+
+    /// The same slot for a run that already held a machine for `ms` before this job.
+    #[must_use]
+    pub fn with_base_ms(mut self, ms: u64) -> Self {
+        self.base_ms = ms;
+        self
     }
 
     /// The machine, waking it on the first call. Two tools asking at once wake one.
@@ -53,16 +64,15 @@ impl MachineSlot {
         Ok(machine.as_ref())
     }
 
-    /// How long the machine has been awake in milliseconds, at least 1 once it was woken, and
-    /// `None` when it never was.
+    /// How long the run's machine has been awake in milliseconds, earlier jobs included, at
+    /// least 1 once it was woken here, and `None` when this job never woke it.
     #[must_use]
     pub fn machine_ms(&self) -> Option<u64> {
         let at = (*self.woke_at.lock().ok()?)?;
-        Some(
-            u64::try_from(at.elapsed().as_millis())
-                .unwrap_or(u64::MAX)
-                .max(1),
-        )
+        let here = u64::try_from(at.elapsed().as_millis())
+            .unwrap_or(u64::MAX)
+            .max(1);
+        Some(self.base_ms.saturating_add(here))
     }
 }
 

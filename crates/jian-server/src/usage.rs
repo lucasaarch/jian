@@ -26,8 +26,10 @@ pub(crate) async fn get(
         max_concurrent_runs: limits.max_concurrent_runs,
         monthly_token_limit: limits.monthly_tokens,
         disk_limit_bytes: limits.disk_bytes,
+        machine_minute_limit: limits.machine_minutes,
         concurrent_runs: used.concurrent_runs,
         monthly_tokens: used.monthly_tokens,
+        machine_minutes: used.machine_minutes,
         disk_bytes: used.disk_bytes,
     }))
 }

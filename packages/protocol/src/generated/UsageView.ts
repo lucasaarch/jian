@@ -17,6 +17,10 @@ monthlyTokenLimit: bigint | null,
  */
 diskLimitBytes: bigint | null, 
 /**
+ * The most minutes of machine time in a UTC calendar month; `null` for no limit.
+ */
+machineMinuteLimit: bigint | null, 
+/**
  * Runs holding a place now.
  */
 concurrentRuns: number, 
@@ -24,6 +28,10 @@ concurrentRuns: number,
  * Tokens used this UTC month: input, output and both cache kinds.
  */
 monthlyTokens: bigint, 
+/**
+ * Whole minutes of machine time the runs held this UTC month.
+ */
+machineMinutes: bigint, 
 /**
  * Bytes the workspace's data takes: tables, indexes and large values.
  */

@@ -14,10 +14,14 @@ pub struct UsageView {
     pub monthly_token_limit: Option<u64>,
     /// The most bytes of data; `null` for no limit.
     pub disk_limit_bytes: Option<u64>,
+    /// The most minutes of machine time in a UTC calendar month; `null` for no limit.
+    pub machine_minute_limit: Option<u64>,
     /// Runs holding a place now.
     pub concurrent_runs: u32,
     /// Tokens used this UTC month: input, output and both cache kinds.
     pub monthly_tokens: u64,
+    /// Whole minutes of machine time the runs held this UTC month.
+    pub machine_minutes: u64,
     /// Bytes the workspace's data takes: tables, indexes and large values.
     pub disk_bytes: u64,
 }

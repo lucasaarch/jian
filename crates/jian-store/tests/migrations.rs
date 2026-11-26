@@ -151,6 +151,11 @@ async fn a_migration_changed_after_it_was_applied_is_refused_and_says_which() {
         "/migrations/platform/0010_github_and_links.sql"
     ))
     .unwrap();
+    let eleventh = std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/migrations/platform/0011_machine_minutes.sql"
+    ))
+    .unwrap();
     let altered = migrator(
         server.dir.path(),
         "platform-edited",
@@ -168,6 +173,7 @@ async fn a_migration_changed_after_it_was_applied_is_refused_and_says_which() {
             ("0008_imports.sql", &eighth),
             ("0009_quotas.sql", &ninth),
             ("0010_github_and_links.sql", &tenth),
+            ("0011_machine_minutes.sql", &eleventh),
         ],
     )
     .await;

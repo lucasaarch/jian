@@ -1,4 +1,5 @@
-//! What a tenant may use at most: runs at the same time, tokens a month, and disk.
+//! What a tenant may use at most: runs at the same time, tokens and machine minutes a month, and
+//! disk.
 //!
 //! Limits and run leases live in `platform`, because they bind a tenant and must not be something
 //! the tenant's own role can edit; usage is read from where it happens (the tenant's
@@ -13,6 +14,14 @@
 //! lease carries an expiry that the run pushes forward ([`Database::renew_run_lease`]) while it
 //! lives: a run whose instance died stops renewing, and its lease is gone the next time anyone
 //! acquires, so a crash never leaves the tenant stuck at its limit.
+//!
+//! # Machine minutes
+//!
+//! The time runs held a machine awake (`runs.machine_ms`), summed over the runs that began in the
+//! UTC calendar month. Light work (model calls, MCP over HTTP, memories, channels) holds no
+//! machine and never counts. [`Database::check_machine_quota`] is called before each tool that
+//! needs a machine: the call in flight is never cut, the next one is refused. It also counts the
+//! time the run has held its machine since it last wrote `machine_ms`.
 //!
 //! # Tokens and disk
 //!
@@ -37,9 +46,14 @@ pub struct Quotas {
     pub max_concurrent_runs: Option<u32>,
     /// Tokens (input, output and both cache kinds) in a UTC calendar month.
     pub monthly_tokens: Option<u64>,
+    /// Minutes of machine time in a UTC calendar month.
+    pub machine_minutes: Option<u64>,
     /// Bytes of the tenant's data.
     pub disk_bytes: Option<u64>,
 }
+
+/// Milliseconds in a minute: the limit is in minutes, runs record milliseconds.
+const MINUTE_MS: u64 = 60_000;
 
 /// What a tenant has used now.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -48,6 +62,9 @@ pub struct QuotaUsage {
     pub concurrent_runs: u32,
     /// Tokens used this UTC month.
     pub monthly_tokens: u64,
+    /// Whole minutes of machine time this UTC month, as the runs have recorded it. Whole, so it
+    /// reaches the limit exactly when [`Database::check_machine_quota`] starts to refuse.
+    pub machine_minutes: u64,
     /// Bytes of the tenant's data.
     pub disk_bytes: u64,
 }
@@ -77,16 +94,37 @@ impl Database {
         const ACTION: &str = "set quotas";
         let mut tx = self.platform_tx(ACTION).await?;
         sqlx::query(
-            "INSERT INTO tenant_quotas (tenant_id, max_concurrent_runs, monthly_tokens, disk_bytes) \
-             VALUES ($1, $2, $3, $4) ON CONFLICT (tenant_id) DO UPDATE SET \
+            "INSERT INTO tenant_quotas (tenant_id, max_concurrent_runs, monthly_tokens, \
+                disk_bytes, machine_minutes) VALUES ($1, $2, $3, $4, $5) \
+             ON CONFLICT (tenant_id) DO UPDATE SET \
                 max_concurrent_runs = EXCLUDED.max_concurrent_runs, \
                 monthly_tokens = EXCLUDED.monthly_tokens, disk_bytes = EXCLUDED.disk_bytes, \
-                updated_at = now()",
+                machine_minutes = EXCLUDED.machine_minutes, updated_at = now()",
         )
         .bind(ctx.id().as_str())
-        .bind(quotas.max_concurrent_runs.map(i32::try_from).transpose().ok().flatten())
-        .bind(quotas.monthly_tokens.map(|t| i64::try_from(t).unwrap_or(i64::MAX)))
-        .bind(quotas.disk_bytes.map(|t| i64::try_from(t).unwrap_or(i64::MAX)))
+        .bind(
+            quotas
+                .max_concurrent_runs
+                .map(i32::try_from)
+                .transpose()
+                .ok()
+                .flatten(),
+        )
+        .bind(
+            quotas
+                .monthly_tokens
+                .map(|t| i64::try_from(t).unwrap_or(i64::MAX)),
+        )
+        .bind(
+            quotas
+                .disk_bytes
+                .map(|t| i64::try_from(t).unwrap_or(i64::MAX)),
+        )
+        .bind(
+            quotas
+                .machine_minutes
+                .map(|t| i64::try_from(t).unwrap_or(i64::MAX)),
+        )
         .execute(&mut *tx)
         .await
         .map_err(StoreError::query(ACTION))?;
@@ -95,19 +133,21 @@ impl Database {
 
     /// The tenant's limits.
     pub async fn quotas(&self, ctx: &TenantCtx) -> Result<Quotas, StoreError> {
+        type Row = (Option<i32>, Option<i64>, Option<i64>, Option<i64>);
         let mut tx = self.platform_tx("read quotas").await?;
-        let row: Option<(Option<i32>, Option<i64>, Option<i64>)> = sqlx::query_as(
-            "SELECT max_concurrent_runs, monthly_tokens, disk_bytes FROM tenant_quotas \
-             WHERE tenant_id = $1",
+        let row: Option<Row> = sqlx::query_as(
+            "SELECT max_concurrent_runs, monthly_tokens, disk_bytes, machine_minutes \
+             FROM tenant_quotas WHERE tenant_id = $1",
         )
         .bind(ctx.id().as_str())
         .fetch_optional(&mut *tx)
         .await
         .map_err(StoreError::query("read quotas"))?;
         Ok(
-            row.map_or_else(Quotas::default, |(runs, tokens, disk)| Quotas {
+            row.map_or_else(Quotas::default, |(runs, tokens, disk, minutes)| Quotas {
                 max_concurrent_runs: runs.map(|r| u32::try_from(r).unwrap_or(0)),
                 monthly_tokens: tokens.map(unsigned),
+                machine_minutes: minutes.map(unsigned),
                 disk_bytes: disk.map(unsigned),
             }),
         )
@@ -245,6 +285,52 @@ impl Database {
         Ok(())
     }
 
+    /// Milliseconds of machine time the tenant's runs recorded in the UTC month that contains
+    /// `now_ms`. A run belongs to the month it began in. `live` is `(run id, ms)`: the time that
+    /// run has held its machine, which counts instead of what it last wrote if it is more.
+    pub async fn machine_ms_this_month(
+        &self,
+        ctx: &TenantCtx,
+        now_ms: i64,
+        live: Option<(&str, u64)>,
+    ) -> Result<u64, StoreError> {
+        let mut tx = self.begin(ctx).await?;
+        let (run, ms) = live.map_or(("", 0), |(run, ms)| (run, ms));
+        let used: i64 = sqlx::query_scalar(AssertSqlSafe(format!(
+            "SELECT COALESCE(sum(CASE WHEN id = $2 THEN GREATEST(machine_ms, $3) \
+                    ELSE machine_ms END), 0)::bigint FROM runs \
+             WHERE created_at >= date_trunc('month', {now} AT TIME ZONE 'UTC') AT TIME ZONE 'UTC' \
+               AND created_at < (date_trunc('month', {now} AT TIME ZONE 'UTC') + interval '1 month') \
+                    AT TIME ZONE 'UTC'",
+            now = at("$1")
+        )))
+        .bind(now_ms)
+        .bind(run)
+        .bind(i64::try_from(ms).unwrap_or(i64::MAX))
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(StoreError::query("sum machine time"))?;
+        Ok(unsigned(used))
+    }
+
+    /// Refuses with [`StoreError::QuotaExceeded`] when this month's machine time has reached the
+    /// limit. Call it before a tool that needs a machine, with `live` as in
+    /// [`Database::machine_ms_this_month`].
+    pub async fn check_machine_quota(
+        &self,
+        ctx: &TenantCtx,
+        now_ms: i64,
+        live: Option<(&str, u64)>,
+    ) -> Result<(), StoreError> {
+        let Some(limit) = self.quotas(ctx).await?.machine_minutes else {
+            return Ok(());
+        };
+        if self.machine_ms_this_month(ctx, now_ms, live).await? / MINUTE_MS >= limit {
+            return Err(StoreError::QuotaExceeded("machine minutes this month"));
+        }
+        Ok(())
+    }
+
     /// The bytes the tenant takes: its schema (tables, indexes and TOAST) and its project files.
     pub async fn disk_bytes(&self, ctx: &TenantCtx) -> Result<u64, StoreError> {
         let files: i64 = {
@@ -316,6 +402,7 @@ impl Database {
         Ok(QuotaUsage {
             concurrent_runs: u32::try_from(live).unwrap_or(u32::MAX),
             monthly_tokens: self.tokens_this_month(ctx, now_ms).await?,
+            machine_minutes: self.machine_ms_this_month(ctx, now_ms, None).await? / MINUTE_MS,
             disk_bytes: self.disk_bytes(ctx).await?,
         })
     }

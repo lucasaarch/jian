@@ -18,7 +18,8 @@ use jian_runtime::{
 };
 use jian_skills::Catalog;
 use jian_store::{
-    AgentId, Message, NewAgent, NewMessage, NewThread, Run, RunOrigin, ThreadId, Viewer, Window,
+    AgentId, Message, NewAgent, NewMessage, NewThread, Quotas, Run, RunOrigin, ThreadId, Viewer,
+    Window,
 };
 use jian_testkit::{
     FakeExecutor, FakeMachineScript, FakeProvider, Gate, Script, TestDb, TwoTenants, call, say,
@@ -663,5 +664,85 @@ async fn a_run_without_the_objective_tools_is_not_told_of_the_objective() {
             .iter()
             .all(|b| !b.text.contains("ship the report"))
     );
+    set.test.stop().await;
+}
+
+async fn limit_machine_minutes(set: &Setup, minutes: u64) {
+    let limit = Quotas {
+        machine_minutes: Some(minutes),
+        ..Quotas::default()
+    };
+    set.test.db.set_quotas(&set.side.ctx, &limit).await.unwrap();
+}
+
+#[tokio::test]
+async fn a_spent_machine_quota_refuses_machine_tools_without_opening_one_and_light_tools_run() {
+    let set = setup().await;
+    limit_machine_minutes(&set, 1).await;
+    set.test
+        .db
+        .record_run_machine(&set.side.ctx, &set.run.id, 61_000)
+        .await
+        .unwrap();
+    let turns = vec![
+        call("c1", "read_file", json!({ "path": "/a" })),
+        call("c2", "shell", json!({ "command": "ls" })),
+        call(
+            "c3",
+            "remember",
+            json!({ "key": "colour", "content": "green" }),
+        ),
+        say("done"),
+    ];
+    let parts = Parts::new(&set, turns, FakeMachineScript::default());
+    let slot = parts.slot();
+    assert_eq!(parts.run(&slot).await, Outcome::Done);
+
+    assert_eq!(parts.executor.opened(), 0);
+    assert!(parts.executor.commands().is_empty());
+    let results = tool_results(&thread_parts(&set).await);
+    assert_eq!(results.len(), 3, "{results:?}");
+    for (text, is_error) in &results[..2] {
+        assert!(
+            *is_error && text.contains("machine minutes used up this month"),
+            "{text}"
+        );
+    }
+    assert_eq!(results[2], ("remembered `colour`".to_owned(), false));
+    set.test.stop().await;
+}
+
+#[tokio::test]
+async fn crossing_the_limit_lets_the_running_tool_finish_and_refuses_the_next() {
+    let set = setup().await;
+    limit_machine_minutes(&set, 1).await;
+    // One millisecond under the limit when the run starts; holding the machine adds at least one.
+    set.test
+        .db
+        .record_run_machine(&set.side.ctx, &set.run.id, 59_999)
+        .await
+        .unwrap();
+    let turns = vec![
+        call("c1", "read_file", json!({ "path": "/a" })),
+        call("c2", "read_file", json!({ "path": "/b" })),
+        say("done"),
+    ];
+    let machine = FakeMachineScript {
+        output: "contents".into(),
+        ..FakeMachineScript::default()
+    };
+    let parts = Parts::new(&set, turns, machine);
+    let slot = parts.slot().with_base_ms(59_999);
+    assert_eq!(parts.run(&slot).await, Outcome::Done);
+
+    assert_eq!(parts.executor.commands(), ["read /a"]);
+    let results = tool_results(&thread_parts(&set).await);
+    assert_eq!(results[0], ("contents".to_owned(), false));
+    assert!(
+        results[1].1 && results[1].0.contains("machine minutes used up"),
+        "{results:?}"
+    );
+    // The time is never written back smaller: a resumed run adds to what it spent before.
+    assert!(the_run(&set).await.machine_ms >= 60_000);
     set.test.stop().await;
 }

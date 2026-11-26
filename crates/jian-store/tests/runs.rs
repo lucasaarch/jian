@@ -5,7 +5,9 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use jian_core::{ThreadKind, Visibility};
-use jian_store::{Answer, ApprovalState, NewAgent, NewThread, RunOrigin, RunState, Viewer};
+use jian_store::{
+    Answer, ApprovalState, NewAgent, NewThread, Quotas, RunOrigin, RunState, StoreError, Viewer,
+};
 use jian_testkit::{Side, TestDb, TwoTenants};
 
 async fn thread_and_agent(
@@ -193,5 +195,94 @@ async fn an_approval_is_answered_once_before_it_expires_and_another_tenant_sees_
             .unwrap()
             .is_empty()
     );
+    test.stop().await;
+}
+
+/// A run of `side` that held a machine for `ms`.
+async fn run_with_machine(test: &TestDb, side: &Side, ms: u64) -> String {
+    let (thread, agent) = thread_and_agent(test, side).await;
+    let (run, _) = test
+        .db
+        .start_run(&side.ctx, &thread, &agent, None, 1, RunOrigin::Message)
+        .await
+        .unwrap();
+    test.db
+        .record_run_machine(&side.ctx, &run.id, ms)
+        .await
+        .unwrap();
+    run.id
+}
+
+#[tokio::test]
+async fn machine_minutes_sum_the_month_per_tenant_and_refuse_only_past_the_limit() {
+    let test = TestDb::start(env!("CARGO_TARGET_TMPDIR")).await;
+    let tenants = TwoTenants::seed(&test.db).await;
+    let (db, a, b) = (&test.db, &tenants.a, &tenants.b);
+    let since = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap();
+    let now = i64::try_from(since.as_millis()).unwrap();
+    let limit = Quotas {
+        machine_minutes: Some(2),
+        ..Quotas::default()
+    };
+    db.set_quotas(&a.ctx, &limit).await.unwrap();
+    db.set_quotas(&b.ctx, &limit).await.unwrap();
+
+    // 90 s is under 2 minutes; two runs of it are 3 minutes, over.
+    run_with_machine(&test, a, 90_000).await;
+    db.check_machine_quota(&a.ctx, now, None).await.unwrap();
+    let second = run_with_machine(&test, a, 90_000).await;
+    assert_eq!(
+        db.machine_ms_this_month(&a.ctx, now, None).await.unwrap(),
+        180_000
+    );
+    assert_eq!(
+        db.quota_usage(&a.ctx, now).await.unwrap().machine_minutes,
+        3
+    );
+    assert!(matches!(
+        db.check_machine_quota(&a.ctx, now, None).await,
+        Err(StoreError::QuotaExceeded(_))
+    ));
+
+    // Another month starts at zero; another tenant never saw A's time.
+    db.check_machine_quota(&a.ctx, now + 40 * 86_400_000, None)
+        .await
+        .unwrap();
+    db.check_machine_quota(&b.ctx, now, None).await.unwrap();
+    assert_eq!(
+        db.machine_ms_this_month(&b.ctx, now, None).await.unwrap(),
+        0
+    );
+
+    // The time a run has held its machine since it last wrote counts, once, not on top of it.
+    db.set_quotas(
+        &a.ctx,
+        &Quotas {
+            machine_minutes: Some(4),
+            ..Quotas::default()
+        },
+    )
+    .await
+    .unwrap();
+    db.check_machine_quota(&a.ctx, now, None).await.unwrap();
+    assert!(
+        db.check_machine_quota(&a.ctx, now, Some((&second, 150_000)))
+            .await
+            .is_err()
+    );
+    assert_eq!(
+        db.machine_ms_this_month(&a.ctx, now, Some((&second, 150_000)))
+            .await
+            .unwrap(),
+        240_000
+    );
+
+    // No limit never refuses, however much was used.
+    db.set_quotas(&a.ctx, &Quotas::default()).await.unwrap();
+    db.check_machine_quota(&a.ctx, now, Some((&second, 10_000_000_000)))
+        .await
+        .unwrap();
     test.stop().await;
 }

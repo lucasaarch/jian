@@ -39,6 +39,7 @@ async fn usage_is_each_workspaces_own_and_a_workspace_over_its_limit_is_refused(
                 max_concurrent_runs: Some(2),
                 monthly_tokens: Some(5_000),
                 disk_bytes: None,
+                machine_minutes: Some(30),
             },
         )
         .await
@@ -57,11 +58,14 @@ async fn usage_is_each_workspaces_own_and_a_workspace_over_its_limit_is_refused(
     assert_eq!(a["maxConcurrentRuns"], 2);
     assert_eq!(a["monthlyTokenLimit"], 5_000);
     assert_eq!(a["diskLimitBytes"], Value::Null);
+    assert_eq!(a["machineMinuteLimit"], 30);
+    assert_eq!(a["machineMinutes"], 0);
     assert_eq!(a["concurrentRuns"], 2);
     assert!(a["diskBytes"].as_u64().unwrap() > 0);
     // B's numbers are B's: no limits, no runs, whatever A holds.
     let (_, b) = call(&gateway, "GET", "/v1/usage", &tenants.b.admin_session, None).await;
     assert_eq!(b["maxConcurrentRuns"], Value::Null);
+    assert_eq!(b["machineMinuteLimit"], Value::Null);
     assert_eq!(b["concurrentRuns"], 0);
     // A member is not an admin.
     let (status, _) = call(

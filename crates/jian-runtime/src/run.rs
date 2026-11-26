@@ -680,6 +680,10 @@ impl Runner<'_> {
                 true,
             ));
         };
+        // Before a person is asked: nobody should allow a call that cannot run.
+        if let Some(refusal) = self.machine_refusal(run, tool.needs_machine()).await? {
+            return Ok(Exec::Result(refusal, true));
+        }
         if tool.needs_approval(&call.input) {
             let known = self.db.approval(self.ctx, &run.id, &call.id).await?;
             let approval = match known {
@@ -705,6 +709,12 @@ impl Runner<'_> {
                     ));
                 }
             }
+        }
+        // The answer may have come days later, in another month.
+        if tool.needs_approval(&call.input)
+            && let Some(refusal) = self.machine_refusal(run, tool.needs_machine()).await?
+        {
+            return Ok(Exec::Result(refusal, true));
         }
         let env = ToolEnv {
             db: self.db,
@@ -742,6 +752,32 @@ impl Runner<'_> {
             Ok(None) => Exec::Park,
             Err(text) => Exec::Result(text, true),
         })
+    }
+
+    /// Why a tool that needs a machine may not run: the month's machine minutes are used up.
+    /// A call already running is never cut; this stops the next one, before any machine opens.
+    async fn machine_refusal(
+        &self,
+        run: &Run,
+        needs_machine: bool,
+    ) -> Result<Option<String>, StoreError> {
+        if !needs_machine {
+            return Ok(None);
+        }
+        let live = self.machine.machine_ms().map(|ms| (run.id.as_str(), ms));
+        match self
+            .db
+            .check_machine_quota(self.ctx, (self.now)(), live)
+            .await
+        {
+            Ok(()) => Ok(None),
+            Err(StoreError::QuotaExceeded(_)) => Ok(Some(
+                "machine minutes used up this month; this tool needs a machine and was not run. \
+                 Tools that need no machine still work."
+                    .to_owned(),
+            )),
+            Err(other) => Err(other),
+        }
     }
 
     /// Puts a call to the people of the thread and queues the job that ends the wait when nobody
