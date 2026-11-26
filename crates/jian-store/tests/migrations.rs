@@ -319,7 +319,7 @@ async fn the_embedded_migrations_apply_to_the_platform_and_to_each_tenant() {
         .await,
         [
             "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16",
-            "17", "18", "19", "20"
+            "17", "18", "19", "20", "21"
         ]
     );
     // After a restart the tenant is migrated again with nothing to do.
@@ -413,6 +413,7 @@ async fn tool_approval_is_dropped_and_a_run_that_waited_on_one_ends_failed() {
         .collect::<Vec<_>>();
     shipped.sort();
     // The release before: everything up to 0016 (0017 is under test; 0018 to 0020 come after).
+    assert!(shipped.pop().unwrap().starts_with("0021_"));
     assert!(shipped.pop().unwrap().starts_with("0020_"));
     assert!(shipped.pop().unwrap().starts_with("0019_"));
     assert!(shipped.pop().unwrap().starts_with("0018_"));
@@ -510,6 +511,7 @@ async fn proactivity_defaults_to_suggest_and_an_hourly_limit_resets_except_off()
         .collect::<Vec<_>>();
     shipped.sort();
     // The release before: everything up to 0018 (0019 and 0020 come after it).
+    assert!(shipped.pop().unwrap().starts_with("0021_"));
     assert!(shipped.pop().unwrap().starts_with("0020_"));
     assert!(shipped.pop().unwrap().starts_with("0019_"));
     let last = shipped.pop().unwrap();

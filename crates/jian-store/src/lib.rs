@@ -123,6 +123,9 @@ mod accounts;
 mod agent_config;
 mod agent_events;
 mod agents;
+mod artifact_edits;
+mod artifact_folders;
+mod artifacts;
 mod backup;
 mod blobs;
 mod checkpoints;
@@ -187,6 +190,13 @@ pub use agents::{
     Agent, AgentId, AgentPatch, MAX_AGENT_AVATAR_BYTES, MAX_AGENT_DESCRIPTION_CHARS,
     MAX_AGENT_INSTRUCTIONS_CHARS, MAX_AGENT_NAME_CHARS, MAX_AGENT_VIEWERS, NewAgent, Viewer,
     can_manage_agent,
+};
+pub use artifact_folders::{
+    ArtifactFolder, ArtifactFolderId, MAX_ARTIFACT_FOLDER_NAME_CHARS, MAX_ARTIFACT_FOLDERS,
+};
+pub use artifacts::{
+    Artifact, ArtifactActor, ArtifactAuthor, ArtifactFilter, ArtifactId, ArtifactVersion,
+    ArtifactVersionInfo, MAX_ARTIFACT_TITLE_CHARS, NewArtifact,
 };
 pub use backup::tenant_dump_args;
 pub use blobs::{BlobError, BlobKey, BlobStore, DiskBlobs};

@@ -6,11 +6,16 @@
 //! tests without a server. It depends on no other crate of the workspace; `jian-store`,
 //! `jian-runtime`, `jian-llm`, `jian-exec` and `jian-server` depend on it.
 
+mod artifact;
 mod catalog;
 mod cron;
 mod message;
 mod provider;
 
+pub use artifact::{
+    ArtifactKind, EditError, MAX_ARTIFACT_CHARS, MAX_DECK_CHARS, MAX_SOURCE_EDITS,
+    MAX_TWEAKS_CHARS, SourceEdit, apply_edits, declared_tweaks,
+};
 pub use catalog::ModelInfo;
 pub use cron::{Cron, CronError, MIN_CRON_INTERVAL_MS, is_time_zone, parse_instant_ms};
 pub use message::{

@@ -205,6 +205,10 @@ pub enum StoreError {
     /// that is full. The text says which and carries no value.
     #[error("conflict: {0}")]
     Conflict(&'static str),
+    /// An edit to an artifact's source that cannot be applied; the text names which edit and why,
+    /// so whoever made it fixes that one. Nothing was changed.
+    #[error("{0}")]
+    Edit(#[from] jian_core::EditError),
     /// The tenant has used up a limit it is held to: runs at the same time, tokens this month, or
     /// disk. The text names which.
     #[error("quota exceeded: {0}")]
