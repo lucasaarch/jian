@@ -9,6 +9,8 @@ use jian_store::secrets::LocalKeyring;
 use jian_store::{Database, DatabaseSource, DatabaseUrl, DiskBlobs, TenantCtx};
 use sqlx::AssertSqlSafe;
 
+use crate::cluster::TestDatabase;
+
 /// 32 zero bytes in base64: a synthetic master key, worth nothing outside a test database.
 const TEST_MASTER_KEY: &str = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
 
@@ -17,21 +19,43 @@ pub fn master_keys() -> Arc<LocalKeyring> {
     Arc::new(LocalKeyring::from_single(TEST_MASTER_KEY).unwrap())
 }
 
-/// An embedded Postgres in a directory of its own, migrated, with [`master_keys`].
+/// Where a [`TestDb`] lives.
+enum Home {
+    /// A database of its own in the server the whole run shares (see [`crate::cluster`]).
+    Shared(TestDatabase),
+    /// A server of its own, for a test that stops it, changes its settings or reads what is
+    /// outside one database.
+    Own {
+        postgres: Box<EmbeddedPostgres>,
+        dir: tempfile::TempDir,
+    },
+}
+
+/// A migrated database with [`master_keys`], on a real embedded Postgres.
 pub struct TestDb {
     /// The database, as a gateway holds it.
     pub db: Database,
-    /// Where to reach the server, for a second pool or a raw connection.
+    /// Where to reach the database, for a second pool or a raw connection.
     pub url: DatabaseUrl,
-    postgres: EmbeddedPostgres,
-    dir: tempfile::TempDir,
+    home: Home,
 }
 
 impl TestDb {
-    /// Starts the server under `scratch` (a test passes `env!("CARGO_TARGET_TMPDIR")`, which only
-    /// the crate that owns the test can name) and migrates it. Each call is a server of its own,
-    /// so tests running side by side never share a row.
+    /// A database of its own, copied from the migrated template in the shared server (a test
+    /// passes `env!("CARGO_TARGET_TMPDIR")` as `scratch`, which only the crate that owns the test
+    /// can name). Tests running side by side never share a row, but they do share the server's
+    /// roles: read the notes in [`crate::cluster`] before creating a tenant by a fixed name.
     pub async fn start(scratch: &str) -> Self {
+        let home = TestDatabase::create(scratch).await;
+        let url = home.url.clone();
+        let blobs = home.dir.path().join("blobs");
+        Self::open(url, &blobs, Home::Shared(home)).await
+    }
+
+    /// A server of its own, started and migrated here, as every test did before servers were
+    /// shared. Slower by seconds: only for what one shared server cannot give, such as stopping
+    /// and restarting the server or a `pg_dump` of the whole cluster.
+    pub async fn start_isolated(scratch: &str) -> Self {
         let dir = tempfile::tempdir_in(Path::new(scratch)).unwrap();
         let postgres = EmbeddedPostgres::start(&EmbeddedConfig {
             data_dir: dir.path().to_path_buf(),
@@ -40,20 +64,28 @@ impl TestDb {
         .await
         .unwrap();
         let url = postgres.url().clone();
+        let blobs = dir.path().join("blobs");
+        Self::open(
+            url,
+            &blobs,
+            Home::Own {
+                postgres: Box::new(postgres),
+                dir,
+            },
+        )
+        .await
+    }
+
+    async fn open(url: DatabaseUrl, blobs: &Path, home: Home) -> Self {
         let db = Database::open(DatabaseSource::External(url.clone()))
             .await
             .unwrap()
             .with_master_keys(master_keys())
             // A server's way: artifacts have links. A test of the desktop's turns them off.
             .with_artifact_links(true)
-            .with_blobs(Arc::new(DiskBlobs::new(dir.path().join("blobs"))));
+            .with_blobs(Arc::new(DiskBlobs::new(blobs.to_path_buf())));
         db.migrate().await.unwrap();
-        Self {
-            db,
-            url,
-            postgres,
-            dir,
-        }
+        Self { db, url, home }
     }
 
     /// Turns artifact links on or off (on by default, as on a server).
@@ -65,13 +97,19 @@ impl TestDb {
 
     /// Where the bytes of project files are kept, for a test that looks at the disk.
     pub fn blobs_dir(&self) -> std::path::PathBuf {
-        self.dir.path().join("blobs")
+        match &self.home {
+            Home::Shared(home) => home.dir.path().join("blobs"),
+            Home::Own { dir, .. } => dir.path().join("blobs"),
+        }
     }
 
-    /// Closes the pool, then stops the server.
+    /// Closes the pool, then deletes the database, or stops the server of its own.
     pub async fn stop(self) {
         self.db.close().await.unwrap();
-        self.postgres.stop().await.unwrap();
+        match self.home {
+            Home::Shared(home) => home.remove().await,
+            Home::Own { postgres, .. } => (*postgres).stop().await.unwrap(),
+        }
     }
 }
 

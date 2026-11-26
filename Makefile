@@ -81,12 +81,16 @@ check: ## Lint, panel dead code, typecheck, unit tests, build, contract drift, a
 check-rust: ## Format, lint and test the Rust helper for this machine's OS
 	cargo fmt --check
 	cargo clippy --all-targets --locked -- -D warnings
-	cargo test --locked
+	# nextest runs every test in its own process and shares one Postgres through .config/nextest.toml;
+	# it does not run doctests.
+	cargo nextest run --locked
+	cargo test --doc --locked
 
 rust-check: ## The Rust workspace: format, clippy, tests and docs, as the rules in crates/AGENTS.md ask
 	cargo fmt --all --check
 	cargo clippy --workspace --all-targets --locked -- -D warnings
-	cargo test --workspace --locked
+	cargo nextest run --workspace --locked
+	cargo test --doc --workspace --locked
 	RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --locked
 
 # The Rust gateway on its own embedded Postgres, in .jian-dev/ (git-ignored). A DATABASE_URL in the

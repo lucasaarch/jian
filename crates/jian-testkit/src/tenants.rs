@@ -1,8 +1,6 @@
 //! Two tenants, each with data of every kind the core stores today: a machine, a phone, a
 //! secret, a job and three members.
 
-use std::sync::atomic::{AtomicU32, Ordering};
-
 use jian_store::secrets::Secret;
 use jian_store::{
     Database, Device, DeviceId, Job, Machine, MachineId, Member, NewJob, NewMember, Role,
@@ -31,8 +29,6 @@ const PASSWORD_HASH: &str =
 
 /// How long the sessions seeded here last.
 const SESSION_TTL: std::time::Duration = std::time::Duration::from_secs(3600);
-
-static NEXT: AtomicU32 = AtomicU32::new(0);
 
 /// One tenant and everything the tests may aim at: its context, a token of each kind in clear
 /// text (the fixture is the one place that has them) and what it owns.
@@ -164,12 +160,12 @@ pub struct TwoTenants {
 
 impl TwoTenants {
     /// Makes both tenants in `db`, which must be migrated and have master keys (see
-    /// [`crate::master_keys`]). Their ids are unique within the process, so tests that share one
-    /// database cannot step on each other.
+    /// [`crate::master_keys`]). Their ids are random, because a tenant's role belongs to the whole
+    /// server and tests in other databases of it, or other processes, make tenants too (see
+    /// [`crate::cluster`]).
     pub async fn seed(db: &Database) -> Self {
-        let n = NEXT.fetch_add(1, Ordering::Relaxed);
-        let pid = std::process::id();
-        let id = |side: &str| TenantId::parse(&format!("iso{side}{pid}n{n}")).unwrap();
+        let token = crate::unique();
+        let id = |side: &str| TenantId::parse(&format!("iso{side}{token}")).unwrap();
         Self {
             a: Side::seed(db, id("a")).await,
             b: Side::seed(db, id("b")).await,

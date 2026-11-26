@@ -27,6 +27,12 @@
 //! (`TwoTenants::seed(&gateway.db)`); that database needs [`master_keys`], which is how the
 //! secrets get stored.
 //!
+//! # One server, many databases
+//!
+//! A test's database is a copy of a migrated template in a server the whole run shares (see
+//! [`cluster`]). Two things follow: a tenant id is never a fixed text (use [`unique`]), and a test
+//! that needs a server of its own says so with [`TestDb::start_isolated`].
+//!
 //! # Plugging in what comes next
 //!
 //! - **Sandbox files** (`jian-exec`, M3): add a field to [`Side`] with a file each tenant owns
@@ -46,11 +52,13 @@
 // a failed setup should stop the test where it is.
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
+pub mod cluster;
 pub mod coverage;
 mod database;
 mod fakes;
 mod tenants;
 
+pub use cluster::{TestDatabase, unique};
 pub use database::{TestDb, job_rows, master_keys, sql_error_code};
 pub use fakes::{FakeExecutor, FakeMachineScript, FakeProvider, Gate, Script, call, say};
 pub use tenants::{JOB_KIND, PASSWORD, SECRET_OWNER, SHARED_KEY, Side, TwoTenants};

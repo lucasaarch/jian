@@ -23,8 +23,10 @@ fn auth() -> Auth {
     )
 }
 
+/// Tenant roles belong to the server that all the tests' databases share, so the name gets a
+/// random tail: `alpha` in two tests at once would collide.
 async fn tenant(db: &Database, name: &str) -> TenantCtx {
-    let id = TenantId::parse(name).unwrap();
+    let id = TenantId::parse(&format!("{name}{}", jian_testkit::unique())).unwrap();
     db.create_tenant(&id).await.unwrap();
     db.tenant(id).await.unwrap()
 }
@@ -152,7 +154,7 @@ async fn every_way_to_be_refused_is_the_same_error() {
     let session = sign_in(&auth, db, "  PAT@Example.test ", PASSWORD, None)
         .await
         .unwrap();
-    assert_eq!(session.tenant.as_str(), "alpha");
+    assert_eq!(session.tenant.as_str(), ctx.id().as_str());
     assert_eq!(session.member.email, "pat@example.test");
     assert!(alive(db, &session).await);
     test.stop().await;
@@ -264,7 +266,7 @@ async fn an_account_in_several_workspaces_must_say_which() {
             .unwrap()
             .tenant
             .as_str(),
-        "beta"
+        b.id().as_str()
     );
 
     // Changing the password ends the other session, in the other workspace, and keeps this one.
@@ -522,7 +524,7 @@ async fn an_invitation_makes_an_account_or_proves_the_one_that_exists() {
     ));
     let session = auth.accept_invite(db, accept(leaked, OTHER)).await.unwrap();
     assert_eq!(session.member.email, "new@example.test");
-    assert_eq!(session.tenant.as_str(), "alpha");
+    assert_eq!(session.tenant.as_str(), a.id().as_str());
     assert!(!session.member.must_change_password);
     assert!(alive(db, &session).await);
     assert!(
@@ -553,7 +555,7 @@ async fn an_invitation_makes_an_account_or_proves_the_one_that_exists() {
         .accept_invite(db, accept(leaked, PASSWORD))
         .await
         .unwrap();
-    assert_eq!(session.tenant.as_str(), "beta");
+    assert_eq!(session.tenant.as_str(), b.id().as_str());
     assert_eq!(session.member.role, Role::Admin);
     // Still the password the account had.
     assert!(

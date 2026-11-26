@@ -1,0 +1,42 @@
+# How `cargo nextest run` runs the Rust workspace (`make rust-check`, CI and the Mac use it).
+#
+# nextest starts one process per test, so the Postgres that the database tests share cannot live
+# inside a test: a setup script starts it once per run (see crates/jian-testkit/src/bin/jian-test-pg.rs)
+# and hands its URL to the tests as JIAN_TEST_PG_URL. Without nextest (`cargo test`) the testkit
+# starts one server per test process instead.
+
+# Setup scripts are still behind this switch in nextest 0.9.x; 0.9.98 is the first with the
+# `[scripts.setup]` spelling used below.
+nextest-version = "0.9.98"
+experimental = ["setup-scripts"]
+
+[scripts.setup.test-pg]
+# `cargo run` and not a path in target/: nothing builds that program before the script runs. It
+# is a plain, portable command, so Windows runs it too.
+command = "cargo run --quiet --locked -p jian-testkit --bin jian-test-pg -- up"
+# The first run on a machine compiles the program and unpacks and migrates a server.
+slow-timeout = { period = "120s", terminate-after = 5 }
+
+[[profile.default.scripts]]
+# Every test that opens a TestDb is in a package that depends on the testkit.
+filter = "rdeps(jian-testkit)"
+setup = "test-pg"
+
+# Tests that start a server of their own (they test migrations, limits, a restart or a dump of a
+# whole server, or still use the store's `Server`). Ten of them unpacking and initialising at once
+# made starts fail with "No such file or directory" on a 10-core Mac, so only a few start at a time.
+[test-groups.own-pg]
+max-threads = 4
+
+[[profile.default.overrides]]
+filter = """
+(package(jian-store) & binary(/^(accounts|embedded|imports|jobs|limits|migrations|project_migration|schema_versions|secrets|slots|tenants|tokens)$/))
+| (package(jian-import) & kind(test))
+"""
+test-group = "own-pg"
+
+[profile.default]
+# One process per test, each with a pool and sometimes a whole gateway: a CPU per test is what
+# 16 GB holds. A test that fails is a failure, not a flake.
+test-threads = "num-cpus"
+retries = 0

@@ -15,7 +15,6 @@ use futures_util::future::BoxFuture;
 use jian_server::{
     JobContext, JobError, JobHandler, JobOptions, JobRegistry, JobRequeue, JobRunner, SlotKeeper,
 };
-use jian_store::embedded::{EmbeddedConfig, EmbeddedPostgres};
 use jian_store::{
     Database, DatabaseSource, DatabaseUrl, JobId, JobState, NewJob, RetryPolicy, SlotOptions,
     TenantCtx, TenantId,
@@ -69,23 +68,15 @@ fn slot_options() -> SlotOptions {
 
 struct Env {
     url: DatabaseUrl,
-    postgres: EmbeddedPostgres,
-    _dir: tempfile::TempDir,
+    home: jian_testkit::TestDatabase,
 }
 
 impl Env {
     async fn start() -> Self {
-        let dir = tempfile::tempdir_in(env!("CARGO_TARGET_TMPDIR")).unwrap();
-        let postgres = EmbeddedPostgres::start(&EmbeddedConfig {
-            data_dir: dir.path().to_path_buf(),
-            port: 0,
-        })
-        .await
-        .unwrap();
+        let home = jian_testkit::TestDatabase::create(env!("CARGO_TARGET_TMPDIR")).await;
         let env = Self {
-            url: postgres.url().clone(),
-            postgres,
-            _dir: dir,
+            url: home.url.clone(),
+            home,
         };
         env.db().await.migrate().await.unwrap();
         env
@@ -102,12 +93,14 @@ impl Env {
     }
 
     async fn stop(self) {
-        self.postgres.stop().await.unwrap();
+        self.home.remove().await;
     }
 }
 
+/// Tenant roles belong to the server that all the tests' databases share, so the name gets a
+/// random tail: `alpha` in two tests at once would collide.
 async fn tenant(db: &Database, name: &str) -> TenantCtx {
-    let id = TenantId::parse(name).unwrap();
+    let id = TenantId::parse(&format!("{name}{}", jian_testkit::unique())).unwrap();
     db.create_tenant(&id).await.unwrap();
     db.tenant(id).await.unwrap()
 }

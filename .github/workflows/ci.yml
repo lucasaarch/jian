@@ -206,7 +206,9 @@ jobs:
       - if: matrix.os == 'ubuntu-latest'
         run: cargo fmt --check
       - run: cargo clippy --all-targets --locked -- -D warnings
-      - run: cargo test --locked
+      - uses: taiki-e/install-action@nextest
+      - run: cargo nextest run --locked
+      - run: cargo test --doc --locked
   postgres:
     needs: changes
     if: needs.changes.outputs.postgres == 'true'

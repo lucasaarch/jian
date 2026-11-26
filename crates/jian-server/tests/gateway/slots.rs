@@ -56,10 +56,13 @@ async fn pair(options: SlotOptions) -> (Gateway, Gateway) {
     (first, second)
 }
 
-/// The first tenant name, in a sequence, that `wanted` accepts by its slot.
+/// The first tenant name, in a sequence, that `wanted` accepts by its slot. The sequence starts
+/// from a random prefix: tenant roles belong to the server that all the tests' databases share,
+/// so the same names in two tests at once would collide.
 fn tenant_where(wanted: impl Fn(SlotId) -> bool) -> TenantId {
+    let prefix = jian_testkit::unique();
     (0..100_000)
-        .filter_map(|number| TenantId::parse(&format!("t{number}")).ok())
+        .filter_map(|number| TenantId::parse(&format!("t{prefix}n{number}")).ok())
         .find(|tenant| wanted(slot_of(tenant)))
         .unwrap()
 }

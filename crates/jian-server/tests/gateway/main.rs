@@ -35,7 +35,7 @@ use jian_protocol::machine::{
     TaskSpec, UpdateTask,
 };
 use jian_server::{DispatchError, Limit, Settings};
-use jian_store::{MachineId, TenantId};
+use jian_store::MachineId;
 use support::{Client, Gateway, RawWorker, RealWorker, closed_with, dial, http_get};
 use tokio_util::sync::CancellationToken;
 
@@ -47,8 +47,10 @@ fn shell(command: &str) -> TaskSpec {
     })
 }
 
-fn tenant(id: &str) -> TenantId {
-    TenantId::parse(id).unwrap()
+/// A tenant name no other test has taken: tenant roles belong to the server all the tests'
+/// databases share, so `alpha` in two tests at once would collide.
+fn named(base: &str) -> String {
+    format!("{base}{}", jian_testkit::unique())
 }
 
 fn machine_of(payload: DeltaPayload) -> MachineSummary {
@@ -85,7 +87,7 @@ async fn delta_until(
 #[tokio::test]
 async fn a_real_worker_runs_tasks_for_the_owner_who_follows_it() {
     let gateway = Gateway::start(Settings::default()).await;
-    let (owner, _) = gateway.tenant("alpha").await;
+    let (owner, ctx) = gateway.tenant(&named("alpha")).await;
     let mut client = Client::open(gateway.addr, &owner).await;
 
     let ClientResponse::Subscribed(subscribed) = client
@@ -123,7 +125,7 @@ async fn a_real_worker_runs_tasks_for_the_owner_who_follows_it() {
     assert!(online.capabilities.contains(&"shell".to_owned()));
     assert_eq!(online.worker_version.as_deref(), Some("0.0.0-test"));
 
-    let alpha = tenant("alpha");
+    let alpha = ctx.id().clone();
     let id = MachineId::new(machine.id.as_str());
     let never = CancellationToken::new();
     let run = |spec, wait| gateway.state.hub.dispatch(&alpha, &id, spec, wait, &never);
@@ -275,11 +277,11 @@ async fn a_worker_socket_obeys_its_token_and_the_protocol() {
         ..Settings::default()
     };
     let gateway = Gateway::start(settings).await;
-    let (owner, ctx) = gateway.tenant("alpha").await;
+    let (owner, ctx) = gateway.tenant(&named("alpha")).await;
     let addr = gateway.addr;
     let (machine, token) = gateway.db.issue_machine(&ctx, "box").await.unwrap();
     let token = token.expose().to_owned();
-    let alpha = tenant("alpha");
+    let alpha = ctx.id().clone();
     let id = MachineId::new(machine.id.clone());
 
     // Refusals before any socket: no reason is given, and a valid token of the wrong kind is
@@ -364,13 +366,16 @@ async fn a_worker_socket_obeys_its_token_and_the_protocol() {
 #[tokio::test]
 async fn a_token_opens_its_own_tenant_and_never_another() {
     let gateway = Gateway::start(Settings::default()).await;
-    let (alpha_owner, alpha_ctx) = gateway.tenant("alpha").await;
-    let (beta_owner, _) = gateway.tenant("beta").await;
+    let (alpha_owner, alpha_ctx) = gateway.tenant(&named("alpha")).await;
+    let (beta_owner, beta_ctx) = gateway.tenant(&named("beta")).await;
     let addr = gateway.addr;
 
     let (status, body) = http_get(addr, "/v1/me", Some(&alpha_owner)).await;
     assert_eq!(status, 200);
-    assert!(body.contains(r#""tenant":"alpha""#) && body.contains(r#""kind":"owner""#));
+    assert!(
+        body.contains(&format!(r#""tenant":"{}""#, alpha_ctx.id()))
+            && body.contains(r#""kind":"owner""#)
+    );
     assert_eq!(http_get(addr, "/v1/me", None).await.0, 401);
     assert_eq!(http_get(addr, "/v1/me", Some("jo_unknown")).await.0, 401);
     assert_eq!(http_get(addr, "/health", None).await.0, 200);
@@ -422,7 +427,7 @@ async fn a_token_opens_its_own_tenant_and_never_another() {
         .state
         .hub
         .dispatch(
-            &tenant("beta"),
+            beta_ctx.id(),
             &MachineId::new(machine.id.clone()),
             shell("true"),
             Duration::from_secs(1),
@@ -472,7 +477,7 @@ async fn too_many_messages_or_attempts_wait_for_the_clock() {
         ..Settings::default()
     };
     let gateway = Gateway::start(settings).await;
-    let (owner, _) = gateway.tenant("alpha").await;
+    let (owner, _) = gateway.tenant(&named("alpha")).await;
     let mut client = Client::open(gateway.addr, &owner).await;
     let list = || ClientRequest::ListMachines {
         cursor: None,

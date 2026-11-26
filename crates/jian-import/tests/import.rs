@@ -66,7 +66,7 @@ fn options(dir: &Path, email: Option<&str>, keys: Option<LocalKeyring>) -> Impor
 
 /// A fresh tenant with no members, as a new install has.
 async fn fresh(db: &Database) -> TenantCtx {
-    let id = TenantId::parse(&format!("import{}", std::process::id())).unwrap();
+    let id = TenantId::parse(&format!("import{}", jian_testkit::unique())).unwrap();
     db.create_tenant(&id).await.unwrap();
     db.tenant(id).await.unwrap()
 }

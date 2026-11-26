@@ -1,3 +1,4 @@
+use sha2::{Digest, Sha256};
 use sqlx::migrate::Migrator;
 
 use crate::{StoreError, TenantId, TenantVersion};
@@ -37,6 +38,25 @@ impl Migrations {
         platform.set_locking(false);
         tenant.set_locking(false);
         Self { platform, tenant }
+    }
+
+    /// 16 hex characters that change whenever any migration is added, removed or edited: the
+    /// version and the checksum of every file, platform's then tenant's. For a test that keeps a
+    /// migrated database to copy, so a new migration can never meet a copy made before it.
+    pub fn fingerprint(&self) -> String {
+        let mut hash = Sha256::new();
+        for migrator in [&self.platform, &self.tenant] {
+            for migration in migrator.iter() {
+                hash.update(migration.version.to_be_bytes());
+                hash.update(&*migration.checksum);
+            }
+            // So a file moving from one set to the other changes the result too.
+            hash.update(b"|");
+        }
+        let digest = hash.finalize();
+        let mut head = [0_u8; 8];
+        head.copy_from_slice(&digest[..8]);
+        format!("{:016x}", u64::from_be_bytes(head))
     }
 }
 

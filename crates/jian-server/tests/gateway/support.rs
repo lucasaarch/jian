@@ -26,7 +26,6 @@ use jian_remote::worker::{Exit, Timings, Worker, WorkerConfig};
 use jian_server::{
     AppState, ManualClock, MemoryEventBus, MemoryRateLimiter, NoRunQueue, Settings, SlotKeeper,
 };
-use jian_store::embedded::{EmbeddedConfig, EmbeddedPostgres};
 use jian_store::{Database, DatabaseSource, DatabaseUrl, SlotOptions, TenantCtx, TenantId};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
@@ -52,13 +51,12 @@ pub struct Gateway {
     stop: CancellationToken,
     server: JoinHandle<()>,
     keeper: Option<SlotKeeper>,
-    /// Only the gateway that started the database has it to stop.
-    postgres: Option<EmbeddedPostgres>,
-    _dir: Option<tempfile::TempDir>,
+    /// Only the gateway that made the database has it to delete.
+    home: Option<jian_testkit::TestDatabase>,
 }
 
 impl Gateway {
-    /// A gateway on a database of its own, with the default lease timing: the one instance, with
+    /// A gateway on a database of its own (a copy in the run's shared server), with the default lease timing: the one instance, with
     /// every slot.
     pub async fn start(settings: Settings) -> Self {
         Self::start_with(settings, SlotOptions::default()).await
@@ -74,14 +72,9 @@ impl Gateway {
         slots: SlotOptions,
         llm: jian_server::LlmAccess,
     ) -> Self {
-        let dir = tempfile::tempdir_in(env!("CARGO_TARGET_TMPDIR")).unwrap();
-        let postgres = EmbeddedPostgres::start(&EmbeddedConfig {
-            data_dir: dir.path().to_path_buf(),
-            port: 0,
-        })
-        .await
-        .unwrap();
-        let url = postgres.url().clone();
+        let home = jian_testkit::TestDatabase::create(env!("CARGO_TARGET_TMPDIR")).await;
+        let url = home.url.clone();
+        let blobs = home.dir.path().join("blobs");
         let db = Database::open(DatabaseSource::External(url.clone()))
             .await
             .unwrap()
@@ -89,21 +82,9 @@ impl Gateway {
             .with_master_keys(jian_testkit::master_keys())
             // As a server, where every artifact has a link.
             .with_artifact_links(true)
-            .with_blobs(Arc::new(jian_store::DiskBlobs::new(
-                dir.path().join("blobs"),
-            )));
+            .with_blobs(Arc::new(jian_store::DiskBlobs::new(blobs.clone())));
         db.migrate().await.unwrap();
-        let blobs = dir.path().join("blobs");
-        let mut gateway = Self::serve(
-            Arc::new(db),
-            url,
-            settings,
-            slots,
-            Some(postgres),
-            Some(dir),
-            llm,
-        )
-        .await;
+        let mut gateway = Self::serve(Arc::new(db), url, settings, slots, Some(home), llm).await;
         gateway.blobs = blobs;
         gateway
     }
@@ -122,7 +103,6 @@ impl Gateway {
             settings,
             slots,
             None,
-            None,
             no_network(),
         )
         .await;
@@ -135,8 +115,7 @@ impl Gateway {
         url: DatabaseUrl,
         settings: Settings,
         slots: SlotOptions,
-        postgres: Option<EmbeddedPostgres>,
-        dir: Option<tempfile::TempDir>,
+        home: Option<jian_testkit::TestDatabase>,
         llm: jian_server::LlmAccess,
     ) -> Self {
         let keeper = SlotKeeper::start(db.clone(), slots).await.unwrap();
@@ -175,8 +154,7 @@ impl Gateway {
             stop,
             server,
             keeper: Some(keeper),
-            postgres,
-            _dir: dir,
+            home,
         }
     }
 
@@ -259,8 +237,8 @@ impl Gateway {
             }
             tokio::time::sleep(Duration::from_millis(50)).await;
         }
-        if let Some(postgres) = self.postgres {
-            postgres.stop().await.unwrap();
+        if let Some(home) = self.home {
+            home.remove().await;
         }
     }
 }
