@@ -250,7 +250,9 @@ async fn a_chat_is_answered_in_the_thread_with_the_tools_and_the_instructions_in
             "skill",
             "set_objective",
             "complete_objective",
-            "block_objective"
+            "block_objective",
+            "spawn_subagent",
+            "stop_subagent"
         ]
     );
     assert!(

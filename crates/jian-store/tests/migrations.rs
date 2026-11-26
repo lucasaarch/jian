@@ -309,7 +309,7 @@ async fn the_embedded_migrations_apply_to_the_platform_and_to_each_tenant() {
         )
         .await,
         [
-            "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13"
+            "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14"
         ]
     );
     // After a restart the tenant is migrated again with nothing to do.

@@ -31,12 +31,14 @@ use jian_llm::{Event, Message as LlmMessage, Params, Part, Provider, Request, Ro
 use jian_skills::{Catalog, RunSkills};
 use jian_store::{
     Agent, Approval, ApprovalState, Database, HistoryRow, Message, NewJob, Objective,
-    ObjectiveState, ProjectContext, Run, RunOrigin, RunState, StoreError, TenantCtx, TokenCounts,
+    ObjectiveState, ProjectContext, Run, RunOrigin, RunState, StoreError, Subagent, TenantCtx,
+    TokenCounts,
 };
 use serde_json::json;
 
 use crate::context::{COMPACT_AT_PERCENT, StoreHistory, build_context};
 use crate::objective_tools::is_objective_tool;
+use crate::subagent_tools::{SPAWN, queue_resume};
 use crate::tool::{MachineSlot, ToolEnv, Tools};
 
 /// The most tool calls one model step may make. More are dropped and the model is told.
@@ -101,6 +103,8 @@ pub enum RunEvent {
     State(RunState),
     /// The run changed the thread's objective: its state now.
     Objective(Objective),
+    /// The run started a subagent: its state now.
+    Subagent(Subagent),
 }
 
 /// Whoever listens to a run. It must not fail the run: a listener that cannot deliver drops
@@ -264,6 +268,9 @@ enum Exec {
     Result(String, bool),
     /// A person has to answer first.
     Wait(Approval),
+    /// The call cannot answer yet and nobody has to be asked: the run parks on it until the job
+    /// that goes on (queued by whatever ends the wait) finds it can.
+    Park,
 }
 
 impl Runner<'_> {
@@ -486,7 +493,11 @@ impl Runner<'_> {
             } else {
                 match self.execute(run, &call, skills).await? {
                     Exec::Result(text, is_error) => (text, is_error),
-                    Exec::Wait(asked) => return self.pause(run, step, asked).await,
+                    Exec::Wait(asked) => {
+                        let call_id = asked.call_id.clone();
+                        return self.pause(run, step, &call_id, Some(asked)).await;
+                    }
+                    Exec::Park => return self.pause(run, step, &call.id, None).await,
                 }
             };
             let (text, _) = cap_tool_result(&text);
@@ -520,17 +531,21 @@ impl Runner<'_> {
         })
     }
 
-    /// Parks the run on `asked`: writes down where it stands, tells the thread, and lets the
-    /// worker go. The answer, or the end of the time to answer, queues the job that goes on.
+    /// Parks the run on the call `call_id`: writes down where it stands, tells the thread, and
+    /// lets the worker go. For an approval (`asked`) the answer, or the end of the time to
+    /// answer, queues the job that goes on. Otherwise the call waits on a subagent: its report
+    /// queues that job, unless it already ended before the run was parked, which is checked
+    /// here, after parking, so one side or the other always sees the other.
     async fn pause(
         &self,
         run: &Run,
         step: &Step,
-        asked: Approval,
+        call_id: &str,
+        asked: Option<Approval>,
     ) -> Result<Option<Outcome>, StoreError> {
         if !self
             .db
-            .pause_run(self.ctx, &run.id, &step.to_resume(&asked.call_id))
+            .pause_run(self.ctx, &run.id, &step.to_resume(call_id))
             .await?
         {
             // Not running any more: a stop got there first.
@@ -539,7 +554,14 @@ impl Runner<'_> {
         self.events
             .emit(RunEvent::State(RunState::WaitingApproval))
             .await;
-        self.events.emit(RunEvent::Approval(asked)).await;
+        match asked {
+            Some(asked) => self.events.emit(RunEvent::Approval(asked)).await,
+            None => {
+                if self.db.subagent_ended(self.ctx, &run.id, call_id).await? {
+                    queue_resume(self.db, self.ctx, &run.id, call_id, "child").await?;
+                }
+            }
+        }
         Ok(Some(Outcome::Waiting))
     }
 
@@ -689,16 +711,26 @@ impl Runner<'_> {
             ctx: self.ctx,
             agent: &run.agent,
             thread: &run.thread,
+            run: &run.id,
+            call_id: &call.id,
             skills,
             machine: self.machine,
             now_ms: (self.now)(),
         };
-        let result = tool.call(&call.input, &env).await;
+        let result = tool.settle(&call.input, &env).await;
         self.db.record_run_call(self.ctx, &run.id).await?;
         if is_objective_tool(tool.name())
             && let Some(objective) = self.db.objective(self.ctx, &run.thread, &run.agent).await?
         {
             self.events.emit(RunEvent::Objective(objective)).await;
+        }
+        if tool.name() == SPAWN
+            && let Some(sub) = self
+                .db
+                .subagent_by_call(self.ctx, &run.id, &call.id)
+                .await?
+        {
+            self.events.emit(RunEvent::Subagent(sub)).await;
         }
         if tool.needs_machine()
             && let Some(ms) = self.machine.machine_ms()
@@ -706,7 +738,8 @@ impl Runner<'_> {
             self.db.record_run_machine(self.ctx, &run.id, ms).await?;
         }
         Ok(match result {
-            Ok(text) => Exec::Result(text, false),
+            Ok(Some(text)) => Exec::Result(text, false),
+            Ok(None) => Exec::Park,
             Err(text) => Exec::Result(text, true),
         })
     }

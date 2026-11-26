@@ -76,6 +76,11 @@ pub struct ToolEnv<'a> {
     pub agent: &'a AgentId,
     /// The thread it runs in.
     pub thread: &'a ThreadId,
+    /// The run, which a tool that makes other work for it keys that work by.
+    pub run: &'a str,
+    /// The model's id for the call being run: unchanged when the call is run again after the
+    /// run waited on it.
+    pub call_id: &'a str,
     /// The skills the run offers.
     pub skills: &'a RunSkills,
     /// The run's machine.
@@ -107,6 +112,18 @@ pub trait Tool: Send + Sync {
         input: &'a Value,
         env: &'a ToolEnv<'a>,
     ) -> BoxFuture<'a, Result<String, String>>;
+
+    /// What the loop runs: the call, or `Ok(None)` when it cannot answer yet and the run must
+    /// park on it until something outside ends the wait (a subagent's report). The loop runs the
+    /// call again, with the same [`ToolEnv::call_id`], when it goes on, so a tool that can wait
+    /// must find what it started the first time. Most tools just call.
+    fn settle<'a>(
+        &'a self,
+        input: &'a Value,
+        env: &'a ToolEnv<'a>,
+    ) -> BoxFuture<'a, Result<Option<String>, String>> {
+        Box::pin(async move { self.call(input, env).await.map(Some) })
+    }
 }
 
 /// The tools a run has.

@@ -22,6 +22,7 @@ use crate::AppState;
 use crate::auth::Principal;
 use crate::http::{Refusal, forbidden, not_found, refuse, tenant_ctx};
 use crate::run_job::RUN_KIND;
+use crate::subagents::report_back;
 use crate::workspace::{announce, failure, now_ms, viewer};
 
 /// How many runs the list shows.
@@ -231,6 +232,10 @@ pub(crate) async fn stop(
         .map_err(|e| failure(&e))?
         .ok_or_else(|| not_found("run"))?;
     announce_run(&app, &ctx, &run).await;
+    if run.state.is_terminal() {
+        // A subagent stopped before a worker held it: its parent is told here.
+        report_back(&app.db, app.events.as_ref(), &ctx, &run).await;
+    }
     let view = current_view(&app.db, &ctx, &run)
         .await
         .map_err(|e| failure(&e))?;

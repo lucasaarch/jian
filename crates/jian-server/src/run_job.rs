@@ -14,6 +14,9 @@
 //! the loop when it asked). Whichever comes first takes the run back to `running` and goes on
 //! from the call; the other finds the run no longer waiting on that call and does nothing.
 //!
+//! A run that waits for a subagent's report is parked the same way: the report queues the job
+//! with the call's id ([`crate::subagents`]), and the call, run again, answers with it.
+//!
 //! A run that ends `done` while its thread has an open objective queues the next one
 //! ([`crate::auto_continue`]); one that ends `failed` or `stopped` does not.
 
@@ -26,8 +29,8 @@ use jian_protocol::client::DeltaPayload;
 use jian_protocol::runs::RunDelta;
 pub use jian_runtime::RUN_KIND;
 use jian_runtime::{
-    MachineSlot, ModelRef, Outcome, RunConfig, RunEvent, RunEvents, Runner, standard_tools,
-    system_now_ms,
+    MAX_SUBAGENT_DEPTH, MachineSlot, ModelRef, OBJECTIVE_TOOLS, Outcome, RunConfig, RunEvent,
+    RunEvents, Runner, SUBAGENT_TOOLS, standard_tools, system_now_ms,
 };
 use jian_skills::Catalog;
 use jian_store::{
@@ -39,6 +42,7 @@ use crate::events::EventBus;
 use crate::guard::catching;
 use crate::objectives::objective_view;
 use crate::runs::current_view;
+use crate::subagents::{report_back, subagent_view};
 use crate::workspace::{announce_with, message_view};
 use crate::{JobContext, JobError, JobHandler, Model, ModelSource};
 
@@ -90,7 +94,7 @@ impl AgentRunner {
             run: run.id.clone(),
         };
         let machine = MachineSlot::new(self.executor.clone(), scope);
-        let tools = standard_tools();
+        let tools = tools_for(db, ctx, run).await;
         let listener = Listener {
             db,
             ctx,
@@ -207,9 +211,34 @@ impl RunEvents for Listener<'_> {
                     let view = objective_view(&objective);
                     self.send(DeltaPayload::ObjectiveUpdated(view)).await;
                 }
+                RunEvent::Subagent(sub) => {
+                    self.send(DeltaPayload::SubagentUpdated(subagent_view(&sub)))
+                        .await;
+                }
             }
         })
     }
+}
+
+/// The tools a run has. A subagent's thread keeps no objective of its own (it works for another
+/// run's), and one at the deepest level hands nothing on. A depth that cannot be read is taken as
+/// the deepest: the run gets less, never more.
+async fn tools_for(db: &Database, ctx: &TenantCtx, run: &Run) -> jian_runtime::Tools {
+    let depth = db
+        .subagent_depth(ctx, &run.thread)
+        .await
+        .unwrap_or_else(|error| {
+            tracing::warn!(%error, "could not read a thread's depth; giving the run fewer tools");
+            MAX_SUBAGENT_DEPTH
+        });
+    let mut tools = standard_tools();
+    if depth > 0 {
+        tools = tools.without(&OBJECTIVE_TOOLS);
+    }
+    if depth >= MAX_SUBAGENT_DEPTH {
+        tools = tools.without(&SUBAGENT_TOOLS);
+    }
+    tools
 }
 
 async fn end(db: &Database, ctx: &TenantCtx, run: &Run, state: RunState, why: Option<&str>) {
@@ -229,6 +258,8 @@ impl AgentRunner {
             return Err(JobError::permanent("no such run"));
         };
         if run.state.is_terminal() {
+            // A subagent that was stopped before a worker took it has no one to report it.
+            report_back(&db, self.events.as_ref(), &tenant, &run).await;
             return Ok(());
         }
         if let Some(call_id) = job.payload["callId"].as_str() {
@@ -252,6 +283,7 @@ impl AgentRunner {
             // Queued no more and not finished: a worker died with it in hand.
             end(&db, &tenant, &run, RunState::Failed, Some("interrupted")).await;
             listener.state().await;
+            report_back(&db, self.events.as_ref(), &tenant, &run).await;
             return Ok(());
         }
         let lease = match lease(&db, &tenant).await {
@@ -279,8 +311,17 @@ impl AgentRunner {
         if run.state != RunState::WaitingApproval {
             return Ok(());
         }
-        let Some(approval) = db.approval(tenant, &run.id, call_id).await.map_err(store)? else {
-            return Ok(());
+        let approval = db.approval(tenant, &run.id, call_id).await.map_err(store)?;
+        let Some(approval) = approval else {
+            // Not a call that waited for a person: it may have waited for a subagent's report.
+            if !db
+                .subagent_ended(tenant, &run.id, call_id)
+                .await
+                .map_err(store)?
+            {
+                return Ok(());
+            }
+            return self.resume(db, tenant, &run.id, call_id).await;
         };
         if approval.state == ApprovalState::Pending {
             // Only the end of the time to answer finds it so.
@@ -292,19 +333,27 @@ impl AgentRunner {
                 return Err(JobError::retry("the time to answer has not passed"));
             }
         }
+        self.resume(db, tenant, &run.id, call_id).await
+    }
+
+    /// Takes the parked run back and drives it from `call_id`.
+    async fn resume(
+        &self,
+        db: &Database,
+        tenant: &TenantCtx,
+        run: &str,
+        call_id: &str,
+    ) -> Result<(), JobError> {
+        let store = |e: StoreError| JobError::retry(e.to_string());
         // The place first: a run that cannot be given one stays parked, and this job tries again.
         let lease = lease(db, tenant).await?;
-        if !db
-            .resume_run(tenant, &run.id, call_id)
-            .await
-            .map_err(store)?
-        {
+        if !db.resume_run(tenant, run, call_id).await.map_err(store)? {
             if let Err(error) = db.release_run_lease(tenant, &lease).await {
                 tracing::warn!(%error, "could not give a run lease back");
             }
             return Ok(());
         }
-        let Some(run) = db.run_by_id(tenant, &run.id).await.map_err(store)? else {
+        let Some(run) = db.run_by_id(tenant, run).await.map_err(store)? else {
             return Ok(());
         };
         self.drive(db, tenant, &run, &lease).await;
@@ -341,6 +390,9 @@ impl AgentRunner {
             Finish::Stopped => end(db, tenant, run, RunState::Stopped, None).await,
         }
         listener.state().await;
+        if !matches!(finish, Finish::Waiting) {
+            report_back(db, self.events.as_ref(), tenant, run).await;
+        }
         if matches!(finish, Finish::Done) {
             after_run(db, self.events.as_ref(), tenant, run).await;
         }

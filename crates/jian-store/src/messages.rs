@@ -512,6 +512,27 @@ impl Database {
         .await
     }
 
+    /// Writes a message as Jian itself, which no person or agent wrote: a subagent's report in
+    /// the thread that asked for it. The same `client_key` twice is one message.
+    pub async fn post_system_message(
+        &self,
+        ctx: &TenantCtx,
+        thread: &ThreadId,
+        parts: MessageParts,
+        client_key: Option<String>,
+    ) -> Result<Option<Posted>, StoreError> {
+        let key = clean_key(client_key)?;
+        self.write(
+            ctx,
+            &Author::System,
+            thread,
+            parts.as_slice(),
+            None,
+            key.as_deref(),
+        )
+        .await
+    }
+
     async fn write(
         &self,
         ctx: &TenantCtx,

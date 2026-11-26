@@ -20,4 +20,5 @@ pub mod quotas;
 pub mod runs;
 pub mod schedules;
 pub mod skills;
+pub mod subagents;
 pub mod threads;

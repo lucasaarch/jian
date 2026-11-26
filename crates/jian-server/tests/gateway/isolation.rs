@@ -192,6 +192,11 @@ const ROUTE_TESTS: &[(&str, &str)] = &[
         "DELETE /v1/threads/{id}/agents/{agent_id}/objective",
         OBJECTIVE_TEST,
     ),
+    ("GET /v1/threads/{id}/subagents", SUBAGENTS_TEST),
+    (
+        "POST /v1/threads/{id}/subagents/{child_id}/stop",
+        SUBAGENTS_TEST,
+    ),
     (
         "GET /v1/machines/connect",
         "a_worker_of_one_tenant_neither_gets_nor_answers_the_others_tasks",
@@ -231,6 +236,8 @@ const RUNS_TEST: &str =
     "a_thread_has_one_active_run_per_agent_and_only_its_members_start_stop_and_answer_it";
 /// The test that shows tenant B and a member outside the thread reach no objective of tenant A.
 const OBJECTIVE_TEST: &str = "an_objective_is_seen_by_its_thread_and_set_only_by_its_members";
+/// The test that shows tenant B and a member outside the thread reach no subagent of tenant A.
+const SUBAGENTS_TEST: &str = "a_threads_subagents_are_seen_by_it_and_stopped_only_by_its_members";
 const THREADS_TEST: &str = "agents_threads_and_messages_of_the_other_tenant_are_out_of_reach";
 
 /// The test that shows tenant B reaches no model provider account of tenant A, and no key.

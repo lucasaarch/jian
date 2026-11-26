@@ -319,3 +319,102 @@ async fn an_objective_is_seen_by_its_thread_and_set_only_by_its_members() {
     assert_eq!(call(&gateway, "DELETE", &path, token, None).await.0, 409);
     gateway.stop().await;
 }
+
+#[tokio::test]
+async fn a_threads_subagents_are_seen_by_it_and_stopped_only_by_its_members() {
+    let (gateway, tenants) = start(open_settings()).await;
+    let a = &tenants.a;
+    let token = a.admin_session.as_str();
+    let agent = made(
+        &gateway,
+        token,
+        "/v1/agents",
+        json!({ "name": "pear", "visibility": "workspace" }),
+    )
+    .await;
+    let mut threads = Vec::new();
+    for _ in 0..2 {
+        let thread = made(
+            &gateway,
+            token,
+            "/v1/threads",
+            json!({ "kind": "dm", "agents": [id(&agent)] }),
+        )
+        .await;
+        made(
+            &gateway,
+            token,
+            &format!("/v1/threads/{}/messages", id(&thread)),
+            json!({ "parts": [{ "type": "text", "text": "hello" }] }),
+        )
+        .await;
+        threads.push(id(&thread));
+    }
+    let (parent, other) = (&threads[0], &threads[1]);
+    let runs = format!("/v1/threads/{parent}/runs");
+    let (status, run) = call(
+        &gateway,
+        "POST",
+        &runs,
+        token,
+        Some(json!({ "agentId": id(&agent) })),
+    )
+    .await;
+    assert_eq!(status, 202, "{run}");
+    let spawned = gateway
+        .db
+        .spawn_subagent(
+            &a.ctx,
+            &jian_store::NewSubagent {
+                parent_thread: &jian_store::ThreadId::new(parent.as_str()),
+                parent_run: &id(&run),
+                parent_call: "c1",
+                agent: &jian_store::AgentId::new(id(&agent)),
+                brief: "look into it",
+                wait: false,
+            },
+            jian_store::SubagentLimits {
+                max_depth: 2,
+                max_running: 4,
+            },
+        )
+        .await
+        .unwrap();
+    let jian_store::Spawn::Made(sub) = spawned else {
+        panic!("not made: {spawned:?}");
+    };
+    let list = format!("/v1/threads/{parent}/subagents");
+    let stop = format!("/v1/threads/{parent}/subagents/{}/stop", sub.child_thread);
+
+    // The thread lists it; another thread of the same member does not.
+    let (status, listed) = call(&gateway, "GET", &list, token, None).await;
+    assert_eq!(status, 200, "{listed}");
+    assert_eq!(listed["items"].as_array().unwrap().len(), 1);
+    assert_eq!(listed["items"][0]["state"], "running");
+    assert_eq!(listed["items"][0]["brief"], "look into it");
+    let other_list = format!("/v1/threads/{other}/subagents");
+    let (_, none) = call(&gateway, "GET", &other_list, token, None).await;
+    assert!(none["items"].as_array().unwrap().is_empty());
+
+    // The member outside the thread and the other tenant meet a 404; so does a subagent that is
+    // not this thread's.
+    for outsider in [a.peer_session.as_str(), tenants.b.admin_session.as_str()] {
+        assert_eq!(call(&gateway, "GET", &list, outsider, None).await.0, 404);
+        assert_eq!(call(&gateway, "POST", &stop, outsider, None).await.0, 404);
+    }
+    let wrong = format!("/v1/threads/{other}/subagents/{}/stop", sub.child_thread);
+    assert_eq!(call(&gateway, "POST", &wrong, token, None).await.0, 404);
+    let (_, still) = call(&gateway, "GET", &list, token, None).await;
+    assert_eq!(still["items"][0]["state"], "running");
+
+    // A member stops it; nobody holds its run, so the route tells the thread it is stopped.
+    let (status, stopped) = call(&gateway, "POST", &stop, token, None).await;
+    assert_eq!(status, 200, "{stopped}");
+    assert_eq!(stopped["state"], "stopped");
+    assert_eq!(stopped["report"], "the subagent was stopped");
+    let messages = format!("/v1/threads/{parent}/messages");
+    let (_, messages) = call(&gateway, "GET", &messages, token, None).await;
+    assert!(messages.to_string().contains("was stopped"), "{messages}");
+    assert_eq!(call(&gateway, "POST", &stop, token, None).await.0, 409);
+    gateway.stop().await;
+}

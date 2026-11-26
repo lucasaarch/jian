@@ -91,6 +91,7 @@ mod schedules;
 mod sign_in;
 mod skills;
 mod slots;
+mod subagents;
 mod summary;
 mod thread_messages;
 mod threads;
@@ -228,6 +229,8 @@ pub const ROUTES: &[&str] = &[
     "GET /v1/threads/{id}/agents/{agent_id}/objective (a member who sees the thread)",
     "PUT /v1/threads/{id}/agents/{agent_id}/objective (a member of the thread)",
     "DELETE /v1/threads/{id}/agents/{agent_id}/objective (a member of the thread)",
+    "GET /v1/threads/{id}/subagents (a member who sees it)",
+    "POST /v1/threads/{id}/subagents/{child_id}/stop (a member of the thread)",
     "POST /v1/threads/{id}/messages (a member in it)",
     "PATCH /v1/threads/{id}/messages/{message_id} (its author)",
     "DELETE /v1/threads/{id}/messages/{message_id} (its author)",
@@ -497,6 +500,11 @@ pub fn router_with(state: AppState, extra: Router<AppState>) -> Router {
             get(objectives::get)
                 .put(objectives::put)
                 .delete(objectives::cancel),
+        )
+        .route("/v1/threads/{id}/subagents", get(subagents::list))
+        .route(
+            "/v1/threads/{id}/subagents/{child_id}/stop",
+            post(subagents::stop),
         )
         .route(
             "/v1/threads/{id}/participants",

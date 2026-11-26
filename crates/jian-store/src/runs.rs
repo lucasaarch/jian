@@ -24,7 +24,7 @@ pub enum RunState {
     Queued,
     /// A worker is on it.
     Running,
-    /// Paused on a tool call that a person must allow.
+    /// Paused on a tool call that a person must allow, or on a subagent's report.
     WaitingApproval,
     /// Ended with an answer.
     Done,

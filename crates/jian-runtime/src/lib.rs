@@ -13,6 +13,7 @@ mod compact;
 mod context;
 mod objective_tools;
 mod run;
+mod subagent_tools;
 mod tool;
 mod tools;
 
@@ -25,5 +26,8 @@ pub use context::{
 };
 pub use objective_tools::{OBJECTIVE_TOOLS, is_objective_tool};
 pub use run::{ModelRef, Outcome, RUN_KIND, RunConfig, RunEvent, RunEvents, Runner, system_now_ms};
+pub use subagent_tools::{
+    MAX_RUNNING_SUBAGENTS, MAX_SUBAGENT_DEPTH, SUBAGENT_TOOLS, queue_resume, queue_run,
+};
 pub use tool::{MachineSlot, Tool, ToolEnv, Tools};
 pub use tools::standard_tools;

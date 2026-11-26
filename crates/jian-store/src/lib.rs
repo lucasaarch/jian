@@ -163,6 +163,7 @@ pub mod secrets;
 mod sessions;
 mod skills;
 mod slots;
+mod subagents;
 mod subjects;
 mod tenant;
 mod tenants;
@@ -249,6 +250,7 @@ pub use skills::{
 pub use slots::{
     HeldSlot, InstanceId, SLOT_COUNT, SlotClaim, SlotId, SlotOptions, SlotRow, slot_of,
 };
+pub use subagents::{NewSubagent, Spawn, Subagent, SubagentLimits, SubagentState};
 pub use tenant::{TenantCtx, TenantId};
 pub use tenants::TenantStatus;
 pub use threads::{
