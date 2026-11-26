@@ -240,3 +240,82 @@ async fn an_agents_model_is_out_of_reach_of_another_tenant() {
     assert_eq!((status, cleared), (200, clear));
     gateway.stop().await;
 }
+
+#[tokio::test]
+async fn an_objective_is_seen_by_its_thread_and_set_only_by_its_members() {
+    let (gateway, tenants) = start(open_settings()).await;
+    let a = &tenants.a;
+    let token = a.admin_session.as_str();
+    let agent = made(
+        &gateway,
+        token,
+        "/v1/agents",
+        json!({ "name": "pear", "visibility": "workspace" }),
+    )
+    .await;
+    let thread = made(
+        &gateway,
+        token,
+        "/v1/threads",
+        json!({ "kind": "dm", "agents": [id(&agent)] }),
+    )
+    .await;
+    let path = format!(
+        "/v1/threads/{}/agents/{}/objective",
+        id(&thread),
+        id(&agent)
+    );
+    let set = json!({ "text": "ship the report" });
+
+    // None yet; an empty one and an agent that is not in the thread are refused.
+    assert_eq!(call(&gateway, "GET", &path, token, None).await.0, 404);
+    let empty = json!({ "text": "  " });
+    assert_eq!(
+        call(&gateway, "PUT", &path, token, Some(empty)).await.0,
+        400
+    );
+    let stray = format!("/v1/threads/{}/agents/agt_none/objective", id(&thread));
+    let got = call(&gateway, "PUT", &stray, token, Some(set.clone())).await;
+    assert_eq!(got.0, 400);
+
+    // Setting it opens it and queues the run that works on it.
+    let (status, objective) = call(&gateway, "PUT", &path, token, Some(set.clone())).await;
+    assert_eq!(status, 200, "{objective}");
+    assert_eq!(objective["state"], "open");
+    assert_eq!(objective["text"], "ship the report");
+    let (_, runs) = call(
+        &gateway,
+        "GET",
+        &format!("/v1/threads/{}/runs", id(&thread)),
+        token,
+        None,
+    )
+    .await;
+    assert_eq!(runs["items"].as_array().unwrap().len(), 1);
+    assert_eq!(runs["items"][0]["state"], "queued");
+    let (status, read) = call(&gateway, "GET", &path, token, None).await;
+    assert_eq!(
+        (status, read["text"].as_str()),
+        (200, Some("ship the report"))
+    );
+
+    // The member outside the thread and the other tenant meet a 404 on every route.
+    for outsider in [a.peer_session.as_str(), tenants.b.admin_session.as_str()] {
+        for method in ["GET", "PUT", "DELETE"] {
+            let body = (method == "PUT").then(|| set.clone());
+            let got = call(&gateway, method, &path, outsider, body).await;
+            assert_eq!(got.0, 404, "{method}: {}", got.1);
+        }
+    }
+    let (_, read) = call(&gateway, "GET", &path, token, None).await;
+    assert_eq!(read["state"], "open");
+
+    // Dropping it works once.
+    let (status, dropped) = call(&gateway, "DELETE", &path, token, None).await;
+    assert_eq!(
+        (status, dropped["state"].as_str()),
+        (200, Some("cancelled"))
+    );
+    assert_eq!(call(&gateway, "DELETE", &path, token, None).await.0, 409);
+    gateway.stop().await;
+}

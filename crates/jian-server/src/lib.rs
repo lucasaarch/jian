@@ -59,6 +59,7 @@ mod accounts;
 mod agent_model;
 mod agents;
 mod auth;
+mod auto_continue;
 mod client_ws;
 mod codex_login;
 mod compact_job;
@@ -75,6 +76,7 @@ mod mail;
 mod mail_settings;
 mod members;
 mod memories;
+mod objectives;
 mod project_events;
 mod project_files;
 mod project_repos;
@@ -111,6 +113,7 @@ use tokio_util::sync::CancellationToken;
 
 pub use account_models::AccountModels;
 pub use auth::{AuthRejection, Principal};
+pub use auto_continue::MAX_IDLE_CONTINUATIONS;
 pub use compact_job::{Model, ModelSource, ThreadCompactor};
 pub use events::{BUFFER_DELTAS, EventBus, MemoryEventBus, Scope, Subscription};
 pub use hub::{DispatchError, HubCommand, MachineHub};
@@ -222,6 +225,9 @@ pub const ROUTES: &[&str] = &[
     "POST /v1/threads/{id}/runs (a member of the thread)",
     "POST /v1/threads/{id}/runs/{run_id}/stop (a member of the thread)",
     "POST /v1/threads/{id}/runs/{run_id}/approval (a member of the thread)",
+    "GET /v1/threads/{id}/agents/{agent_id}/objective (a member who sees the thread)",
+    "PUT /v1/threads/{id}/agents/{agent_id}/objective (a member of the thread)",
+    "DELETE /v1/threads/{id}/agents/{agent_id}/objective (a member of the thread)",
     "POST /v1/threads/{id}/messages (a member in it)",
     "PATCH /v1/threads/{id}/messages/{message_id} (its author)",
     "DELETE /v1/threads/{id}/messages/{message_id} (its author)",
@@ -485,6 +491,12 @@ pub fn router_with(state: AppState, extra: Router<AppState>) -> Router {
         .route(
             "/v1/threads/{id}/runs/{run_id}/approval",
             post(runs::approval),
+        )
+        .route(
+            "/v1/threads/{id}/agents/{agent_id}/objective",
+            get(objectives::get)
+                .put(objectives::put)
+                .delete(objectives::cancel),
         )
         .route(
             "/v1/threads/{id}/participants",

@@ -30,12 +30,13 @@ use jian_llm::ToolCall;
 use jian_llm::{Event, Message as LlmMessage, Params, Part, Provider, Request, Role, TextBlock};
 use jian_skills::{Catalog, RunSkills};
 use jian_store::{
-    Agent, Approval, ApprovalState, Database, HistoryRow, Message, NewJob, ProjectContext, Run,
-    RunState, StoreError, TenantCtx, TokenCounts,
+    Agent, Approval, ApprovalState, Database, HistoryRow, Message, NewJob, Objective,
+    ObjectiveState, ProjectContext, Run, RunOrigin, RunState, StoreError, TenantCtx, TokenCounts,
 };
 use serde_json::json;
 
 use crate::context::{COMPACT_AT_PERCENT, StoreHistory, build_context};
+use crate::objective_tools::is_objective_tool;
 use crate::tool::{MachineSlot, ToolEnv, Tools};
 
 /// The most tool calls one model step may make. More are dropped and the model is told.
@@ -98,6 +99,8 @@ pub enum RunEvent {
     Approval(Approval),
     /// The run moved between running and waiting.
     State(RunState),
+    /// The run changed the thread's objective: its state now.
+    Objective(Objective),
 }
 
 /// Whoever listens to a run. It must not fail the run: a listener that cannot deliver drops
@@ -300,11 +303,21 @@ impl Runner<'_> {
             budget,
         )
         .await?;
+        // Only a run that has the tools to end an objective is told about it.
+        let objective = if self.tools.get("complete_objective").is_some() {
+            self.db
+                .objective(self.ctx, &run.thread, &run.agent)
+                .await?
+                .filter(|o| o.state == ObjectiveState::Open)
+        } else {
+            None
+        };
         let system = system_blocks(
             &agent,
             project.as_ref(),
             &skills,
             context.summary.as_deref(),
+            objective.as_ref(),
         );
         let mut seen = context
             .messages
@@ -321,6 +334,20 @@ impl Runner<'_> {
         let mut conversation: Vec<LlmMessage> = Vec::new();
         for row in &context.messages {
             push_row(&mut conversation, row, me);
+        }
+        if run.origin == RunOrigin::Continue
+            && let Some(objective) = &objective
+        {
+            // The thread ends on the agent's own words and nobody has written since: say why it
+            // is called again. This line is not stored in the thread.
+            push(
+                &mut conversation,
+                Role::User,
+                vec![Part::Text(TextBlock::new(format!(
+                    "Keep working on your objective: {}",
+                    objective.text
+                )))],
+            );
         }
         if let Some(step) = &pending {
             push(&mut conversation, Role::Assistant, step.assistant_parts());
@@ -667,6 +694,12 @@ impl Runner<'_> {
             now_ms: (self.now)(),
         };
         let result = tool.call(&call.input, &env).await;
+        self.db.record_run_call(self.ctx, &run.id).await?;
+        if is_objective_tool(tool.name())
+            && let Some(objective) = self.db.objective(self.ctx, &run.thread, &run.agent).await?
+        {
+            self.events.emit(RunEvent::Objective(objective)).await;
+        }
         if tool.needs_machine()
             && let Some(ms) = self.machine.machine_ms()
         {
@@ -747,6 +780,7 @@ fn system_blocks(
     project: Option<&ProjectContext>,
     skills: &RunSkills,
     summary: Option<&str>,
+    objective: Option<&Objective>,
 ) -> Vec<TextBlock> {
     let mut blocks = Vec::new();
     if !agent.instructions.trim().is_empty() {
@@ -768,6 +802,14 @@ fn system_blocks(
     if let Some(summary) = summary {
         blocks.push(TextBlock::new(format!(
             "Summary of the conversation before the messages below:\n{summary}"
+        )));
+    }
+    if let Some(objective) = objective {
+        blocks.push(TextBlock::new(format!(
+            "Your objective in this conversation: {}\nKeep working until it is met, then call \
+             `complete_objective`. If you cannot go on without a person, call \
+             `block_objective` and say what you wait for.",
+            objective.text
         )));
     }
     blocks

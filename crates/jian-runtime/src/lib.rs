@@ -11,6 +11,7 @@
 
 mod compact;
 mod context;
+mod objective_tools;
 mod run;
 mod tool;
 mod tools;
@@ -22,6 +23,7 @@ pub use context::{
     BYTES_PER_TOKEN, COMPACT_AT_PERCENT, Context, History, PAGE, StoreHistory, build_context,
     estimate_tokens, should_compact,
 };
+pub use objective_tools::{OBJECTIVE_TOOLS, is_objective_tool};
 pub use run::{ModelRef, Outcome, RUN_KIND, RunConfig, RunEvent, RunEvents, Runner, system_now_ms};
 pub use tool::{MachineSlot, Tool, ToolEnv, Tools};
 pub use tools::standard_tools;

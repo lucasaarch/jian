@@ -127,6 +127,20 @@ impl Tools {
         self
     }
 
+    /// Adds several tools.
+    #[must_use]
+    pub fn with_all(mut self, tools: impl IntoIterator<Item = Arc<dyn Tool>>) -> Self {
+        self.0.extend(tools);
+        self
+    }
+
+    /// The same set without the tools called `names`.
+    #[must_use]
+    pub fn without(mut self, names: &[&str]) -> Self {
+        self.0.retain(|tool| !names.contains(&tool.name()));
+        self
+    }
+
     /// One tool by name.
     #[must_use]
     pub fn get(&self, name: &str) -> Option<&Arc<dyn Tool>> {

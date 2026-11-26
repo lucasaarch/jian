@@ -13,6 +13,9 @@
 //! `callId` in the payload: the answer (the route) and the end of the time to answer (queued by
 //! the loop when it asked). Whichever comes first takes the run back to `running` and goes on
 //! from the call; the other finds the run no longer waiting on that call and does nothing.
+//!
+//! A run that ends `done` while its thread has an open objective queues the next one
+//! ([`crate::auto_continue`]); one that ends `failed` or `stopped` does not.
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -27,10 +30,14 @@ use jian_runtime::{
     system_now_ms,
 };
 use jian_skills::Catalog;
-use jian_store::{ApprovalState, Database, Run, RunLease, RunState, StoreError, TenantCtx};
+use jian_store::{
+    ApprovalState, Database, Run, RunLease, RunOrigin, RunState, StoreError, TenantCtx,
+};
 
+use crate::auto_continue::{after_run, still_wanted};
 use crate::events::EventBus;
 use crate::guard::catching;
+use crate::objectives::objective_view;
 use crate::runs::current_view;
 use crate::workspace::{announce_with, message_view};
 use crate::{JobContext, JobError, JobHandler, Model, ModelSource};
@@ -196,6 +203,10 @@ impl RunEvents for Listener<'_> {
                         .await;
                 }
                 RunEvent::Approval(_) | RunEvent::State(_) => self.state().await,
+                RunEvent::Objective(objective) => {
+                    let view = objective_view(&objective);
+                    self.send(DeltaPayload::ObjectiveUpdated(view)).await;
+                }
             }
         })
     }
@@ -229,6 +240,14 @@ impl AgentRunner {
             events: self.events.as_ref(),
             run: &run,
         };
+        if run.origin == RunOrigin::Continue
+            && !still_wanted(&db, &tenant, &run).await.map_err(store)?
+        {
+            // The objective was dropped, blocked or met while the run waited in the queue.
+            end(&db, &tenant, &run, RunState::Stopped, None).await;
+            listener.state().await;
+            return Ok(());
+        }
         if !db.claim_run(&tenant, id).await.map_err(store)? {
             // Queued no more and not finished: a worker died with it in hand.
             end(&db, &tenant, &run, RunState::Failed, Some("interrupted")).await;
@@ -322,6 +341,9 @@ impl AgentRunner {
             Finish::Stopped => end(db, tenant, run, RunState::Stopped, None).await,
         }
         listener.state().await;
+        if matches!(finish, Finish::Done) {
+            after_run(db, self.events.as_ref(), tenant, run).await;
+        }
     }
 }
 

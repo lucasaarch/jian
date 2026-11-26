@@ -8,6 +8,7 @@ use jian_llm::ToolSpec;
 use jian_store::MemoryWrite;
 use serde_json::{Value, json};
 
+use crate::objective_tools::objective_tools;
 use crate::tool::{Tool, ToolEnv, Tools};
 
 /// The longest a shell command may run, in milliseconds, whatever the model asks.
@@ -15,7 +16,8 @@ const SHELL_LIMIT_MS: u64 = 120_000;
 /// What a command gets when the model says nothing.
 const SHELL_DEFAULT_MS: u64 = 30_000;
 
-/// The standard set. `shell` and `write_file` wait for a person; the rest run at once.
+/// The standard set. `shell` and `write_file` wait for a person; the rest run at once. The
+/// objective tools are in it; a run that must not have them drops them with `Tools::without`.
 #[must_use]
 pub fn standard_tools() -> Tools {
     Tools::new()
@@ -24,6 +26,7 @@ pub fn standard_tools() -> Tools {
         .with(Arc::new(WriteFile))
         .with(Arc::new(Remember))
         .with(Arc::new(OpenSkill))
+        .with_all(objective_tools())
 }
 
 fn spec(name: &str, description: &str, schema: Value) -> ToolSpec {

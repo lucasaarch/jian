@@ -146,6 +146,7 @@ mod memories;
 mod memory_links;
 mod messages;
 mod migrate;
+mod objectives;
 #[cfg(unix)]
 mod orphan;
 mod platform;
@@ -213,6 +214,7 @@ pub use messages::{
     NoObserver, Posted, ThreadObserver, Window,
 };
 pub use migrate::{MigrateOptions, MigrationReport, Migrations};
+pub use objectives::{Objective, ObjectiveState};
 pub use project_files::{
     MAX_PROJECT_FILE_BYTES, MAX_PROJECT_FILE_NAME_CHARS, MAX_PROJECT_FILES, ProjectFile,
     ProjectFileId,

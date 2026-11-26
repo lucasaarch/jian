@@ -13,8 +13,8 @@ use jian_core::{
 use jian_exec::{Executor, Scope};
 use jian_llm::Part;
 use jian_runtime::{
-    MachineSlot, ModelRef, Outcome, RunConfig, RunEvent, RunEvents, Runner, standard_tools,
-    system_now_ms,
+    MachineSlot, ModelRef, OBJECTIVE_TOOLS, Outcome, RunConfig, RunEvent, RunEvents, Runner, Tools,
+    standard_tools, system_now_ms,
 };
 use jian_skills::Catalog;
 use jian_store::{
@@ -144,6 +144,7 @@ struct Parts<'a> {
     executor: Arc<FakeExecutor>,
     events: Recorder,
     config: RunConfig,
+    tools: Tools,
 }
 
 impl<'a> Parts<'a> {
@@ -154,6 +155,7 @@ impl<'a> Parts<'a> {
             executor: FakeExecutor::new(machine),
             events: Recorder::default(),
             config: RunConfig::default(),
+            tools: standard_tools(),
         }
     }
 
@@ -175,7 +177,7 @@ impl<'a> Parts<'a> {
 
     async fn run_from(&self, slot: &MachineSlot, run: &Run) -> Outcome {
         let catalog = Catalog::core();
-        let tools = standard_tools();
+        let tools = self.tools.clone();
         let runner = Runner {
             db: &self.set.test.db,
             ctx: &self.set.side.ctx,
@@ -240,7 +242,16 @@ async fn a_chat_is_answered_in_the_thread_with_the_tools_and_the_instructions_in
     let names: Vec<&str> = request.tools.iter().map(|t| t.name.as_str()).collect();
     assert_eq!(
         names,
-        ["shell", "read_file", "write_file", "remember", "skill"]
+        [
+            "shell",
+            "read_file",
+            "write_file",
+            "remember",
+            "skill",
+            "set_objective",
+            "complete_objective",
+            "block_objective"
+        ]
     );
     assert!(
         parts
@@ -614,5 +625,40 @@ async fn a_message_that_arrives_mid_run_joins_the_next_step() {
     assert!(second_text.contains("my name is Ana"), "{second_text}");
     // The late message sits after the tool result in the same user turn: nothing was reordered.
     assert!(second_text.find("ToolResult").unwrap() < second_text.find("Ana").unwrap());
+    set.test.stop().await;
+}
+
+#[tokio::test]
+async fn a_run_without_the_objective_tools_is_not_told_of_the_objective() {
+    let set = setup().await;
+    set.test
+        .db
+        .set_objective(
+            &set.side.ctx,
+            &set.thread,
+            &set.agent,
+            "ship the report",
+            None,
+        )
+        .await
+        .unwrap();
+
+    let mut plain = Parts::new(&set, vec![say("ok")], FakeMachineScript::default());
+    plain.tools = standard_tools().without(&OBJECTIVE_TOOLS);
+    let slot = plain.slot();
+    assert_eq!(plain.run(&slot).await, Outcome::Done);
+    let request = &plain.provider.requests()[0];
+    assert!(
+        request
+            .tools
+            .iter()
+            .all(|t| !OBJECTIVE_TOOLS.contains(&t.name.as_str()))
+    );
+    assert!(
+        request
+            .system
+            .iter()
+            .all(|b| !b.text.contains("ship the report"))
+    );
     set.test.stop().await;
 }

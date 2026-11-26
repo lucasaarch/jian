@@ -81,12 +81,12 @@ pub(crate) async fn current_view(
     Ok(run_view(run, approval.as_ref()))
 }
 
-fn bad(why: &str) -> Refusal {
+pub(crate) fn bad(why: &str) -> Refusal {
     refuse(StatusCode::BAD_REQUEST, "invalid_input", why)
 }
 
 /// The viewer must be in the thread: 404 when they do not see it, 403 when they only see it.
-async fn member(
+pub(crate) async fn member(
     app: &AppState,
     ctx: &TenantCtx,
     viewer: &Viewer,
@@ -104,7 +104,32 @@ async fn member(
     }
 }
 
-async fn announce_run(app: &AppState, ctx: &TenantCtx, run: &Run) {
+/// The agent must be one of the thread's participants.
+pub(crate) async fn agent_in_thread(
+    app: &AppState,
+    ctx: &TenantCtx,
+    viewer: &Viewer,
+    thread: &ThreadId,
+    agent: &AgentId,
+) -> Result<(), Refusal> {
+    let found = app
+        .db
+        .thread(ctx, viewer, thread)
+        .await
+        .map_err(|e| failure(&e))?
+        .ok_or_else(|| not_found("thread"))?;
+    if found
+        .participants
+        .iter()
+        .any(|p| matches!(&p.who, Who::Agent(a) if a == agent))
+    {
+        Ok(())
+    } else {
+        Err(bad("that agent is not in the thread"))
+    }
+}
+
+pub(crate) async fn announce_run(app: &AppState, ctx: &TenantCtx, run: &Run) {
     match current_view(&app.db, ctx, run).await {
         Ok(view) => announce(app, ctx, &run.thread, None, DeltaPayload::RunUpdated(view)).await,
         Err(error) => tracing::warn!(%error, "could not read a run to announce it"),
@@ -123,19 +148,7 @@ pub(crate) async fn start(
     let thread_id = ThreadId::new(id);
     member(&app, &ctx, &viewer, &thread_id).await?;
     let agent = AgentId::new(body.agent_id);
-    let thread = app
-        .db
-        .thread(&ctx, &viewer, &thread_id)
-        .await
-        .map_err(|e| failure(&e))?
-        .ok_or_else(|| not_found("thread"))?;
-    if !thread
-        .participants
-        .iter()
-        .any(|p| matches!(&p.who, Who::Agent(a) if *a == agent))
-    {
-        return Err(bad("that agent is not in the thread"));
-    }
+    agent_in_thread(&app, &ctx, &viewer, &thread_id, &agent).await?;
     let latest = app
         .db
         .list_messages(&ctx, &viewer, &thread_id, Window::Latest, 1)

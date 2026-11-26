@@ -641,3 +641,383 @@ async fn an_agents_chosen_model_reaches_its_run_and_without_one_the_default_is_u
     );
     test.stop().await;
 }
+
+// ---- Objectives and auto-continue ----
+
+struct Objective {
+    handler: Arc<AgentRunner>,
+    model: Arc<FakeProvider>,
+    bus: Arc<MemoryEventBus>,
+    world: World,
+}
+
+/// A thread whose agent has an open objective, answered by `turns`.
+async fn objective_world(test: &TestDb, side: &Side, turns: Vec<Vec<Script>>) -> Objective {
+    let world = world(test, side).await;
+    test.db
+        .set_objective(
+            &side.ctx,
+            &world.thread,
+            &world.run.agent,
+            "ship the report",
+            Some(&side.admin.account_id),
+        )
+        .await
+        .unwrap();
+    let model = FakeProvider::new(turns);
+    let mut models = Source::default();
+    models
+        .0
+        .insert(side.id.to_string(), Arc::new(Shared(model.clone())));
+    let bus = Arc::new(MemoryEventBus::new());
+    let handler = runner(
+        models,
+        FakeExecutor::new(FakeMachineScript::default()),
+        bus.clone(),
+    );
+    Objective {
+        handler,
+        model,
+        bus,
+        world,
+    }
+}
+
+impl Objective {
+    async fn objective(&self, test: &TestDb, side: &Side) -> jian_store::Objective {
+        test.db
+            .objective(&side.ctx, &self.world.thread, &self.world.run.agent)
+            .await
+            .unwrap()
+            .unwrap()
+    }
+
+    async fn runs(&self, test: &TestDb, side: &Side) -> Vec<Run> {
+        let mut runs = test
+            .db
+            .list_runs(&side.ctx, &self.world.thread, 50)
+            .await
+            .unwrap();
+        runs.reverse();
+        runs
+    }
+
+    /// Runs the thread's runs one after another as the queue would, until none is queued.
+    async fn drain(&self, test: &TestDb, side: &Side) {
+        loop {
+            let next = self
+                .runs(test, side)
+                .await
+                .into_iter()
+                .find(|run| run.state == RunState::Queued);
+            let Some(next) = next else { return };
+            self.handler
+                .handle(context(test, side, &next).await)
+                .await
+                .unwrap();
+        }
+    }
+}
+
+#[tokio::test]
+async fn an_open_objective_continues_the_run_until_the_agent_completes_it() {
+    let test = TestDb::start(env!("CARGO_TARGET_TMPDIR")).await;
+    let a = TwoTenants::seed(&test.db).await.a;
+    let o = objective_world(
+        &test,
+        &a,
+        vec![
+            say("on it"),
+            call("c1", "complete_objective", json!({ "note": "sent" })),
+            say("done"),
+        ],
+    )
+    .await;
+
+    o.drain(&test, &a).await;
+    let runs = o.runs(&test, &a).await;
+    let origins: Vec<_> = runs.iter().map(|run| run.origin).collect();
+    assert_eq!(origins, [RunOrigin::Message, RunOrigin::Continue]);
+    assert!(runs.iter().all(|run| run.state == RunState::Done));
+    let objective = o.objective(&test, &a).await;
+    assert_eq!(objective.state, jian_store::ObjectiveState::Done);
+    assert_eq!(objective.note.as_deref(), Some("sent"));
+    // Three model calls: the first run, then the continuation's tool call and its answer. Nothing
+    // continued the completed objective.
+    assert_eq!(o.model.streams(), 3);
+
+    // The continuation was told the objective, and why it was called again.
+    let requests = o.model.requests();
+    let system: String = requests[1].system.iter().map(|b| b.text.clone()).collect();
+    assert!(system.contains("ship the report"), "{system}");
+    let last = requests[1].messages.last().unwrap();
+    assert!(format!("{last:?}").contains("Keep working on your objective: ship the report"));
+    test.stop().await;
+}
+
+#[tokio::test]
+async fn a_blocked_objective_does_not_continue_and_only_a_new_one_reopens_it() {
+    let test = TestDb::start(env!("CARGO_TARGET_TMPDIR")).await;
+    let a = TwoTenants::seed(&test.db).await.a;
+    let o = objective_world(
+        &test,
+        &a,
+        vec![
+            say("on it"),
+            call(
+                "c1",
+                "block_objective",
+                json!({ "note": "need the API key" }),
+            ),
+            say("waiting for you"),
+        ],
+    )
+    .await;
+
+    o.drain(&test, &a).await;
+    assert_eq!(o.runs(&test, &a).await.len(), 2);
+    let objective = o.objective(&test, &a).await;
+    assert_eq!(objective.state, jian_store::ObjectiveState::Blocked);
+    assert_eq!(objective.note.as_deref(), Some("need the API key"));
+
+    // A person's message gives nothing back to a blocked objective; setting it anew does.
+    let (run, _) = test
+        .db
+        .start_run(
+            &a.ctx,
+            &o.world.thread,
+            &o.world.run.agent,
+            Some(&a.admin.account_id),
+            1,
+            RunOrigin::Message,
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        o.objective(&test, &a).await.state,
+        jian_store::ObjectiveState::Blocked
+    );
+    test.db
+        .set_run_state(&a.ctx, &run.id, RunState::Stopped, None)
+        .await
+        .unwrap();
+    let again = test
+        .db
+        .set_objective(
+            &a.ctx,
+            &o.world.thread,
+            &o.world.run.agent,
+            "ship it anyway",
+            Some(&a.admin.account_id),
+        )
+        .await
+        .unwrap();
+    assert_eq!(again.state, jian_store::ObjectiveState::Open);
+    assert_eq!((again.note, again.idle_runs), (None, 0));
+    test.stop().await;
+}
+
+#[tokio::test]
+async fn runs_that_do_nothing_stop_at_the_ceiling_and_work_or_a_person_resets_the_count() {
+    let test = TestDb::start(env!("CARGO_TARGET_TMPDIR")).await;
+    let a = TwoTenants::seed(&test.db).await.a;
+    let o = objective_world(
+        &test,
+        &a,
+        vec![
+            say("on it"),
+            // A continuation that does something resets the count...
+            call("c1", "remember", json!({ "key": "k", "content": "v" })),
+            say("noted"),
+            // ...and then only talking runs into the ceiling.
+            say("hm"),
+            say("hm"),
+            say("hm"),
+            say("never asked"),
+        ],
+    )
+    .await;
+    let mut member = o
+        .bus
+        .subscribe_scoped(
+            &a.id,
+            Topic::Threads,
+            Some(a.admin.account_id.as_str()),
+            None,
+        )
+        .await;
+
+    o.drain(&test, &a).await;
+    let runs = o.runs(&test, &a).await;
+    // The person's run, the one that worked, and MAX_IDLE_CONTINUATIONS that did not.
+    assert_eq!(
+        runs.len(),
+        2 + usize::try_from(jian_server::MAX_IDLE_CONTINUATIONS).unwrap()
+    );
+    assert!(runs.iter().all(|run| run.state == RunState::Done));
+    assert_eq!(o.model.streams(), 6);
+    let objective = o.objective(&test, &a).await;
+    assert_eq!(objective.state, jian_store::ObjectiveState::Blocked);
+    assert_eq!(objective.idle_runs, jian_server::MAX_IDLE_CONTINUATIONS);
+    assert!(objective.note.unwrap().contains("waiting for a person"));
+    // The people of the thread were told it stopped.
+    let heard = drain(&mut member);
+    assert!(heard.iter().any(|d| matches!(
+        &d.payload,
+        DeltaPayload::ObjectiveUpdated(view)
+            if view.state == jian_protocol::objectives::ObjectiveStateView::Blocked
+    )));
+    test.stop().await;
+}
+
+#[tokio::test]
+async fn a_person_who_writes_during_a_continuation_opens_no_second_run_and_resets_the_count() {
+    let test = TestDb::start(env!("CARGO_TARGET_TMPDIR")).await;
+    let a = TwoTenants::seed(&test.db).await.a;
+    let o = objective_world(&test, &a, vec![say("on it")]).await;
+    o.handler
+        .handle(context(&test, &a, &o.world.run).await)
+        .await
+        .unwrap();
+    let queued = o.runs(&test, &a).await.pop().unwrap();
+    assert_eq!(
+        (queued.origin, queued.state),
+        (RunOrigin::Continue, RunState::Queued)
+    );
+
+    // The objective had been idling; the person's message gives the tries back, and joins the
+    // continuation that is already there.
+    test.db
+        .note_objective_run(&a.ctx, &o.world.thread, &o.world.run.agent, false, 99, "x")
+        .await
+        .unwrap();
+    assert_eq!(o.objective(&test, &a).await.idle_runs, 1);
+    let (joined, created) = test
+        .db
+        .start_run(
+            &a.ctx,
+            &o.world.thread,
+            &o.world.run.agent,
+            Some(&a.admin.account_id),
+            queued.trigger_seq,
+            RunOrigin::Message,
+        )
+        .await
+        .unwrap();
+    assert!(!created);
+    assert_eq!(joined.id, queued.id);
+    assert_eq!(o.objective(&test, &a).await.idle_runs, 0);
+    assert_eq!(o.runs(&test, &a).await.len(), 2);
+    test.stop().await;
+}
+
+#[tokio::test]
+async fn a_failed_or_stopped_run_does_not_continue_and_a_dropped_objective_is_not_run() {
+    let test = TestDb::start(env!("CARGO_TARGET_TMPDIR")).await;
+    let a = TwoTenants::seed(&test.db).await.a;
+
+    let failing = objective_world(&test, &a, vec![vec![Script::Fail(LlmError::Overloaded)]]).await;
+    failing.drain(&test, &a).await;
+    let runs = failing.runs(&test, &a).await;
+    assert_eq!(runs.len(), 1);
+    assert_eq!(runs[0].state, RunState::Failed);
+    assert_eq!(
+        failing.objective(&test, &a).await.state,
+        jian_store::ObjectiveState::Open
+    );
+
+    let gate = Gate::new();
+    let stopped = objective_world(
+        &test,
+        &a,
+        vec![vec![
+            Script::Event(Event::Text("par".to_owned())),
+            Script::Gate(gate.clone()),
+        ]],
+    )
+    .await;
+    let job = tokio::spawn({
+        let (handler, ctx) = (
+            stopped.handler.clone(),
+            context(&test, &a, &stopped.world.run).await,
+        );
+        async move { handler.handle(ctx).await }
+    });
+    gate.reached.notified().await;
+    test.db
+        .request_run_stop(&a.ctx, &stopped.world.thread, &stopped.world.run.id)
+        .await
+        .unwrap()
+        .unwrap();
+    tokio::time::timeout(Duration::from_secs(10), job)
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+    let runs = stopped.runs(&test, &a).await;
+    assert_eq!(runs.len(), 1);
+    assert_eq!(runs[0].state, RunState::Stopped);
+
+    // A continuation queued before the objective was dropped ends without asking the model.
+    let dropped = objective_world(&test, &a, vec![say("on it")]).await;
+    dropped
+        .handler
+        .handle(context(&test, &a, &dropped.world.run).await)
+        .await
+        .unwrap();
+    test.db
+        .end_objective(
+            &a.ctx,
+            &dropped.world.thread,
+            &dropped.world.run.agent,
+            &[jian_store::ObjectiveState::Open],
+            jian_store::ObjectiveState::Cancelled,
+            None,
+        )
+        .await
+        .unwrap()
+        .unwrap();
+    dropped.drain(&test, &a).await;
+    let runs = dropped.runs(&test, &a).await;
+    assert_eq!(runs[1].state, RunState::Stopped);
+    assert_eq!(dropped.model.streams(), 1);
+    test.stop().await;
+}
+
+#[tokio::test]
+async fn an_objective_of_one_tenant_neither_continues_nor_is_heard_in_the_other() {
+    let test = TestDb::start(env!("CARGO_TARGET_TMPDIR")).await;
+    let tenants = TwoTenants::seed(&test.db).await;
+    let (a, b) = (&tenants.a, &tenants.b);
+    let oa = objective_world(&test, a, vec![say("on it")]).await;
+    let wb = world(&test, b).await;
+    let mut hears_b = oa
+        .bus
+        .subscribe_scoped(
+            &b.id,
+            Topic::Threads,
+            Some(b.admin.account_id.as_str()),
+            None,
+        )
+        .await;
+
+    oa.drain(&test, a).await;
+    // B has no objective and its run (never driven here) was not touched by A's.
+    assert!(
+        test.db
+            .objective(&b.ctx, &wb.thread, &wb.run.agent)
+            .await
+            .unwrap()
+            .is_none()
+    );
+    assert_eq!(
+        test.db
+            .list_runs(&b.ctx, &wb.thread, 10)
+            .await
+            .unwrap()
+            .len(),
+        1
+    );
+    assert!(drain(&mut hears_b).is_empty());
+    test.stop().await;
+}

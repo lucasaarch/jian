@@ -340,7 +340,8 @@ impl Database {
 
     /// Starts a run of `agent` in `thread`, or returns the active one: a thread and agent have
     /// one at a time. The `bool` is whether this call made it. A run that was made is queued; the
-    /// caller enqueues its job.
+    /// caller enqueues its job. A `Message` origin also gives the thread's open objective its
+    /// idle count back, whether or not it made the run.
     pub async fn start_run(
         &self,
         ctx: &TenantCtx,
@@ -382,6 +383,18 @@ impl Database {
             .map_err(StoreError::query(ACTION))?;
             (row, false)
         };
+        if origin == RunOrigin::Message {
+            // A person is talking to the agent: a stalled objective gets its tries back.
+            sqlx::query(
+                "UPDATE objectives SET idle_runs = 0 \
+                 WHERE thread_id = $1 AND agent_id = $2 AND state = 'open'",
+            )
+            .bind(thread.as_str())
+            .bind(agent.as_str())
+            .execute(&mut *tx)
+            .await
+            .map_err(StoreError::query(ACTION))?;
+        }
         tx.commit().await.map_err(StoreError::query(ACTION))?;
         Ok((Run::try_from(row)?, created))
     }

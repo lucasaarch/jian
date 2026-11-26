@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use super::MachineSummary;
+use crate::objectives::ObjectiveView;
 use crate::projects::{ProjectFileChange, ProjectGone, ProjectThreadChange, ProjectView};
 use crate::runs::{RunDelta, RunView};
 use crate::skills::{SkillGone, SkillSummary};
@@ -96,6 +97,10 @@ pub enum DeltaPayload {
     /// message: a client that missed it reads the message when it comes.
     #[serde(rename = "run.delta")]
     RunDelta(RunDelta),
+    /// The objective of an agent in a thread of the client was set, changed or ended: its state
+    /// now.
+    #[serde(rename = "objective.updated")]
+    ObjectiveUpdated(ObjectiveView),
 }
 
 /// One change on a topic.

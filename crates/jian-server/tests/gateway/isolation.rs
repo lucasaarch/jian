@@ -181,6 +181,18 @@ const ROUTE_TESTS: &[(&str, &str)] = &[
     ("POST /v1/threads/{id}/runs/{run_id}/stop", RUNS_TEST),
     ("POST /v1/threads/{id}/runs/{run_id}/approval", RUNS_TEST),
     (
+        "GET /v1/threads/{id}/agents/{agent_id}/objective",
+        OBJECTIVE_TEST,
+    ),
+    (
+        "PUT /v1/threads/{id}/agents/{agent_id}/objective",
+        OBJECTIVE_TEST,
+    ),
+    (
+        "DELETE /v1/threads/{id}/agents/{agent_id}/objective",
+        OBJECTIVE_TEST,
+    ),
+    (
         "GET /v1/machines/connect",
         "a_worker_of_one_tenant_neither_gets_nor_answers_the_others_tasks",
     ),
@@ -217,6 +229,8 @@ const USAGE_TEST: &str = "usage_is_each_workspaces_own_and_a_workspace_over_its_
 /// The test that shows tenant B reaches no agent, thread or message of tenant A.
 const RUNS_TEST: &str =
     "a_thread_has_one_active_run_per_agent_and_only_its_members_start_stop_and_answer_it";
+/// The test that shows tenant B and a member outside the thread reach no objective of tenant A.
+const OBJECTIVE_TEST: &str = "an_objective_is_seen_by_its_thread_and_set_only_by_its_members";
 const THREADS_TEST: &str = "agents_threads_and_messages_of_the_other_tenant_are_out_of_reach";
 
 /// The test that shows tenant B reaches no model provider account of tenant A, and no key.
