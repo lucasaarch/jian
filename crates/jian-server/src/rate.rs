@@ -198,4 +198,19 @@ mod tests {
             Verdict::Limited { .. }
         ));
     }
+
+    #[tokio::test]
+    async fn a_panic_while_the_lock_is_held_does_not_stop_the_next_use() {
+        let limiter = Arc::new(MemoryRateLimiter::new(ManualClock::default()));
+        let holder = limiter.clone();
+        let crashed = std::thread::spawn(move || {
+            let _held = holder.buckets.lock();
+            panic!("a bug while holding the lock");
+        })
+        .join();
+        assert!(crashed.is_err());
+        assert!(limiter.buckets.is_poisoned());
+
+        assert_eq!(limiter.take("a", LIMIT).await, Verdict::Allowed);
+    }
 }

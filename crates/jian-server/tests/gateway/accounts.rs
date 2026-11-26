@@ -696,3 +696,30 @@ async fn a_gateway_without_password_sign_in_has_no_login() {
     assert_eq!(status, 200);
     gateway.stop().await;
 }
+
+#[tokio::test]
+async fn one_tenant_that_floods_the_gateway_is_limited_and_the_other_is_not() {
+    let settings = Settings {
+        // A trickle after the burst, so the test never waits for a refill.
+        tenant_requests: Limit {
+            burst: 8,
+            per_second: 0.01,
+        },
+        ..open_settings()
+    };
+    let (gateway, tenants) = start(settings).await;
+    let mut refused = None;
+    for _ in 0..30 {
+        let (status, _) = me(&gateway, &tenants.a.admin_session).await;
+        if status != 200 {
+            refused = Some(status);
+            break;
+        }
+    }
+    assert_eq!(refused, Some(429), "the flood was never limited");
+    // Every token of the flooding tenant is held to the one allowance...
+    assert_eq!(me(&gateway, &tenants.a.member_session).await.0, 429);
+    // ...and the other tenant has its own.
+    assert_eq!(me(&gateway, &tenants.b.admin_session).await.0, 200);
+    gateway.stop().await;
+}

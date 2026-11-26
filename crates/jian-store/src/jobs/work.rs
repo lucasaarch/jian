@@ -22,9 +22,14 @@ const REAP_BATCH: i64 = 1000;
 
 impl Database {
     /// Gives `me` up to `limit` jobs that are ready (`run_at` reached, by the database's clock),
-    /// of the `kinds` it has handlers for and in the slots it holds, oldest first, and locks them
+    /// of the `kinds` it has handlers for and in the slots it holds, and locks them
     /// for `visibility`. Each comes back `running`, with `attempts` raised by one and the slot's
     /// epoch in `lease_epoch`.
+    ///
+    /// The order is one job of each tenant in turn (each tenant's own oldest first, and the
+    /// oldest across tenants within a turn), not the oldest overall: a tenant with a long backlog
+    /// cannot keep another tenant's one job waiting behind it. The ranking reads every ready job
+    /// of the held slots, which is cheap while the ready backlog is in the thousands.
     ///
     /// `FOR UPDATE SKIP LOCKED` is what lets any number of instances and workers ask at once: a
     /// row another claim holds is passed over, not waited for, and one claim's rows are never
@@ -48,11 +53,16 @@ impl Database {
         let mut tx = self.platform_tx(ACTION).await?;
         let rows: Vec<JobRow> = sqlx::query_as(AssertSqlSafe(format!(
             "WITH owned AS (SELECT slot, epoch FROM unnest($2::int4[], $3::int8[]) AS o(slot, epoch)), \
+             ranked AS ( \
+               SELECT j.id AS ranked_id, o.epoch AS ranked_epoch, j.run_at AS ranked_at, \
+                 row_number() OVER (PARTITION BY j.tenant_id ORDER BY j.run_at, j.id) AS turn \
+               FROM jobs j JOIN owned o ON o.slot = j.slot \
+               WHERE j.state = 'queued' AND j.run_at <= now() AND j.kind = ANY($4::text[])), \
              picked AS ( \
-               SELECT j.id AS picked_id, o.epoch AS picked_epoch FROM jobs j \
-               JOIN owned o ON o.slot = j.slot \
-               WHERE j.state = 'queued' AND j.run_at <= now() AND j.kind = ANY($4::text[]) \
-               ORDER BY j.run_at LIMIT $5 FOR UPDATE OF j SKIP LOCKED) \
+               SELECT j.id AS picked_id, r.ranked_epoch AS picked_epoch FROM jobs j \
+               JOIN ranked r ON r.ranked_id = j.id \
+               WHERE j.state = 'queued' \
+               ORDER BY r.turn, r.ranked_at LIMIT $5 FOR UPDATE OF j SKIP LOCKED) \
              UPDATE jobs SET state = 'running', locked_by = $1::text::uuid, \
                locked_until = now() + $6::float8 * interval '1 second', \
                lease_epoch = picked.picked_epoch, attempts = attempts + 1 \

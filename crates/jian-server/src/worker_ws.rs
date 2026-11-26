@@ -46,7 +46,15 @@ pub(crate) async fn connect(
     upgrade
         .max_message_size(MAX_TEXT_FRAME_BYTES)
         .max_frame_size(MAX_TEXT_FRAME_BYTES)
-        .on_upgrade(move |socket| session(app, principal, machine, socket))
+        .on_upgrade(move |socket| async move {
+            let tenant = principal.tenant.clone();
+            crate::guard::catching(
+                &tenant,
+                "worker socket",
+                Box::pin(session(app, principal, machine, socket)),
+            )
+            .await;
+        })
 }
 
 async fn close(socket: &mut WebSocket, code: u16, reason: &'static str) {

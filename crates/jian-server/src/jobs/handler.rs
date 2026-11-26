@@ -58,8 +58,8 @@ impl JobError {
 /// drains while the handler runs leaves the job to be run again, and the handler's future is
 /// dropped at whatever `.await` it was on. So a handler's effects must be safe to repeat (check
 /// before writing, or key the effect on the job's id), and it must not hold something across an
-/// `.await` that cannot be dropped. A handler that panics takes the process with it (the release
-/// profile aborts): return a [`JobError`] instead.
+/// `.await` that cannot be dropped. A handler that panics fails its own job (`dead`, logged with the
+/// tenant) and nothing else, but it should still return a [`JobError`]: that one may retry.
 pub trait JobHandler: Send + Sync {
     /// Runs one attempt.
     fn handle(&self, context: JobContext) -> BoxFuture<'_, Result<(), JobError>>;

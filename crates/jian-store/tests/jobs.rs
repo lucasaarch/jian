@@ -449,3 +449,35 @@ async fn an_enqueue_wakes_a_listener_with_the_slot() {
     db.close().await.unwrap();
     server.stop().await;
 }
+
+#[tokio::test]
+async fn a_tenant_with_a_long_backlog_does_not_keep_another_tenants_job_waiting() {
+    let server = Server::start().await;
+    let db = migrated(&server).await;
+    let busy = tenant(&db, "busy").await;
+    let quiet = tenant(&db, "quiet").await;
+    // The busy tenant's jobs are all older than the quiet tenant's one.
+    for _ in 0..30 {
+        db.enqueue_job(&busy, echo()).await.unwrap();
+    }
+    let late = db.enqueue_job(&quiet, echo()).await.unwrap().job;
+    let (me, held) = instance(&db).await;
+
+    // Oldest-first would hand over thirty of the busy tenant's before the quiet one's.
+    let first = db
+        .claim_jobs(&me, &held, &kinds(), 2, VISIBLE)
+        .await
+        .unwrap();
+    assert!(
+        first.iter().any(|job| job.id == late.id),
+        "the quiet tenant's job waited behind the backlog"
+    );
+    // Nothing is lost or taken twice.
+    let mut taken = first.len();
+    while let Some(job) = claim_one(&db, &me, &held).await {
+        assert_ne!(job.id, late.id, "a job was claimed twice");
+        taken += 1;
+    }
+    assert_eq!(taken, 31);
+    server.stop().await;
+}

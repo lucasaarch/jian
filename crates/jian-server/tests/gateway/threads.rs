@@ -474,3 +474,31 @@ async fn a_member_hears_only_the_threads_they_are_in() {
     assert_eq!(refused.code, ErrorCode::Forbidden);
     gateway.stop().await;
 }
+
+#[tokio::test]
+async fn a_body_over_a_routes_ceiling_is_refused_with_413_before_it_is_read() {
+    let (gateway, tenants) = start(open_settings()).await;
+    let admin = &tenants.a.admin_session;
+    // A message may be long (160 KiB of JSON), but not this long.
+    let long = text(&"x".repeat(170_000));
+    let (status, _) = call(
+        &gateway,
+        "POST",
+        "/v1/threads/anything/messages",
+        admin,
+        Some(long),
+    )
+    .await;
+    assert_eq!(status, 413);
+    // An account-sized route has a much smaller ceiling.
+    let (status, _) = call(
+        &gateway,
+        "POST",
+        "/v1/agents",
+        admin,
+        Some(json!({ "name": "x".repeat(20_000) })),
+    )
+    .await;
+    assert_eq!(status, 413);
+    gateway.stop().await;
+}

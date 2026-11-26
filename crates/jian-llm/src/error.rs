@@ -52,6 +52,13 @@ pub enum LlmError {
     /// the provider's format, or an error event. Whatever was emitted before stays emitted.
     #[error("the stream failed: {0}")]
     Stream(String),
+    /// Too many calls to this provider failed in a row, so this one was not even sent. Not
+    /// retried by the transport (it never ran); the caller may try again after `retry_after`.
+    #[error("the provider keeps failing; not calling it for {retry_after:?}")]
+    CircuitOpen {
+        /// How long until a call is let through again.
+        retry_after: Duration,
+    },
     /// The provider's address or the client could not be set up from the configuration.
     #[error("invalid provider configuration: {0}")]
     Config(&'static str),

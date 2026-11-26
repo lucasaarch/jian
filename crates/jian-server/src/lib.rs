@@ -61,6 +61,7 @@ mod client_ws;
 mod codex_login;
 mod compact_job;
 mod events;
+mod guard;
 mod http;
 mod hub;
 mod invite_job;
@@ -218,6 +219,10 @@ pub struct Settings {
     /// How often an open socket checks that its token is still valid, which is also how long a
     /// revocation made on another replica takes to cut it off.
     pub recheck_interval: Duration,
+    /// How many authenticated requests and socket messages one tenant may make in all, whoever
+    /// sends them. Per token limits stop one client; this one stops one tenant from taking the
+    /// shared database and CPU from the others.
+    pub tenant_requests: Limit,
     /// How many messages a client may send, per token.
     pub messages: Limit,
     /// Which ways of signing in exist, and the lifetimes of sessions and invitations. A
@@ -250,6 +255,10 @@ impl Default for Settings {
             hello_timeout: Duration::from_secs(10),
             idle_timeout: Duration::from_secs(90),
             recheck_interval: Duration::from_secs(30),
+            tenant_requests: Limit {
+                burst: 300,
+                per_second: 100.0,
+            },
             messages: Limit {
                 burst: 60,
                 per_second: 20.0,
@@ -470,6 +479,10 @@ pub fn router_with(state: AppState, extra: Router<AppState>) -> Router {
         )
         .route(jian_protocol::client::CLIENT_PATH, get(client_ws::connect))
         .merge(extra)
+        // The ceiling for every route not given its own above, so a new route is bounded by
+        // default. The groups' own layers sit inside this one and win; the upload route reads
+        // its body itself, up to its own limit.
+        .layer(DefaultBodyLimit::max(MAX_ACCOUNT_BODY))
         .with_state(state)
 }
 

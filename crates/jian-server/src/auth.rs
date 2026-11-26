@@ -25,6 +25,11 @@ const ATTEMPTS: Limit = Limit {
     per_second: 2.0,
 };
 
+/// The rate limiter's key for everything one tenant does.
+pub(crate) fn tenant_key(tenant: &TenantId) -> String {
+    format!("tenant:{tenant}")
+}
+
 /// The caller of a request: whose token it holds and what that token may act as.
 #[derive(Debug, Clone)]
 pub struct Principal {
@@ -145,6 +150,13 @@ impl FromRequestParts<AppState> for Principal {
         let token = bearer(parts).ok_or(AuthRejection::Unauthorized)?;
         match state.db.authenticate(token).await {
             Ok(Some(found)) => {
+                if let Verdict::Limited { retry_after } = state
+                    .limiter
+                    .take(&tenant_key(&found.tenant), state.settings.tenant_requests)
+                    .await
+                {
+                    return Err(AuthRejection::TooMany(retry_after));
+                }
                 if found.must_change_password && !MAY_CHANGE_PASSWORD.contains(&parts.uri.path()) {
                     return Err(AuthRejection::PasswordChangeRequired);
                 }

@@ -28,7 +28,7 @@ use tokio::task::JoinHandle;
 use tokio::time::MissedTickBehavior;
 
 use crate::AppState;
-use crate::auth::Principal;
+use crate::auth::{Principal, tenant_key};
 use crate::rate::Verdict;
 
 mod requests;
@@ -57,7 +57,15 @@ pub(crate) async fn connect(
     upgrade
         .max_message_size(MAX_CLIENT_FRAME_BYTES)
         .max_frame_size(MAX_CLIENT_FRAME_BYTES)
-        .on_upgrade(move |socket| session(app, principal, socket))
+        .on_upgrade(move |socket| async move {
+            let tenant = principal.tenant.clone();
+            crate::guard::catching(
+                &tenant,
+                "client socket",
+                Box::pin(session(app, principal, socket)),
+            )
+            .await;
+        })
 }
 
 fn frame(message: &ServerMessage) -> Message {
@@ -117,7 +125,11 @@ struct Session {
 async fn session(app: AppState, principal: Principal, socket: WebSocket) {
     let (sink, mut stream) = socket.split();
     let (out, queue) = mpsc::channel(OUT_QUEUE);
-    let writer = tokio::spawn(write(sink, queue));
+    let writer = crate::guard::spawn_catching(
+        principal.tenant.clone(),
+        "client writer",
+        write(sink, queue),
+    );
 
     let ctx = app.db.tenant(principal.tenant.clone()).await;
     let mut session = match ctx {
@@ -248,11 +260,21 @@ impl Session {
     /// One text frame; `false` ends the connection.
     async fn on_text(&mut self, text: &str) -> bool {
         let key = format!("msg:{}", self.principal.token.as_str());
-        let verdict = self
+        let mut verdict = self
             .app
             .limiter
             .take(&key, self.app.settings.messages)
             .await;
+        if verdict == Verdict::Allowed {
+            verdict = self
+                .app
+                .limiter
+                .take(
+                    &tenant_key(&self.principal.tenant),
+                    self.app.settings.tenant_requests,
+                )
+                .await;
+        }
         if let Verdict::Limited { retry_after } = verdict {
             // Only the id is read, so the client can tell which request was refused.
             let id = serde_json::from_str::<Envelope>(text)
@@ -347,14 +369,18 @@ impl Session {
                 return false;
             }
         }
-        let forwarder = tokio::spawn(forward(
-            self.app.clone(),
-            tenant.clone(),
-            topic,
-            scope,
-            subscription.live,
-            self.out.clone(),
-        ));
+        let forwarder = crate::guard::spawn_catching(
+            self.principal.tenant.clone(),
+            "subscription forwarder",
+            forward(
+                self.app.clone(),
+                tenant.clone(),
+                topic,
+                scope,
+                subscription.live,
+                self.out.clone(),
+            ),
+        );
         self.forwarders.insert(topic, forwarder);
         true
     }

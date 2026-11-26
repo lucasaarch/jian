@@ -15,6 +15,7 @@
 //! [`Provider::stream`] while it connects.
 
 mod anthropic;
+mod breaker;
 mod classify;
 mod codex;
 mod compatible;
@@ -33,6 +34,7 @@ mod transport;
 use futures_util::future::BoxFuture;
 use jian_core::{AccountMode, ModelInfo, ProviderKind};
 
+pub use breaker::{BreakerConfig, CircuitBreakers};
 pub use codex::{
     AUTH_ORIGIN as CODEX_AUTH_ORIGIN, CodexAuth, Login as CodexLogin, Tokens as CodexTokens,
 };

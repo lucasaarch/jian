@@ -259,6 +259,15 @@ async fn list_account(
         &app.llm.http,
     )
     .map_err(|error| error.to_string())?;
+    // By vendor and address, not account: an outage is every account's.
+    let provider = app.llm.breakers.guard(
+        format!(
+            "{:?}:{}",
+            account.provider,
+            account.base_url.as_deref().unwrap_or("")
+        ),
+        provider,
+    );
     app.llm
         .catalog
         .models(&board, account.provider, provider.as_ref())

@@ -16,6 +16,7 @@ use tracing::Instrument as _;
 
 use super::{JobContext, JobError, JobRegistry};
 use crate::SlotOwnership;
+use crate::guard::catching;
 
 /// The most jobs one claim asks for, so a backlog is taken in a few short statements and not one
 /// that locks hundreds of rows.
@@ -304,7 +305,18 @@ async fn run(shared: Arc<Shared>, job: Job, place: OwnedSemaphorePermit) {
     let span = tracing::info_span!(
         "job", id = %job.id, kind = %job.kind, tenant = %job.tenant, attempt = job.attempts
     );
-    attempt(&shared, job).instrument(span).await;
+    // A panic in a handler fails this job and no other: the process, the other tenants' jobs
+    // and this place in the runner all go on. `dead`, not retried: a handler that panics on this
+    // payload will panic on the next attempt too.
+    let panicked = catching(&job.tenant, "job", attempt(&shared, job.clone()))
+        .instrument(span.clone())
+        .await
+        .is_none();
+    if panicked {
+        record_failure(&shared, &job, &JobError::permanent("the handler panicked"))
+            .instrument(span)
+            .await;
+    }
     drop(place);
     shared.finished.notify_one();
 }

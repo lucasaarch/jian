@@ -319,4 +319,25 @@ mod tests {
         assert_eq!(one.live.recv().await.unwrap().seq, 1);
         assert!(other.live.try_recv().is_err());
     }
+
+    #[tokio::test]
+    async fn a_panic_while_the_lock_is_held_does_not_stop_the_next_use() {
+        let bus = std::sync::Arc::new(MemoryEventBus::new());
+        let alpha = tenant("alpha");
+        let holder = bus.clone();
+        // A thread that panics with the map locked poisons a std mutex.
+        let crashed = std::thread::spawn(move || {
+            let _held = holder.channels.lock();
+            panic!("a bug while holding the lock");
+        })
+        .join();
+        assert!(crashed.is_err());
+        assert!(bus.channels.is_poisoned());
+
+        bus.publish(&alpha, Topic::Machines, payload("x")).await;
+        let mut again = bus.subscribe(&alpha, Topic::Machines, None).await;
+        assert_eq!(again.seq, 1);
+        bus.publish(&alpha, Topic::Machines, payload("y")).await;
+        assert_eq!(again.live.recv().await.unwrap().seq, 2);
+    }
 }

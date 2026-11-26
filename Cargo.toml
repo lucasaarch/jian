@@ -147,4 +147,6 @@ cast_precision_loss = "allow"
 lto = true
 codegen-units = 1
 strip = true
-panic = "abort"
+# Unwind, not abort: the gateway serves many tenants in one process, and a panic in one tenant's
+# job or socket must end that task only (see `jian_server::guard`). The helper binaries pay a
+# little size for it.

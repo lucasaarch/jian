@@ -8,7 +8,8 @@ use std::sync::{Arc, Mutex, PoisonError};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use jian_llm::{
-    CODEX_AUTH_ORIGIN, CodexAuth, CodexTokens, HttpConfig, LimitsBoard, LlmError, ModelCatalog,
+    CODEX_AUTH_ORIGIN, CircuitBreakers, CodexAuth, CodexTokens, HttpConfig, LimitsBoard, LlmError,
+    ModelCatalog,
 };
 use jian_store::secrets::{RefreshError, Secret};
 use jian_store::{Database, TenantCtx, provider_secret_owner};
@@ -33,6 +34,8 @@ pub struct LlmAccess {
     pub codex_auth_origin: String,
     /// The ChatGPT sign-ins that wait for their code.
     pub logins: PendingLogins,
+    /// Which providers are failing, shared by every workspace.
+    pub breakers: CircuitBreakers,
 }
 
 impl Default for LlmAccess {
@@ -43,6 +46,7 @@ impl Default for LlmAccess {
             catalog: ModelCatalog::default(),
             codex_auth_origin: CODEX_AUTH_ORIGIN.to_owned(),
             logins: PendingLogins::default(),
+            breakers: CircuitBreakers::default(),
         }
     }
 }

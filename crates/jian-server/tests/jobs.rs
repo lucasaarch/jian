@@ -553,3 +553,53 @@ async fn a_job_runs_as_its_own_tenant_and_a_handler_sees_nothing_of_another() {
     instance.stop().await;
     env.stop().await;
 }
+
+#[tokio::test]
+async fn a_handler_that_panics_fails_its_own_job_and_another_tenants_job_still_runs() {
+    let env = Env::start().await;
+    let instance = Instance::start(&env).await;
+    let bad = tenant(&instance.db, "bad").await;
+    let good = tenant(&instance.db, "good").await;
+
+    let runner = instance
+        .runner(
+            registry(handler(|context| {
+                Box::pin(async move {
+                    assert!(
+                        context.job.payload["boom"].as_bool() != Some(true),
+                        "a handler bug"
+                    );
+                    Ok(())
+                })
+            })),
+            // One place: if the panic leaked it, the next job could never start.
+            JobOptions {
+                concurrency: 1,
+                ..options()
+            },
+        )
+        .await;
+    let enqueue = |ctx: &TenantCtx, boom: bool| {
+        let (db, ctx) = (instance.db.clone(), ctx.clone());
+        async move {
+            db.enqueue_job(&ctx, NewJob::new("test.work", json!({ "boom": boom })))
+                .await
+                .unwrap()
+                .job
+                .id
+        }
+    };
+    let panicking = enqueue(&bad, true).await;
+    let fine = enqueue(&good, false).await;
+
+    wait_for(&instance.db, &panicking, JobState::Dead).await;
+    wait_for(&instance.db, &fine, JobState::Done).await;
+    let dead = instance.db.job(&panicking).await.unwrap().unwrap();
+    assert_eq!(dead.last_error.as_deref(), Some("the handler panicked"));
+
+    runner
+        .shutdown(Instant::now() + Duration::from_secs(5))
+        .await;
+    instance.stop().await;
+    env.stop().await;
+}
