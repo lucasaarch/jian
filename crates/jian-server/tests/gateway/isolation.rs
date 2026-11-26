@@ -34,6 +34,7 @@ const PROVIDERS_FILE: &str = include_str!("providers.rs");
 const MEMORIES_FILE: &str = include_str!("memories.rs");
 const PROJECTS_FILE: &str = include_str!("projects.rs");
 const RUNS_FILE: &str = include_str!("runs.rs");
+const MACHINES_FILE: &str = include_str!("machines.rs");
 const SCHEDULES_FILE: &str = include_str!("schedules.rs");
 const WAKE_FILE: &str = include_str!("wake.rs");
 const SIGN_IN_FILE: &str = include_str!("sign_in.rs");
@@ -54,6 +55,7 @@ fn is_a_test_here(name: &str) -> bool {
         || MEMORIES_FILE.contains(&declared)
         || PROJECTS_FILE.contains(&declared)
         || RUNS_FILE.contains(&declared)
+        || MACHINES_FILE.contains(&declared)
         || SCHEDULES_FILE.contains(&declared)
         || WAKE_FILE.contains(&declared)
         || SIGN_IN_FILE.contains(&declared)
@@ -116,6 +118,8 @@ const ROUTE_TESTS: &[(&str, &str)] = &[
     ("PUT /v1/skills/{name}", SKILLS_TEST),
     ("DELETE /v1/skills/{name}", SKILLS_TEST),
     ("GET /v1/skills/{name}/versions", SKILLS_TEST),
+    ("GET /v1/agents/{id}/machine", AGENT_MACHINE_TEST),
+    ("PUT /v1/agents/{id}/machine", AGENT_MACHINE_TEST),
     ("GET /v1/agents/{id}/model", AGENT_MODEL_TEST),
     ("PUT /v1/agents/{id}/model", AGENT_MODEL_TEST),
     ("POST /v1/agents/{id}/events", WAKE_TEST),
@@ -222,6 +226,10 @@ const MEMORIES_TEST: &str = "memories_and_projects_of_the_other_tenant_are_out_o
 
 /// The test that shows tenant B reaches no skill of tenant A's library, nor its agents' skills.
 /// The test that shows tenant B reads and changes no model of tenant A's agents.
+/// The test that shows tenant B reads and changes no machine choice of tenant A's agents, and
+/// cannot point one at its own machine.
+const AGENT_MACHINE_TEST: &str =
+    "an_agents_machine_is_chosen_by_its_manager_and_is_out_of_reach_of_another_tenant";
 const AGENT_MODEL_TEST: &str = "an_agents_model_is_out_of_reach_of_another_tenant";
 const SKILLS_TEST: &str = "skills_of_the_other_tenant_are_out_of_reach";
 

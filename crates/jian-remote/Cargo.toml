@@ -15,7 +15,10 @@ regex.workspace = true
 reqwest = { workspace = true, features = ["stream"] }
 rustls.workspace = true
 serde.workspace = true
-serde_json.workspace = true
+# A file is replaced only by a writer that names its mtime, a float of milliseconds that goes
+# through JSON twice (worker, gateway, worker). Without exact float parsing it can come back one
+# bit off and the worker then refuses the write as "changed".
+serde_json = { workspace = true, features = ["float_roundtrip"] }
 sha2.workspace = true
 thiserror.workspace = true
 tokio = { workspace = true, features = ["fs", "io-util", "process", "signal", "sync", "time"] }

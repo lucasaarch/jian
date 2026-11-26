@@ -174,7 +174,7 @@ mod tokens;
 mod usage;
 
 pub use accounts::{Account, NewAccount, default_name, normalize_email};
-pub use agent_config::AgentModel;
+pub use agent_config::{AgentMachine, AgentModel};
 pub use agent_events::{
     AgentEvent, BUDGET_WINDOW_MS, BudgetKind, BudgetLimits, DEFAULT_PROACTIVE_RUNS_PER_HOUR,
     DEFAULT_WAKES_PER_HOUR, EXTERNAL_EVENT, MAX_BUDGET_PER_HOUR, MAX_EVENT_PAYLOAD_BYTES,

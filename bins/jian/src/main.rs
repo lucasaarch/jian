@@ -19,17 +19,19 @@ mod users_cli;
 
 use std::future::IntoFuture as _;
 use std::net::SocketAddr;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use anyhow::Context as _;
-use clap::{Parser, Subcommand};
+use clap::{ArgAction, Parser, Subcommand};
+use jian_exec::Executor;
 use jian_server::{
-    AGENT_WAKE_KIND, AccountModels, AgentRunner, AgentWaker, AppState, EventBus, INVITE_SEND_KIND,
-    InviteSender, JobOptions, JobRegistry, JobRequeue, JobRunner, LOGIN_LINK_SEND_KIND, LlmAccess,
-    LoginLinkSender, MemoryEventBus, ModelSource, PublicUrl, RUN_KIND, SCHEDULE_FIRE_KIND,
-    ScheduleFirer, Settings, SlotKeeper, THREAD_COMPACT_KIND, ThreadCompactor,
+    AGENT_WAKE_KIND, AccountModels, AgentMachines, AgentRunner, AgentWaker, AppState, EventBus,
+    INVITE_SEND_KIND, InviteSender, JobOptions, JobRegistry, JobRequeue, JobRunner,
+    LOGIN_LINK_SEND_KIND, LlmAccess, LoginLinkSender, MachineHub, MemoryEventBus, ModelSource,
+    PublicUrl, RUN_KIND, SCHEDULE_FIRE_KIND, ScheduleFirer, Settings, SlotKeeper,
+    THREAD_COMPACT_KIND, ThreadCompactor,
 };
 use jian_store::embedded::EmbeddedConfig;
 use jian_store::secrets::{LocalKeyring, MasterKeys as _};
@@ -136,6 +138,19 @@ struct Cli {
         value_name = "LIST"
     )]
     auth_methods: AuthPolicy,
+
+    /// Whether agents may run their shell and file tools on this machine, when their workspace
+    /// chose it, in a folder of their own under the data directory. On for a self-hosted or
+    /// desktop install, where this machine is the owner's; a shared deployment turns it off, and
+    /// its agents then use connected machines only.
+    #[arg(
+        long,
+        env = "JIAN_LOCAL_MACHINE",
+        default_value_t = true,
+        action = ArgAction::Set,
+        value_name = "BOOL"
+    )]
+    local_machine: bool,
 
     /// Where the panel is on the internet, such as `https://jian.example.com`: what the link in
     /// an invitation points at. Without it an invitation is only a token, and sending one by
@@ -309,6 +324,7 @@ async fn run() -> anyhow::Result<()> {
         public_url: cli.public_url.clone(),
         mail: cli.mail.config()?,
         workspace_name: cli.mail.workspace_name.clone(),
+        local_machine: cli.local_machine,
         ..Settings::default()
     };
     let source = cli.database_source()?;
@@ -348,7 +364,15 @@ async fn run() -> anyhow::Result<()> {
         None => match prepare(&database, &owner).await {
             Ok(ctx) => {
                 import_cli::at_boot(&database, &ctx, &cli.import, &data_dir).await;
-                serve(&addr, &database, &owner_source, settings, &mut shutdown).await
+                serve(
+                    &addr,
+                    &database,
+                    &owner_source,
+                    settings,
+                    &data_dir,
+                    &mut shutdown,
+                )
+                .await
             }
             Err(error) => Err(error),
         },
@@ -471,6 +495,7 @@ fn job_registry(
     settings: &Settings,
     models: &Arc<dyn ModelSource>,
     events: &Arc<dyn EventBus>,
+    executor: &Arc<dyn Executor>,
 ) -> JobRegistry {
     debug_jobs::registry()
         .register(INVITE_SEND_KIND, Arc::new(InviteSender::new(settings)))
@@ -487,13 +512,11 @@ fn job_registry(
             THREAD_COMPACT_KIND,
             Arc::new(ThreadCompactor::new(models.clone())),
         )
-        // No hub-backed machine yet: a run that needs one fails that tool call, and the light
-        // tools still work.
         .register(
             RUN_KIND,
             Arc::new(AgentRunner::new(
                 models.clone(),
-                Arc::new(jian_exec::NoMachine),
+                executor.clone(),
                 events.clone(),
             )),
         )
@@ -509,6 +532,7 @@ async fn serve(
     database: &Arc<Database>,
     owner_source: &Source,
     settings: Settings,
+    data_dir: &Path,
     shutdown: &mut Shutdown,
 ) -> anyhow::Result<()> {
     let listener = tokio::net::TcpListener::bind(addr)
@@ -549,11 +573,21 @@ async fn serve(
     let llm = LlmAccess::default();
     let events: Arc<dyn EventBus> = Arc::new(MemoryEventBus::new());
     let models: Arc<dyn ModelSource> = Arc::new(AccountModels::new(database.clone(), llm.clone()));
+    // The jobs and the routes meet on one hub: a run's task reaches the worker that connected to
+    // a route. Agents run on this machine, in a folder under the data directory, only where the
+    // deploy allows it.
+    let hub = MachineHub::new();
+    let executor: Arc<dyn Executor> = Arc::new(AgentMachines::from_settings(
+        database.clone(),
+        hub.clone(),
+        &settings,
+        &data_dir.join("work"),
+    ));
     let runner = JobRunner::start(
         database.clone(),
         keeper.instance().clone(),
         slots.clone(),
-        job_registry(&settings, &models, &events),
+        job_registry(&settings, &models, &events, &executor),
         JobOptions::default(),
     )
     .await;
@@ -566,6 +600,7 @@ async fn serve(
     // The runs' deltas and the routes' must meet on one bus, and the models on one set of
     // breakers.
     state.events = events;
+    state.hub = hub;
     state.llm = llm;
     let (stop, stopped) = oneshot::channel::<()>();
     let mut server = tokio::spawn(

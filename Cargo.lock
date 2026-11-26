@@ -1478,7 +1478,12 @@ name = "jian-exec"
 version = "0.1.0"
 dependencies = [
  "futures-util",
+ "jian-core",
+ "jian-remote",
+ "tempfile",
  "thiserror",
+ "tokio",
+ "tokio-util",
 ]
 
 [[package]]

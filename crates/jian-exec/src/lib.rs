@@ -10,7 +10,11 @@
 //! the run and dropped with it. Dropping a call's future cancels it: an implementation must not
 //! leave work running behind a dropped call.
 
+mod local;
+
 use futures_util::future::BoxFuture;
+
+pub use local::LocalExecutor;
 
 /// Why a call to a machine failed.
 #[derive(Debug, thiserror::Error)]
@@ -72,9 +76,8 @@ pub trait Machine: Send + Sync {
     ) -> BoxFuture<'a, Result<(), ExecError>>;
 }
 
-/// An [`Executor`] with no machine behind it: every `open` is [`ExecError::Unavailable`]. The
-/// gateway uses it until a machine is wired in, so a tool that needs one fails in words the
-/// model can read instead of hanging.
+/// An [`Executor`] with no machine behind it: every `open` is [`ExecError::Unavailable`]. For
+/// tests and tools that must not touch a machine; the gateway's real one chooses per agent.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct NoMachine;
 

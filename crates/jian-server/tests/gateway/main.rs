@@ -8,6 +8,7 @@ mod accounts;
 mod codex;
 mod invites;
 mod isolation;
+mod machines;
 mod memories;
 mod projects;
 mod providers;

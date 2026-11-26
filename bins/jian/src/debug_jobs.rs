@@ -74,6 +74,7 @@ mod tests {
             &Settings::default(),
             &(Arc::new(NoModels) as Arc<dyn ModelSource>),
             &(Arc::new(MemoryEventBus::new()) as Arc<dyn EventBus>),
+            &(Arc::new(jian_exec::NoMachine) as Arc<dyn jian_exec::Executor>),
         )
         .kinds()
         {

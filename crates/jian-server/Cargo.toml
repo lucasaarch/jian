@@ -17,7 +17,10 @@ jian-runtime.workspace = true
 jian-skills.workspace = true
 jian-store.workspace = true
 serde.workspace = true
-serde_json.workspace = true
+# A file is replaced only by a writer that names its mtime, a float of milliseconds that goes
+# through JSON twice (worker, gateway, worker). Without exact float parsing it can come back one
+# bit off and the worker then refuses the write as "changed".
+serde_json = { workspace = true, features = ["float_roundtrip"] }
 thiserror.workspace = true
 tokio = { workspace = true, features = ["sync", "time"] }
 tokio-util.workspace = true

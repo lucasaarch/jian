@@ -57,6 +57,7 @@
 mod account_models;
 mod accounts;
 mod agent_events;
+mod agent_machine;
 mod agent_model;
 mod agents;
 mod auth;
@@ -73,6 +74,7 @@ mod invites;
 mod jobs;
 mod llm_access;
 mod login_link_job;
+mod machine_exec;
 mod mail;
 mod mail_settings;
 mod members;
@@ -125,6 +127,7 @@ pub use jian_runtime::THREAD_COMPACT_KIND;
 pub use jobs::{JobContext, JobError, JobHandler, JobOptions, JobRegistry, JobRequeue, JobRunner};
 pub use llm_access::{LlmAccess, PendingLogins};
 pub use login_link_job::{LOGIN_LINK_SEND_KIND, LoginLinkSender};
+pub use machine_exec::AgentMachines;
 pub use mail::{DeployMail, MailConfig};
 pub use public_url::{InvalidPublicUrl, PublicUrl};
 pub use rate::{Clock, Limit, ManualClock, MemoryRateLimiter, RateLimiter, SystemClock, Verdict};
@@ -176,6 +179,8 @@ pub const ROUTES: &[&str] = &[
     "PATCH /v1/agents/{id} (its creator or an admin)",
     "POST /v1/agents/{id}/archive (its creator or an admin)",
     "GET /v1/agents/{id}/threads (a member who sees it)",
+    "GET /v1/agents/{id}/machine (a member who sees the agent)",
+    "PUT /v1/agents/{id}/machine (a member who manages the agent)",
     "GET /v1/agents/{id}/model (a member who sees the agent)",
     "PUT /v1/agents/{id}/model (a member who manages the agent)",
     "POST /v1/agents/{id}/events (the owner token, an admin, or the member who manages the agent)",
@@ -285,6 +290,10 @@ pub struct Settings {
     /// How the e-mail names the workspace. Workspaces have no name of their own yet, so one
     /// name is said for all of them.
     pub workspace_name: String,
+    /// Whether an agent's runs may use the gateway's own machine. On for a self-hosted or
+    /// desktop install, where that machine is the owner's; the Cloud turns it off, because
+    /// there it would be the operator's machine shared by every tenant.
+    pub local_machine: bool,
 }
 
 impl Default for Settings {
@@ -319,6 +328,7 @@ impl Default for Settings {
             mail: MailConfig::default(),
             skills_github_base: jian_skills::DEFAULT_GITHUB_BASE.to_owned(),
             workspace_name: "Jian".to_owned(),
+            local_machine: true,
         }
     }
 }
@@ -465,6 +475,10 @@ pub fn router_with(state: AppState, extra: Router<AppState>) -> Router {
             get(skills::get).put(skills::put).delete(skills::delete),
         )
         .route("/v1/skills/{name}/versions", get(skills::versions))
+        .route(
+            "/v1/agents/{id}/machine",
+            get(agent_machine::get).put(agent_machine::put),
+        )
         .route(
             "/v1/agents/{id}/model",
             get(agent_model::get).put(agent_model::put),
