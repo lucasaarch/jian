@@ -60,6 +60,9 @@ mod agent_events;
 mod agent_machine;
 mod agent_model;
 mod agents;
+mod artifact_events;
+mod artifact_folders;
+mod artifacts;
 mod auth;
 mod auto_continue;
 mod client_ws;
@@ -218,6 +221,19 @@ pub const ROUTES: &[&str] = &[
     "DELETE /v1/projects/{id}/files/{file_id} (its creator or an admin)",
     "GET /v1/threads/{id}/project (a member who sees it)",
     "PUT /v1/threads/{id}/project (a member in it)",
+    "GET /v1/artifacts (a member: the ones they see)",
+    "POST /v1/artifacts (a member in the thread, or who sees the project)",
+    "GET /v1/artifacts/{id} (a member who sees it)",
+    "PATCH /v1/artifacts/{id} (a member who sees it)",
+    "DELETE /v1/artifacts/{id} (its maker or an admin; anyone who sees it, for an agent's)",
+    "GET /v1/artifacts/{id}/versions (a member who sees it)",
+    "PUT /v1/artifacts/{id}/content (a member who sees it)",
+    "POST /v1/artifacts/{id}/edits (a member who sees it)",
+    "POST /v1/artifacts/{id}/duplicate (a member who sees it)",
+    "GET /v1/artifact-folders (a member)",
+    "POST /v1/artifact-folders (a member)",
+    "PATCH /v1/artifact-folders/{id} (its maker or an admin)",
+    "DELETE /v1/artifact-folders/{id} (its maker or an admin)",
     "GET /v1/agents/{id}/schedules (a member who sees the agent)",
     "POST /v1/agents/{id}/schedules (a member who sees the agent)",
     "GET /v1/agents/{id}/schedules/{scheduleId} (a member who sees the agent)",
@@ -511,6 +527,14 @@ pub fn router_with(state: AppState, extra: Router<AppState>) -> Router {
             "/v1/threads/{id}/project",
             get(projects::of_thread).put(projects::set_for_thread),
         )
+        .route(
+            "/v1/artifact-folders",
+            get(artifact_folders::list).post(artifact_folders::create),
+        )
+        .route(
+            "/v1/artifact-folders/{id}",
+            patch(artifact_folders::rename).delete(artifact_folders::delete),
+        )
         .route("/v1/grants", get(agents::grants).post(agents::give))
         .route("/v1/grants/revoke", post(agents::revoke))
         .route("/v1/threads", get(threads::list).post(threads::create))
@@ -548,6 +572,24 @@ pub fn router_with(state: AppState, extra: Router<AppState>) -> Router {
             patch(thread_messages::edit).delete(thread_messages::delete),
         )
         .layer(DefaultBodyLimit::max(MAX_MESSAGE_BODY));
+    // An artifact's source is up to 2M characters for a deck, which UTF-8 and JSON escaping can
+    // multiply; the store holds the real ceiling per kind.
+    let artifacts = Router::new()
+        .route(
+            "/v1/artifacts",
+            get(artifacts::list).post(artifacts::create),
+        )
+        .route(
+            "/v1/artifacts/{id}",
+            get(artifacts::get)
+                .patch(artifacts::update)
+                .delete(artifacts::delete),
+        )
+        .route("/v1/artifacts/{id}/versions", get(artifacts::versions))
+        .route("/v1/artifacts/{id}/content", put(artifacts::save))
+        .route("/v1/artifacts/{id}/edits", post(artifacts::edit))
+        .route("/v1/artifacts/{id}/duplicate", post(artifacts::duplicate))
+        .layer(DefaultBodyLimit::max(MAX_ARTIFACT_BODY));
     // A file is held in memory up to its limit, and the body is read by the handler, which
     // answers a clear 413 (the layer would answer plain text).
     let files = Router::new()
@@ -561,6 +603,7 @@ pub fn router_with(state: AppState, extra: Router<AppState>) -> Router {
         .route("/v1/me", get(me))
         .merge(accounts)
         .merge(messages)
+        .merge(artifacts)
         .merge(files)
         .route(
             jian_protocol::machine::CONNECT_PATH,
@@ -577,6 +620,10 @@ pub fn router_with(state: AppState, extra: Router<AppState>) -> Router {
 
 /// The most bytes the body of an account route may have.
 const MAX_ACCOUNT_BODY: usize = 16 * 1024;
+
+/// The most bytes the body of an artifact route may have: 2M characters of a deck at their
+/// widest in UTF-8, with room for the JSON around them.
+const MAX_ARTIFACT_BODY: usize = 9 * 1024 * 1024;
 
 /// The most bytes the body of a message route may have.
 const MAX_MESSAGE_BODY: usize = 160 * 1024;

@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use super::MachineSummary;
+use crate::artifacts::{ArtifactGone, ArtifactVersioned, ArtifactView};
 use crate::objectives::ObjectiveView;
 use crate::projects::{ProjectFileChange, ProjectGone, ProjectThreadChange, ProjectView};
 use crate::runs::{RunDelta, RunView};
@@ -25,6 +26,9 @@ pub enum Topic {
     /// The projects the client sees: their changes, files and threads. A client hears only about
     /// projects it sees, so each client has a numbering of its own.
     Projects,
+    /// The artifacts the client sees (those of its threads and projects): made, changed, given a
+    /// new version or deleted. Each client has a numbering of its own.
+    Artifacts,
     /// The workspace's skill library: members adding, changing and removing skills. Everyone
     /// sees the whole library, so every client has the same numbering.
     Skills,
@@ -85,6 +89,18 @@ pub enum DeltaPayload {
     /// A thread came into a project or left it.
     #[serde(rename = "project.thread.changed")]
     ProjectThreadChanged(ProjectThreadChange),
+    /// An artifact was made: its state now, as the client sees it.
+    #[serde(rename = "artifact.created")]
+    ArtifactCreated(ArtifactView),
+    /// An artifact's title, folder or pin changed: its state now.
+    #[serde(rename = "artifact.updated")]
+    ArtifactUpdated(ArtifactView),
+    /// An artifact got a new version, or a member's save rewrote the latest.
+    #[serde(rename = "artifact.version")]
+    ArtifactVersion(ArtifactVersioned),
+    /// An artifact was deleted, or the client no longer sees it.
+    #[serde(rename = "artifact.deleted")]
+    ArtifactDeleted(ArtifactGone),
     /// A library skill was made, changed or imported: its state now.
     #[serde(rename = "skill.updated")]
     SkillUpdated(SkillSummary),

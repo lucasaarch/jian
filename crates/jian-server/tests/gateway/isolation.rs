@@ -28,6 +28,7 @@ const QUIET: Duration = Duration::from_millis(300);
 /// This file, to check that a name in a table below is a test that exists.
 const THIS_FILE: &str = include_str!("isolation.rs");
 /// The invitation tests are in their own file, and the isolation one is among them.
+const ARTIFACTS_FILE: &str = include_str!("artifacts.rs");
 const CODEX_FILE: &str = include_str!("codex.rs");
 const INVITES_FILE: &str = include_str!("invites.rs");
 const PROVIDERS_FILE: &str = include_str!("providers.rs");
@@ -49,6 +50,7 @@ async fn start() -> (Gateway, TwoTenants) {
 fn is_a_test_here(name: &str) -> bool {
     let declared = format!("async fn {name}(");
     THIS_FILE.contains(&declared)
+        || ARTIFACTS_FILE.contains(&declared)
         || CODEX_FILE.contains(&declared)
         || INVITES_FILE.contains(&declared)
         || PROVIDERS_FILE.contains(&declared)
@@ -135,6 +137,19 @@ const ROUTE_TESTS: &[(&str, &str)] = &[
         "DELETE /v1/agents/{id}/memories/{key}/links/{other}",
         MEMORIES_TEST,
     ),
+    ("GET /v1/artifacts", ARTIFACTS_TEST),
+    ("POST /v1/artifacts", ARTIFACTS_TEST),
+    ("GET /v1/artifacts/{id}", ARTIFACTS_TEST),
+    ("PATCH /v1/artifacts/{id}", ARTIFACTS_TEST),
+    ("DELETE /v1/artifacts/{id}", ARTIFACTS_TEST),
+    ("GET /v1/artifacts/{id}/versions", ARTIFACTS_TEST),
+    ("PUT /v1/artifacts/{id}/content", ARTIFACTS_TEST),
+    ("POST /v1/artifacts/{id}/edits", ARTIFACTS_TEST),
+    ("POST /v1/artifacts/{id}/duplicate", ARTIFACTS_TEST),
+    ("GET /v1/artifact-folders", ARTIFACTS_TEST),
+    ("POST /v1/artifact-folders", ARTIFACTS_TEST),
+    ("PATCH /v1/artifact-folders/{id}", ARTIFACTS_TEST),
+    ("DELETE /v1/artifact-folders/{id}", ARTIFACTS_TEST),
     ("GET /v1/projects", MEMORIES_TEST),
     ("POST /v1/projects", MEMORIES_TEST),
     ("GET /v1/projects/{id}", MEMORIES_TEST),
@@ -220,6 +235,9 @@ const ROUTE_TESTS: &[(&str, &str)] = &[
 const INVITES_TEST: &str =
     "an_invitation_is_sent_with_its_own_workspaces_mail_account_and_nobody_elses";
 
+/// The test that shows tenant B reaches no artifact or artifact folder of tenant A.
+const ARTIFACTS_TEST: &str = "artifacts_and_folders_of_the_other_tenant_are_out_of_reach";
+
 /// The test that shows tenant B reaches no memory, project or thread-project link of tenant A.
 const MEMORIES_TEST: &str = "memories_and_projects_of_the_other_tenant_are_out_of_reach";
 
@@ -294,6 +312,7 @@ fn topic_test(topic: Topic) -> &'static str {
         Topic::Machines => "a_delta_reaches_only_its_own_tenants_subscribers",
         Topic::Threads => "a_member_hears_only_the_threads_they_are_in",
         Topic::Projects => "only_those_who_see_a_project_hear_of_it",
+        Topic::Artifacts => "only_those_who_see_an_artifact_hear_of_it",
         Topic::Skills => "a_change_to_the_library_is_heard_by_every_member",
     }
 }
@@ -368,6 +387,7 @@ async fn every_route_request_and_topic_has_an_isolation_test() {
     assert!(is_a_test_here(topic_test(Topic::Machines)));
     assert!(is_a_test_here(topic_test(Topic::Threads)));
     assert!(is_a_test_here(topic_test(Topic::Projects)));
+    assert!(is_a_test_here(topic_test(Topic::Artifacts)));
     assert!(is_a_test_here(topic_test(Topic::Skills)));
     // Compiling this is the check: a new worker message must be listed in `worker_message_test`.
     let _: fn(&WorkerMessage) -> &'static str = worker_message_test;

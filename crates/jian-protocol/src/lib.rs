@@ -9,6 +9,7 @@
 //! users, which have no version of their own: they are additive.
 
 pub mod agents;
+pub mod artifacts;
 pub mod auth;
 pub mod client;
 pub mod machine;

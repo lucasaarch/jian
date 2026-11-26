@@ -123,6 +123,7 @@ mod accounts;
 mod agent_config;
 mod agent_events;
 mod agents;
+mod artifact_audience;
 mod artifact_edits;
 mod artifact_folders;
 mod artifacts;
