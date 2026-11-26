@@ -51,8 +51,12 @@
 //! ([`ImportReport::not_imported`]); the issue that creates a domain's table adds its import
 //! here. (Profiles, sessions, contacts and messages do have one: the `agents`, `threads` and
 //! `messages` domains, which need the owner imported first; memories and projects, in the
-//! `memories` and `projects` domains, schedules in `schedules` and skills in `skills`.)
+//! `memories` and `projects` domains, schedules in `schedules`, skills in `skills` and the
+//! artifacts of sessions, with their versions and folders, in `artifacts`. A whiteboard or a
+//! picture has no place in the core and is counted in that marker as left out. The old
+//! `artifacts` table is the output of tool calls, not these, and is still listed.)
 
+mod artifacts_import;
 mod conversations;
 mod error;
 mod machines;

@@ -9,7 +9,10 @@ use std::path::{Path, PathBuf};
 use jian_import::{Domain, ImportOptions, ImportReport, Importer, Scope, Source};
 use jian_store::embedded::{EmbeddedConfig, EmbeddedPostgres};
 use jian_store::secrets::LocalKeyring;
-use jian_store::{Author, Database, ImportStatus, TenantCtx, TenantId, Viewer, Who, Window};
+use jian_store::{
+    ArtifactActor, ArtifactAuthor, ArtifactFilter, Author, Database, ImportStatus, TenantCtx,
+    TenantId, Viewer, Who, Window,
+};
 use jian_testkit::{TestDb, TwoTenants};
 use sqlx::Connection as _;
 
@@ -42,7 +45,8 @@ fn rows(which: Domain) -> u32 {
         Domain::Messages => 5,
         // Two sessions with a person (the one between two agents is left); two skills, the ones
         // with a name the core accepts ("Bad Name" is left out).
-        Domain::Threads | Domain::Skills => 2,
+        // A folder and a markdown artifact (the whiteboard and the picture are left out).
+        Domain::Threads | Domain::Skills | Domain::Artifacts => 2,
         _ => 1,
     }
 }
@@ -184,6 +188,7 @@ async fn a_dump_of_the_old_desktop_database_comes_over_once() {
     owners_chats_came_over(&new.db, &ctx, &members[0].account_id).await;
     memories_and_projects_came_over(&new.db, &ctx, &first, &members[0].account_id).await;
     skills_came_over(&new.db, &ctx, &first, &members[0].account_id).await;
+    artifacts_came_over(&new.db, &ctx, &first, &members[0].account_id).await;
     // The scratch server is gone with its directory.
     assert!(!dir.path().join("scratch").exists());
 
@@ -224,7 +229,7 @@ async fn a_dump_of_the_old_desktop_database_comes_over_once() {
         .unwrap();
     assert!(pending.domains.is_empty());
     let markers = new.db.imports(&ctx).await.unwrap();
-    assert_eq!(markers.len(), 12);
+    assert_eq!(markers.len(), 13);
     assert!(markers.iter().all(|m| m.status == ImportStatus::Done));
     new.stop().await;
 }
@@ -319,7 +324,8 @@ async fn a_run_that_stopped_or_lacked_a_key_is_finished_by_the_next() {
             Domain::Memories,
             Domain::Projects,
             Domain::Schedules,
-            Domain::Skills
+            Domain::Skills,
+            Domain::Artifacts
         ]
     );
     // No owner address was given, so the chats wait for one and say so.
@@ -331,6 +337,7 @@ async fn a_run_that_stopped_or_lacked_a_key_is_finished_by_the_next() {
         Domain::Projects,
         Domain::Schedules,
         Domain::Skills,
+        Domain::Artifacts,
     ] {
         assert_eq!(domain(&second, which).status, ImportStatus::Skipped);
     }
@@ -713,4 +720,70 @@ async fn skills_came_over(
         detail.contains("1 left out") && detail.contains("name the core does not accept"),
         "{detail}"
     );
+}
+
+async fn artifacts_came_over(
+    db: &Database,
+    ctx: &TenantCtx,
+    report: &ImportReport,
+    owner: &jian_store::AccountId,
+) {
+    let viewer = Viewer {
+        account: owner.clone(),
+        admin: true,
+    };
+    let actor = ArtifactActor::Member(&viewer);
+    // A folder and a markdown artifact; the whiteboard and the picture are counted, not failed.
+    let detail = domain(report, Domain::Artifacts).detail.clone().unwrap();
+    assert!(
+        detail.contains("2 left out") && detail.contains("a whiteboard or a picture"),
+        "{detail}"
+    );
+    let all = db
+        .list_artifacts(ctx, actor, &ArtifactFilter::default(), None, 10)
+        .await
+        .unwrap()
+        .items;
+    // Once, however many runs: the second run of the test found it already there.
+    assert_eq!(all.len(), 1);
+    let made = &all[0];
+    assert_eq!(
+        (made.kind, made.title.as_str(), made.pinned),
+        (jian_core::ArtifactKind::Markdown, "Launch plan", true)
+    );
+    assert_eq!(made.created_at, "2026-11-25T18:31:00.000Z");
+    // Linked to the thread of its session, the project and the folder it was filed in.
+    assert!(made.thread.is_some() && made.project.is_some() && made.folder.is_some());
+    let agent = db.list_agents(ctx, &viewer, None, 10).await.unwrap().items[0]
+        .id
+        .clone();
+    assert_eq!(made.created_by, ArtifactAuthor::Agent(agent.clone()));
+    // The old numbers had a gap (1, 3); the versions count from 1 with none skipped, and a
+    // version a person saved is the owner's.
+    let versions = db
+        .artifact_versions(ctx, actor, &made.id)
+        .await
+        .unwrap()
+        .unwrap();
+    let seen: Vec<(i32, ArtifactAuthor)> = versions
+        .into_iter()
+        .map(|v| (v.version, v.author))
+        .collect();
+    assert_eq!(
+        seen,
+        [
+            (1, ArtifactAuthor::Agent(agent)),
+            (2, ArtifactAuthor::Member(owner.clone()))
+        ]
+    );
+    assert_eq!(made.version, 2);
+    let latest = db
+        .artifact_version(ctx, actor, &made.id, None)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(latest.content, "# Launch plan");
+    let folders = db.list_artifact_folders(ctx).await.unwrap();
+    assert_eq!(folders.len(), 1);
+    assert_eq!(folders[0].name, "Drafts");
 }

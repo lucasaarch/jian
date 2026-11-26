@@ -6,7 +6,10 @@ use jian_store::secrets::LocalKeyring;
 use jian_store::{Database, ImportResult, ImportStatus, TenantCtx};
 
 use crate::reader::{LegacyReader, LegacyTable};
-use crate::{ImportError, Source, conversations, machines, memories, owner, providers, secrets};
+use crate::{
+    ImportError, Source, artifacts_import, conversations, machines, memories, owner, providers,
+    secrets,
+};
 
 /// A part of the old Jian that has a table in the core, imported on its own: one marker, one
 /// result.
@@ -38,11 +41,14 @@ pub enum Domain {
     Schedules,
     /// The old skill library, with what was switched off. Needs the owner and the agents.
     Skills,
+    /// The artifacts of the old sessions, with their versions and folders. Needs the owner, the
+    /// threads and the projects.
+    Artifacts,
 }
 
 impl Domain {
     /// Every domain, in the order a run takes them.
-    pub const ALL: [Self; 12] = [
+    pub const ALL: [Self; 13] = [
         Self::Owner,
         Self::Secrets,
         Self::Providers,
@@ -55,6 +61,7 @@ impl Domain {
         Self::Projects,
         Self::Schedules,
         Self::Skills,
+        Self::Artifacts,
     ];
 
     /// The name in a marker and in the report.
@@ -72,6 +79,7 @@ impl Domain {
             Self::Projects => "projects",
             Self::Schedules => "schedules",
             Self::Skills => "skills",
+            Self::Artifacts => "artifacts",
         }
     }
 
@@ -92,6 +100,12 @@ impl Domain {
             Self::Projects => &["projects"],
             Self::Schedules => &["schedules"],
             Self::Skills => &["skills"],
+            // The old `artifacts` is the output of tool calls, not these, so it stays reported.
+            Self::Artifacts => &[
+                "artifact_folders",
+                "session_artifacts",
+                "session_artifact_versions",
+            ],
         }
     }
 }
@@ -274,6 +288,10 @@ impl<'a> Importer<'a> {
             Domain::Projects => {
                 let email = self.options.owner_email.as_deref();
                 memories::projects(self.db, self.ctx, reader, email).await
+            }
+            Domain::Artifacts => {
+                let email = self.options.owner_email.as_deref();
+                artifacts_import::artifacts(self.db, self.ctx, reader, email).await
             }
         }
     }

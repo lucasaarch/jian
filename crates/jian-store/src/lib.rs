@@ -141,6 +141,7 @@ mod imports;
 mod invites;
 mod jobs;
 mod legacy;
+mod legacy_artifacts;
 mod legacy_memories;
 mod legacy_schedules;
 mod legacy_skills;
@@ -218,6 +219,7 @@ pub use jobs::{
     MAX_PAYLOAD_BYTES, NewJob, PURGE_BATCH, RetryPolicy,
 };
 pub use legacy::{DeviceImport, ImportOutcome, LegacyDevice, LegacyMachine, MachineImport};
+pub use legacy_artifacts::{LegacyArtifact, LegacyArtifactFolder, LegacyArtifactVersion};
 pub use legacy_memories::{LegacyMemory, LegacyMemoryLink, LegacyProject};
 pub use legacy_schedules::LegacySchedule;
 pub use legacy_skills::LegacySkill;

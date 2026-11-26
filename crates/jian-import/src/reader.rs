@@ -1,12 +1,14 @@
 //! Reading the old gateway's tables. Every method is a `SELECT`; the connection is read-only.
 
+use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 
 use jian_store::embedded::EmbeddedPostgres;
 use jian_store::{
-    LegacyAgent, LegacyChat, LegacyDevice, LegacyMachine, LegacyMemory, LegacyMemoryLink,
-    LegacyMessage, LegacyProject, LegacyProvider, LegacySchedule, LegacyThread,
+    LegacyAgent, LegacyArtifact, LegacyArtifactFolder, LegacyArtifactVersion, LegacyChat,
+    LegacyDevice, LegacyMachine, LegacyMemory, LegacyMemoryLink, LegacyMessage, LegacyProject,
+    LegacyProvider, LegacySchedule, LegacyThread,
 };
 use sqlx::{AssertSqlSafe, Connection as _, PgConnection};
 
@@ -235,6 +237,87 @@ impl LegacyReader {
                 name,
                 repository_url,
                 created_at,
+            })
+            .collect())
+    }
+
+    pub(crate) async fn artifact_folders(
+        &mut self,
+    ) -> Result<Vec<LegacyArtifactFolder>, ImportError> {
+        let rows: Vec<(String, String, String)> = sqlx::query_as(
+            "SELECT id::text, name, created_at::text FROM artifact_folders ORDER BY created_at, id",
+        )
+        .fetch_all(&mut self.connection)
+        .await
+        .map_err(ImportError::Source)?;
+        Ok(rows
+            .into_iter()
+            .map(|(id, name, created_at)| LegacyArtifactFolder {
+                id,
+                name,
+                created_at,
+            })
+            .collect())
+    }
+
+    /// The artifacts of the sessions, each with every version it had.
+    pub(crate) async fn artifacts(&mut self) -> Result<Vec<LegacyArtifact>, ImportError> {
+        #[derive(sqlx::FromRow)]
+        struct Row {
+            id: String,
+            profile_id: String,
+            session_id: String,
+            project_id: Option<String>,
+            folder_id: Option<String>,
+            title: String,
+            kind: String,
+            pinned: bool,
+            created_at: String,
+            updated_at: String,
+        }
+        let rows: Vec<Row> = sqlx::query_as(
+            "SELECT id::text, profile_id::text, session_id::text, project_id::text, \
+                    folder_id::text, title, type AS kind, pinned, created_at::text, \
+                    updated_at::text \
+             FROM session_artifacts ORDER BY created_at, id",
+        )
+        .fetch_all(&mut self.connection)
+        .await
+        .map_err(ImportError::Source)?;
+        let versions: Vec<(String, i32, String, String, Option<String>, String)> = sqlx::query_as(
+            "SELECT artifact_id::text, version, content, author, edit_key, created_at::text \
+             FROM session_artifact_versions ORDER BY artifact_id, version",
+        )
+        .fetch_all(&mut self.connection)
+        .await
+        .map_err(ImportError::Source)?;
+        let mut by_artifact: HashMap<String, Vec<LegacyArtifactVersion>> = HashMap::new();
+        for (artifact, version, content, author, edit_key, created_at) in versions {
+            by_artifact
+                .entry(artifact)
+                .or_default()
+                .push(LegacyArtifactVersion {
+                    version,
+                    content,
+                    author,
+                    edit_key,
+                    created_at,
+                });
+        }
+        Ok(rows
+            .into_iter()
+            .map(|row| LegacyArtifact {
+                versions: by_artifact.remove(&row.id).unwrap_or_default(),
+                id: row.id,
+                profile_id: row.profile_id,
+                session_id: row.session_id,
+                project_id: row.project_id,
+                folder_id: row.folder_id,
+                title: row.title,
+                kind: row.kind,
+                pinned: row.pinned,
+                created_at: row.created_at,
+                updated_at: row.updated_at,
             })
             .collect())
     }
