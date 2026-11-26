@@ -15,6 +15,7 @@ pub mod memories;
 pub mod projects;
 pub mod providers;
 pub mod quotas;
+pub mod runs;
 pub mod schedules;
 pub mod skills;
 pub mod threads;

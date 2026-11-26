@@ -5,6 +5,7 @@ use ts_rs::TS;
 
 use super::MachineSummary;
 use crate::projects::{ProjectFileChange, ProjectGone, ProjectThreadChange, ProjectView};
+use crate::runs::{RunDelta, RunView};
 use crate::skills::{SkillGone, SkillSummary};
 use crate::threads::{MessageView, ParticipantChange, ThreadSummary};
 
@@ -87,6 +88,14 @@ pub enum DeltaPayload {
     /// A library skill was deleted.
     #[serde(rename = "skill.deleted")]
     SkillDeleted(SkillGone),
+    /// A run of an agent in a thread of the client began, paused, resumed or ended: its state
+    /// now.
+    #[serde(rename = "run.updated")]
+    RunUpdated(RunView),
+    /// Text a run is writing, before the message that holds it exists. Not replayed as a
+    /// message: a client that missed it reads the message when it comes.
+    #[serde(rename = "run.delta")]
+    RunDelta(RunDelta),
 }
 
 /// One change on a topic.
