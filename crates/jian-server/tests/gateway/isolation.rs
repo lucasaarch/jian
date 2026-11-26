@@ -114,6 +114,8 @@ const ROUTE_TESTS: &[(&str, &str)] = &[
     ("PUT /v1/skills/{name}", SKILLS_TEST),
     ("DELETE /v1/skills/{name}", SKILLS_TEST),
     ("GET /v1/skills/{name}/versions", SKILLS_TEST),
+    ("GET /v1/agents/{id}/model", AGENT_MODEL_TEST),
+    ("PUT /v1/agents/{id}/model", AGENT_MODEL_TEST),
     ("GET /v1/agents/{id}/skills", SKILLS_TEST),
     ("PUT /v1/agents/{id}/skills/{name}", SKILLS_TEST),
     (
@@ -197,6 +199,8 @@ const INVITES_TEST: &str =
 const MEMORIES_TEST: &str = "memories_and_projects_of_the_other_tenant_are_out_of_reach";
 
 /// The test that shows tenant B reaches no skill of tenant A's library, nor its agents' skills.
+/// The test that shows tenant B reads and changes no model of tenant A's agents.
+const AGENT_MODEL_TEST: &str = "an_agents_model_is_out_of_reach_of_another_tenant";
 const SKILLS_TEST: &str = "skills_of_the_other_tenant_are_out_of_reach";
 
 /// The test that shows tenant B reaches no file or repository of tenant A's projects.

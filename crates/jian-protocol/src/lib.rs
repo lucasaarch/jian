@@ -8,6 +8,7 @@
 //! [`machine::PROTOCOL_VERSION`]. [`auth`] holds the bodies of the plain HTTP routes of sign-in and
 //! users, which have no version of their own: they are additive.
 
+pub mod agents;
 pub mod auth;
 pub mod client;
 pub mod machine;

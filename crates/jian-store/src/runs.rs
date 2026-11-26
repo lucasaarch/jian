@@ -70,6 +70,38 @@ impl RunState {
     }
 }
 
+/// Why a run exists.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RunOrigin {
+    /// A person wrote to the agent.
+    Message,
+    /// An objective is still open.
+    Continue,
+    /// Another run handed it a brief.
+    Subagent,
+    /// The agent's inbox woke it.
+    Wake,
+}
+
+impl RunOrigin {
+    /// The name in the database.
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Message => "message",
+            Self::Continue => "continue",
+            Self::Subagent => "subagent",
+            Self::Wake => "wake",
+        }
+    }
+
+    fn parse(text: &str) -> Option<Self> {
+        [Self::Message, Self::Continue, Self::Subagent, Self::Wake]
+            .into_iter()
+            .find(|origin| origin.as_str() == text)
+    }
+}
+
 /// One run.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Run {
@@ -101,6 +133,11 @@ pub struct Run {
     pub error: Option<String>,
     /// A stop was asked for.
     pub stop_requested: bool,
+    /// Why it exists.
+    pub origin: RunOrigin,
+    /// Where it paused, as JSON text, while it waits on an approval and no worker holds it. The
+    /// runtime writes and reads it; its `callId` names the call that waits.
+    pub resume: Option<String>,
     /// When it was made.
     pub created_at: String,
     /// When it last changed.
@@ -190,6 +227,8 @@ struct RunRow {
     machine_ms: i64,
     error: Option<String>,
     stop_requested: bool,
+    origin: String,
+    resume: Option<String>,
     created_at: String,
     updated_at: String,
     finished_at: Option<String>,
@@ -197,7 +236,7 @@ struct RunRow {
 
 const RUN_COLUMNS: &str = concat!(
     "id, seq, thread_id, agent_id, started_by, trigger_seq, seen_seq, state, steps, tokens, \
-     used_machine, machine_ms, error, stop_requested, ",
+     used_machine, machine_ms, error, stop_requested, origin, resume::text AS resume, ",
     iso!("created_at"),
     " AS created_at, ",
     iso!("updated_at"),
@@ -226,6 +265,9 @@ impl TryFrom<RunRow> for Run {
             machine_ms: row.machine_ms,
             error: row.error,
             stop_requested: row.stop_requested,
+            origin: RunOrigin::parse(&row.origin)
+                .ok_or(StoreError::InvalidWorkspace("a stored run has no origin"))?,
+            resume: row.resume,
             created_at: row.created_at,
             updated_at: row.updated_at,
             finished_at: row.finished_at,
@@ -306,13 +348,14 @@ impl Database {
         agent: &AgentId,
         started_by: Option<&AccountId>,
         trigger_seq: i64,
+        origin: RunOrigin,
     ) -> Result<(Run, bool), StoreError> {
         const ACTION: &str = "start a run";
         let id = random_id("run_")?;
         let mut tx = self.begin(ctx).await?;
         let made: Option<RunRow> = sqlx::query_as(AssertSqlSafe(format!(
-            "INSERT INTO runs (id, thread_id, agent_id, started_by, trigger_seq, seen_seq) \
-             VALUES ($1, $2, $3, $4, $5, $5) \
+            "INSERT INTO runs (id, thread_id, agent_id, started_by, trigger_seq, seen_seq, origin) \
+             VALUES ($1, $2, $3, $4, $5, $5, $6) \
              ON CONFLICT (thread_id, agent_id) WHERE state IN {ACTIVE} DO NOTHING \
              RETURNING {RUN_COLUMNS}"
         )))
@@ -321,6 +364,7 @@ impl Database {
         .bind(agent.as_str())
         .bind(started_by.map(AccountId::as_str))
         .bind(trigger_seq)
+        .bind(origin.as_str())
         .fetch_optional(&mut *tx)
         .await
         .map_err(StoreError::query(ACTION))?;
@@ -406,13 +450,65 @@ impl Database {
         let mut tx = self.begin(ctx).await?;
         let changed = sqlx::query(
             "UPDATE runs SET state = $2, error = COALESCE($3, error), updated_at = now(), \
-             finished_at = CASE WHEN $4 THEN now() ELSE finished_at END \
+             finished_at = CASE WHEN $4 THEN now() ELSE finished_at END, \
+             resume = CASE WHEN $4 THEN NULL ELSE resume END \
              WHERE id = $1 AND state NOT IN ('done', 'failed', 'stopped')",
         )
         .bind(id)
         .bind(state.as_str())
         .bind(error.map(clip))
         .bind(state.is_terminal())
+        .execute(&mut *tx)
+        .await
+        .map_err(StoreError::query(ACTION))?
+        .rows_affected();
+        tx.commit().await.map_err(StoreError::query(ACTION))?;
+        Ok(changed == 1)
+    }
+
+    /// Parks a running run on an approval: it becomes `waiting_approval` with `resume` (JSON
+    /// text) to go on from, and its worker may let go. `false` when it was not running (it was
+    /// stopped meanwhile).
+    pub async fn pause_run(
+        &self,
+        ctx: &TenantCtx,
+        id: &str,
+        resume: &str,
+    ) -> Result<bool, StoreError> {
+        const ACTION: &str = "pause a run";
+        let mut tx = self.begin(ctx).await?;
+        let changed = sqlx::query(
+            "UPDATE runs SET state = 'waiting_approval', resume = $2::jsonb, updated_at = now() \
+             WHERE id = $1 AND state = 'running'",
+        )
+        .bind(id)
+        .bind(resume)
+        .execute(&mut *tx)
+        .await
+        .map_err(StoreError::query(ACTION))?
+        .rows_affected();
+        tx.commit().await.map_err(StoreError::query(ACTION))?;
+        Ok(changed == 1)
+    }
+
+    /// Takes a run that waits on the call `call_id` back to `running`, for the worker that goes
+    /// on with it. `false` when it does not wait on that call any more: another worker took it,
+    /// it was stopped, or it waits on a later call. Only one of any number of callers gets
+    /// `true`.
+    pub async fn resume_run(
+        &self,
+        ctx: &TenantCtx,
+        id: &str,
+        call_id: &str,
+    ) -> Result<bool, StoreError> {
+        const ACTION: &str = "resume a run";
+        let mut tx = self.begin(ctx).await?;
+        let changed = sqlx::query(
+            "UPDATE runs SET state = 'running', updated_at = now() \
+             WHERE id = $1 AND state = 'waiting_approval' AND resume->>'callId' = $2",
+        )
+        .bind(id)
+        .bind(call_id)
         .execute(&mut *tx)
         .await
         .map_err(StoreError::query(ACTION))?
@@ -494,8 +590,11 @@ impl Database {
         let mut tx = self.begin(ctx).await?;
         sqlx::query(
             "UPDATE runs SET stop_requested = true, updated_at = now(), \
-             state = CASE WHEN state = 'queued' THEN 'stopped' ELSE state END, \
-             finished_at = CASE WHEN state = 'queued' THEN now() ELSE finished_at END \
+             state = CASE WHEN state IN ('queued', 'waiting_approval') \
+                 THEN 'stopped' ELSE state END, \
+             finished_at = CASE WHEN state IN ('queued', 'waiting_approval') \
+                 THEN now() ELSE finished_at END, \
+             resume = CASE WHEN state = 'waiting_approval' THEN NULL ELSE resume END \
              WHERE id = $1 AND thread_id = $2 AND state NOT IN ('done', 'failed', 'stopped')",
         )
         .bind(id)
@@ -613,7 +712,8 @@ impl Database {
         let row: Option<ApprovalRow> = sqlx::query_as(AssertSqlSafe(format!(
             "UPDATE run_approvals SET state = $3, decided_by = $4, reason = $5, decided_at = now() \
              WHERE state = 'pending' AND expires_at > {} AND run_id = $1 \
-               AND EXISTS (SELECT 1 FROM runs WHERE id = $1 AND thread_id = $2) \
+               AND EXISTS (SELECT 1 FROM runs WHERE id = $1 AND thread_id = $2 \
+                             AND state = 'waiting_approval') \
              RETURNING {APPROVAL_COLUMNS}",
             at("$6")
         )))

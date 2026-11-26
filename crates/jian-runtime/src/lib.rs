@@ -22,6 +22,6 @@ pub use context::{
     BYTES_PER_TOKEN, COMPACT_AT_PERCENT, Context, History, PAGE, StoreHistory, build_context,
     estimate_tokens, should_compact,
 };
-pub use run::{ModelRef, Outcome, RunConfig, RunEvent, RunEvents, Runner, system_now_ms};
+pub use run::{ModelRef, Outcome, RUN_KIND, RunConfig, RunEvent, RunEvents, Runner, system_now_ms};
 pub use tool::{MachineSlot, Tool, ToolEnv, Tools};
 pub use tools::standard_tools;

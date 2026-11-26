@@ -13,8 +13,8 @@ use jian_protocol::runs::{
     ApprovalView, DecideApprovalRequest, RunStateView, RunView, RunsPage, StartRunRequest,
 };
 use jian_store::{
-    AgentId, Answer, Approval, NewJob, Run, RunState, StoreError, TenantCtx, ThreadId, Viewer, Who,
-    Window,
+    AgentId, Answer, Approval, NewJob, Run, RunOrigin, RunState, StoreError, TenantCtx, ThreadId,
+    Viewer, Who, Window,
 };
 use serde_json::json;
 
@@ -145,7 +145,14 @@ pub(crate) async fn start(
         .ok_or_else(|| bad("the thread has no message to answer"))?;
     let (run, created) = app
         .db
-        .start_run(&ctx, &thread_id, &agent, Some(&viewer.account), latest)
+        .start_run(
+            &ctx,
+            &thread_id,
+            &agent,
+            Some(&viewer.account),
+            latest,
+            RunOrigin::Message,
+        )
         .await
         .map_err(|e| failure(&e))?;
     if !created {
@@ -258,5 +265,16 @@ pub(crate) async fn approval(
                 "no call of this run waits for an answer",
             )
         })?;
+    // The answer is what takes the run back. If this does not get queued, the job that ends the
+    // time to answer finds the answer and does the same.
+    let job = NewJob::new(
+        RUN_KIND,
+        json!({ "runId": run.id, "callId": decided.call_id }),
+    )
+    .idempotent(format!("run:{}:answer:{}", run.id, decided.call_id));
+    app.db
+        .enqueue_job(&ctx, job)
+        .await
+        .map_err(|e| failure(&e))?;
     Ok(Json(run_view(&run, Some(&decided))))
 }

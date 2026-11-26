@@ -2,7 +2,8 @@
 //! one, and what another tenant or a member outside the thread reaches. No test calls a model:
 //! the job that works a run is `tests/run_job.rs`.
 
-use jian_store::ApprovalState;
+use jian_runtime::RUN_KIND;
+use jian_store::{ApprovalState, NewJob, NewProviderAccount};
 use serde_json::{Value, json};
 
 use super::accounts::{open_settings, start};
@@ -97,19 +98,35 @@ async fn a_thread_has_one_active_run_per_agent_and_only_its_members_start_stop_a
     let (_, listed) = call(&gateway, "GET", &runs, token, None).await;
     assert_eq!(listed["items"][0]["state"], "queued");
 
-    // Nothing waits for an answer: a 409. Then one does, and is answered once.
+    // Nothing waits for an answer: a 409. Then the run parks on a call (as the loop does when it
+    // lets its worker go), and the call is answered once.
     let decide = || call(&gateway, "POST", &approval, token, Some(answer.clone()));
     assert_eq!(decide().await.0, 409);
     let now = jian_runtime::system_now_ms();
-    gateway
-        .db
-        .create_approval(&a.ctx, &id(&run), "c1", "shell", "{}", now + 60_000)
+    let db = &gateway.db;
+    assert!(db.claim_run(&a.ctx, &id(&run)).await.unwrap());
+    db.create_approval(&a.ctx, &id(&run), "c1", "shell", "{}", now + 60_000)
         .await
         .unwrap();
+    assert!(
+        db.pause_run(&a.ctx, &id(&run), r#"{"callId":"c1"}"#)
+            .await
+            .unwrap()
+    );
     let (status, decided) = decide().await;
     assert_eq!(status, 200, "{decided}");
     assert_eq!(decided["approval"]["state"], "approved");
     assert_eq!(decide().await.0, 409);
+    // The answer queued the job that takes the run back, once.
+    let queued = db
+        .enqueue_job(
+            &a.ctx,
+            NewJob::new(RUN_KIND, json!({})).idempotent(format!("run:{}:answer:c1", id(&run))),
+        )
+        .await
+        .unwrap();
+    assert!(!queued.created);
+    assert_eq!(queued.job.payload["callId"], "c1");
     let kept = gateway
         .db
         .approval(&a.ctx, &id(&run), "c1")
@@ -118,11 +135,108 @@ async fn a_thread_has_one_active_run_per_agent_and_only_its_members_start_stop_a
         .unwrap();
     assert_eq!(kept.state, ApprovalState::Approved);
 
-    // A run that has not started stops at once, and then the thread takes a new one.
+    // A run that waits on a call, like one that has not started, has no worker to stop: it
+    // stops at once, and then the thread takes a new one.
     let (status, stopped) = call(&gateway, "POST", &stop, token, None).await;
     assert_eq!((status, stopped["state"].as_str()), (200, Some("stopped")));
     let (status, next) = start_run(body).await;
     assert_eq!(status, 202);
     assert_ne!(id(&next), id(&run));
+    gateway.stop().await;
+}
+
+#[tokio::test]
+async fn an_agents_model_is_out_of_reach_of_another_tenant() {
+    let (gateway, tenants) = start(open_settings()).await;
+    let (a, b) = (&tenants.a, &tenants.b);
+    let token = a.admin_session.as_str();
+    let agent = made(
+        &gateway,
+        token,
+        "/v1/agents",
+        json!({ "name": "pear", "visibility": "workspace" }),
+    )
+    .await;
+    let path = format!("/v1/agents/{}/model", id(&agent));
+    let account = gateway
+        .db
+        .create_provider_account(
+            &a.ctx,
+            &NewProviderAccount {
+                provider: jian_core::ProviderKind::Anthropic,
+                mode: jian_core::AccountMode::Api,
+                label: "main".to_owned(),
+                base_url: None,
+                key: None,
+            },
+        )
+        .await
+        .unwrap();
+    let pick = json!({ "accountId": account.id, "model": "big-1" });
+
+    // Nothing chosen: the workspace default.
+    let (status, none) = call(&gateway, "GET", &path, token, None).await;
+    assert_eq!(
+        (status, none["model"].clone()),
+        (200, Value::Null),
+        "{none}"
+    );
+    // An account that is not the workspace's, half a choice and an empty model are refused.
+    for bad in [
+        json!({ "accountId": "prv_nope", "model": "big-1" }),
+        json!({ "accountId": account.id, "model": null }),
+        json!({ "accountId": null, "model": "big-1" }),
+        json!({ "accountId": account.id, "model": "  " }),
+    ] {
+        let got = call(&gateway, "PUT", &path, token, Some(bad)).await;
+        assert_eq!(got.0, 400, "{}", got.1);
+    }
+    let (status, set) = call(&gateway, "PUT", &path, token, Some(pick.clone())).await;
+    assert_eq!((status, set), (200, pick.clone()));
+
+    // A member who sees the agent reads it and may not change it.
+    let peer = a.peer_session.as_str();
+    assert_eq!(call(&gateway, "GET", &path, peer, None).await.1, pick);
+    assert_eq!(
+        call(
+            &gateway,
+            "PUT",
+            &path,
+            peer,
+            Some(json!({ "accountId": null, "model": null }))
+        )
+        .await
+        .0,
+        403
+    );
+    // The other tenant finds no agent; its own agent takes none of A's accounts.
+    let other = b.admin_session.as_str();
+    assert_eq!(call(&gateway, "GET", &path, other, None).await.0, 404);
+    assert_eq!(
+        call(&gateway, "PUT", &path, other, Some(pick.clone()))
+            .await
+            .0,
+        404
+    );
+    let theirs = made(
+        &gateway,
+        other,
+        "/v1/agents",
+        json!({ "name": "plum", "visibility": "workspace" }),
+    )
+    .await;
+    let theirs_path = format!("/v1/agents/{}/model", id(&theirs));
+    assert_eq!(
+        call(&gateway, "PUT", &theirs_path, other, Some(pick.clone()))
+            .await
+            .0,
+        400
+    );
+    assert_eq!(call(&gateway, "GET", &path, token, None).await.1, pick);
+
+    // Both null takes the choice back.
+    let clear = json!({ "accountId": null, "model": null });
+    let (status, cleared) = call(&gateway, "PUT", &path, token, Some(clear.clone())).await;
+    assert_eq!((status, cleared), (200, clear));
     gateway.stop().await;
 }

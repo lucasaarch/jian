@@ -6,9 +6,13 @@
 //! panic into a `failed` run while the other tenants' runs go on.
 //!
 //! A run that was already `running` when its job came back (the process died) is not redone: its
-//! tools may have had effects, so it ends `failed`. A run waiting for an approval holds its job
-//! while it waits (it polls the database); a deploy that needs many waiting runs at once will
-//! want to release the job and wake it on the answer.
+//! tools may have had effects, so it ends `failed`.
+//!
+//! A run that waits for an approval holds no job and no worker: its job ends with the run
+//! parked as `waiting_approval`. Two things queue a job of the same kind with the run's
+//! `callId` in the payload: the answer (the route) and the end of the time to answer (queued by
+//! the loop when it asked). Whichever comes first takes the run back to `running` and goes on
+//! from the call; the other finds the run no longer waiting on that call and does nothing.
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -17,21 +21,19 @@ use futures_util::future::BoxFuture;
 use jian_exec::{Executor, Scope};
 use jian_protocol::client::DeltaPayload;
 use jian_protocol::runs::RunDelta;
+pub use jian_runtime::RUN_KIND;
 use jian_runtime::{
     MachineSlot, ModelRef, Outcome, RunConfig, RunEvent, RunEvents, Runner, standard_tools,
     system_now_ms,
 };
 use jian_skills::Catalog;
-use jian_store::{Database, Run, RunState, StoreError, TenantCtx};
+use jian_store::{ApprovalState, Database, Run, RunLease, RunState, StoreError, TenantCtx};
 
 use crate::events::EventBus;
 use crate::guard::catching;
 use crate::runs::current_view;
 use crate::workspace::{announce_with, message_view};
 use crate::{JobContext, JobError, JobHandler, Model, ModelSource};
-
-/// The job kind of a run. The payload is `{"runId": "..."}`.
-pub const RUN_KIND: &str = "agent.run";
 
 /// How long a run holds its place under the tenant's concurrency limit. Long, because it is
 /// given back when the run ends, and only a crash leaves it to expire.
@@ -120,9 +122,10 @@ impl AgentRunner {
         };
         let finish = match Box::pin(catching(ctx.id(), "agent run", work)).await {
             Some(Some(Ok(Outcome::Done))) => Finish::Done,
+            Some(Some(Ok(Outcome::Waiting))) => Finish::Waiting,
             Some(Some(Ok(Outcome::Failed(why)))) => Finish::Failed(why),
             Some(Some(Err(error))) => Finish::Failed(format!("the run could not go on: {error}")),
-            Some(None) => Finish::Stopped,
+            Some(Some(Ok(Outcome::Stopped)) | None) => Finish::Stopped,
             None => Finish::Failed("the run crashed".to_owned()),
         };
         // Read after the loop is gone, however it went: the slot outlives it.
@@ -137,6 +140,8 @@ impl AgentRunner {
 
 enum Finish {
     Done,
+    /// Parked on an approval: the run is `waiting_approval` already and holds nothing.
+    Waiting,
     Failed(String),
     Stopped,
 }
@@ -215,6 +220,9 @@ impl AgentRunner {
         if run.state.is_terminal() {
             return Ok(());
         }
+        if let Some(call_id) = job.payload["callId"].as_str() {
+            return self.go_on(&db, &tenant, &run, call_id).await;
+        }
         let listener = Listener {
             db: &db,
             ctx: &tenant,
@@ -227,33 +235,105 @@ impl AgentRunner {
             listener.state().await;
             return Ok(());
         }
-        let lease = match db
-            .acquire_run_lease(&tenant, LEASE_MS, system_now_ms())
-            .await
-        {
+        let lease = match lease(&db, &tenant).await {
             Ok(lease) => lease,
-            Err(StoreError::QuotaExceeded(_)) => {
+            Err(error) => {
                 // Over the concurrency limit: back to the queue to wait for a place.
                 end(&db, &tenant, &run, RunState::Queued, None).await;
-                return Err(JobError::retry("too many runs at once"));
+                return Err(error);
             }
-            Err(error) => return Err(store(error)),
+        };
+        self.drive(&db, &tenant, &run, &lease).await;
+        Ok(())
+    }
+
+    /// The job after a call's answer, or after its time ran out: takes the run back from
+    /// `waiting_approval` and goes on from that call.
+    async fn go_on(
+        &self,
+        db: &Database,
+        tenant: &TenantCtx,
+        run: &Run,
+        call_id: &str,
+    ) -> Result<(), JobError> {
+        let store = |e: StoreError| JobError::retry(e.to_string());
+        if run.state != RunState::WaitingApproval {
+            return Ok(());
+        }
+        let Some(approval) = db.approval(tenant, &run.id, call_id).await.map_err(store)? else {
+            return Ok(());
+        };
+        if approval.state == ApprovalState::Pending {
+            // Only the end of the time to answer finds it so.
+            db.expire_approval(tenant, &run.id, call_id, system_now_ms())
+                .await
+                .map_err(store)?;
+            let still = db.approval(tenant, &run.id, call_id).await.map_err(store)?;
+            if still.is_none_or(|a| a.state == ApprovalState::Pending) {
+                return Err(JobError::retry("the time to answer has not passed"));
+            }
+        }
+        // The place first: a run that cannot be given one stays parked, and this job tries again.
+        let lease = lease(db, tenant).await?;
+        if !db
+            .resume_run(tenant, &run.id, call_id)
+            .await
+            .map_err(store)?
+        {
+            if let Err(error) = db.release_run_lease(tenant, &lease).await {
+                tracing::warn!(%error, "could not give a run lease back");
+            }
+            return Ok(());
+        }
+        let Some(run) = db.run_by_id(tenant, &run.id).await.map_err(store)? else {
+            return Ok(());
+        };
+        self.drive(db, tenant, &run, &lease).await;
+        Ok(())
+    }
+
+    /// Runs a run this worker holds (`running`, with a lease) until it ends or parks.
+    async fn drive(&self, db: &Database, tenant: &TenantCtx, run: &Run, lease: &RunLease) {
+        let listener = Listener {
+            db,
+            ctx: tenant,
+            events: self.events.as_ref(),
+            run,
         };
         listener.state().await;
-        let finish = match self.models.model(&tenant).await {
-            Some(model) => Box::pin(self.run(&db, &tenant, &run, &model)).await,
+        let chosen = db
+            .agent_model(tenant, &run.agent)
+            .await
+            .unwrap_or_else(|error| {
+                tracing::warn!(%error, "could not read an agent's model; using the default");
+                None
+            });
+        let finish = match self.models.model_for(tenant, chosen).await {
+            Some(model) => Box::pin(self.run(db, tenant, run, &model)).await,
             None => Finish::Failed("no model is set up to answer with".to_owned()),
         };
-        if let Err(error) = db.release_run_lease(&tenant, &lease).await {
+        if let Err(error) = db.release_run_lease(tenant, lease).await {
             tracing::warn!(%error, "could not give a run lease back");
         }
         match &finish {
-            Finish::Done => end(&db, &tenant, &run, RunState::Done, None).await,
-            Finish::Failed(why) => end(&db, &tenant, &run, RunState::Failed, Some(why)).await,
-            Finish::Stopped => end(&db, &tenant, &run, RunState::Stopped, None).await,
+            Finish::Done => end(db, tenant, run, RunState::Done, None).await,
+            Finish::Waiting => {}
+            Finish::Failed(why) => end(db, tenant, run, RunState::Failed, Some(why)).await,
+            Finish::Stopped => end(db, tenant, run, RunState::Stopped, None).await,
         }
         listener.state().await;
-        Ok(())
+    }
+}
+
+/// A place under the tenant's concurrency limit, or a job error that tries again.
+async fn lease(db: &Database, tenant: &TenantCtx) -> Result<RunLease, JobError> {
+    match db
+        .acquire_run_lease(tenant, LEASE_MS, system_now_ms())
+        .await
+    {
+        Ok(lease) => Ok(lease),
+        Err(StoreError::QuotaExceeded(_)) => Err(JobError::retry("too many runs at once")),
+        Err(error) => Err(JobError::retry(error.to_string())),
     }
 }
 

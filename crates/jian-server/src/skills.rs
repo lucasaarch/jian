@@ -373,7 +373,7 @@ fn same_place(held: &SkillSource, new: &SkillSource) -> bool {
 }
 
 /// The agent, once the caller is known to see it, and whether they manage it.
-async fn seen_agent(
+pub(crate) async fn seen_agent(
     app: &AppState,
     ctx: &TenantCtx,
     viewer: &Viewer,

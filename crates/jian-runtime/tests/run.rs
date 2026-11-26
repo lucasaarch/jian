@@ -5,7 +5,6 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
 
 use futures_util::future::BoxFuture;
 use jian_core::{
@@ -19,7 +18,7 @@ use jian_runtime::{
 };
 use jian_skills::Catalog;
 use jian_store::{
-    AgentId, Message, NewAgent, NewMessage, NewThread, Run, ThreadId, Viewer, Window,
+    AgentId, Message, NewAgent, NewMessage, NewThread, Run, RunOrigin, ThreadId, Viewer, Window,
 };
 use jian_testkit::{
     FakeExecutor, FakeMachineScript, FakeProvider, Gate, Script, TestDb, TwoTenants, call, say,
@@ -94,6 +93,7 @@ async fn setup() -> Setup {
             &agent,
             Some(&side.admin.account_id),
             seq,
+            RunOrigin::Message,
         )
         .await
         .unwrap();
@@ -153,10 +153,7 @@ impl<'a> Parts<'a> {
             provider: FakeProvider::new(turns),
             executor: FakeExecutor::new(machine),
             events: Recorder::default(),
-            config: RunConfig {
-                approval_poll_ms: 20,
-                ..RunConfig::default()
-            },
+            config: RunConfig::default(),
         }
     }
 
@@ -173,6 +170,10 @@ impl<'a> Parts<'a> {
     }
 
     async fn run(&self, slot: &MachineSlot) -> Outcome {
+        self.run_from(slot, &self.set.run).await
+    }
+
+    async fn run_from(&self, slot: &MachineSlot, run: &Run) -> Outcome {
         let catalog = Catalog::core();
         let tools = standard_tools();
         let runner = Runner {
@@ -191,7 +192,7 @@ impl<'a> Parts<'a> {
             config: &self.config,
             now: system_now_ms,
         };
-        runner.run(&self.set.run).await.unwrap()
+        runner.run(run).await.unwrap()
     }
 }
 
@@ -345,31 +346,22 @@ async fn a_result_over_the_limit_is_cut_for_the_thread_and_for_the_model_alike()
     set.test.stop().await;
 }
 
-/// Waits until the run has put a call to a person, then returns it.
-async fn pending(set: &Setup) -> jian_store::Approval {
-    for _ in 0..300 {
-        if let Some(found) = set
-            .test
-            .db
-            .pending_approval(&set.side.ctx, &set.run.id)
-            .await
-            .unwrap()
-        {
-            return found;
-        }
-        tokio::time::sleep(Duration::from_millis(20)).await;
-    }
-    panic!("the run never asked");
-}
-
-async fn answer(set: &Setup, approve: bool) {
-    let asked = pending(set).await;
+/// The call the run waits on, once it has parked.
+async fn parked_on(set: &Setup) -> jian_store::Approval {
     assert_eq!(
         the_run(set).await.state,
         jian_store::RunState::WaitingApproval
     );
-    let decided = set
-        .test
+    set.test
+        .db
+        .pending_approval(&set.side.ctx, &set.run.id)
+        .await
+        .unwrap()
+        .expect("a parked run waits on a call")
+}
+
+async fn answer(set: &Setup, approve: bool) -> Option<jian_store::Approval> {
+    set.test
         .db
         .decide_approval(
             &set.side.ctx,
@@ -383,8 +375,26 @@ async fn answer(set: &Setup, approve: bool) {
             system_now_ms(),
         )
         .await
-        .unwrap();
-    assert!(decided.is_some(), "{asked:?}");
+        .unwrap()
+}
+
+/// What the job that goes on does: takes the run back from its call, once, and runs it on.
+async fn go_on(set: &Setup, parts: &Parts<'_>, slot: &MachineSlot, call_id: &str) -> Outcome {
+    let db = &set.test.db;
+    assert!(
+        db.resume_run(&set.side.ctx, &set.run.id, call_id)
+            .await
+            .unwrap()
+    );
+    // A second job for the same call (the answer and the expiry) finds nothing to take.
+    assert!(
+        !db.resume_run(&set.side.ctx, &set.run.id, call_id)
+            .await
+            .unwrap()
+    );
+    let run = the_run(set).await;
+    assert_eq!(run.state, jian_store::RunState::Running);
+    parts.run_from(slot, &run).await
 }
 
 fn tool_results(parts: &[(bool, Vec<MessagePart>)]) -> Vec<(String, bool)> {
@@ -399,7 +409,7 @@ fn tool_results(parts: &[(bool, Vec<MessagePart>)]) -> Vec<(String, bool)> {
 }
 
 #[tokio::test]
-async fn a_shell_call_pauses_for_a_person_and_runs_only_when_approved() {
+async fn a_shell_call_parks_the_run_and_runs_exactly_once_when_it_is_approved() {
     let set = setup().await;
     let turns = vec![
         call("c1", "shell", json!({ "command": "ls" })),
@@ -411,24 +421,43 @@ async fn a_shell_call_pauses_for_a_person_and_runs_only_when_approved() {
     };
     let parts = Parts::new(&set, turns, machine);
     let slot = parts.slot();
-    let (outcome, ()) = tokio::join!(parts.run(&slot), async {
-        pending(&set).await;
-        // Paused: the machine has not been woken for it.
-        assert_eq!(parts.executor.opened(), 0);
-        answer(&set, true).await;
-    });
-    assert_eq!(outcome, Outcome::Done);
+    // The loop returns while the call waits: nothing holds it, and the machine stays asleep.
+    assert_eq!(parts.run(&slot).await, Outcome::Waiting);
+    assert_eq!(parked_on(&set).await.call_id, "c1");
+    assert_eq!(parts.executor.opened(), 0);
+    assert_eq!(parts.provider.requests().len(), 1);
+    // A message that arrives while it waits is read by the next step.
+    say_as(
+        &set.test,
+        &set.side,
+        &set.viewer,
+        &set.thread,
+        "meanwhile: hello",
+    )
+    .await;
+
+    assert!(answer(&set, true).await.is_some());
+    // An answer to an answered call finds nothing to answer.
+    assert!(answer(&set, true).await.is_none());
+    assert_eq!(go_on(&set, &parts, &slot, "c1").await, Outcome::Done);
+
     assert_eq!(parts.executor.commands(), ["ls"]);
     assert_eq!(
         tool_results(&thread_parts(&set).await),
         [("a b".to_owned(), false)]
     );
-    assert_eq!(the_run(&set).await.state, jian_store::RunState::Running);
+    // The model was asked again once, and read the call, its result and the new message in order.
+    let requests = parts.provider.requests();
+    assert_eq!(requests.len(), 2);
+    let second = format!("{:?}", requests[1].messages);
+    assert_eq!(second.matches("ToolUse").count(), 1, "{second}");
+    assert!(second.find("ToolResult").unwrap() < second.find("meanwhile").unwrap());
+    assert_eq!(the_run(&set).await.steps, 2);
     set.test.stop().await;
 }
 
 #[tokio::test]
-async fn a_refused_call_does_not_run_and_the_model_reads_an_error() {
+async fn a_refused_call_never_runs_and_the_model_reads_an_error() {
     let set = setup().await;
     let turns = vec![
         call("c1", "shell", json!({ "command": "rm -rf x" })),
@@ -436,8 +465,9 @@ async fn a_refused_call_does_not_run_and_the_model_reads_an_error() {
     ];
     let parts = Parts::new(&set, turns, FakeMachineScript::default());
     let slot = parts.slot();
-    let (outcome, ()) = tokio::join!(parts.run(&slot), answer(&set, false));
-    assert_eq!(outcome, Outcome::Done);
+    assert_eq!(parts.run(&slot).await, Outcome::Waiting);
+    assert!(answer(&set, false).await.is_some());
+    assert_eq!(go_on(&set, &parts, &slot, "c1").await, Outcome::Done);
     assert!(parts.executor.commands().is_empty());
     assert_eq!(parts.executor.opened(), 0);
     let results = tool_results(&thread_parts(&set).await);
@@ -453,39 +483,96 @@ async fn an_approval_nobody_answers_expires_and_the_call_never_runs() {
         call("c1", "write_file", json!({ "path": "/x", "content": "y" })),
         say("gave up"),
     ];
-    let mut parts = Parts::new(&set, turns, FakeMachineScript::default());
-    parts.config.approval_ttl_ms = 150;
+    let parts = Parts::new(&set, turns, FakeMachineScript::default());
     let slot = parts.slot();
-    assert_eq!(parts.run(&slot).await, Outcome::Done);
+    assert_eq!(parts.run(&slot).await, Outcome::Waiting);
+    let asked = parked_on(&set).await;
+    assert_eq!(asked.state, jian_store::ApprovalState::Pending);
+
+    // Before its time the call stays pending.
+    let db = &set.test.db;
+    db.expire_approval(&set.side.ctx, &set.run.id, "c1", system_now_ms())
+        .await
+        .unwrap();
+    assert_eq!(
+        parked_on(&set).await.state,
+        jian_store::ApprovalState::Pending
+    );
+    // The job queued for its end finds the time up.
+    let later = system_now_ms() + parts.config.approval_ttl_ms + 1_000;
+    db.expire_approval(&set.side.ctx, &set.run.id, "c1", later)
+        .await
+        .unwrap();
+    assert_eq!(go_on(&set, &parts, &slot, "c1").await, Outcome::Done);
+
     assert!(parts.executor.commands().is_empty());
     let results = tool_results(&thread_parts(&set).await);
     assert!(results[0].1 && results[0].0.contains("nobody answered"));
-    let approval = set
-        .test
-        .db
+    let approval = db
         .approval(&set.side.ctx, &set.run.id, "c1")
         .await
         .unwrap()
         .unwrap();
     assert_eq!(approval.state, jian_store::ApprovalState::Expired);
     // An answer that comes too late finds nothing to answer.
-    let late = set
+    assert!(answer(&set, true).await.is_none());
+    set.test.stop().await;
+}
+
+#[tokio::test]
+async fn a_step_with_two_calls_that_wait_goes_on_from_each_in_turn() {
+    let set = setup().await;
+    let mut first = call("c1", "shell", json!({ "command": "one" }));
+    // Both calls come in one turn, before it ends.
+    first.insert(
+        1,
+        call("c2", "shell", json!({ "command": "two" })).remove(0),
+    );
+    let parts = Parts::new(&set, vec![first, say("both")], FakeMachineScript::default());
+    let slot = parts.slot();
+    assert_eq!(parts.run(&slot).await, Outcome::Waiting);
+    assert_eq!(parked_on(&set).await.call_id, "c1");
+    assert!(answer(&set, true).await.is_some());
+    // The first runs and the run parks again, now on the second, keeping the first's result.
+    assert_eq!(go_on(&set, &parts, &slot, "c1").await, Outcome::Waiting);
+    assert_eq!(parts.executor.commands(), ["one"]);
+    assert_eq!(parked_on(&set).await.call_id, "c2");
+    assert!(answer(&set, false).await.is_some());
+    assert_eq!(go_on(&set, &parts, &slot, "c2").await, Outcome::Done);
+
+    assert_eq!(parts.executor.commands(), ["one"]);
+    let results = tool_results(&thread_parts(&set).await);
+    assert_eq!(results.len(), 2);
+    assert!(!results[0].1 && results[1].1 && results[1].0.contains("refused"));
+    // The model was asked twice in all: before the calls and after both.
+    assert_eq!(parts.provider.requests().len(), 2);
+    set.test.stop().await;
+}
+
+#[tokio::test]
+async fn a_stop_ends_a_parked_run_at_once_and_its_answer_is_refused() {
+    let set = setup().await;
+    let turns = vec![call("c1", "shell", json!({ "command": "ls" })), say("x")];
+    let parts = Parts::new(&set, turns, FakeMachineScript::default());
+    let slot = parts.slot();
+    assert_eq!(parts.run(&slot).await, Outcome::Waiting);
+    let stopped = set
         .test
         .db
-        .decide_approval(
-            &set.side.ctx,
-            &set.thread,
-            &set.run.id,
-            &jian_store::Answer {
-                approve: true,
-                by: &set.side.admin.account_id,
-                reason: None,
-            },
-            system_now_ms(),
-        )
+        .request_run_stop(&set.side.ctx, &set.thread, &set.run.id)
         .await
+        .unwrap()
         .unwrap();
-    assert!(late.is_none());
+    assert_eq!(stopped.state, jian_store::RunState::Stopped);
+    assert!(answer(&set, true).await.is_none());
+    assert!(
+        !set.test
+            .db
+            .resume_run(&set.side.ctx, &set.run.id, "c1")
+            .await
+            .unwrap()
+    );
+    assert!(parts.executor.commands().is_empty());
     set.test.stop().await;
 }
 

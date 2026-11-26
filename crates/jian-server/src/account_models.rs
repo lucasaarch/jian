@@ -1,7 +1,8 @@
 //! The model a tenant's runs and summaries use, taken from its provider accounts.
 //!
-//! Until agents choose a model of their own, a workspace answers with the first model of its
-//! first active account. The provider comes back behind the shared circuit breakers, so a vendor
+//! An agent that chose an account and a model answers with those. One that did not, or whose
+//! account is gone, inactive or no longer lists the model, answers with the first model of the
+//! workspace's first active account. The provider comes back behind the shared circuit breakers, so a vendor
 //! that is down is refused here for every workspace instead of being called again by each run.
 
 use std::sync::Arc;
@@ -9,7 +10,7 @@ use std::sync::Arc;
 use futures_util::future::BoxFuture;
 use jian_core::{AccountMode, ProviderKind};
 use jian_store::secrets::Secret;
-use jian_store::{Database, ProviderAccount, TenantCtx};
+use jian_store::{AgentModel, Database, ProviderAccount, TenantCtx};
 
 use crate::{LlmAccess, Model, ModelSource};
 
@@ -30,7 +31,12 @@ impl AccountModels {
         Self { db, llm }
     }
 
-    async fn of_account(&self, tenant: &TenantCtx, account: &ProviderAccount) -> Option<Model> {
+    async fn of_account(
+        &self,
+        tenant: &TenantCtx,
+        account: &ProviderAccount,
+        wanted: Option<&str>,
+    ) -> Option<Model> {
         let key: Option<Secret> = if account.mode == AccountMode::Subscription
             && account.provider == ProviderKind::OpenAi
         {
@@ -69,7 +75,10 @@ impl AccountModels {
             .models(&board, account.provider, provider.as_ref())
             .await
             .ok()?;
-        let first = models.into_iter().next()?;
+        let first = match wanted {
+            Some(id) => models.into_iter().find(|m| m.id == id)?,
+            None => models.into_iter().next()?,
+        };
         Some(Model {
             provider,
             kind: account.provider,
@@ -81,11 +90,25 @@ impl AccountModels {
 
 impl ModelSource for AccountModels {
     fn model(&self, tenant: &TenantCtx) -> BoxFuture<'_, Option<Model>> {
+        self.model_for(tenant, None)
+    }
+
+    fn model_for(
+        &self,
+        tenant: &TenantCtx,
+        chosen: Option<AgentModel>,
+    ) -> BoxFuture<'_, Option<Model>> {
         let tenant = tenant.clone();
         Box::pin(async move {
             let accounts = self.db.provider_accounts(&tenant).await.ok()?;
+            if let Some(choice) = &chosen
+                && let Some(account) = accounts.iter().find(|a| a.active && a.id == choice.account)
+                && let Some(model) = self.of_account(&tenant, account, Some(&choice.model)).await
+            {
+                return Some(model);
+            }
             for account in accounts.iter().filter(|a| a.active) {
-                if let Some(model) = self.of_account(&tenant, account).await {
+                if let Some(model) = self.of_account(&tenant, account, None).await {
                     return Some(model);
                 }
             }

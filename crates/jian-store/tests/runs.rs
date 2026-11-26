@@ -5,7 +5,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use jian_core::{ThreadKind, Visibility};
-use jian_store::{Answer, ApprovalState, NewAgent, NewThread, RunState, Viewer};
+use jian_store::{Answer, ApprovalState, NewAgent, NewThread, RunOrigin, RunState, Viewer};
 use jian_testkit::{Side, TestDb, TwoTenants};
 
 async fn thread_and_agent(
@@ -61,7 +61,11 @@ async fn a_thread_and_agent_have_one_active_run_whoever_starts_it_and_when() {
 
     let starts = (0..8).map(|n| {
         let (db, ctx, thread, agent, by) = (&test.db, &side.ctx, &thread, &agent, &by);
-        async move { db.start_run(ctx, thread, agent, Some(by), n).await.unwrap() }
+        async move {
+            db.start_run(ctx, thread, agent, Some(by), n, RunOrigin::Message)
+                .await
+                .unwrap()
+        }
     });
     let results = futures_util::future::join_all(starts).await;
     assert_eq!(results.iter().filter(|(_, created)| *created).count(), 1);
@@ -85,7 +89,7 @@ async fn a_thread_and_agent_have_one_active_run_whoever_starts_it_and_when() {
     );
     let (next, created) = test
         .db
-        .start_run(&side.ctx, &thread, &agent, Some(&by), 9)
+        .start_run(&side.ctx, &thread, &agent, Some(&by), 9, RunOrigin::Message)
         .await
         .unwrap();
     assert!(created && &next.id != id);
@@ -115,7 +119,7 @@ async fn an_approval_is_answered_once_before_it_expires_and_another_tenant_sees_
     let by = a.admin.account_id.clone();
     let (run, _) = test
         .db
-        .start_run(&a.ctx, &thread, &agent, Some(&by), 1)
+        .start_run(&a.ctx, &thread, &agent, Some(&by), 1, RunOrigin::Message)
         .await
         .unwrap();
 
@@ -126,6 +130,12 @@ async fn an_approval_is_answered_once_before_it_expires_and_another_tenant_sees_
     let first = ask("c1", 60_000).await.unwrap();
     // Asking again for the same call is the same approval.
     assert_eq!(ask("c1", 60_000).await.unwrap().id, first.id);
+    // Only a run parked on its call takes an answer.
+    assert!(test.db.claim_run(&a.ctx, &run.id).await.unwrap());
+    test.db
+        .pause_run(&a.ctx, &run.id, r#"{"callId":"c1"}"#)
+        .await
+        .unwrap();
 
     let answer = |approve: bool, now: i64| {
         let answer = Answer {

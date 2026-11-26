@@ -5,7 +5,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use futures_util::future::BoxFuture;
@@ -14,12 +14,13 @@ use jian_exec::Executor;
 use jian_llm::{BreakerConfig, CircuitBreakers, Event, EventStream, LlmError, Provider, Request};
 use jian_protocol::client::{Delta, DeltaPayload, Topic};
 use jian_protocol::runs::RunStateView;
+use jian_runtime::{RunConfig, system_now_ms};
 use jian_server::{
     AgentRunner, EventBus, JobContext, JobHandler, MemoryEventBus, Model, ModelSource, RUN_KIND,
 };
 use jian_store::{
-    Database, DatabaseSource, NewAgent, NewJob, NewMessage, NewThread, Run, RunState, TenantCtx,
-    ThreadId, Viewer,
+    AgentModel, Answer, Database, DatabaseSource, NewAgent, NewJob, NewMessage, NewThread, Run,
+    RunOrigin, RunState, TenantCtx, ThreadId, Viewer,
 };
 use jian_testkit::{
     FakeExecutor, FakeMachineScript, FakeProvider, Gate, Script, Side, TestDb, TwoTenants, call,
@@ -40,11 +41,22 @@ impl Provider for Shared {
     }
 }
 
-/// Each tenant answers with a model of its own.
+type Chosen = Arc<Mutex<Vec<Option<AgentModel>>>>;
+
+/// Each tenant answers with a model of its own. It keeps what each run's agent chose.
 #[derive(Default)]
-struct Source(HashMap<String, Arc<dyn Provider>>);
+struct Source(HashMap<String, Arc<dyn Provider>>, Chosen);
 
 impl ModelSource for Source {
+    fn model_for(
+        &self,
+        tenant: &TenantCtx,
+        chosen: Option<AgentModel>,
+    ) -> BoxFuture<'_, Option<Model>> {
+        self.1.lock().unwrap().push(chosen);
+        self.model(tenant)
+    }
+
     fn model(&self, tenant: &TenantCtx) -> BoxFuture<'_, Option<Model>> {
         let provider = self.0.get(&tenant.id().to_string()).cloned();
         Box::pin(async move {
@@ -126,6 +138,7 @@ async fn world(test: &TestDb, side: &Side) -> World {
             &agent,
             Some(&side.admin.account_id),
             seq,
+            RunOrigin::Message,
         )
         .await
         .unwrap();
@@ -413,6 +426,218 @@ async fn an_open_breaker_fails_the_run_without_calling_the_provider() {
         fake.streams(),
         calls,
         "the provider was called with the breaker open"
+    );
+    test.stop().await;
+}
+
+/// The job that goes on after `call_id`: what the answer route queues, and what the end of the
+/// time to answer queues too.
+async fn resume_context(
+    test: &TestDb,
+    side: &Side,
+    run: &Run,
+    call_id: &str,
+    key: &str,
+) -> JobContext {
+    let job = test
+        .db
+        .enqueue_job(
+            &side.ctx,
+            NewJob::new(RUN_KIND, json!({ "runId": run.id, "callId": call_id }))
+                .idempotent(format!("run:{}:{key}:{call_id}", run.id)),
+        )
+        .await
+        .unwrap()
+        .job;
+    let db = Database::open(DatabaseSource::External(test.url.clone()))
+        .await
+        .unwrap()
+        .with_master_keys(jian_testkit::master_keys());
+    JobContext {
+        job,
+        tenant: side.ctx.clone(),
+        db: Arc::new(db),
+    }
+}
+
+async fn decide(test: &TestDb, side: &Side, w: &World, approve: bool) {
+    let decided = test
+        .db
+        .decide_approval(
+            &side.ctx,
+            &w.thread,
+            &w.run.id,
+            &Answer {
+                approve,
+                by: &side.admin.account_id,
+                reason: None,
+            },
+            system_now_ms(),
+        )
+        .await
+        .unwrap();
+    assert!(decided.is_some());
+}
+
+fn shell_runner(
+    test_side: &Side,
+    shell: Vec<Vec<Script>>,
+    config: RunConfig,
+) -> (Arc<AgentRunner>, Arc<FakeExecutor>, Chosen) {
+    let mut models = Source::default();
+    let provider: Arc<dyn Provider> = Arc::new(Shared(FakeProvider::new(shell)));
+    models.0.insert(test_side.id.to_string(), provider);
+    let chosen = models.1.clone();
+    let machine = FakeExecutor::new(FakeMachineScript {
+        output: "listed".into(),
+        ..FakeMachineScript::default()
+    });
+    let handler = Arc::new(
+        AgentRunner::new(
+            Arc::new(models),
+            machine.clone(),
+            Arc::new(MemoryEventBus::new()),
+        )
+        .with_config(config),
+    );
+    (handler, machine, chosen)
+}
+
+#[tokio::test]
+async fn a_run_waiting_for_an_approval_holds_no_job_and_the_answer_resumes_it_once() {
+    let test = TestDb::start(env!("CARGO_TARGET_TMPDIR")).await;
+    let a = TwoTenants::seed(&test.db).await.a;
+    let w = world(&test, &a).await;
+    let turns = vec![
+        call("c1", "shell", json!({ "command": "ls" })),
+        say("listed"),
+    ];
+    let (handler, machine, _) = shell_runner(&a, turns, RunConfig::default());
+
+    // The job ends (this returns) with the run parked: nothing waits inside a worker.
+    tokio::time::timeout(
+        Duration::from_secs(10),
+        handler.handle(context(&test, &a, &w.run).await),
+    )
+    .await
+    .expect("the job held its worker while the run waited")
+    .unwrap();
+    let parked = state(&test, &a, &w.run).await;
+    assert_eq!(parked.state, RunState::WaitingApproval, "{parked:?}");
+    assert_eq!(machine.opened(), 0);
+
+    // The loop queued the job that ends the wait, for its time.
+    let expiry = test
+        .db
+        .enqueue_job(
+            &a.ctx,
+            NewJob::new(RUN_KIND, json!({})).idempotent(format!("run:{}:expire:c1", w.run.id)),
+        )
+        .await
+        .unwrap();
+    assert!(!expiry.created);
+    assert_eq!(expiry.job.payload["callId"], "c1");
+
+    decide(&test, &a, &w, true).await;
+    let answer = resume_context(&test, &a, &w.run, "c1", "answer").await;
+    handler.handle(answer).await.unwrap();
+    assert_eq!(state(&test, &a, &w.run).await.state, RunState::Done);
+    assert_eq!(machine.commands(), ["ls"]);
+
+    // The answer's job and the expiry's job both arrive: the second finds the run done.
+    let late = resume_context(&test, &a, &w.run, "c1", "expire").await;
+    handler.handle(late).await.unwrap();
+    assert_eq!(machine.commands(), ["ls"]);
+    test.stop().await;
+}
+
+#[tokio::test]
+async fn an_approval_nobody_answers_is_expired_by_its_job_and_the_model_reads_the_error() {
+    let test = TestDb::start(env!("CARGO_TARGET_TMPDIR")).await;
+    let a = TwoTenants::seed(&test.db).await.a;
+    let w = world(&test, &a).await;
+    let turns = vec![
+        call("c1", "shell", json!({ "command": "ls" })),
+        say("gave up"),
+    ];
+    let config = RunConfig {
+        approval_ttl_ms: 3_000,
+        ..RunConfig::default()
+    };
+    let (handler, machine, _) = shell_runner(&a, turns, config);
+    handler
+        .handle(context(&test, &a, &w.run).await)
+        .await
+        .unwrap();
+    assert_eq!(
+        state(&test, &a, &w.run).await.state,
+        RunState::WaitingApproval
+    );
+
+    // Early, the expiry job gives the job back to be tried again and the run keeps waiting.
+    let early = resume_context(&test, &a, &w.run, "c1", "expire").await;
+    assert!(handler.handle(early).await.is_err());
+    assert_eq!(
+        state(&test, &a, &w.run).await.state,
+        RunState::WaitingApproval
+    );
+    tokio::time::sleep(Duration::from_millis(3_500)).await;
+    let due = resume_context(&test, &a, &w.run, "c1", "expire-again").await;
+    handler.handle(due).await.unwrap();
+
+    assert_eq!(state(&test, &a, &w.run).await.state, RunState::Done);
+    assert!(machine.commands().is_empty());
+    let approval = test
+        .db
+        .approval(&a.ctx, &w.run.id, "c1")
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(approval.state, jian_store::ApprovalState::Expired);
+    test.stop().await;
+}
+
+#[tokio::test]
+async fn an_agents_chosen_model_reaches_its_run_and_without_one_the_default_is_used() {
+    let test = TestDb::start(env!("CARGO_TARGET_TMPDIR")).await;
+    let a = TwoTenants::seed(&test.db).await.a;
+
+    let plain = world(&test, &a).await;
+    let (handler, _, chosen) = shell_runner(&a, vec![say("hi")], RunConfig::default());
+    handler
+        .handle(context(&test, &a, &plain.run).await)
+        .await
+        .unwrap();
+    assert_eq!(*chosen.lock().unwrap(), [None]);
+
+    let picked = world(&test, &a).await;
+    let model = AgentModel {
+        account: "acct_one".to_owned(),
+        model: "big-1".to_owned(),
+    };
+    test.db
+        .set_agent_model(&a.ctx, &picked.run.agent, Some(&model))
+        .await
+        .unwrap();
+    let (handler, _, chosen) = shell_runner(&a, vec![say("hi")], RunConfig::default());
+    handler
+        .handle(context(&test, &a, &picked.run).await)
+        .await
+        .unwrap();
+    assert_eq!(*chosen.lock().unwrap(), [Some(model)]);
+    assert_eq!(state(&test, &a, &picked.run).await.state, RunState::Done);
+
+    // Taking the choice back goes to the default again.
+    test.db
+        .set_agent_model(&a.ctx, &picked.run.agent, None)
+        .await
+        .unwrap();
+    assert_eq!(
+        test.db
+            .agent_model(&a.ctx, &picked.run.agent)
+            .await
+            .unwrap(),
+        None
     );
     test.stop().await;
 }

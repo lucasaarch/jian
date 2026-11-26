@@ -56,6 +56,7 @@
 
 mod account_models;
 mod accounts;
+mod agent_model;
 mod agents;
 mod auth;
 mod client_ws;
@@ -168,6 +169,8 @@ pub const ROUTES: &[&str] = &[
     "PATCH /v1/agents/{id} (its creator or an admin)",
     "POST /v1/agents/{id}/archive (its creator or an admin)",
     "GET /v1/agents/{id}/threads (a member who sees it)",
+    "GET /v1/agents/{id}/model (a member who sees the agent)",
+    "PUT /v1/agents/{id}/model (a member who manages the agent)",
     "GET /v1/agents/{id}/memories (a member who sees the agent)",
     "GET /v1/agents/{id}/memories/{key} (a member who sees the agent)",
     "PUT /v1/agents/{id}/memories/{key} (a member who sees the agent)",
@@ -442,6 +445,10 @@ pub fn router_with(state: AppState, extra: Router<AppState>) -> Router {
             get(skills::get).put(skills::put).delete(skills::delete),
         )
         .route("/v1/skills/{name}/versions", get(skills::versions))
+        .route(
+            "/v1/agents/{id}/model",
+            get(agent_model::get).put(agent_model::put),
+        )
         .route("/v1/agents/{id}/skills", get(skills::agent_list))
         .route("/v1/agents/{id}/skills/{name}", put(skills::agent_set))
         .route("/v1/usage", get(usage::get))

@@ -119,6 +119,7 @@
 //! (`CREATEROLE`) and own the database: it creates, grants and drops the tenant roles.
 
 mod accounts;
+mod agent_config;
 mod agents;
 mod backup;
 mod blobs;
@@ -169,6 +170,7 @@ mod tokens;
 mod usage;
 
 pub use accounts::{Account, NewAccount, default_name, normalize_email};
+pub use agent_config::AgentModel;
 pub use agents::{
     Agent, AgentId, AgentPatch, MAX_AGENT_AVATAR_BYTES, MAX_AGENT_DESCRIPTION_CHARS,
     MAX_AGENT_INSTRUCTIONS_CHARS, MAX_AGENT_NAME_CHARS, MAX_AGENT_VIEWERS, NewAgent, Viewer,
@@ -228,7 +230,7 @@ pub use providers::{
     ProviderImport, provider_secret_owner,
 };
 pub use quotas::{QuotaUsage, Quotas, RunLease};
-pub use runs::{Answer, Approval, ApprovalState, Run, RunState};
+pub use runs::{Answer, Approval, ApprovalState, Run, RunOrigin, RunState};
 pub use schedules::{
     Due, Fired, InboxEvent, MAX_SCHEDULE_INSTRUCTION_CHARS, MAX_SCHEDULE_NAME_CHARS,
     MAX_SCHEDULES_PER_AGENT, NewSchedule, SCHEDULE_EVENT, Schedule, ScheduleId, SchedulePatch,

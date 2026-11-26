@@ -11,7 +11,7 @@ use futures_util::future::BoxFuture;
 use jian_core::ProviderKind;
 use jian_llm::Provider;
 use jian_runtime::{CompactError, Compacted, Compactor};
-use jian_store::{StoreError, TenantCtx, ThreadId};
+use jian_store::{AgentModel, StoreError, TenantCtx, ThreadId};
 
 use crate::workspace::now_ms;
 use crate::{JobContext, JobError, JobHandler};
@@ -35,6 +35,17 @@ pub struct Model {
 pub trait ModelSource: Send + Sync {
     /// The model for `tenant`, or `None` when it has none to use.
     fn model(&self, tenant: &TenantCtx) -> BoxFuture<'_, Option<Model>>;
+
+    /// The model an agent that chose `chosen` answers with. A source that cannot honour the
+    /// choice gives the tenant's default, as an agent that chose nothing gets.
+    fn model_for(
+        &self,
+        tenant: &TenantCtx,
+        chosen: Option<AgentModel>,
+    ) -> BoxFuture<'_, Option<Model>> {
+        let _ = chosen;
+        self.model(tenant)
+    }
 }
 
 /// Compacts the threads of the jobs it is given.
