@@ -60,13 +60,19 @@ pub(super) fn header(head: &str, name: &str) -> Option<String> {
     })
 }
 
-async fn put(gateway: &Gateway, token: &str, artifact: &str, what: &str, body: Value) -> u16 {
+pub(super) async fn put(
+    gateway: &Gateway,
+    token: &str,
+    artifact: &str,
+    what: &str,
+    body: Value,
+) -> u16 {
     let path = format!("/v1/artifacts/{artifact}/{what}");
     call(gateway, "PUT", &path, token, Some(body)).await.0
 }
 
 /// The token in the path of an artifact's link, as its owner reads it.
-async fn link_of(gateway: &Gateway, token: &str, artifact: &str) -> String {
+pub(super) async fn link_of(gateway: &Gateway, token: &str, artifact: &str) -> String {
     let path = format!("/v1/artifacts/{artifact}/share");
     let (status, share) = call(gateway, "GET", &path, token, None).await;
     assert_eq!(status, 200, "{share}");
@@ -96,7 +102,12 @@ async fn shared(gateway: &Gateway, token: &str, text: &str, level: &str) -> (Str
     (artifact, link)
 }
 
-async fn set_password(gateway: &Gateway, token: &str, artifact: &str, password: Value) -> u16 {
+pub(super) async fn set_password(
+    gateway: &Gateway,
+    token: &str,
+    artifact: &str,
+    password: Value,
+) -> u16 {
     put(
         gateway,
         token,
@@ -107,7 +118,7 @@ async fn set_password(gateway: &Gateway, token: &str, artifact: &str, password: 
     .await
 }
 
-async fn unlock(gateway: &Gateway, link: &str, password: &str) -> (u16, String) {
+pub(super) async fn unlock(gateway: &Gateway, link: &str, password: &str) -> (u16, String) {
     let path = format!("/v1/public/artifacts/{link}/unlock");
     let body = json!({ "password": password });
     let (status, head, _) = raw(gateway, "POST", &path, None, Some(body)).await;
@@ -115,7 +126,7 @@ async fn unlock(gateway: &Gateway, link: &str, password: &str) -> (u16, String) 
 }
 
 /// The `name=value` part of the cookie an unlock set.
-fn pass_of(head: &str) -> String {
+pub(super) fn pass_of(head: &str) -> String {
     header(head, "set-cookie")
         .expect("a cookie")
         .split(';')

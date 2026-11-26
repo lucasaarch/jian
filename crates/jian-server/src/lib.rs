@@ -61,7 +61,9 @@ mod agent_machine;
 mod agent_model;
 mod agents;
 mod artifact_events;
+mod artifact_export;
 mod artifact_folders;
+mod artifact_office;
 mod artifact_pass;
 mod artifact_public;
 mod artifact_share;
@@ -124,6 +126,7 @@ use serde::Serialize;
 use tokio_util::sync::CancellationToken;
 
 pub use account_models::AccountModels;
+pub use artifact_export::{ArtifactRenderer, RenderFormat, Renderer};
 pub use auth::{AuthRejection, Principal};
 pub use auto_continue::MAX_IDLE_CONTINUATIONS;
 pub use compact_job::{Model, ModelSource, ThreadCompactor};
@@ -237,8 +240,10 @@ pub const ROUTES: &[&str] = &[
     "PUT /v1/artifacts/{id}/visibility (its owner, not an admin; external needs a server)",
     "PUT /v1/artifacts/{id}/password (its owner; only for external; null removes it)",
     "POST /v1/artifacts/{id}/link (its owner: a new link, the old one stops)",
+    "GET /v1/artifacts/{id}/export (a member who sees it; ?format=: its kind's files; pdf and png need a renderer)",
     "GET /v1/public/artifacts/{token} (the link: a signed-in member who sees it, or anyone for external, with its pass when it has a password)",
     "POST /v1/public/artifacts/{token}/unlock (no token; the link's password; 10 tries a minute)",
+    "GET /v1/public/artifacts/{token}/export (the link, opened as for a read; ?format=)",
     "GET /v1/artifact-folders (a member)",
     "POST /v1/artifact-folders (a member)",
     "PATCH /v1/artifact-folders/{id} (its maker or an admin)",
@@ -387,6 +392,9 @@ pub struct AppState {
     pub llm: LlmAccess,
     /// The built-in skills: the core's, and a plugin's once plugins can add some.
     pub catalog: Arc<jian_skills::Catalog>,
+    /// What draws an artifact as PDF or PNG, which needs a browser. `None` where there is none:
+    /// those two downloads answer 501.
+    pub renderer: Option<Renderer>,
 }
 
 impl AppState {
@@ -408,6 +416,7 @@ impl AppState {
             settings,
             llm: LlmAccess::default(),
             catalog: Arc::new(jian_skills::Catalog::core()),
+            renderer: None,
         }
     }
 }
@@ -612,6 +621,7 @@ pub fn router_with(state: AppState, extra: Router<AppState>) -> Router {
         .route("/v1/artifacts/{id}/password", put(artifact_share::password))
         .route("/v1/artifacts/{id}/share", get(artifact_share::get))
         .route("/v1/artifacts/{id}/link", post(artifact_share::rotate))
+        .route("/v1/artifacts/{id}/export", get(artifact_export::export))
         .layer(DefaultBodyLimit::max(MAX_ARTIFACT_BODY));
     // What a reader of a public link may do has no token, and its only body is a password.
     let public = Router::new()
@@ -619,6 +629,10 @@ pub fn router_with(state: AppState, extra: Router<AppState>) -> Router {
         .route(
             "/v1/public/artifacts/{token}/unlock",
             post(artifact_public::unlock),
+        )
+        .route(
+            "/v1/public/artifacts/{token}/export",
+            get(artifact_export::export_public),
         )
         .layer(DefaultBodyLimit::max(MAX_ACCOUNT_BODY));
     // A file is held in memory up to its limit, and the body is read by the handler, which

@@ -81,6 +81,9 @@ url = "2.5"
 webpki-roots = "1.0"
 # Wipes keys and secrets from memory when they drop.
 zeroize = "1"
+# The container of Office files (xlsx, docx and pptx are zips of XML). Deflate through flate2's
+# zlib-rs; the defaults would add bzip2, zstd, xz and AES, none of which Office needs.
+zip = { version = "9.8", default-features = false, features = ["deflate-flate2-zlib-rs"] }
 
 # Computer Use helper, per platform. The macOS set is the AppKit and Quartz bindings the pointer
 # overlay and input need; the Linux one is pure Rust (no libxcb, no libX11) so the binary links

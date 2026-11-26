@@ -30,6 +30,7 @@ const THIS_FILE: &str = include_str!("isolation.rs");
 /// The invitation tests are in their own file, and the isolation one is among them.
 const ARTIFACTS_FILE: &str = include_str!("artifacts.rs");
 const SHARING_FILE: &str = include_str!("artifact_sharing.rs");
+const EXPORT_FILE: &str = include_str!("artifact_export.rs");
 const CODEX_FILE: &str = include_str!("codex.rs");
 const INVITES_FILE: &str = include_str!("invites.rs");
 const PROVIDERS_FILE: &str = include_str!("providers.rs");
@@ -53,6 +54,7 @@ fn is_a_test_here(name: &str) -> bool {
     THIS_FILE.contains(&declared)
         || ARTIFACTS_FILE.contains(&declared)
         || SHARING_FILE.contains(&declared)
+        || EXPORT_FILE.contains(&declared)
         || CODEX_FILE.contains(&declared)
         || INVITES_FILE.contains(&declared)
         || PROVIDERS_FILE.contains(&declared)
@@ -152,7 +154,9 @@ const ROUTE_TESTS: &[(&str, &str)] = &[
     ("PUT /v1/artifacts/{id}/visibility", SHARING_TEST),
     ("PUT /v1/artifacts/{id}/password", SHARING_TEST),
     ("POST /v1/artifacts/{id}/link", SHARING_TEST),
+    ("GET /v1/artifacts/{id}/export", EXPORT_TEST),
     ("GET /v1/public/artifacts/{token}", SHARING_TEST),
+    ("GET /v1/public/artifacts/{token}/export", EXPORT_TEST),
     ("POST /v1/public/artifacts/{token}/unlock", SHARING_TEST),
     ("GET /v1/artifact-folders", ARTIFACTS_TEST),
     ("POST /v1/artifact-folders", ARTIFACTS_TEST),
@@ -249,6 +253,9 @@ const ARTIFACTS_TEST: &str = "artifacts_and_folders_of_the_other_tenant_are_out_
 /// The test that shows tenant B can neither share, protect nor open a link of tenant A's artifact,
 /// and that a link opens only the artifact of its own workspace.
 const SHARING_TEST: &str = "links_and_passwords_of_artifacts_stay_inside_their_own_tenant";
+
+/// The test that shows tenant B can download no artifact of tenant A, by id or by link.
+const EXPORT_TEST: &str = "exports_of_artifacts_stay_inside_their_own_tenant";
 
 /// The test that shows tenant B reaches no memory, project or thread-project link of tenant A.
 const MEMORIES_TEST: &str = "memories_and_projects_of_the_other_tenant_are_out_of_reach";
