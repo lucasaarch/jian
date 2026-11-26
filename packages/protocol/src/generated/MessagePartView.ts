@@ -7,7 +7,31 @@ export type MessagePartView = { "type": "text",
 /**
  * The text.
  */
-text: string, } | { "type": "legacy", 
+text: string, } | { "type": "toolCall", 
+/**
+ * The id the model gave the call.
+ */
+id: string, 
+/**
+ * The tool's name.
+ */
+name: string, 
+/**
+ * The arguments, as JSON text.
+ */
+input: string, } | { "type": "toolResult", 
+/**
+ * The id of the call it answers.
+ */
+id: string, 
+/**
+ * What the tool printed, or why it failed.
+ */
+text: string, 
+/**
+ * The call failed or was refused.
+ */
+isError: boolean, } | { "type": "legacy", 
 /**
  * What it was.
  */

@@ -14,6 +14,7 @@ mod provider;
 pub use catalog::ModelInfo;
 pub use cron::{Cron, CronError, MIN_CRON_INTERVAL_MS, is_time_zone, parse_instant_ms};
 pub use message::{
-    MAX_PARTS, MAX_TEXT_BYTES, MessagePart, MessageParts, PartsError, ThreadKind, Visibility,
+    MAX_PARTS, MAX_TEXT_BYTES, MAX_TOOL_INPUT_BYTES, MAX_TOOL_RESULT_BYTES, MessagePart,
+    MessageParts, PartsError, ThreadKind, Visibility, cap_tool_result,
 };
 pub use provider::{AccountMode, ProviderKind};

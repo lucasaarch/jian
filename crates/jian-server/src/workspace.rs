@@ -146,6 +146,16 @@ pub(crate) fn thread_view(thread: &Thread) -> ThreadSummary {
 pub(crate) fn part_view(part: &MessagePart) -> MessagePartView {
     match part {
         MessagePart::Text(text) => MessagePartView::Text { text: text.clone() },
+        MessagePart::ToolCall { id, name, input } => MessagePartView::ToolCall {
+            id: id.clone(),
+            name: name.clone(),
+            input: input.clone(),
+        },
+        MessagePart::ToolResult { id, text, is_error } => MessagePartView::ToolResult {
+            id: id.clone(),
+            text: text.clone(),
+            is_error: *is_error,
+        },
         MessagePart::Legacy { kind, json } => MessagePartView::Legacy {
             kind: kind.clone(),
             json: json.clone(),

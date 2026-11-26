@@ -196,6 +196,19 @@ pub(crate) fn encode_parts(parts: &[MessagePart]) -> String {
         .iter()
         .map(|part| match part {
             MessagePart::Text(text) => serde_json::json!({ "type": "text", "text": text }),
+            MessagePart::ToolCall { id, name, input } => serde_json::json!({
+                "type": "tool_call",
+                "id": id,
+                "name": name,
+                "input": serde_json::from_str::<serde_json::Value>(input)
+                    .unwrap_or_else(|_| serde_json::Value::String(input.clone())),
+            }),
+            MessagePart::ToolResult { id, text, is_error } => serde_json::json!({
+                "type": "tool_result",
+                "id": id,
+                "text": text,
+                "is_error": is_error,
+            }),
             MessagePart::Legacy { kind, json } => serde_json::json!({
                 "type": "legacy",
                 "kind": kind,
@@ -218,6 +231,19 @@ pub(crate) fn decode_parts(text: &str) -> Result<Vec<MessagePart>, StoreError> {
                 .and_then(|t| t.as_str())
                 .map(|t| MessagePart::Text(t.to_owned()))
                 .ok_or(BAD),
+            Some("tool_call") => Ok(MessagePart::ToolCall {
+                id: str_field(part, "id").ok_or(BAD)?,
+                name: str_field(part, "name").ok_or(BAD)?,
+                input: part.get("input").map(ToString::to_string).ok_or(BAD)?,
+            }),
+            Some("tool_result") => Ok(MessagePart::ToolResult {
+                id: str_field(part, "id").ok_or(BAD)?,
+                text: str_field(part, "text").ok_or(BAD)?,
+                is_error: part
+                    .get("is_error")
+                    .and_then(serde_json::Value::as_bool)
+                    .unwrap_or(false),
+            }),
             Some("legacy") => Ok(MessagePart::Legacy {
                 kind: part
                     .get("kind")
@@ -232,6 +258,12 @@ pub(crate) fn decode_parts(text: &str) -> Result<Vec<MessagePart>, StoreError> {
             _ => Err(BAD),
         })
         .collect()
+}
+
+fn str_field(part: &serde_json::Value, key: &str) -> Option<String> {
+    part.get(key)
+        .and_then(serde_json::Value::as_str)
+        .map(str::to_owned)
 }
 
 #[derive(sqlx::FromRow)]

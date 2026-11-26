@@ -28,13 +28,16 @@ pub(crate) struct ListQuery {
     limit: Option<u32>,
 }
 
-/// Parts a client may send: text only. `legacy` parts are what the import keeps.
+/// Parts a client may send: text only. `legacy` parts are what the import keeps; tool parts are
+/// written by a run.
 fn parts(views: Vec<MessagePartView>) -> Result<MessageParts, Refusal> {
     let list = views
         .into_iter()
         .map(|view| match view {
             MessagePartView::Text { text } => Ok(MessagePart::Text(text)),
-            MessagePartView::Legacy { .. } => Err("only text parts can be sent"),
+            MessagePartView::Legacy { .. }
+            | MessagePartView::ToolCall { .. }
+            | MessagePartView::ToolResult { .. } => Err("only text parts can be sent"),
         })
         .collect::<Result<Vec<_>, _>>()
         .map_err(bad)?;

@@ -616,6 +616,42 @@ async fn only_the_author_edits_or_deletes_and_a_deleted_message_keeps_its_place(
             .unwrap()
             .is_none()
     );
+
+    // Tool parts and unmapped (legacy) content survive a write and a read, in order.
+    let parts = vec![
+        jian_core::MessagePart::ToolCall {
+            id: "c1".into(),
+            name: "shell".into(),
+            input: r#"{"command":"ls"}"#.into(),
+        },
+        jian_core::MessagePart::ToolResult {
+            id: "c1".into(),
+            text: "a\nb".into(),
+            is_error: true,
+        },
+        jian_core::MessagePart::Legacy {
+            kind: "reaction".into(),
+            json: r#"{"emoji":"x"}"#.into(),
+        },
+    ];
+    let tools = db
+        .post_agent_message(
+            ctx,
+            &thread.id,
+            &agent.id,
+            MessageParts::new(parts.clone()).unwrap(),
+            None,
+        )
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(tools.message.parts, parts);
+    let page = db
+        .list_messages(ctx, &y, &thread.id, Window::Latest, 1)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(page.items[0].parts, parts);
 }
 
 fn legacy_message(id: &str, role: &str, content: &str, at: &str) -> LegacyMessage {

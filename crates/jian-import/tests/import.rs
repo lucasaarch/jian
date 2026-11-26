@@ -500,7 +500,7 @@ async fn owners_chats_came_over(db: &Database, ctx: &TenantCtx, owner: &jian_sto
         .iter()
         .map(|m| match &m.parts[0] {
             jian_core::MessagePart::Text(text) => (m.seq, text.as_str()),
-            other @ jian_core::MessagePart::Legacy { .. } => panic!("{other:?}"),
+            other => panic!("{other:?}"),
         })
         .collect();
     assert_eq!(

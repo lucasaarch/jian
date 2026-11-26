@@ -119,6 +119,16 @@ impl Database {
                 .into_iter()
                 .filter_map(|part| match part {
                     MessagePart::Text(text) => Some(text),
+                    // Tool parts reach the model as plain lines: a structured call kept in old
+                    // history could lose its pair at the edge of the window.
+                    MessagePart::ToolCall { name, input, .. } => {
+                        Some(format!("[tool call {name}({input})]"))
+                    }
+                    MessagePart::ToolResult { text, is_error, .. } => Some(if is_error {
+                        format!("[tool error: {text}]")
+                    } else {
+                        format!("[tool result: {text}]")
+                    }),
                     MessagePart::Legacy { .. } => None,
                 })
                 .collect::<Vec<_>>()

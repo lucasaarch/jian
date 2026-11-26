@@ -246,6 +246,24 @@ pub enum MessagePartView {
         /// The text.
         text: String,
     },
+    /// A tool an agent called. Written by a run; it cannot be sent.
+    ToolCall {
+        /// The id the model gave the call.
+        id: String,
+        /// The tool's name.
+        name: String,
+        /// The arguments, as JSON text.
+        input: String,
+    },
+    /// What a tool call returned, cut at 32 KiB. Written by a run; it cannot be sent.
+    ToolResult {
+        /// The id of the call it answers.
+        id: String,
+        /// What the tool printed, or why it failed.
+        text: String,
+        /// The call failed or was refused.
+        is_error: bool,
+    },
     /// Something of the old Jian that has no part yet, kept as it was. Read only: it cannot be
     /// sent.
     Legacy {
