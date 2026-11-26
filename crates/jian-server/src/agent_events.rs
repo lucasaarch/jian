@@ -6,7 +6,9 @@
 //! agent's next wake looks at it. It is also the place a plugin (M4) hooks in: a plugin turns
 //! what it hears into an event, through this route or, in the gateway, through
 //! [`jian_store::Database::add_event`], which is all that route does. The mode and the budget
-//! are read by whoever sees the agent and changed by whoever manages it.
+//! are read by whoever sees the agent and changed by whoever manages it. The same settings say
+//! how often the agent's round comes (`roundEveryHours`, 0 for never) and when the last one was
+//! queued: a round is the agent looking over its usual work on its own, with no event.
 
 use axum::Json;
 use axum::extract::{Path, State};
@@ -82,9 +84,15 @@ async fn proactivity_view(
     ctx: &TenantCtx,
     agent: &AgentId,
 ) -> Result<AgentProactivityView, Refusal> {
-    let ProactivityConfig { mode, limits } = app
+    let config = app
         .db
         .agent_proactivity(ctx, agent)
+        .await
+        .map_err(|e| failure(&e))?;
+    let ProactivityConfig { mode, limits, .. } = config;
+    let last_round_at = app
+        .db
+        .last_round_at(ctx, agent)
         .await
         .map_err(|e| failure(&e))?;
     let now = now_ms();
@@ -104,6 +112,8 @@ async fn proactivity_view(
         max_proactive_runs_per_day: limits.runs_per_day(),
         wakes_used: used(BudgetKind::Wake).await?,
         runs_used: used(BudgetKind::Run).await?,
+        round_every_hours: config.round_hours(),
+        last_round_at,
     })
 }
 
@@ -142,6 +152,7 @@ pub(crate) async fn put_proactivity(
             wakes: body.max_wakes_per_day,
             runs: body.max_proactive_runs_per_day,
         },
+        round_every_hours: body.round_every_hours,
     };
     app.db
         .set_agent_proactivity(&ctx, &agent, config)

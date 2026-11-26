@@ -136,7 +136,7 @@ pub use run_job::{AgentRunner, RUN_KIND};
 pub use schedule_job::{SCHEDULE_FIRE_KIND, ScheduleFirer, run_ticker, tick};
 pub use schedule_run_job::{SCHEDULE_RUN_KIND, ScheduleRunner, dispatch_tick};
 pub use slots::{DrainReport, NoRunQueue, RunRequeue, SlotKeeper, SlotOwnership};
-pub use wake_job::{AGENT_WAKE_KIND, AgentWaker, NowMs, SETTLE_MS, tick as wake_tick};
+pub use wake_job::{AGENT_WAKE_KIND, AgentWaker, NowMs, SETTLE_MS, round_tick, tick as wake_tick};
 
 /// The routes `router` serves, for the binary to print at start-up: there is no panel yet to
 /// show what is reachable. Keep it in step with `router`.

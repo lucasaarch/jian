@@ -1,7 +1,10 @@
 //! The agent's event box and its budget: what reaches an agent without a person asking, and how
 //! much of it may cost a model call or a run.
 //!
-//! The box is `agent_inbox`. Schedule firings are rows of it too but are NOT events of the wake:
+//! The box is `agent_inbox`. Proactivity is not only events: every so often an agent's round
+//! (see [`crate::rounds`], kind `round`, no thread) is a row of it too, and `pending_events`
+//! returns it with the rest, so the wake handles it with the same mode and budget.
+//! Schedule firings are rows of it too but are NOT events of the wake:
 //! a schedule is authorised work, so the wake never reads them (`schedule_runs` dispatches
 //! them straight to a run). An event has a kind, an optional thread it is about, a JSON payload under [`MAX_EVENT_PAYLOAD_BYTES`], the time it counts from
 //! (`available_ms`, which a `wake_later` sets in the future) and, once a wake took it, the time it
@@ -25,6 +28,7 @@ use sqlx::AssertSqlSafe;
 
 use crate::machines::iso;
 use crate::messages::{Author, Message};
+use crate::rounds::{DEFAULT_ROUND_EVERY_HOURS, MAX_ROUND_EVERY_HOURS};
 use crate::threads::ThreadId;
 use crate::tokens::random_id;
 use crate::{AgentId, Database, StoreError, TenantCtx};
@@ -137,13 +141,24 @@ impl BudgetLimits {
     }
 }
 
-/// How much an agent may do on its own: the mode and the budget.
+/// How much an agent may do on its own: the mode, the budget and how often it makes its round.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct ProactivityConfig {
     /// What a wake may do.
     pub mode: Proactivity,
     /// How often.
     pub limits: BudgetLimits,
+    /// Hours between the agent's rounds, 1 to [`MAX_ROUND_EVERY_HOURS`]; 0 is never and `None`
+    /// is [`DEFAULT_ROUND_EVERY_HOURS`].
+    pub round_every_hours: Option<i32>,
+}
+
+impl ProactivityConfig {
+    /// The hours between rounds that count: the agent's, or the default. 0 is never.
+    #[must_use]
+    pub fn round_hours(self) -> i32 {
+        self.round_every_hours.unwrap_or(DEFAULT_ROUND_EVERY_HOURS)
+    }
 }
 
 /// Where a thread stands for a wake that would start a run in it.
@@ -454,9 +469,10 @@ impl Database {
         ctx: &TenantCtx,
         agent: &AgentId,
     ) -> Result<ProactivityConfig, StoreError> {
+        type Row = (String, Option<i32>, Option<i32>, Option<i32>);
         let mut tx = self.begin(ctx).await?;
-        let row: Option<(String, Option<i32>, Option<i32>)> = sqlx::query_as(
-            "SELECT proactivity, max_wakes_per_day, max_proactive_runs_per_day \
+        let row: Option<Row> = sqlx::query_as(
+            "SELECT proactivity, max_wakes_per_day, max_proactive_runs_per_day, round_every_hours \
              FROM agent_config WHERE agent_id = $1",
         )
         .bind(agent.as_str())
@@ -465,10 +481,11 @@ impl Database {
         .map_err(StoreError::query("read an agent's proactivity"))?;
         row.map_or_else(
             || Ok(ProactivityConfig::default()),
-            |(mode, wakes, runs)| {
+            |(mode, wakes, runs, round_every_hours)| {
                 Ok(ProactivityConfig {
                     mode: Proactivity::parse(&mode)?,
                     limits: BudgetLimits { wakes, runs },
+                    round_every_hours,
                 })
             },
         )
@@ -490,18 +507,28 @@ impl Database {
                 "a budget limit is 0 to 1000 per day",
             ));
         }
+        if config
+            .round_every_hours
+            .is_some_and(|n| !(0..=MAX_ROUND_EVERY_HOURS).contains(&n))
+        {
+            return Err(StoreError::InvalidWorkspace(
+                "the hours between rounds are 0 to 168",
+            ));
+        }
         let mut tx = self.begin(ctx).await?;
         sqlx::query(
             "INSERT INTO agent_config \
-                 (agent_id, proactivity, max_wakes_per_day, max_proactive_runs_per_day) \
-             VALUES ($1, $4, $2, $3) ON CONFLICT (agent_id) DO UPDATE \
+                 (agent_id, proactivity, max_wakes_per_day, max_proactive_runs_per_day, \
+                  round_every_hours) \
+             VALUES ($1, $4, $2, $3, $5) ON CONFLICT (agent_id) DO UPDATE \
              SET proactivity = $4, max_wakes_per_day = $2, max_proactive_runs_per_day = $3, \
-                 updated_at = now()",
+                 round_every_hours = $5, updated_at = now()",
         )
         .bind(agent.as_str())
         .bind(limits.wakes)
         .bind(limits.runs)
         .bind(config.mode.as_str())
+        .bind(config.round_every_hours)
         .execute(&mut *tx)
         .await
         .map_err(StoreError::query(ACTION))?;

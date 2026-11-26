@@ -152,7 +152,7 @@ impl ScheduleRunner {
         let Some(creator) = &firing.creator else {
             return Ok(None);
         };
-        db.schedule_dm(ctx, creator, &firing.agent)
+        db.dm_with_agent(ctx, creator, &firing.agent)
             .await
             .map_err(|e| store(&e))
     }

@@ -106,6 +106,10 @@ pub async fn run_ticker(db: Arc<Database>, closing: CancellationToken) {
         if let Err(error) = crate::schedule_run_job::dispatch_tick(&db, now_ms()).await {
             tracing::warn!(%error, "looking for schedule firings to run failed");
         }
+        // Rounds come before the wake tick, which queues the wake that handles them.
+        if let Err(error) = crate::wake_job::round_tick(&db, now_ms()).await {
+            tracing::warn!(%error, "looking for agents whose round is due failed");
+        }
         // The same beat looks for agents whose events have settled.
         if let Err(error) = crate::wake_job::tick(&db, now_ms()).await {
             tracing::warn!(%error, "looking for agents to wake failed");

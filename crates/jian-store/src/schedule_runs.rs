@@ -8,7 +8,7 @@
 //! A firing is a row of `agent_inbox` of kind `schedule`, written by [`fire_schedule`]; the wake
 //! never reads it. The row is the queue of firings that have not opened a run yet:
 //!
-//! 1. [`schedule_event`] reads the firing, [`schedule_dm`] finds where it goes when the schedule
+//! 1. [`schedule_event`] reads the firing, [`dm_with_agent`] finds where it goes when the schedule
 //!    has no thread (the direct chat between the agent and the person who made it, made when it
 //!    does not exist).
 //! 2. [`start_schedule_run`] opens the run and links it to the firing in one statement. The
@@ -37,6 +37,27 @@ use jian_core::ThreadKind;
 
 /// The most firings one tick dispatches for one tenant; the rest wait for the next tick.
 const MAX_DISPATCH: i64 = 100;
+
+async fn find_dm(
+    tx: &mut sqlx::PgConnection,
+    member: &AccountId,
+    agent: &AgentId,
+) -> Result<Option<ThreadId>, StoreError> {
+    let existing: Option<String> = sqlx::query_scalar(
+        "SELECT t.id FROM threads t WHERE t.kind = 'dm' AND t.archived_at IS NULL \
+           AND EXISTS (SELECT 1 FROM thread_participants p WHERE p.thread_id = t.id \
+                       AND p.account_id = $1 AND p.left_at IS NULL) \
+           AND EXISTS (SELECT 1 FROM thread_participants p WHERE p.thread_id = t.id \
+                       AND p.agent_id = $2 AND p.left_at IS NULL) \
+         ORDER BY t.seq LIMIT 1",
+    )
+    .bind(member.as_str())
+    .bind(agent.as_str())
+    .fetch_optional(tx)
+    .await
+    .map_err(StoreError::query("look for a direct chat"))?;
+    Ok(existing.map(ThreadId::new))
+}
 
 /// A firing that has not opened a run.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -162,52 +183,59 @@ impl Database {
         }))
     }
 
-    /// The direct chat between `member` and `agent`, made when there is none. One at a time per
-    /// pair: two schedules due together make one chat, not two. `None` when the person is no
-    /// longer an active member or can no longer see the agent.
-    pub async fn schedule_dm(
+    /// Whether `member` is an active member of the workspace who can still see `agent`: who may
+    /// be given a direct chat with it by something that runs on its own (a schedule, a round).
+    pub async fn dm_access(
         &self,
         ctx: &TenantCtx,
         member: &AccountId,
         agent: &AgentId,
-    ) -> Result<Option<ThreadId>, StoreError> {
-        const ACTION: &str = "open a direct chat for a schedule";
+    ) -> Result<bool, StoreError> {
         let Some(found) = self.member(ctx, member).await? else {
-            return Ok(None);
+            return Ok(false);
         };
         let viewer = Viewer {
             account: member.clone(),
             admin: found.role == Role::Admin,
         };
-        if found.disabled || !self.can_see_agent(ctx, &viewer, agent).await? {
+        Ok(!found.disabled && self.can_see_agent(ctx, &viewer, agent).await?)
+    }
+
+    /// The direct chat between `member` and `agent`, if there is one. Reads only: see
+    /// [`dm_with_agent`](Self::dm_with_agent) to make it, and [`dm_access`](Self::dm_access) for
+    /// whether the person may have one.
+    pub async fn existing_dm(
+        &self,
+        ctx: &TenantCtx,
+        member: &AccountId,
+        agent: &AgentId,
+    ) -> Result<Option<ThreadId>, StoreError> {
+        let mut tx = self.begin(ctx).await?;
+        find_dm(&mut tx, member, agent).await
+    }
+
+    /// The direct chat between `member` and `agent`, made when there is none. One at a time per
+    /// pair: two schedules due together make one chat, not two. `None` when the person is no
+    /// longer an active member or can no longer see the agent.
+    pub async fn dm_with_agent(
+        &self,
+        ctx: &TenantCtx,
+        member: &AccountId,
+        agent: &AgentId,
+    ) -> Result<Option<ThreadId>, StoreError> {
+        const ACTION: &str = "open a direct chat with an agent";
+        if !self.dm_access(ctx, member, agent).await? {
             return Ok(None);
         }
         let mut tx = self.begin(ctx).await?;
         // Held to the end of the transaction; the pair names it, so other pairs do not wait.
         sqlx::query("SELECT pg_advisory_xact_lock(hashtext($1))")
-            .bind(format!(
-                "schedule-dm:{}:{}",
-                member.as_str(),
-                agent.as_str()
-            ))
+            .bind(format!("agent-dm:{}:{}", member.as_str(), agent.as_str()))
             .execute(&mut *tx)
             .await
             .map_err(StoreError::query(ACTION))?;
-        let existing: Option<String> = sqlx::query_scalar(
-            "SELECT t.id FROM threads t WHERE t.kind = 'dm' AND t.archived_at IS NULL \
-               AND EXISTS (SELECT 1 FROM thread_participants p WHERE p.thread_id = t.id \
-                           AND p.account_id = $1 AND p.left_at IS NULL) \
-               AND EXISTS (SELECT 1 FROM thread_participants p WHERE p.thread_id = t.id \
-                           AND p.agent_id = $2 AND p.left_at IS NULL) \
-             ORDER BY t.seq LIMIT 1",
-        )
-        .bind(member.as_str())
-        .bind(agent.as_str())
-        .fetch_optional(&mut *tx)
-        .await
-        .map_err(StoreError::query(ACTION))?;
-        if let Some(id) = existing {
-            return Ok(Some(ThreadId::new(id)));
+        if let Some(id) = find_dm(&mut tx, member, agent).await? {
+            return Ok(Some(id));
         }
         let id = random_id("thr_")?;
         sqlx::query("INSERT INTO threads (id, kind, title, created_by) VALUES ($1, $2, $3, $4)")

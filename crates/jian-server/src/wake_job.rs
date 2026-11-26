@@ -2,8 +2,12 @@
 //!
 //! Events reach an agent's box from three sides (a group message that did not cite it, the end
 //! of a run of its own that failed, a time it asked for or something from outside through the
-//! events route). [`tick`] looks for agents whose oldest waiting event has settled for
-//! [`SETTLE_MS`] and queues one job per agent, so a burst is one wake, never one per event.
+//! events route), and a fourth that is not an event of the world: the round, which the agent's
+//! own interval makes ([`round_tick`]; the handling is in `round`). Proactivity is not only
+//! reacting: now and then, without an event or a schedule, an agent looks over its usual work
+//! and brings one suggestion to its creator. [`tick`] looks for agents whose oldest waiting event
+//! has settled for [`SETTLE_MS`] and queues one job per agent, so a burst is one wake, never one
+//! per event.
 //!
 //! A schedule's firing is NOT one of these events. A schedule was made by a person, so it is
 //! authorised work and opens a run of its own (`schedule.run`, see [`crate::schedule_run_job`]):
@@ -35,7 +39,7 @@ use jian_protocol::wake::{BudgetLimitView, WakeHeldView};
 use jian_runtime::{Decider, Decision, RUN_KIND, WakeError};
 use jian_store::{
     AgentEvent, AgentId, BUDGET_WINDOW_MS, BudgetKind, BudgetLimits, Database, NewJob, Proactivity,
-    RunOrigin, StoreError, Target, TenantCtx, ThreadId,
+    ProactivityConfig, ROUND_EVENT, RunOrigin, StoreError, Target, TenantCtx, ThreadId,
 };
 use serde_json::json;
 
@@ -44,6 +48,8 @@ use crate::events::EventBus;
 use crate::runs::run_view;
 use crate::workspace::{announce_with, message_view, now_ms};
 use crate::{JobContext, JobError, JobHandler};
+
+mod round;
 
 /// The kind of job this handler runs.
 pub const AGENT_WAKE_KIND: &str = "agent.wake";
@@ -142,13 +148,28 @@ impl Work<'_> {
             .pending_events(self.ctx, &self.agent, now, BATCH)
             .await
             .map_err(|e| store(&e))?;
+        // A round is the agent's own, not something that happened: it is handled after the
+        // events, on its own wake and its own call.
+        let (rounds, batch): (Vec<AgentEvent>, Vec<AgentEvent>) =
+            batch.into_iter().partition(|e| e.kind == ROUND_EVENT);
+        self.events(&batch, &config, now).await?;
+        self.round(&rounds, &config, now).await
+    }
+
+    /// The events that are about something: see the module's note.
+    async fn events(
+        &self,
+        batch: &[AgentEvent],
+        config: &ProactivityConfig,
+        now: i64,
+    ) -> Result<(), JobError> {
         if batch.is_empty() {
             return Ok(());
         }
         // What the agent could start a run on: not a thread it left, not one it is busy in.
         let mut ready = Vec::new();
         let (mut gone, mut busy) = (Vec::new(), Vec::new());
-        for event in &batch {
+        for event in batch {
             match &event.thread {
                 None => ready.push(event),
                 Some(thread) => {
@@ -448,4 +469,16 @@ pub async fn tick(db: &Database, now_ms: i64) -> Result<usize, StoreError> {
         }
     }
     Ok(queued)
+}
+
+/// Writes the round of every agent of every tenant whose interval has passed at `now_ms`. Returns
+/// how many it wrote. A round is an event like the others, so the next [`tick`] queues the wake
+/// that handles it once it has settled; calling this again in the same window writes nothing.
+pub async fn round_tick(db: &Database, now_ms: i64) -> Result<usize, StoreError> {
+    let mut written = 0;
+    for id in db.list_tenants().await? {
+        let ctx: TenantCtx = db.tenant(id).await?;
+        written += db.queue_due_rounds(&ctx, now_ms).await?;
+    }
+    Ok(written)
 }

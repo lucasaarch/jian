@@ -158,6 +158,7 @@ mod project_threads;
 mod projects;
 mod providers;
 mod quotas;
+mod rounds;
 mod runs;
 mod schedule_runs;
 mod schedules;
@@ -242,6 +243,10 @@ pub use providers::{
     ProviderImport, provider_secret_owner,
 };
 pub use quotas::{QuotaUsage, Quotas, RunLease};
+pub use rounds::{
+    DEFAULT_ROUND_EVERY_HOURS, MAX_ROUND_EVERY_HOURS, ROUND_EVENT, ROUND_LINES, RoundLine,
+    RoundSuggestion, RoundThread, round_due_ms,
+};
 pub use runs::{Run, RunOrigin, RunState};
 pub use schedule_runs::{Dispatch, DueFiring, PendingSchedule};
 pub use schedules::{

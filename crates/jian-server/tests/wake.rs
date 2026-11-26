@@ -18,8 +18,8 @@ use jian_server::{
 };
 use jian_store::{
     AgentEvent, AgentId, AgentModel, BudgetLimits, Database, DatabaseSource, NewAgent, NewJob,
-    NewMessage, NewThread, Proactivity, ProactivityConfig, Run, RunOrigin, RunState, TenantCtx,
-    ThreadId, Viewer, Window,
+    NewMessage, NewSchedule, NewThread, Proactivity, ProactivityConfig, Run, RunOrigin, RunState,
+    TenantCtx, ThreadId, Viewer, When, Window,
 };
 use jian_testkit::{FakeExecutor, FakeMachineScript, FakeProvider, Script, TestDb, TwoTenants};
 use jian_testkit::{call, say};
@@ -200,7 +200,11 @@ impl Rig {
 
     /// Sets the agent's mode and limits.
     async fn proactivity(&self, agent: &AgentId, mode: Proactivity, limits: BudgetLimits) {
-        let config = ProactivityConfig { mode, limits };
+        let config = ProactivityConfig {
+            mode,
+            limits,
+            round_every_hours: None,
+        };
         self.db()
             .set_agent_proactivity(self.ctx(), agent, config)
             .await
@@ -807,6 +811,292 @@ async fn the_budget_is_per_day_and_the_window_opens_after_24_hours() {
     assert_eq!(rig.pending(&rig.pear).await.len(), 1);
     // A day after the first wake the room is back.
     rig.wake(&rig.pear, first + DAY).await.unwrap();
+    assert_eq!(rig.provider.streams(), 2);
+    assert!(rig.pending(&rig.pear).await.is_empty());
+}
+
+// ---- The round: the agent looks over its usual work now and then. ----
+
+const HOUR: i64 = 3_600_000;
+const FAR_OFF: i64 = 4_000_000_000_000;
+
+/// The start of tomorrow, in the test clock's days: every round below is later than the agents,
+/// which were made a moment ago, and a day's budget does not roll over in the middle of a test.
+fn tomorrow() -> i64 {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_millis();
+    (i64::try_from(now).unwrap() / DAY + 1) * DAY
+}
+
+impl Rig {
+    async fn set_round(&self, agent: &AgentId, mode: Proactivity, hours: Option<i32>) {
+        let config = ProactivityConfig {
+            mode,
+            limits: BudgetLimits::default(),
+            round_every_hours: hours,
+        };
+        self.db()
+            .set_agent_proactivity(self.ctx(), agent, config)
+            .await
+            .unwrap();
+    }
+
+    async fn tick_rounds(&self, at: i64) -> usize {
+        self.db().queue_due_rounds(self.ctx(), at).await.unwrap()
+    }
+
+    /// The wake of the round queued at `at`, once its debounce has passed.
+    async fn wake_round(&self, agent: &AgentId, at: i64) {
+        self.wake(agent, at + SETTLE_MS).await.unwrap();
+    }
+
+    fn request_text(&self, n: usize) -> String {
+        format!("{:?}", self.provider.requests()[n])
+    }
+
+    async fn dm_of(&self, agent: &AgentId, viewer: &Viewer) -> Vec<ThreadId> {
+        let page = self
+            .db()
+            .list_threads(self.ctx(), viewer, Some(agent), None, 50)
+            .await
+            .unwrap();
+        page.items
+            .into_iter()
+            .filter(|t| t.kind == ThreadKind::Dm)
+            .map(|t| t.id)
+            .collect()
+    }
+
+    async fn schedule(&self, ctx: &TenantCtx, who: &Viewer, agent: &AgentId, name: &str) {
+        let new = NewSchedule {
+            name: name.to_owned(),
+            instruction: format!("do {name}"),
+            when: When::Once(FAR_OFF),
+            time_zone: None,
+            thread: None,
+        };
+        self.db()
+            .create_schedule(ctx, &who.account, agent, &new, 1_000)
+            .await
+            .unwrap();
+    }
+}
+
+#[tokio::test]
+async fn a_round_comes_once_per_window_and_never_when_off_or_at_zero() {
+    let rig = Rig::new(vec![decide("ignore", None)]).await;
+    rig.set_round(&rig.plum, Proactivity::Suggest, Some(0))
+        .await;
+    let t0 = tomorrow() + 15 * HOUR;
+
+    // 12 hours is the default; before it (and its offset) nothing.
+    assert_eq!(rig.tick_rounds(tomorrow() - DAY + 11 * HOUR).await, 0);
+    // Two gateways ticking together queue it once.
+    let other = Database::open(DatabaseSource::External(rig.test.url.clone()))
+        .await
+        .unwrap();
+    let (one, two) = tokio::join!(
+        rig.db().queue_due_rounds(rig.ctx(), t0),
+        other.queue_due_rounds(rig.ctx(), t0)
+    );
+    assert_eq!(one.unwrap() + two.unwrap(), 1);
+    assert_eq!(rig.tick_rounds(t0).await, 0);
+    assert_eq!(rig.tick_rounds(t0 + HOUR).await, 0);
+    let waiting = rig.pending(&rig.pear).await;
+    assert_eq!(waiting.len(), 1);
+    assert_eq!(waiting[0].kind, "round");
+    assert!(waiting[0].thread.is_none());
+    assert!(
+        rig.db()
+            .last_round_at(rig.ctx(), &rig.pear)
+            .await
+            .unwrap()
+            .is_some()
+    );
+
+    // Once it is handled, the next one is an interval (and its offset, up to a fifth) later.
+    rig.wake_round(&rig.pear, t0).await;
+    assert!(rig.pending(&rig.pear).await.is_empty());
+    assert_eq!(rig.tick_rounds(t0 + 11 * HOUR).await, 0);
+    assert_eq!(rig.tick_rounds(t0 + 15 * HOUR).await, 1);
+
+    // Off, or 0 hours: never, however long it has been.
+    rig.set_round(&rig.pear, Proactivity::Off, None).await;
+    assert_eq!(rig.tick_rounds(t0 + 1_000 * HOUR).await, 0);
+    rig.set_round(&rig.pear, Proactivity::Act, Some(0)).await;
+    assert_eq!(rig.tick_rounds(t0 + 1_000 * HOUR).await, 0);
+}
+
+#[tokio::test]
+async fn a_round_shows_the_schedules_and_the_last_suggestion_and_lands_in_the_creators_dm() {
+    let rig = Rig::new(vec![
+        decide("act", None),
+        say("Review the stale invoices"),
+        decide("ignore", None),
+    ])
+    .await;
+    rig.set_round(&rig.pear, Proactivity::Suggest, Some(0))
+        .await;
+    let (a, b) = (&rig.tenants.a, &rig.tenants.b);
+    rig.schedule(&a.ctx, &rig.who, &rig.plum, "Weekly digest")
+        .await;
+    rig.schedule(&a.ctx, &rig.who, &rig.pear, "Pear secret")
+        .await;
+    let b_who = Viewer {
+        account: b.admin.account_id.clone(),
+        admin: true,
+    };
+    let theirs = rig
+        .db()
+        .create_agent(&b.ctx, &b_who, &new_agent("plum"))
+        .await
+        .unwrap();
+    rig.schedule(&b.ctx, &b_who, &theirs.id, "Other tenant secret")
+        .await;
+
+    // plum has no chat with its creator yet; the round makes it once it has something to say.
+    let member = Viewer {
+        account: a.member.account_id.clone(),
+        admin: false,
+    };
+    assert!(rig.dm_of(&rig.plum, &rig.who).await.is_empty());
+    let t0 = tomorrow() + 15 * HOUR;
+    assert_eq!(rig.tick_rounds(t0).await, 1);
+    rig.wake_round(&rig.plum, t0).await;
+
+    let asked = rig.request_text(0);
+    assert!(asked.contains("Weekly digest"), "{asked}");
+    assert!(asked.contains("next run 2096-"), "{asked}");
+    for leak in ["Pear secret", "Other tenant secret"] {
+        assert!(!asked.contains(leak), "{leak} in {asked}");
+    }
+    let chats = rig.dm_of(&rig.plum, &rig.who).await;
+    assert_eq!(chats.len(), 1);
+    assert!(rig.dm_of(&rig.plum, &member).await.is_empty());
+    let runs = rig.runs(&chats[0], &rig.plum).await;
+    assert_eq!(runs.len(), 1);
+    assert_eq!(runs[0].origin, RunOrigin::Wake);
+    rig.work(&runs[0].id).await;
+    assert!(
+        rig.texts(&chats[0])
+            .await
+            .iter()
+            .any(|t| t.contains("Review the stale invoices"))
+    );
+
+    // The next round remembers the suggestion, and that a person answered it.
+    rig.set_round(&rig.plum, Proactivity::Suggest, None).await;
+    rig.post(&chats[0], "good idea, thanks").await;
+    let t1 = t0 + 15 * HOUR;
+    assert_eq!(rig.tick_rounds(t1).await, 1);
+    rig.wake_round(&rig.plum, t1).await;
+    let again = rig.request_text(2);
+    assert!(again.contains("Review the stale invoices"), "{again}");
+    assert!(again.contains("a person answered"), "{again}");
+    assert!(again.contains("Weekly digest"), "{again}");
+}
+
+#[tokio::test]
+async fn a_suggestion_nobody_answered_is_not_followed_by_another_and_costs_nothing() {
+    let rig = Rig::new(vec![
+        decide("act", None),
+        say("Try the new report"),
+        decide("ignore", None),
+    ])
+    .await;
+    rig.set_round(&rig.plum, Proactivity::Suggest, Some(0))
+        .await;
+    let t0 = tomorrow() + 15 * HOUR;
+    assert_eq!(rig.tick_rounds(t0).await, 1);
+    rig.wake_round(&rig.pear, t0).await;
+    let run = rig.runs(&rig.dm, &rig.pear).await.remove(0);
+    rig.work(&run.id).await;
+    assert_eq!(rig.provider.streams(), 2);
+    let at = t0 + SETTLE_MS;
+    let wakes = |when: i64| {
+        rig.db()
+            .budget_used(rig.ctx(), &rig.pear, jian_store::BudgetKind::Wake, when)
+    };
+    assert_eq!(wakes(at).await.unwrap(), 1, "a round spends one wake");
+
+    // No answer: the next round is consumed with no call and no budget, and the clock moves on.
+    let t1 = t0 + 15 * HOUR;
+    assert_eq!(rig.tick_rounds(t1).await, 1);
+    let before = rig.db().last_round_at(rig.ctx(), &rig.pear).await.unwrap();
+    rig.wake_round(&rig.pear, t1).await;
+    assert_eq!(rig.provider.streams(), 2);
+    assert!(rig.pending(&rig.pear).await.is_empty());
+    assert_eq!(wakes(t1 + SETTLE_MS).await.unwrap(), 1);
+    assert_eq!(rig.tick_rounds(t1 + HOUR).await, 0);
+    assert!(before.is_some());
+
+    // The person answers: the round runs again.
+    rig.post(&rig.dm, "will do").await;
+    let t2 = t1 + 15 * HOUR;
+    assert_eq!(rig.tick_rounds(t2).await, 1);
+    rig.wake_round(&rig.pear, t2).await;
+    assert_eq!(rig.provider.streams(), 3);
+}
+
+#[tokio::test]
+async fn a_round_run_reads_only_in_suggest_and_has_every_tool_in_act() {
+    for (mode, full) in [(Proactivity::Suggest, false), (Proactivity::Act, true)] {
+        let rig = Rig::new(vec![decide("act", None), say("a thought")]).await;
+        rig.set_round(&rig.plum, Proactivity::Off, None).await;
+        rig.set_round(&rig.pear, mode, None).await;
+        let t0 = tomorrow() + 15 * HOUR;
+        assert_eq!(rig.tick_rounds(t0).await, 1);
+        rig.wake_round(&rig.pear, t0).await;
+        let run = rig.runs(&rig.dm, &rig.pear).await.remove(0);
+        rig.work(&run.id).await;
+        let offered = rig.tools_of(1);
+        for name in READS {
+            assert!(offered.iter().any(|t| t == name), "{offered:?}");
+        }
+        for name in CHANGES {
+            assert_eq!(
+                offered.iter().any(|t| t == name),
+                full,
+                "{name} {offered:?}"
+            );
+        }
+    }
+}
+
+#[tokio::test]
+async fn a_round_waits_when_the_wake_budget_is_spent() {
+    let rig = Rig::new(vec![decide("ignore", None), decide("ignore", None)]).await;
+    rig.set_round(&rig.plum, Proactivity::Suggest, Some(0))
+        .await;
+    let limits = BudgetLimits {
+        wakes: Some(1),
+        runs: None,
+    };
+    let config = ProactivityConfig {
+        mode: Proactivity::Suggest,
+        limits,
+        round_every_hours: Some(1),
+    };
+    rig.db()
+        .set_agent_proactivity(rig.ctx(), &rig.pear, config)
+        .await
+        .unwrap();
+    let t1 = tomorrow() + 2 * HOUR;
+    assert_eq!(rig.tick_rounds(t1).await, 1);
+    rig.wake_round(&rig.pear, t1).await;
+    assert_eq!(rig.provider.streams(), 1);
+
+    // The same day, the next round finds the budget spent: no call, and it waits.
+    let t2 = t1 + 2 * HOUR;
+    assert_eq!(rig.tick_rounds(t2).await, 1);
+    rig.wake_round(&rig.pear, t2).await;
+    assert_eq!(rig.provider.streams(), 1);
+    assert_eq!(rig.pending(&rig.pear).await.len(), 1);
+
+    // A day after the first wake the room is back.
+    rig.wake(&rig.pear, t1 + SETTLE_MS + DAY).await.unwrap();
     assert_eq!(rig.provider.streams(), 2);
     assert!(rig.pending(&rig.pear).await.is_empty());
 }

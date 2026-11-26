@@ -63,10 +63,16 @@ pub struct AgentProactivityView {
     /// Proactive runs spent in the last day.
     #[ts(type = "number")]
     pub runs_used: i64,
+    /// Hours between the agent's rounds (it looks over its usual work and brings one suggestion
+    /// to its creator); 0 is never.
+    pub round_every_hours: i32,
+    /// When its last round was queued, ISO 8601; `null` before the first.
+    pub last_round_at: Option<String>,
 }
 
 /// `PUT /v1/agents/{id}/proactivity`. Each limit is 0 to 1000, or `null` for the default; 0
-/// switches that kind off.
+/// switches that kind off. `roundEveryHours` is 0 to 168, `null` for the default (12); 0 is
+/// never.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[ts(export)]
 #[serde(rename_all = "camelCase")]
@@ -77,6 +83,8 @@ pub struct SetAgentProactivityRequest {
     pub max_wakes_per_day: Option<i32>,
     /// Proactive runs per day.
     pub max_proactive_runs_per_day: Option<i32>,
+    /// Hours between rounds.
+    pub round_every_hours: Option<i32>,
 }
 
 /// Which of the budget's limits held events back.

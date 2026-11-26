@@ -24,4 +24,13 @@ wakesUsed: number,
 /**
  * Proactive runs spent in the last day.
  */
-runsUsed: number, };
+runsUsed: number, 
+/**
+ * Hours between the agent's rounds (it looks over its usual work and brings one suggestion
+ * to its creator); 0 is never.
+ */
+roundEveryHours: number, 
+/**
+ * When its last round was queued, ISO 8601; `null` before the first.
+ */
+lastRoundAt: string | null, };

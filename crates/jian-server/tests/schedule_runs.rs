@@ -226,6 +226,7 @@ impl Rig {
         let config = ProactivityConfig {
             mode,
             limits: BudgetLimits::default(),
+            round_every_hours: None,
         };
         let set = self
             .db()
@@ -393,7 +394,7 @@ async fn a_schedule_without_a_thread_uses_the_creators_direct_chat_and_nobody_el
     // Asked again, the same chat and not a second one.
     let again = rig
         .db()
-        .schedule_dm(rig.ctx(), &rig.other.account, &rig.agent)
+        .dm_with_agent(rig.ctx(), &rig.other.account, &rig.agent)
         .await
         .unwrap();
     assert_eq!(again, Some(chat));

@@ -3,7 +3,8 @@ import type { ProactivityModeView } from "./ProactivityModeView";
 
 /**
  * `PUT /v1/agents/{id}/proactivity`. Each limit is 0 to 1000, or `null` for the default; 0
- * switches that kind off.
+ * switches that kind off. `roundEveryHours` is 0 to 168, `null` for the default (12); 0 is
+ * never.
  */
 export type SetAgentProactivityRequest = { 
 /**
@@ -17,4 +18,8 @@ maxWakesPerDay: number | null,
 /**
  * Proactive runs per day.
  */
-maxProactiveRunsPerDay: number | null, };
+maxProactiveRunsPerDay: number | null, 
+/**
+ * Hours between rounds.
+ */
+roundEveryHours: number | null, };

@@ -153,4 +153,25 @@ async fn an_event_of_one_tenant_never_wakes_the_agent_of_another() {
         call(&gateway, "PUT", &path, admin, Some(too_big)).await.0,
         400
     );
+
+    // The round: 12 hours by default, none yet; 0 turns it off; over a week is refused.
+    let (_, view) = call(&gateway, "GET", &path, peer, None).await;
+    assert_eq!(view["roundEveryHours"], 12, "{view}");
+    assert!(view["lastRoundAt"].is_null(), "{view}");
+    let round = |hours: i64| json!({ "mode": "act", "roundEveryHours": hours });
+    for ok in [0, 1, 168] {
+        let (status, view) = call(&gateway, "PUT", &path, admin, Some(round(ok))).await;
+        assert_eq!(status, 200, "{view}");
+        assert_eq!(view["roundEveryHours"], ok, "{view}");
+    }
+    for bad in [-1, 169, 200] {
+        let (status, _) = call(&gateway, "PUT", &path, admin, Some(round(bad))).await;
+        assert_eq!(status, 400, "{bad}");
+    }
+    assert_eq!(
+        call(&gateway, "PUT", &path, peer, Some(round(6))).await.0,
+        403
+    );
+    let (_, view) = call(&gateway, "GET", &path, peer, None).await;
+    assert_eq!(view["roundEveryHours"], 168, "{view}");
 }
