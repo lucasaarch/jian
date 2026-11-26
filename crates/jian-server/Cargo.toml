@@ -13,6 +13,7 @@ jian-llm.workspace = true
 jian-mail.workspace = true
 jian-protocol.workspace = true
 jian-runtime.workspace = true
+jian-skills.workspace = true
 jian-store.workspace = true
 serde.workspace = true
 serde_json.workspace = true

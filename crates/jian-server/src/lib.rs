@@ -83,6 +83,7 @@ mod rate;
 mod schedule_job;
 mod schedules;
 mod sign_in;
+mod skills;
 mod slots;
 mod summary;
 mod thread_messages;
@@ -168,6 +169,15 @@ pub const ROUTES: &[&str] = &[
     "DELETE /v1/agents/{id}/memories/{key} (a member who sees the agent)",
     "PUT /v1/agents/{id}/memories/{key}/links/{other} (a member who sees the agent)",
     "DELETE /v1/agents/{id}/memories/{key}/links/{other} (a member who sees the agent)",
+    "GET /v1/skills (a member)",
+    "POST /v1/skills (a member)",
+    "POST /v1/skills/import (a member)",
+    "GET /v1/skills/{name} (a member)",
+    "PUT /v1/skills/{name} (its creator or an admin)",
+    "DELETE /v1/skills/{name} (its creator or an admin)",
+    "GET /v1/skills/{name}/versions (a member)",
+    "GET /v1/agents/{id}/skills (a member who sees the agent)",
+    "PUT /v1/agents/{id}/skills/{name} (a member who manages the agent)",
     "GET /v1/projects (a member: the ones they see)",
     "POST /v1/projects (a member)",
     "GET /v1/projects/{id} (a member who sees it)",
@@ -243,6 +253,8 @@ pub struct Settings {
     pub public_url: Option<PublicUrl>,
     /// Where e-mail comes from: the deploy's own Resend account, or each workspace's.
     pub mail: MailConfig,
+    /// Where a skill import reads GitHub files from. Tests and a mirror give another one.
+    pub skills_github_base: String,
     /// How the e-mail names the workspace. Workspaces have no name of their own yet, so one
     /// name is said for all of them.
     pub workspace_name: String,
@@ -278,6 +290,7 @@ impl Default for Settings {
             },
             public_url: None,
             mail: MailConfig::default(),
+            skills_github_base: jian_skills::DEFAULT_GITHUB_BASE.to_owned(),
             workspace_name: "Jian".to_owned(),
         }
     }
@@ -302,6 +315,8 @@ pub struct AppState {
     pub settings: Settings,
     /// How model providers are reached, and what their subscriptions last said of their usage.
     pub llm: LlmAccess,
+    /// The built-in skills: the core's, and a plugin's once plugins can add some.
+    pub catalog: Arc<jian_skills::Catalog>,
 }
 
 impl AppState {
@@ -322,6 +337,7 @@ impl AppState {
             shutdown,
             settings,
             llm: LlmAccess::default(),
+            catalog: Arc::new(jian_skills::Catalog::core()),
         }
     }
 }
@@ -410,6 +426,15 @@ pub fn router_with(state: AppState, extra: Router<AppState>) -> Router {
                 .delete(schedules::delete),
         )
         .route("/v1/agents/{id}/inbox", get(schedules::inbox))
+        .route("/v1/skills", get(skills::list).post(skills::create))
+        .route("/v1/skills/import", post(skills::import))
+        .route(
+            "/v1/skills/{name}",
+            get(skills::get).put(skills::put).delete(skills::delete),
+        )
+        .route("/v1/skills/{name}/versions", get(skills::versions))
+        .route("/v1/agents/{id}/skills", get(skills::agent_list))
+        .route("/v1/agents/{id}/skills/{name}", put(skills::agent_set))
         .route("/v1/usage", get(usage::get))
         .route("/v1/projects", get(projects::list).post(projects::create))
         .route(

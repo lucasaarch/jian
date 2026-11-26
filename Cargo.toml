@@ -36,6 +36,7 @@ jian-protocol = { path = "crates/jian-protocol" }
 jian-remote = { path = "crates/jian-remote" }
 jian-runtime = { path = "crates/jian-runtime" }
 jian-server = { path = "crates/jian-server" }
+jian-skills = { path = "crates/jian-skills" }
 jian-store = { path = "crates/jian-store" }
 # Test fixtures only: a crate lists it under [dev-dependencies].
 jian-testkit = { path = "crates/jian-testkit" }

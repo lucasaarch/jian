@@ -1605,6 +1605,7 @@ dependencies = [
  "jian-protocol",
  "jian-remote",
  "jian-runtime",
+ "jian-skills",
  "jian-store",
  "jian-testkit",
  "serde",
@@ -1617,6 +1618,20 @@ dependencies = [
  "tokio-util",
  "tracing",
  "url",
+]
+
+[[package]]
+name = "jian-skills"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "jian-store",
+ "jian-testkit",
+ "reqwest",
+ "rustls",
+ "thiserror",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]

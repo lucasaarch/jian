@@ -35,6 +35,7 @@ const MEMORIES_FILE: &str = include_str!("memories.rs");
 const PROJECTS_FILE: &str = include_str!("projects.rs");
 const SCHEDULES_FILE: &str = include_str!("schedules.rs");
 const SIGN_IN_FILE: &str = include_str!("sign_in.rs");
+const SKILLS_FILE: &str = include_str!("skills.rs");
 const THREADS_FILE: &str = include_str!("threads.rs");
 const USAGE_FILE: &str = include_str!("usage.rs");
 
@@ -52,6 +53,7 @@ fn is_a_test_here(name: &str) -> bool {
         || PROJECTS_FILE.contains(&declared)
         || SCHEDULES_FILE.contains(&declared)
         || SIGN_IN_FILE.contains(&declared)
+        || SKILLS_FILE.contains(&declared)
         || USAGE_FILE.contains(&declared)
         || THREADS_FILE.contains(&declared)
 }
@@ -103,6 +105,15 @@ const ROUTE_TESTS: &[(&str, &str)] = &[
     ("GET /v1/agents/{id}/memories/{key}", MEMORIES_TEST),
     ("PUT /v1/agents/{id}/memories/{key}", MEMORIES_TEST),
     ("DELETE /v1/agents/{id}/memories/{key}", MEMORIES_TEST),
+    ("GET /v1/skills", SKILLS_TEST),
+    ("POST /v1/skills", SKILLS_TEST),
+    ("POST /v1/skills/import", SKILLS_TEST),
+    ("GET /v1/skills/{name}", SKILLS_TEST),
+    ("PUT /v1/skills/{name}", SKILLS_TEST),
+    ("DELETE /v1/skills/{name}", SKILLS_TEST),
+    ("GET /v1/skills/{name}/versions", SKILLS_TEST),
+    ("GET /v1/agents/{id}/skills", SKILLS_TEST),
+    ("PUT /v1/agents/{id}/skills/{name}", SKILLS_TEST),
     (
         "PUT /v1/agents/{id}/memories/{key}/links/{other}",
         MEMORIES_TEST,
@@ -179,6 +190,9 @@ const INVITES_TEST: &str =
 /// The test that shows tenant B reaches no memory, project or thread-project link of tenant A.
 const MEMORIES_TEST: &str = "memories_and_projects_of_the_other_tenant_are_out_of_reach";
 
+/// The test that shows tenant B reaches no skill of tenant A's library, nor its agents' skills.
+const SKILLS_TEST: &str = "skills_of_the_other_tenant_are_out_of_reach";
+
 /// The test that shows tenant B reaches no file or repository of tenant A's projects.
 const PROJECTS_TEST: &str =
     "the_files_and_repositories_of_the_other_tenants_projects_are_out_of_reach";
@@ -235,6 +249,7 @@ fn topic_test(topic: Topic) -> &'static str {
         Topic::Machines => "a_delta_reaches_only_its_own_tenants_subscribers",
         Topic::Threads => "a_member_hears_only_the_threads_they_are_in",
         Topic::Projects => "only_those_who_see_a_project_hear_of_it",
+        Topic::Skills => "a_change_to_the_library_is_heard_by_every_member",
     }
 }
 
@@ -308,6 +323,7 @@ async fn every_route_request_and_topic_has_an_isolation_test() {
     assert!(is_a_test_here(topic_test(Topic::Machines)));
     assert!(is_a_test_here(topic_test(Topic::Threads)));
     assert!(is_a_test_here(topic_test(Topic::Projects)));
+    assert!(is_a_test_here(topic_test(Topic::Skills)));
     // Compiling this is the check: a new worker message must be listed in `worker_message_test`.
     let _: fn(&WorkerMessage) -> &'static str = worker_message_test;
     gateway.stop().await;

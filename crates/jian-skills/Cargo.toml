@@ -1,0 +1,20 @@
+[package]
+name = "jian-skills"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+jian-store.workspace = true
+reqwest.workspace = true
+rustls.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+axum.workspace = true
+jian-testkit.workspace = true
+tokio = { workspace = true, features = ["rt-multi-thread", "sync"] }
+
+[lints]
+workspace = true

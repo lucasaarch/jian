@@ -5,6 +5,7 @@ use ts_rs::TS;
 
 use super::MachineSummary;
 use crate::projects::{ProjectFileChange, ProjectGone, ProjectThreadChange, ProjectView};
+use crate::skills::{SkillGone, SkillSummary};
 use crate::threads::{MessageView, ParticipantChange, ThreadSummary};
 
 /// What a client can subscribe to. One topic today; each domain adds its own with its issue.
@@ -20,6 +21,9 @@ pub enum Topic {
     /// The projects the client sees: their changes, files and threads. A client hears only about
     /// projects it sees, so each client has a numbering of its own.
     Projects,
+    /// The workspace's skill library: members adding, changing and removing skills. Everyone
+    /// sees the whole library, so every client has the same numbering.
+    Skills,
 }
 
 /// Where a client left a topic: the gateway's `epoch` (it changes when the gateway restarts, and
@@ -77,6 +81,12 @@ pub enum DeltaPayload {
     /// A thread came into a project or left it.
     #[serde(rename = "project.thread.changed")]
     ProjectThreadChanged(ProjectThreadChange),
+    /// A library skill was made, changed or imported: its state now.
+    #[serde(rename = "skill.updated")]
+    SkillUpdated(SkillSummary),
+    /// A library skill was deleted.
+    #[serde(rename = "skill.deleted")]
+    SkillDeleted(SkillGone),
 }
 
 /// One change on a topic.

@@ -16,4 +16,5 @@ pub mod projects;
 pub mod providers;
 pub mod quotas;
 pub mod schedules;
+pub mod skills;
 pub mod threads;

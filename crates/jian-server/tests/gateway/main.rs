@@ -13,6 +13,7 @@ mod projects;
 mod providers;
 mod schedules;
 mod sign_in;
+mod skills;
 mod slots;
 mod support;
 mod threads;
