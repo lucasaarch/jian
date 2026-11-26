@@ -6,6 +6,7 @@ license.workspace = true
 
 [dependencies]
 axum = { workspace = true, features = ["ws"] }
+base64.workspace = true
 futures-util.workspace = true
 jian-auth.workspace = true
 jian-core.workspace = true
@@ -17,6 +18,7 @@ jian-runtime.workspace = true
 jian-skills.workspace = true
 jian-store.workspace = true
 serde.workspace = true
+sha2.workspace = true
 # A file is replaced only by a writer that names its mtime, a float of milliseconds that goes
 # through JSON twice (worker, gateway, worker). Without exact float parsing it can come back one
 # bit off and the worker then refuses the write as "changed".
@@ -28,10 +30,8 @@ tracing.workspace = true
 url.workspace = true
 
 [dev-dependencies]
-base64.workspace = true
 jian-remote.workspace = true
 jian-testkit.workspace = true
-sha2.workspace = true
 tempfile.workspace = true
 tokio = { workspace = true, features = ["io-util"] }
 tokio-tungstenite.workspace = true

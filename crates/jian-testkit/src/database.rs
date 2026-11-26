@@ -44,6 +44,8 @@ impl TestDb {
             .await
             .unwrap()
             .with_master_keys(master_keys())
+            // A server's way: artifacts have links. A test of the desktop's turns them off.
+            .with_artifact_links(true)
             .with_blobs(Arc::new(DiskBlobs::new(dir.path().join("blobs"))));
         db.migrate().await.unwrap();
         Self {
@@ -52,6 +54,13 @@ impl TestDb {
             postgres,
             dir,
         }
+    }
+
+    /// Turns artifact links on or off (on by default, as on a server).
+    #[must_use]
+    pub fn with_artifact_links(mut self, on: bool) -> Self {
+        self.db = self.db.with_artifact_links(on);
+        self
     }
 
     /// Where the bytes of project files are kept, for a test that looks at the disk.

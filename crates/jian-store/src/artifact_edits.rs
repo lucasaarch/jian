@@ -37,14 +37,13 @@ async fn lock(
     id: &ArtifactId,
 ) -> Result<Option<Locked>, StoreError> {
     const ACTION: &str = "lock an artifact";
-    let (account, admin, thread) = actor.binds();
+    let (account, thread) = actor.binds();
     let row: Option<(String, i32)> = sqlx::query_as(AssertSqlSafe(format!(
         "SELECT a.kind, a.latest FROM artifacts a WHERE a.id = $1 AND {} FOR UPDATE OF a",
         artifact_visible_sql("a")
     )))
     .bind(id.as_str())
     .bind(account)
-    .bind(admin)
     .bind(thread)
     .fetch_optional(&mut *tx)
     .await
@@ -266,9 +265,9 @@ impl Database {
         self.artifact(ctx, actor, id).await
     }
 
-    /// Deletes an artifact and every version of it. Whoever sees one may delete what an agent
-    /// made; what a member made only that member or an admin may. `false` when the member does
-    /// not see it; [`StoreError::Denied`] when they see it but may not delete it.
+    /// Deletes an artifact and every version of it: its owner may, and an admin who sees it (it
+    /// is shared with the whole workspace). `false` when the member does not see it;
+    /// [`StoreError::Denied`] when they see it but may not delete it.
     pub async fn delete_artifact(
         &self,
         ctx: &TenantCtx,
@@ -282,28 +281,29 @@ impl Database {
         else {
             return Ok(false);
         };
-        let allowed = match &artifact.created_by {
-            ArtifactAuthor::Agent(_) => true,
-            ArtifactAuthor::Member(account) => viewer.admin || *account == viewer.account,
-        };
-        if !allowed {
+        if !artifact.deletable_by(viewer) {
             return Err(StoreError::Denied(
-                "only who made an artifact or an admin may delete it",
+                "only the owner of an artifact or an admin may delete it",
             ));
         }
         let mut tx = self.begin(ctx).await?;
-        sqlx::query("DELETE FROM artifacts WHERE id = $1")
-            .bind(id.as_str())
-            .execute(&mut *tx)
-            .await
-            .map_err(StoreError::query(ACTION))?;
+        let link: Option<Option<String>> =
+            sqlx::query_scalar("DELETE FROM artifacts WHERE id = $1 RETURNING link_hash")
+                .bind(id.as_str())
+                .fetch_optional(&mut *tx)
+                .await
+                .map_err(StoreError::query(ACTION))?;
         tx.commit().await.map_err(StoreError::query(ACTION))?;
+        if let Some(Some(hash)) = link {
+            self.forget_public_link(&hash).await;
+        }
         Ok(true)
     }
 
     /// Copies the latest version into a new artifact of the member's, with the same project. The
-    /// copy is in the same thread only when the member is in it. `Ok(None)` when the member does
-    /// not see the original.
+    /// copy is in the same thread only when the member is in it. It is the member's own: private
+    /// (`owner`), with no password and a link of its own, never the original's. `Ok(None)` when
+    /// the member does not see the original.
     pub async fn duplicate_artifact(
         &self,
         ctx: &TenantCtx,

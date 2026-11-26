@@ -87,6 +87,8 @@ impl Gateway {
             .unwrap()
             // So `TwoTenants::seed` can store a secret in this database.
             .with_master_keys(jian_testkit::master_keys())
+            // As a server, where every artifact has a link.
+            .with_artifact_links(true)
             .with_blobs(Arc::new(jian_store::DiskBlobs::new(
                 dir.path().join("blobs"),
             )));
@@ -112,6 +114,7 @@ impl Gateway {
         let db = Database::open(DatabaseSource::External(self.url.clone()))
             .await
             .unwrap()
+            .with_artifact_links(true)
             .with_blobs(Arc::new(jian_store::DiskBlobs::new(self.blobs.clone())));
         let mut gateway = Self::serve(
             Arc::new(db),

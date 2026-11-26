@@ -1,5 +1,8 @@
-//! The tools that make and change artifacts: `create_artifact`, `update_artifact` and
-//! `read_artifact`. None needs the run's machine; the run stays light.
+//! The tools that make and change artifacts: `create_artifact`, `update_artifact`,
+//! `read_artifact`, and the four of sharing (`read_artifact_sharing`, `share_artifact`,
+//! `set_artifact_password`, `rotate_artifact_link`). None needs the run's machine; the run
+//! stays light. A run never sees an artifact's link: it can read who may open it and change that,
+//! and a password it sets is the one thing it can hand over that it cannot read back.
 //!
 //! A run acts for its thread ([`ArtifactActor::Run`]): what it makes is linked to that thread and
 //! to the thread's project, and it reads and edits only the artifacts of those two. The model
@@ -16,14 +19,25 @@ use std::sync::Arc;
 use futures_util::future::BoxFuture;
 use jian_core::{ArtifactKind, MAX_SOURCE_EDITS, SourceEdit};
 use jian_llm::ToolSpec;
-use jian_store::{Artifact, ArtifactActor, ArtifactId, ArtifactVersion, NewArtifact};
+use jian_store::{
+    AccountId, Artifact, ArtifactActor, ArtifactId, ArtifactVersion, ArtifactVisibility,
+    NewArtifact, hash_artifact_password,
+};
 use serde_json::{Value, json};
 
 use crate::run::RunEvent;
 use crate::tool::{Tool, ToolEnv};
 
-/// The names of the three tools.
-pub const ARTIFACT_TOOLS: [&str; 3] = ["create_artifact", "update_artifact", "read_artifact"];
+/// The names of the artifact tools.
+pub const ARTIFACT_TOOLS: [&str; 7] = [
+    "create_artifact",
+    "update_artifact",
+    "read_artifact",
+    "read_artifact_sharing",
+    "share_artifact",
+    "set_artifact_password",
+    "rotate_artifact_link",
+];
 
 /// What an artifact tool tells the run's listener.
 #[derive(Clone, Debug)]
@@ -48,10 +62,25 @@ pub enum ArtifactEvent {
         /// The version that was written.
         version: ArtifactVersion,
     },
+    /// Who may open the artifact changed.
+    Shared {
+        /// The artifact now.
+        artifact: Artifact,
+        /// The members who saw it before the change.
+        before: Vec<AccountId>,
+    },
 }
 
 pub(crate) fn artifact_tools() -> Vec<Arc<dyn Tool>> {
-    vec![Arc::new(Create), Arc::new(Update), Arc::new(Read)]
+    vec![
+        Arc::new(Create),
+        Arc::new(Update),
+        Arc::new(Read),
+        Arc::new(ReadSharing),
+        Arc::new(Share),
+        Arc::new(SetPassword),
+        Arc::new(Rotate),
+    ]
 }
 
 fn spec(name: &str, description: &str, schema: Value) -> ToolSpec {
@@ -74,6 +103,7 @@ fn actor<'a>(env: &'a ToolEnv<'a>) -> ArtifactActor<'a> {
     ArtifactActor::Run {
         thread: env.thread,
         agent: env.agent,
+        run: env.run,
     }
 }
 
@@ -307,6 +337,250 @@ impl Tool for Read {
                     )
                 })?;
             Ok(found.content)
+        })
+    }
+}
+
+struct ReadSharing;
+
+impl Tool for ReadSharing {
+    fn name(&self) -> &'static str {
+        "read_artifact_sharing"
+    }
+
+    fn spec(&self) -> ToolSpec {
+        spec(
+            "read_artifact_sharing",
+            "Says who may open an artifact of this conversation or its project: its visibility \
+             (owner, members, workspace or external), the members it is shared with and whether \
+             its external link has a password.",
+            json!({
+                "type": "object",
+                "properties": { "id": { "type": "string" } },
+                "required": ["id"]
+            }),
+        )
+    }
+
+    fn needs_machine(&self) -> bool {
+        false
+    }
+
+    fn read_only(&self) -> bool {
+        true
+    }
+
+    fn call<'a>(
+        &'a self,
+        input: &'a Value,
+        env: &'a ToolEnv<'a>,
+    ) -> BoxFuture<'a, Result<String, String>> {
+        Box::pin(async move {
+            let id = ArtifactId::new(text(input, "id")?.to_owned());
+            let artifact = env
+                .db
+                .artifact(env.ctx, actor(env), &id)
+                .await
+                .map_err(|e| e.to_string())?
+                .ok_or_else(|| not_found(&id))?;
+            let share = env
+                .db
+                .artifact_share(env.ctx, actor(env), &id)
+                .await
+                .map_err(|e| e.to_string())?
+                .ok_or_else(|| not_found(&id))?;
+            Ok(json!({
+                "visibility": artifact.visibility.as_str(),
+                "members": share.members.iter().map(ToString::to_string).collect::<Vec<_>>(),
+                "hasPassword": share.has_password,
+            })
+            .to_string())
+        })
+    }
+}
+
+/// The members who see `id` now, for telling those who stop seeing it.
+async fn seen_by(env: &ToolEnv<'_>, id: &ArtifactId) -> Vec<AccountId> {
+    match env.db.artifact(env.ctx, actor(env), id).await {
+        Ok(Some(artifact)) => env
+            .db
+            .artifact_audience(env.ctx, &artifact)
+            .await
+            .unwrap_or_default(),
+        _ => Vec::new(),
+    }
+}
+
+async fn shared(env: &ToolEnv<'_>, artifact: Artifact, before: Vec<AccountId>) {
+    announce(env, ArtifactEvent::Shared { artifact, before }).await;
+}
+
+struct Share;
+
+impl Tool for Share {
+    fn name(&self) -> &'static str {
+        "share_artifact"
+    }
+
+    fn spec(&self) -> ToolSpec {
+        spec(
+            "share_artifact",
+            "Changes who may open an artifact of this conversation or its project. `owner`: \
+             only its owner; `members`: the owner and the `members` listed (account ids); \
+             `workspace`: every member; `external`: anyone with its link (a server only). \
+             Leaving `external` deletes the link's password. Do this only when the person asked.",
+            json!({
+                "type": "object",
+                "properties": {
+                    "id": { "type": "string" },
+                    "visibility": {
+                        "type": "string",
+                        "enum": ["owner", "members", "workspace", "external"]
+                    },
+                    "members": { "type": "array", "items": { "type": "string" } }
+                },
+                "required": ["id", "visibility"]
+            }),
+        )
+    }
+
+    fn needs_machine(&self) -> bool {
+        false
+    }
+
+    fn call<'a>(
+        &'a self,
+        input: &'a Value,
+        env: &'a ToolEnv<'a>,
+    ) -> BoxFuture<'a, Result<String, String>> {
+        Box::pin(async move {
+            let id = ArtifactId::new(text(input, "id")?.to_owned());
+            let level = ArtifactVisibility::parse(text(input, "visibility")?)
+                .ok_or("`visibility` is owner, members, workspace or external".to_owned())?;
+            let members: Option<Vec<AccountId>> =
+                input.get("members").and_then(Value::as_array).map(|list| {
+                    list.iter()
+                        .filter_map(Value::as_str)
+                        .map(|account| AccountId::new(account.to_owned()))
+                        .collect()
+                });
+            let before = seen_by(env, &id).await;
+            let artifact = env
+                .db
+                .set_artifact_visibility(env.ctx, actor(env), &id, level, members.as_deref())
+                .await
+                .map_err(|e| e.to_string())?
+                .ok_or_else(|| not_found(&id))?;
+            let now = artifact.visibility.as_str().to_owned();
+            shared(env, artifact, before).await;
+            Ok(format!("the artifact `{id}` is now {now}"))
+        })
+    }
+}
+
+struct SetPassword;
+
+impl Tool for SetPassword {
+    fn name(&self) -> &'static str {
+        "set_artifact_password"
+    }
+
+    fn spec(&self) -> ToolSpec {
+        spec(
+            "set_artifact_password",
+            "Sets the password of an `external` artifact's link (4 to 128 characters), or takes \
+             it away when `password` is left out. Readers who had unlocked it must unlock it \
+             again. Only for an artifact that is `external`.",
+            json!({
+                "type": "object",
+                "properties": {
+                    "id": { "type": "string" },
+                    "password": { "type": "string" }
+                },
+                "required": ["id"]
+            }),
+        )
+    }
+
+    fn needs_machine(&self) -> bool {
+        false
+    }
+
+    fn call<'a>(
+        &'a self,
+        input: &'a Value,
+        env: &'a ToolEnv<'a>,
+    ) -> BoxFuture<'a, Result<String, String>> {
+        Box::pin(async move {
+            let id = ArtifactId::new(text(input, "id")?.to_owned());
+            let hash = match input.get("password").and_then(Value::as_str) {
+                Some(password) => Some(
+                    hash_artifact_password(password)
+                        .await
+                        .map_err(|e| e.to_string())?,
+                ),
+                None => None,
+            };
+            let artifact = env
+                .db
+                .set_artifact_password(env.ctx, actor(env), &id, hash.as_deref())
+                .await
+                .map_err(|e| e.to_string())?
+                .ok_or_else(|| not_found(&id))?;
+            let set = artifact.has_password;
+            shared(env, artifact, Vec::new()).await;
+            Ok(format!(
+                "the link of `{id}` {}",
+                if set {
+                    "has a password now"
+                } else {
+                    "has no password"
+                }
+            ))
+        })
+    }
+}
+
+struct Rotate;
+
+impl Tool for Rotate {
+    fn name(&self) -> &'static str {
+        "rotate_artifact_link"
+    }
+
+    fn spec(&self) -> ToolSpec {
+        spec(
+            "rotate_artifact_link",
+            "Gives an artifact a new link; the old one stops working at once.",
+            json!({
+                "type": "object",
+                "properties": { "id": { "type": "string" } },
+                "required": ["id"]
+            }),
+        )
+    }
+
+    fn needs_machine(&self) -> bool {
+        false
+    }
+
+    fn call<'a>(
+        &'a self,
+        input: &'a Value,
+        env: &'a ToolEnv<'a>,
+    ) -> BoxFuture<'a, Result<String, String>> {
+        Box::pin(async move {
+            let id = ArtifactId::new(text(input, "id")?.to_owned());
+            let artifact = env
+                .db
+                .rotate_artifact_link(env.ctx, actor(env), &id)
+                .await
+                .map_err(|e| e.to_string())?
+                .ok_or_else(|| not_found(&id))?;
+            shared(env, artifact, Vec::new()).await;
+            Ok(format!(
+                "`{id}` has a new link; the old one no longer opens it"
+            ))
         })
     }
 }

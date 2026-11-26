@@ -10,8 +10,8 @@ use jian_import::{Domain, ImportOptions, ImportReport, Importer, Scope, Source};
 use jian_store::embedded::{EmbeddedConfig, EmbeddedPostgres};
 use jian_store::secrets::LocalKeyring;
 use jian_store::{
-    ArtifactActor, ArtifactAuthor, ArtifactFilter, Author, Database, ImportStatus, TenantCtx,
-    TenantId, Viewer, Who, Window,
+    ArtifactActor, ArtifactAuthor, ArtifactFilter, ArtifactVisibility, Author, Database,
+    ImportStatus, TenantCtx, TenantId, Viewer, Who, Window,
 };
 use jian_testkit::{TestDb, TwoTenants};
 use sqlx::Connection as _;
@@ -42,11 +42,12 @@ fn rows(which: Domain) -> u32 {
         // Two memories and the link between them (the ended one and the bad key are left out).
         // Three schedules (the one every minute is left out).
         Domain::Secrets | Domain::Providers | Domain::Memories | Domain::Schedules => 3,
-        Domain::Messages => 5,
+        // Five messages; and a folder and four markdown artifacts (the whiteboard and the
+        // picture are left out).
+        Domain::Messages | Domain::Artifacts => 5,
         // Two sessions with a person (the one between two agents is left); two skills, the ones
         // with a name the core accepts ("Bad Name" is left out).
-        // A folder and a markdown artifact (the whiteboard and the picture are left out).
-        Domain::Threads | Domain::Skills | Domain::Artifacts => 2,
+        Domain::Threads | Domain::Skills => 2,
         _ => 1,
     }
 }
@@ -745,8 +746,48 @@ async fn artifacts_came_over(
         .unwrap()
         .items;
     // Once, however many runs: the second run of the test found it already there.
-    assert_eq!(all.len(), 1);
-    let made = &all[0];
+    assert_eq!(all.len(), 4);
+    let made = all.iter().find(|a| a.title == "Launch plan").unwrap();
+    // A private artifact came over as `owner`, with the owner as its owner.
+    assert_eq!(made.visibility, ArtifactVisibility::Owner);
+    assert_eq!(made.owner.as_ref(), Some(owner));
+    // Public ones came over `external`, keeping the address already handed out and, when the
+    // old password's hash is one this core checks, the password; one it cannot check became
+    // `owner`, never open without it.
+    let by_title = |title: &str| all.iter().find(|a| a.title == title).unwrap();
+    let open = by_title("Open page");
+    assert_eq!(
+        (open.visibility, open.has_password),
+        (ArtifactVisibility::External, false)
+    );
+    let link = db
+        .public_artifact_link(&"p".repeat(43))
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(link.artifact, open.id);
+    let locked = by_title("Locked page");
+    assert_eq!(
+        (locked.visibility, locked.has_password),
+        (ArtifactVisibility::External, true)
+    );
+    let link = db
+        .public_artifact_link(&"q".repeat(43))
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(link.artifact, locked.id);
+    let odd = by_title("Odd lock");
+    assert_eq!(
+        (odd.visibility, odd.has_password),
+        (ArtifactVisibility::Owner, false)
+    );
+    assert!(
+        db.public_artifact_link(&"r".repeat(43))
+            .await
+            .unwrap()
+            .is_none()
+    );
     assert_eq!(
         (made.kind, made.title.as_str(), made.pinned),
         (jian_core::ArtifactKind::Markdown, "Launch plan", true)

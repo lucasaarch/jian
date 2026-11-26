@@ -1,7 +1,6 @@
-//! Artifacts through the gateway: who sees one (whoever sees its thread or its project, else its
-//! maker and the admins; anyone else gets a 404 on every route, the same as for one that never
-//! was), versions by edit and by autosave, folders, and that only those who see an artifact hear
-//! of it.
+//! Artifacts through the gateway: who sees one (its owner, and whoever it is shared with;
+//! anyone else gets a 404 on every route, the same as for one that never was), versions by edit
+//! and by autosave, folders, and that only those who see an artifact hear of it.
 
 use std::time::Duration;
 
@@ -13,11 +12,11 @@ use super::support::{Client, Gateway, http_request};
 
 /// A request is one more of the address's attempts, and the clock is the test's: let it earn them
 /// back, so a long test is not limited.
-fn earn(gateway: &Gateway) {
+pub(super) fn earn(gateway: &Gateway) {
     gateway.clock.advance(Duration::from_secs(1));
 }
 
-async fn call(
+pub(super) async fn call(
     gateway: &Gateway,
     method: &str,
     path: &str,
@@ -31,18 +30,18 @@ async fn call(
     (status, serde_json::from_str(&answer).unwrap_or(Value::Null))
 }
 
-async fn made(gateway: &Gateway, token: &str, path: &str, body: Value) -> Value {
+pub(super) async fn made(gateway: &Gateway, token: &str, path: &str, body: Value) -> Value {
     let (status, answer) = call(gateway, "POST", path, token, Some(body)).await;
     assert!(matches!(status, 200 | 201), "{path}: {status} {answer}");
     answer
 }
 
-fn id(value: &Value) -> String {
+pub(super) fn id(value: &Value) -> String {
     value["id"].as_str().unwrap().to_owned()
 }
 
 /// A markdown artifact made by `token`, with `extra` merged into the body.
-async fn artifact(gateway: &Gateway, token: &str, text: &str, extra: Value) -> String {
+pub(super) async fn artifact(gateway: &Gateway, token: &str, text: &str, extra: Value) -> String {
     let mut body = json!({ "kind": "markdown", "title": "Notes", "content": text });
     body.as_object_mut()
         .unwrap()
@@ -108,78 +107,81 @@ async fn thread_in_project(gateway: &Gateway, admin: &str) -> (String, String) {
 }
 
 #[tokio::test]
-async fn an_artifact_is_seen_by_whoever_sees_its_thread_or_project_and_nobody_else() {
+async fn an_artifact_is_its_owners_alone_until_they_share_it() {
     let (gateway, tenants) = start(open_settings()).await;
     let side = &tenants.a;
     let (admin, x) = (&side.admin_session, &side.member_session);
     let (thread, project) = thread_in_project(&gateway, admin).await;
-    let in_both = artifact(&gateway, admin, "hello", json!({ "threadId": thread })).await;
-    let loose = artifact(&gateway, admin, "alone", json!({})).await;
+    let mine = artifact(
+        &gateway,
+        admin,
+        "hello",
+        json!({ "threadId": thread, "projectId": project }),
+    )
+    .await;
     let never = sweep(&gateway, x, "art_never").await;
     assert!(never.iter().all(|s| *s == 404), "{never:?}");
 
-    // The thread is the admin's DM and the project is private: the member sees neither, so
-    // neither the artifact in them nor the one with no link.
-    for hidden in [&in_both, &loose] {
-        assert_eq!(sweep(&gateway, x, hidden).await, never);
-        let (_, list) = call(&gateway, "GET", "/v1/artifacts", x, None).await;
-        assert!(!list.to_string().contains(hidden.as_str()), "{list}");
-    }
-    // An unlinked artifact is its maker's and the admins'.
-    assert_eq!(
-        call(
-            &gateway,
-            "GET",
-            &format!("/v1/artifacts/{loose}"),
-            admin,
-            None
-        )
-        .await
-        .0,
-        200
-    );
-
-    // Showing the project to everyone shows what is in it, and only that.
-    let path = format!("/v1/projects/{project}");
-    let share = json!({ "visibility": "workspace" });
-    assert_eq!(
-        call(&gateway, "PATCH", &path, admin, Some(share)).await.0,
-        200
-    );
-    let (status, seen) = call(
+    // `owner` is the default: the member, who sees neither the thread nor the project, finds
+    // nothing, on every route and in the list.
+    assert_eq!(sweep(&gateway, x, &mine).await, never);
+    let (_, list) = call(&gateway, "GET", "/v1/artifacts", x, None).await;
+    assert!(!list.to_string().contains(mine.as_str()), "{list}");
+    let (_, seen) = call(
         &gateway,
         "GET",
-        &format!("/v1/artifacts/{in_both}"),
-        x,
+        &format!("/v1/artifacts/{mine}"),
+        admin,
         None,
     )
     .await;
+    assert_eq!(seen["artifact"]["visibility"], "owner");
+    assert_eq!(seen["artifact"]["hasPassword"], false);
+
+    // The member's own is theirs: an admin does not see it either.
+    let theirs = artifact(&gateway, x, "theirs", json!({})).await;
+    assert_eq!(sweep(&gateway, admin, &theirs).await, never);
+
+    // Shared with the workspace, the member reads it but does not own it.
+    let path = format!("/v1/artifacts/{mine}/visibility");
+    let set = |session: &str, level: &str| {
+        let (session, body) = (session.to_owned(), json!({ "visibility": level }));
+        let (gateway, path) = (&gateway, &path);
+        async move { call(gateway, "PUT", path, &session, Some(body)).await }
+    };
+    assert_eq!(set(admin, "workspace").await.0, 200);
+    let (status, seen) = call(&gateway, "GET", &format!("/v1/artifacts/{mine}"), x, None).await;
     assert_eq!(status, 200, "{seen}");
-    assert_eq!(seen["artifact"]["projectId"], project);
-    assert_eq!(sweep(&gateway, x, &loose).await, never);
-    let (_, list) = call(
-        &gateway,
-        "GET",
-        &format!("/v1/artifacts?projectId={project}"),
-        x,
-        None,
-    )
-    .await;
-    assert!(list.to_string().contains(&in_both), "{list}");
-
-    // Seeing is not owning: the admin made it, so the member may not delete it, and it stays.
+    assert_eq!(seen["artifact"]["visibility"], "workspace");
     let gone = call(
         &gateway,
         "DELETE",
-        &format!("/v1/artifacts/{in_both}"),
+        &format!("/v1/artifacts/{mine}"),
         x,
         None,
     )
     .await;
     assert_eq!(gone.0, 403, "{}", gone.1);
-    let own = artifact(&gateway, x, "mine", json!({ "projectId": project })).await;
-    let deleted = call(&gateway, "DELETE", &format!("/v1/artifacts/{own}"), x, None).await;
-    assert_eq!(deleted.0, 204);
+    // Only who owns it changes who opens it: someone who only sees it gets a 403.
+    assert_eq!(set(x, "external").await.0, 403);
+    let (status, shared) = call(
+        &gateway,
+        "GET",
+        &format!("/v1/artifacts/{mine}/share"),
+        x,
+        None,
+    )
+    .await;
+    assert_eq!(status, 200, "{shared}");
+    assert_eq!(shared["visibility"], "workspace");
+
+    // Back to `owner`, and it is gone for the member again.
+    assert_eq!(set(admin, "owner").await.0, 200);
+    assert_eq!(sweep(&gateway, x, &mine).await, never);
+
+    // Only members of the workspace can be listed.
+    let body = json!({ "visibility": "members", "members": ["acc_nobody"] });
+    assert_eq!(call(&gateway, "PUT", &path, admin, Some(body)).await.0, 400);
     gateway.stop().await;
 }
 
@@ -312,7 +314,7 @@ async fn a_folder_is_changed_by_its_maker_or_an_admin_and_deleting_it_keeps_its_
     gateway.stop().await;
 }
 
-async fn follow(client: &mut Client) {
+pub(super) async fn follow(client: &mut Client) {
     let subscribed = client
         .call(ClientRequest::Subscribe {
             topic: Topic::Artifacts,
@@ -336,40 +338,38 @@ async fn only_those_who_see_an_artifact_hear_of_it() {
     follow(&mut boss).await;
     let wait = Duration::from_millis(300);
 
-    // A project shown to the member only.
-    let share = json!({
-        "name": "shared",
-        "visibility": "members",
-        "viewers": [side.member.account_id.as_str()],
-    });
-    let project = id(&made(&gateway, admin, "/v1/projects", share).await);
-    // One with no link at all is the admin's: nobody here hears it.
-    let loose = artifact(&gateway, admin, "alone", json!({})).await;
+    // One made by the admin is the admin's: nobody else hears it.
+    let mine = artifact(&gateway, admin, "one", json!({})).await;
     assert!(x.quiet(wait).await);
     assert!(y.quiet(wait).await);
-    // ...but the admin does, being who made it.
     assert!(matches!(
         boss.delta().await.payload,
-        DeltaPayload::ArtifactCreated(c) if c.id == loose
+        DeltaPayload::ArtifactCreated(c) if c.id == mine
     ));
 
-    let shown = artifact(&gateway, admin, "one", json!({ "projectId": project })).await;
-    let DeltaPayload::ArtifactCreated(created) = x.delta().await.payload else {
-        panic!("the artifact, as created");
-    };
-    assert_eq!(created.id, shown);
+    // Shared with the member alone, it is told to them as updated, and what follows too.
+    let path = format!("/v1/artifacts/{mine}");
+    let share = json!({
+        "visibility": "members",
+        "members": [side.member.account_id.as_str()],
+    });
+    let put = call(
+        &gateway,
+        "PUT",
+        &format!("{path}/visibility"),
+        admin,
+        Some(share),
+    )
+    .await;
+    assert_eq!(put.0, 200, "{}", put.1);
+    assert!(matches!(
+        x.delta().await.payload,
+        DeltaPayload::ArtifactUpdated(u) if u.id == mine && u.visibility == "members"
+    ));
     let edit = json!({ "edits": [{ "find": "one", "replace": "two" }] });
-    let path = format!("/v1/artifacts/{shown}");
+    let edits = format!("{path}/edits");
     assert_eq!(
-        call(
-            &gateway,
-            "POST",
-            &format!("{path}/edits"),
-            admin,
-            Some(edit)
-        )
-        .await
-        .0,
+        call(&gateway, "POST", &edits, admin, Some(edit)).await.0,
         200
     );
     let DeltaPayload::ArtifactVersion(versioned) = x.delta().await.payload else {
@@ -377,13 +377,26 @@ async fn only_those_who_see_an_artifact_hear_of_it() {
     };
     assert_eq!(
         (versioned.artifact.id.as_str(), versioned.version),
-        (shown.as_str(), 2)
+        (mine.as_str(), 2)
     );
-    assert_eq!(call(&gateway, "DELETE", &path, admin, None).await.0, 204);
+
+    // Taking it back tells the member it is gone; deleting tells only the owner.
+    let back = json!({ "visibility": "owner" });
+    let put = call(
+        &gateway,
+        "PUT",
+        &format!("{path}/visibility"),
+        admin,
+        Some(back),
+    )
+    .await;
+    assert_eq!(put.0, 200);
     assert!(matches!(
         x.delta().await.payload,
-        DeltaPayload::ArtifactDeleted(g) if g.artifact_id == shown
+        DeltaPayload::ArtifactDeleted(g) if g.artifact_id == mine
     ));
+    assert_eq!(call(&gateway, "DELETE", &path, admin, None).await.0, 204);
+    assert!(x.quiet(wait).await);
     assert!(y.quiet(wait).await);
     gateway.stop().await;
 }

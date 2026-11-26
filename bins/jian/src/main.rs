@@ -347,6 +347,9 @@ async fn run() -> anyhow::Result<()> {
             .await
             .context("cannot open the database")?
             .with_master_keys(Arc::new(keys))
+            // A server is reachable from outside, so its artifacts have links; the desktop app
+            // embeds the store itself and keeps the default (none).
+            .with_artifact_links(true)
             .with_blobs(Arc::new(DiskBlobs::new(data_dir.join("files")))),
     );
     // From here the database is up, so every way out goes through `close` below.

@@ -259,7 +259,11 @@ async fn a_chat_is_answered_in_the_thread_with_the_tools_and_the_instructions_in
             "wake_me_later",
             "create_artifact",
             "update_artifact",
-            "read_artifact"
+            "read_artifact",
+            "read_artifact_sharing",
+            "share_artifact",
+            "set_artifact_password",
+            "rotate_artifact_link"
         ]
     );
     assert!(
@@ -570,6 +574,7 @@ async fn made_by_the_run(set: &Setup, thread: &ThreadId, title: &str, content: &
             ArtifactActor::Run {
                 thread,
                 agent: &set.agent,
+                run: "run",
             },
             &NewArtifact {
                 kind: ArtifactKind::Markdown,

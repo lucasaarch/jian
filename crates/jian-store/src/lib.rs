@@ -126,6 +126,8 @@ mod agents;
 mod artifact_audience;
 mod artifact_edits;
 mod artifact_folders;
+mod artifact_password;
+mod artifact_sharing;
 mod artifacts;
 mod backup;
 mod blobs;
@@ -196,6 +198,14 @@ pub use agents::{
 pub use artifact_folders::{
     ArtifactFolder, ArtifactFolderId, MAX_ARTIFACT_FOLDER_NAME_CHARS, MAX_ARTIFACT_FOLDERS,
 };
+pub use artifact_password::{
+    MAX_PASSWORD_CHARS, MIN_PASSWORD_CHARS, artifact_password_matches, hash_artifact_password,
+    is_artifact_password_hash,
+};
+pub use artifact_sharing::{
+    ArtifactShare, ArtifactVisibility, MAX_ARTIFACT_MEMBERS, PUBLIC_TOKEN_LEN, PublicArtifact,
+    PublicLink,
+};
 pub use artifacts::{
     Artifact, ArtifactActor, ArtifactAuthor, ArtifactFilter, ArtifactId, ArtifactVersion,
     ArtifactVersionInfo, MAX_ARTIFACT_TITLE_CHARS, NewArtifact,
@@ -219,7 +229,9 @@ pub use jobs::{
     MAX_PAYLOAD_BYTES, NewJob, PURGE_BATCH, RetryPolicy,
 };
 pub use legacy::{DeviceImport, ImportOutcome, LegacyDevice, LegacyMachine, MachineImport};
-pub use legacy_artifacts::{LegacyArtifact, LegacyArtifactFolder, LegacyArtifactVersion};
+pub use legacy_artifacts::{
+    LegacyArtifact, LegacyArtifactFolder, LegacyArtifactVersion, LegacyPasswordHash,
+};
 pub use legacy_memories::{LegacyMemory, LegacyMemoryLink, LegacyProject};
 pub use legacy_schedules::LegacySchedule;
 pub use legacy_skills::LegacySkill;

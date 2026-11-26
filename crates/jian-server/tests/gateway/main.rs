@@ -5,6 +5,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 mod accounts;
+mod artifact_sharing;
 mod artifacts;
 mod codex;
 mod invites;

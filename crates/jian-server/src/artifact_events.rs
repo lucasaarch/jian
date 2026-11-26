@@ -41,6 +41,9 @@ pub(crate) fn artifact_view(artifact: &Artifact) -> ArtifactView {
         project_id: artifact.project.as_ref().map(ToString::to_string),
         created_by: author_view(&artifact.created_by),
         version: artifact.version,
+        owner_id: artifact.owner.as_ref().map(ToString::to_string),
+        visibility: artifact.visibility.as_str().to_owned(),
+        has_password: artifact.has_password,
         created_at: artifact.created_at.clone(),
         updated_at: artifact.updated_at.clone(),
     }
@@ -130,6 +133,29 @@ pub(crate) async fn announce_updated(app: &AppState, ctx: &TenantCtx, artifact: 
     let to = audience(&app.db, ctx, artifact).await;
     let payload = DeltaPayload::ArtifactUpdated(artifact_view(artifact));
     send(app.events.as_ref(), ctx, &to, &payload).await;
+}
+
+/// `artifact.updated` after a change of who sees the artifact: to those who see it now, and
+/// `artifact.deleted` to those in `before` who no longer do. Neither carries a link or a password.
+pub(crate) async fn announce_reshared(
+    db: &Database,
+    events: &dyn EventBus,
+    ctx: &TenantCtx,
+    artifact: &Artifact,
+    before: &[AccountId],
+) {
+    let now = audience(db, ctx, artifact).await;
+    let payload = DeltaPayload::ArtifactUpdated(artifact_view(artifact));
+    send(events, ctx, &now, &payload).await;
+    let lost: Vec<AccountId> = before
+        .iter()
+        .filter(|account| !now.contains(account))
+        .cloned()
+        .collect();
+    let gone = DeltaPayload::ArtifactDeleted(ArtifactGone {
+        artifact_id: artifact.id.to_string(),
+    });
+    send(events, ctx, &lost, &gone).await;
 }
 
 /// `artifact.version` to everyone who sees the artifact. `artifact` is read after the write, so

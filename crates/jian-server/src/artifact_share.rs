@@ -1,0 +1,150 @@
+//! Who may open an artifact: how it is shared, its visibility and members, the password of its
+//! external link, and a new link.
+//!
+//! Anyone who sees an artifact may read how it is shared and copy its link. Changing any of it is
+//! the owner's alone (403 for someone who only sees it; an admin sees no more than anyone else).
+//! The token is in the answer of the share route and nowhere else: no event, list or log has it,
+//! and neither has the password.
+
+use axum::Json;
+use axum::extract::{Path, State};
+use axum::http::StatusCode;
+use jian_protocol::artifacts::{
+    ArtifactShareView, SetArtifactPasswordRequest, ShareArtifactRequest,
+};
+use jian_store::{
+    AccountId, Artifact, ArtifactActor, ArtifactId, ArtifactVisibility, hash_artifact_password,
+};
+
+use crate::AppState;
+use crate::artifact_events::{announce_reshared, artifact_view, audience};
+use crate::auth::Principal;
+use crate::http::{Refusal, not_found, refuse, tenant_ctx};
+use crate::workspace::{failure, viewer};
+
+/// Where a link is opened on this gateway.
+pub(crate) fn link_path(token: &str) -> String {
+    format!("/v1/public/artifacts/{token}")
+}
+
+/// The share view of `artifact`, with its link read back for the owner or anyone who sees it.
+async fn share_view(
+    app: &AppState,
+    ctx: &jian_store::TenantCtx,
+    actor: ArtifactActor<'_>,
+    artifact: &Artifact,
+) -> Result<Json<ArtifactShareView>, Refusal> {
+    let share = app
+        .db
+        .artifact_share(ctx, actor, &artifact.id)
+        .await
+        .map_err(|e| failure(&e))?
+        .ok_or_else(|| not_found("artifact"))?;
+    Ok(Json(ArtifactShareView {
+        artifact: artifact_view(artifact),
+        visibility: share.visibility.as_str().to_owned(),
+        members: share.members.iter().map(ToString::to_string).collect(),
+        url: share.token.as_ref().map(|token| link_path(token.expose())),
+        has_password: share.has_password,
+    }))
+}
+
+/// `GET /v1/artifacts/{id}/share`.
+pub(crate) async fn get(
+    State(app): State<AppState>,
+    principal: Principal,
+    Path(id): Path<String>,
+) -> Result<Json<ArtifactShareView>, Refusal> {
+    let viewer = viewer(&principal)?;
+    let ctx = tenant_ctx(&app, &principal.tenant).await?;
+    let actor = ArtifactActor::Member(&viewer);
+    let artifact = app
+        .db
+        .artifact(&ctx, actor, &ArtifactId::new(id))
+        .await
+        .map_err(|e| failure(&e))?
+        .ok_or_else(|| not_found("artifact"))?;
+    share_view(&app, &ctx, actor, &artifact).await
+}
+
+/// `PUT /v1/artifacts/{id}/visibility`.
+pub(crate) async fn visibility(
+    State(app): State<AppState>,
+    principal: Principal,
+    Path(id): Path<String>,
+    Json(body): Json<ShareArtifactRequest>,
+) -> Result<Json<ArtifactShareView>, Refusal> {
+    let viewer = viewer(&principal)?;
+    let ctx = tenant_ctx(&app, &principal.tenant).await?;
+    let id = ArtifactId::new(id);
+    let actor = ArtifactActor::Member(&viewer);
+    let Some(level) = ArtifactVisibility::parse(&body.visibility) else {
+        return Err(refuse(
+            StatusCode::BAD_REQUEST,
+            "invalid_input",
+            "visibility is owner, members, workspace or external",
+        ));
+    };
+    let members: Option<Vec<AccountId>> = body
+        .members
+        .map(|list| list.into_iter().map(AccountId::new).collect());
+    let before = match app.db.artifact(&ctx, actor, &id).await {
+        Ok(Some(artifact)) => audience(&app.db, &ctx, &artifact).await,
+        _ => Vec::new(),
+    };
+    let artifact = app
+        .db
+        .set_artifact_visibility(&ctx, actor, &id, level, members.as_deref())
+        .await
+        .map_err(|e| failure(&e))?
+        .ok_or_else(|| not_found("artifact"))?;
+    announce_reshared(&app.db, app.events.as_ref(), &ctx, &artifact, &before).await;
+    share_view(&app, &ctx, actor, &artifact).await
+}
+
+/// `PUT /v1/artifacts/{id}/password`: sets, changes or (with `null`) removes the password of an
+/// external link. It ends every pass already given.
+pub(crate) async fn password(
+    State(app): State<AppState>,
+    principal: Principal,
+    Path(id): Path<String>,
+    Json(body): Json<SetArtifactPasswordRequest>,
+) -> Result<Json<ArtifactShareView>, Refusal> {
+    let viewer = viewer(&principal)?;
+    let ctx = tenant_ctx(&app, &principal.tenant).await?;
+    let actor = ArtifactActor::Member(&viewer);
+    let hash = match &body.password {
+        Some(password) => Some(
+            hash_artifact_password(password)
+                .await
+                .map_err(|e| failure(&e))?,
+        ),
+        None => None,
+    };
+    let artifact = app
+        .db
+        .set_artifact_password(&ctx, actor, &ArtifactId::new(id), hash.as_deref())
+        .await
+        .map_err(|e| failure(&e))?
+        .ok_or_else(|| not_found("artifact"))?;
+    announce_reshared(&app.db, app.events.as_ref(), &ctx, &artifact, &[]).await;
+    share_view(&app, &ctx, actor, &artifact).await
+}
+
+/// `POST /v1/artifacts/{id}/link`: a new link; the old one is a 404 from now on.
+pub(crate) async fn rotate(
+    State(app): State<AppState>,
+    principal: Principal,
+    Path(id): Path<String>,
+) -> Result<Json<ArtifactShareView>, Refusal> {
+    let viewer = viewer(&principal)?;
+    let ctx = tenant_ctx(&app, &principal.tenant).await?;
+    let actor = ArtifactActor::Member(&viewer);
+    let artifact = app
+        .db
+        .rotate_artifact_link(&ctx, actor, &ArtifactId::new(id))
+        .await
+        .map_err(|e| failure(&e))?
+        .ok_or_else(|| not_found("artifact"))?;
+    share_view(&app, &ctx, actor, &artifact).await
+}

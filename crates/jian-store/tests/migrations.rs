@@ -159,6 +159,11 @@ async fn a_migration_changed_after_it_was_applied_is_refused_and_says_which() {
         "/migrations/platform/0011_machine_minutes.sql"
     ))
     .unwrap();
+    let twelfth = std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/migrations/platform/0012_public_artifact_links.sql"
+    ))
+    .unwrap();
     let altered = migrator(
         server.dir.path(),
         "platform-edited",
@@ -177,6 +182,7 @@ async fn a_migration_changed_after_it_was_applied_is_refused_and_says_which() {
             ("0009_quotas.sql", &ninth),
             ("0010_github_and_links.sql", &tenth),
             ("0011_machine_minutes.sql", &eleventh),
+            ("0012_public_artifact_links.sql", &twelfth),
         ],
     )
     .await;
@@ -319,7 +325,7 @@ async fn the_embedded_migrations_apply_to_the_platform_and_to_each_tenant() {
         .await,
         [
             "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16",
-            "17", "18", "19", "20", "21"
+            "17", "18", "19", "20", "21", "22"
         ]
     );
     // After a restart the tenant is migrated again with nothing to do.
@@ -412,7 +418,8 @@ async fn tool_approval_is_dropped_and_a_run_that_waited_on_one_ends_failed() {
         .map(|entry| entry.unwrap().file_name().into_string().unwrap())
         .collect::<Vec<_>>();
     shipped.sort();
-    // The release before: everything up to 0016 (0017 is under test; 0018 to 0020 come after).
+    // The release before: everything up to 0016 (0017 is under test; 0018 to 0022 come after).
+    assert!(shipped.pop().unwrap().starts_with("0022_"));
     assert!(shipped.pop().unwrap().starts_with("0021_"));
     assert!(shipped.pop().unwrap().starts_with("0020_"));
     assert!(shipped.pop().unwrap().starts_with("0019_"));
@@ -510,7 +517,8 @@ async fn proactivity_defaults_to_suggest_and_an_hourly_limit_resets_except_off()
         .map(|entry| entry.unwrap().file_name().into_string().unwrap())
         .collect::<Vec<_>>();
     shipped.sort();
-    // The release before: everything up to 0018 (0019 and 0020 come after it).
+    // The release before: everything up to 0018 (0019 to 0022 come after it).
+    assert!(shipped.pop().unwrap().starts_with("0022_"));
     assert!(shipped.pop().unwrap().starts_with("0021_"));
     assert!(shipped.pop().unwrap().starts_with("0020_"));
     assert!(shipped.pop().unwrap().starts_with("0019_"));

@@ -6,8 +6,8 @@
 
 use jian_core::{ArtifactKind, EditError, SourceEdit, ThreadKind, Visibility};
 use jian_store::{
-    Agent, ArtifactActor, ArtifactAuthor, ArtifactFilter, ArtifactId, Database, NewAgent,
-    NewArtifact, NewProject, NewThread, StoreError, TenantCtx, Thread, Viewer,
+    Agent, ArtifactActor, ArtifactAuthor, ArtifactFilter, ArtifactId, ArtifactVisibility, Database,
+    NewAgent, NewArtifact, NewProject, NewThread, StoreError, TenantCtx, Thread, Viewer,
 };
 use jian_testkit::{Side, TestDb, TwoTenants};
 
@@ -18,7 +18,22 @@ fn viewer(side: &Side, who: &jian_store::Member) -> Viewer {
     }
 }
 
+/// An agent the member made (the owner of what a run of it makes, when no run is on record):
+/// an admin creates it, and the row is handed to the member.
 async fn agent(db: &Database, side: &Side) -> Agent {
+    let agent = made_agent(db, side).await;
+    let mut tx = db.begin(&side.ctx).await.unwrap();
+    sqlx::query("UPDATE agents SET created_by = $2 WHERE id = $1")
+        .bind(agent.id.as_str())
+        .bind(side.member.account_id.as_str())
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    tx.commit().await.unwrap();
+    agent
+}
+
+async fn made_agent(db: &Database, side: &Side) -> Agent {
     db.create_agent(
         &side.ctx,
         &viewer(side, &side.admin),
@@ -90,6 +105,7 @@ async fn versions_are_kept_and_an_agents_is_never_written_over() {
     let run = ArtifactActor::Run {
         thread: &thread.id,
         agent: &helper.id,
+        run: "run",
     };
 
     let (artifact, first) = db
@@ -308,6 +324,17 @@ async fn deleting_the_thread_keeps_the_artifact_without_it() {
         .unwrap()
         .unwrap();
     assert_eq!(in_project.project.as_ref(), Some(&project.id));
+    // Its owner opens it to the workspace; the one kept private is for the owner alone.
+    db.set_artifact_visibility(
+        ctx,
+        ArtifactActor::Member(&member),
+        &in_project.id,
+        ArtifactVisibility::Workspace,
+        None,
+    )
+    .await
+    .unwrap()
+    .unwrap();
     // The thread's project: kept by the artifact.
     db.set_thread_project(ctx, &member, &thread.id, None)
         .await
@@ -336,10 +363,10 @@ async fn deleting_the_thread_keeps_the_artifact_without_it() {
         (kept.thread, kept.project.as_ref()),
         (None, Some(&project.id))
     );
-    // With no thread and no project it is its maker's, and an admin's; nobody else's.
+    // Private, it is its owner's alone: not an admin's either.
     let loose_id = &loose.id;
     assert!(sees(db, ctx, ArtifactActor::Member(&member), loose_id).await);
-    assert!(sees(db, ctx, ArtifactActor::Member(&admin), loose_id).await);
+    assert!(!sees(db, ctx, ArtifactActor::Member(&admin), loose_id).await);
     assert!(!sees(db, ctx, ArtifactActor::Member(&peer), loose_id).await);
 
     // Seeing it through the project does not let a peer delete what a member made.
@@ -384,10 +411,12 @@ async fn who_sees_an_artifact_is_who_sees_its_thread_or_its_project() {
     let run_mine = ArtifactActor::Run {
         thread: &mine.id,
         agent: &helper.id,
+        run: "run",
     };
     let run_theirs = ArtifactActor::Run {
         thread: &theirs.id,
         agent: &helper.id,
+        run: "run",
     };
     let (in_thread, _) = db
         .create_artifact(ctx, run_mine, &new(ArtifactKind::Markdown, "mine"))
@@ -401,7 +430,12 @@ async fn who_sees_an_artifact_is_who_sees_its_thread_or_its_project() {
         .unwrap();
     let id = &in_thread.id;
 
+    // A run's artifact is its owner's: the one who started the run, else the agent's creator
+    // (here the member, for a run that is not on record). An admin does not see it.
+    assert_eq!(in_thread.owner.as_ref(), Some(&side.member.account_id));
+    let admin = viewer(side, &side.admin);
     assert!(sees(db, ctx, ArtifactActor::Member(&member), id).await);
+    assert!(!sees(db, ctx, ArtifactActor::Member(&admin), id).await);
     assert!(!sees(db, ctx, ArtifactActor::Member(&peer), id).await);
     assert!(sees(db, ctx, ArtifactActor::Member(&member), &in_project.id).await);
     assert!(!sees(db, ctx, ArtifactActor::Member(&peer), &in_project.id).await);
@@ -580,6 +614,7 @@ async fn pin_folder_copy_and_delete() {
     let in_thread = ArtifactActor::Run {
         thread: &thread.id,
         agent: &helper.id,
+        run: "run",
     };
     assert!(db.delete_artifact(ctx, &member, &copy.id).await.unwrap());
     assert_eq!(db.artifact(ctx, actor, &copy.id).await.unwrap(), None);
@@ -608,6 +643,7 @@ async fn tenant_b_sees_and_changes_nothing_of_tenant_a() {
         let run = ArtifactActor::Run {
             thread: &thread.id,
             agent: &helper.id,
+            run: "run",
         };
         let (artifact, _) = db
             .create_artifact(

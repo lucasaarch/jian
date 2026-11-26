@@ -67,6 +67,7 @@ pub struct Database {
     pub(crate) blobs: Option<Arc<dyn BlobStore>>,
     pub(crate) limits: TenantLimits,
     pub(crate) gate: TenantGate,
+    pub(crate) artifact_links: bool,
     embedded: Option<EmbeddedPostgres>,
 }
 
@@ -94,6 +95,7 @@ impl Database {
                 blobs: None,
                 limits: TenantLimits::default(),
                 gate: TenantGate::default(),
+                artifact_links: false,
                 embedded,
             }),
             Err(error) => {
@@ -127,6 +129,15 @@ impl Database {
     #[must_use]
     pub fn with_tenant_limits(mut self, limits: TenantLimits) -> Self {
         self.limits = limits;
+        self
+    }
+
+    /// Whether an artifact has a link: on for a server (and the Cloud), where a link can be opened
+    /// from outside; off for the desktop app, which embeds the store for one computer and has
+    /// nowhere a link could lead. Off, no artifact gets a token and none can be made `external`.
+    #[must_use]
+    pub fn with_artifact_links(mut self, on: bool) -> Self {
+        self.artifact_links = on;
         self
     }
 

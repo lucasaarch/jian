@@ -39,7 +39,7 @@ use jian_store::{
 
 use serde_json::json;
 
-use crate::artifact_events::{announce_created_with, announce_version};
+use crate::artifact_events::{announce_created_with, announce_reshared, announce_version};
 use crate::auto_continue::{after_run, still_wanted};
 use crate::events::EventBus;
 use crate::guard::catching;
@@ -217,6 +217,9 @@ impl Listener<'_> {
             }
             ArtifactEvent::Version { artifact, version } => {
                 announce_version(self.db, self.events, self.ctx, &artifact, &version).await;
+            }
+            ArtifactEvent::Shared { artifact, before } => {
+                announce_reshared(self.db, self.events, self.ctx, &artifact, &before).await;
             }
         }
     }

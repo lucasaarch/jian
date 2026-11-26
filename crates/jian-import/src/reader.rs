@@ -7,8 +7,8 @@ use std::path::PathBuf;
 use jian_store::embedded::EmbeddedPostgres;
 use jian_store::{
     LegacyAgent, LegacyArtifact, LegacyArtifactFolder, LegacyArtifactVersion, LegacyChat,
-    LegacyDevice, LegacyMachine, LegacyMemory, LegacyMemoryLink, LegacyMessage, LegacyProject,
-    LegacyProvider, LegacySchedule, LegacyThread,
+    LegacyDevice, LegacyMachine, LegacyMemory, LegacyMemoryLink, LegacyMessage, LegacyPasswordHash,
+    LegacyProject, LegacyProvider, LegacySchedule, LegacyThread,
 };
 use sqlx::{AssertSqlSafe, Connection as _, PgConnection};
 
@@ -272,13 +272,19 @@ impl LegacyReader {
             title: String,
             kind: String,
             pinned: bool,
+            public: bool,
+            public_token: Option<String>,
+            public_password: Option<String>,
             created_at: String,
             updated_at: String,
         }
+        // The password's hash is read so a public artifact keeps it; it never reaches a log
+        // (`LegacyPasswordHash` redacts itself).
         let rows: Vec<Row> = sqlx::query_as(
             "SELECT id::text, profile_id::text, session_id::text, project_id::text, \
-                    folder_id::text, title, type AS kind, pinned, created_at::text, \
-                    updated_at::text \
+                    folder_id::text, title, type AS kind, pinned, visibility = 'public' AS public, \
+                    public_token, public_password, \
+                    created_at::text, updated_at::text \
              FROM session_artifacts ORDER BY created_at, id",
         )
         .fetch_all(&mut self.connection)
@@ -316,6 +322,9 @@ impl LegacyReader {
                 title: row.title,
                 kind: row.kind,
                 pinned: row.pinned,
+                public: row.public,
+                public_token: row.public_token,
+                password_hash: row.public_password.map(LegacyPasswordHash::new),
                 created_at: row.created_at,
                 updated_at: row.updated_at,
             })

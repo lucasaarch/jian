@@ -29,6 +29,7 @@ const QUIET: Duration = Duration::from_millis(300);
 const THIS_FILE: &str = include_str!("isolation.rs");
 /// The invitation tests are in their own file, and the isolation one is among them.
 const ARTIFACTS_FILE: &str = include_str!("artifacts.rs");
+const SHARING_FILE: &str = include_str!("artifact_sharing.rs");
 const CODEX_FILE: &str = include_str!("codex.rs");
 const INVITES_FILE: &str = include_str!("invites.rs");
 const PROVIDERS_FILE: &str = include_str!("providers.rs");
@@ -51,6 +52,7 @@ fn is_a_test_here(name: &str) -> bool {
     let declared = format!("async fn {name}(");
     THIS_FILE.contains(&declared)
         || ARTIFACTS_FILE.contains(&declared)
+        || SHARING_FILE.contains(&declared)
         || CODEX_FILE.contains(&declared)
         || INVITES_FILE.contains(&declared)
         || PROVIDERS_FILE.contains(&declared)
@@ -146,6 +148,12 @@ const ROUTE_TESTS: &[(&str, &str)] = &[
     ("PUT /v1/artifacts/{id}/content", ARTIFACTS_TEST),
     ("POST /v1/artifacts/{id}/edits", ARTIFACTS_TEST),
     ("POST /v1/artifacts/{id}/duplicate", ARTIFACTS_TEST),
+    ("GET /v1/artifacts/{id}/share", SHARING_TEST),
+    ("PUT /v1/artifacts/{id}/visibility", SHARING_TEST),
+    ("PUT /v1/artifacts/{id}/password", SHARING_TEST),
+    ("POST /v1/artifacts/{id}/link", SHARING_TEST),
+    ("GET /v1/public/artifacts/{token}", SHARING_TEST),
+    ("POST /v1/public/artifacts/{token}/unlock", SHARING_TEST),
     ("GET /v1/artifact-folders", ARTIFACTS_TEST),
     ("POST /v1/artifact-folders", ARTIFACTS_TEST),
     ("PATCH /v1/artifact-folders/{id}", ARTIFACTS_TEST),
@@ -237,6 +245,10 @@ const INVITES_TEST: &str =
 
 /// The test that shows tenant B reaches no artifact or artifact folder of tenant A.
 const ARTIFACTS_TEST: &str = "artifacts_and_folders_of_the_other_tenant_are_out_of_reach";
+
+/// The test that shows tenant B can neither share, protect nor open a link of tenant A's artifact,
+/// and that a link opens only the artifact of its own workspace.
+const SHARING_TEST: &str = "links_and_passwords_of_artifacts_stay_inside_their_own_tenant";
 
 /// The test that shows tenant B reaches no memory, project or thread-project link of tenant A.
 const MEMORIES_TEST: &str = "memories_and_projects_of_the_other_tenant_are_out_of_reach";
@@ -355,7 +367,12 @@ async fn every_route_request_and_topic_has_an_isolation_test() {
         assert!(is_a_test_here(test), "`{test}` is not a test in this file");
         // And the route is really served: a path ROUTES names that the router lacks is a 404.
         let path = key.split(' ').nth(1).unwrap();
-        assert_ne!(http_get(gateway.addr, path, None).await.0, 404, "{key}");
+        // A link that is not there is a 404 with a JSON body; a route the router lacks has none.
+        let (status, body) = http_get(gateway.addr, path, None).await;
+        assert!(
+            status != 404 || body.contains("not_found"),
+            "{key}: {status} {body}"
+        );
     }
 
     let samples = [

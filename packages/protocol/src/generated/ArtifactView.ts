@@ -42,6 +42,20 @@ createdBy: ArtifactAuthorView,
  */
 version: number, 
 /**
+ * The member it belongs to: who made it, or who started the run that did. `null` for an
+ * old one with no owner to find. Only they change who can open it.
+ */
+ownerId: string | null, 
+/**
+ * `owner`, `members`, `workspace` or `external`. The link and the password are never in a
+ * view.
+ */
+visibility: string, 
+/**
+ * Whether its `external` link asks for a password.
+ */
+hasPassword: boolean, 
+/**
  * When, UTC ISO 8601.
  */
 createdAt: string, 

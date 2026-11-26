@@ -41,6 +41,14 @@ pub struct ArtifactView {
     pub created_by: ArtifactAuthorView,
     /// The number of its latest version, from 1.
     pub version: i32,
+    /// The member it belongs to: who made it, or who started the run that did. `null` for an
+    /// old one with no owner to find. Only they change who can open it.
+    pub owner_id: Option<String>,
+    /// `owner`, `members`, `workspace` or `external`. The link and the password are never in a
+    /// view.
+    pub visibility: String,
+    /// Whether its `external` link asks for a password.
+    pub has_password: bool,
     /// When, UTC ISO 8601.
     pub created_at: String,
     /// When it last changed, UTC ISO 8601.
@@ -256,4 +264,71 @@ pub struct ArtifactWriting {
 pub struct ArtifactGone {
     /// Its id.
     pub artifact_id: String,
+}
+
+/// `PUT /v1/artifacts/{id}/visibility`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+#[serde(rename_all = "camelCase")]
+pub struct ShareArtifactRequest {
+    /// `owner`, `members`, `workspace` or `external`.
+    pub visibility: String,
+    /// For `members`: the accounts that may open it besides the owner. Left out, the list there
+    /// is stays; any other level clears it.
+    #[serde(default)]
+    pub members: Option<Vec<String>>,
+}
+
+/// How an artifact is shared: the answer of `GET /v1/artifacts/{id}/share` and of every change
+/// to it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+#[serde(rename_all = "camelCase")]
+pub struct ArtifactShareView {
+    /// The artifact as it is now.
+    pub artifact: ArtifactView,
+    /// `owner`, `members`, `workspace` or `external`.
+    pub visibility: String,
+    /// For `members`: the accounts it is shared with, besides the owner.
+    pub members: Vec<String>,
+    /// The path that opens its link on this gateway; `null` where the gateway has no links (one
+    /// computer). Whoever sees the artifact may copy it.
+    pub url: Option<String>,
+    /// Whether the `external` link asks for a password.
+    pub has_password: bool,
+}
+
+/// `PUT /v1/artifacts/{id}/password`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+#[serde(rename_all = "camelCase")]
+pub struct SetArtifactPasswordRequest {
+    /// 4 to 128 characters; `null` takes the password away.
+    pub password: Option<String>,
+}
+
+/// `POST /v1/public/artifacts/{token}/unlock`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+#[serde(rename_all = "camelCase")]
+pub struct UnlockArtifactRequest {
+    /// The link's password.
+    pub password: String,
+}
+
+/// `GET /v1/public/artifacts/{token}`: what a reader of the link sees, and nothing else.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+#[serde(rename_all = "camelCase")]
+pub struct PublicArtifactView {
+    /// `html`, `react`, `markdown`, `mermaid`, `deck`, `sheet` or `diagram`.
+    pub kind: String,
+    /// Its title.
+    pub title: String,
+    /// The number of the version shown, the latest.
+    pub version: i32,
+    /// The whole source of that version.
+    pub content: String,
+    /// When that version was written, UTC ISO 8601.
+    pub updated_at: String,
 }

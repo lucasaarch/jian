@@ -62,6 +62,9 @@ mod agent_model;
 mod agents;
 mod artifact_events;
 mod artifact_folders;
+mod artifact_pass;
+mod artifact_public;
+mod artifact_share;
 mod artifacts;
 mod auth;
 mod auto_continue;
@@ -221,15 +224,21 @@ pub const ROUTES: &[&str] = &[
     "DELETE /v1/projects/{id}/files/{file_id} (its creator or an admin)",
     "GET /v1/threads/{id}/project (a member who sees it)",
     "PUT /v1/threads/{id}/project (a member in it)",
-    "GET /v1/artifacts (a member: the ones they see)",
+    "GET /v1/artifacts (a member: the ones they own or are shared with)",
     "POST /v1/artifacts (a member in the thread, or who sees the project)",
     "GET /v1/artifacts/{id} (a member who sees it)",
     "PATCH /v1/artifacts/{id} (a member who sees it)",
-    "DELETE /v1/artifacts/{id} (its maker or an admin; anyone who sees it, for an agent's)",
+    "DELETE /v1/artifacts/{id} (its owner, or an admin who sees it)",
     "GET /v1/artifacts/{id}/versions (a member who sees it)",
     "PUT /v1/artifacts/{id}/content (a member who sees it)",
     "POST /v1/artifacts/{id}/edits (a member who sees it)",
     "POST /v1/artifacts/{id}/duplicate (a member who sees it)",
+    "GET /v1/artifacts/{id}/share (a member who sees it: how it is shared, and its link)",
+    "PUT /v1/artifacts/{id}/visibility (its owner, not an admin; external needs a server)",
+    "PUT /v1/artifacts/{id}/password (its owner; only for external; null removes it)",
+    "POST /v1/artifacts/{id}/link (its owner: a new link, the old one stops)",
+    "GET /v1/public/artifacts/{token} (the link: a signed-in member who sees it, or anyone for external, with its pass when it has a password)",
+    "POST /v1/public/artifacts/{token}/unlock (no token; the link's password; 10 tries a minute)",
     "GET /v1/artifact-folders (a member)",
     "POST /v1/artifact-folders (a member)",
     "PATCH /v1/artifact-folders/{id} (its maker or an admin)",
@@ -311,6 +320,9 @@ pub struct Settings {
     /// desktop install, where that machine is the owner's; the Cloud turns it off, because
     /// there it would be the operator's machine shared by every tenant.
     pub local_machine: bool,
+    /// How many password tries one reader may make on one public link: every try counts, right
+    /// or wrong. Kept in this process, so each replica gives its own allowance.
+    pub public_unlock: Limit,
 }
 
 impl Default for Settings {
@@ -346,6 +358,10 @@ impl Default for Settings {
             skills_github_base: jian_skills::DEFAULT_GITHUB_BASE.to_owned(),
             workspace_name: "Jian".to_owned(),
             local_machine: true,
+            public_unlock: Limit {
+                burst: 10,
+                per_second: 10.0 / 60.0,
+            },
         }
     }
 }
@@ -589,7 +605,22 @@ pub fn router_with(state: AppState, extra: Router<AppState>) -> Router {
         .route("/v1/artifacts/{id}/content", put(artifacts::save))
         .route("/v1/artifacts/{id}/edits", post(artifacts::edit))
         .route("/v1/artifacts/{id}/duplicate", post(artifacts::duplicate))
+        .route(
+            "/v1/artifacts/{id}/visibility",
+            put(artifact_share::visibility),
+        )
+        .route("/v1/artifacts/{id}/password", put(artifact_share::password))
+        .route("/v1/artifacts/{id}/share", get(artifact_share::get))
+        .route("/v1/artifacts/{id}/link", post(artifact_share::rotate))
         .layer(DefaultBodyLimit::max(MAX_ARTIFACT_BODY));
+    // What a reader of a public link may do has no token, and its only body is a password.
+    let public = Router::new()
+        .route("/v1/public/artifacts/{token}", get(artifact_public::get))
+        .route(
+            "/v1/public/artifacts/{token}/unlock",
+            post(artifact_public::unlock),
+        )
+        .layer(DefaultBodyLimit::max(MAX_ACCOUNT_BODY));
     // A file is held in memory up to its limit, and the body is read by the handler, which
     // answers a clear 413 (the layer would answer plain text).
     let files = Router::new()
@@ -604,6 +635,7 @@ pub fn router_with(state: AppState, extra: Router<AppState>) -> Router {
         .merge(accounts)
         .merge(messages)
         .merge(artifacts)
+        .merge(public)
         .merge(files)
         .route(
             jian_protocol::machine::CONNECT_PATH,

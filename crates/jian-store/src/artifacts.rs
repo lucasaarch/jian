@@ -3,10 +3,17 @@
 //!
 //! # Who sees one
 //!
-//! An artifact is seen by whoever sees its thread, or whoever sees its project; with neither
-//! (made outside a thread, or both were deleted) by the member who made it and by an admin. One
-//! a caller does not see is `None`, never an error that says it exists. [`artifact_visible_sql`]
+//! A member sees an artifact by its visibility (see `artifact_sharing`): `owner` only its owner,
+//! `members` the owner and a list, `workspace` and `external` every member. Not the thread it was
+//! made in, not the project, and not an admin: a private artifact is private from them too. One a
+//! caller does not see is `None`, never an error that says it exists. [`artifact_visible_sql`]
 //! is the one place that decides, and every statement here is built from it.
+//!
+//! # Whose it is
+//!
+//! `owner_member` is the member who made it; for an agent's, the member whose message or action
+//! started the run (`runs.started_by`), else whoever made the agent. It is stored, so it does not
+//! change when the thread does.
 //!
 //! The agent loop acts for a thread, not for a member ([`ArtifactActor::Run`]): it sees the
 //! artifacts of its own thread and of that thread's project, and nothing else, so a run can never
@@ -30,9 +37,10 @@ use sqlx::AssertSqlSafe;
 
 use crate::agents::{AgentId, clean};
 use crate::artifact_folders::ArtifactFolderId;
+use crate::artifact_sharing::ArtifactVisibility;
 use crate::machines::{MAX_PAGE, Page, iso};
-use crate::projects::{ProjectId, project_visible_sql};
-use crate::threads::{ThreadId, thread_visible_sql};
+use crate::projects::ProjectId;
+use crate::threads::ThreadId;
 use crate::tokens::{AccountId, random_id, subject_id};
 use crate::{Database, StoreError, TenantCtx, Viewer};
 
@@ -56,16 +64,17 @@ pub enum ArtifactActor<'a> {
         thread: &'a ThreadId,
         /// The agent that runs.
         agent: &'a AgentId,
+        /// The run's id: what says which member started it, and so whose a new artifact is.
+        run: &'a str,
     },
 }
 
 impl ArtifactActor<'_> {
-    /// What the visibility rule binds: the member's account, whether they administer the
-    /// workspace, and the run's thread.
-    pub(crate) fn binds(&self) -> (Option<&str>, bool, Option<&str>) {
+    /// What the visibility rule binds: the member's account, and the run's thread.
+    pub(crate) fn binds(&self) -> (Option<&str>, Option<&str>) {
         match self {
-            Self::Member(viewer) => (Some(viewer.account.as_str()), viewer.admin, None),
-            Self::Run { thread, .. } => (None, false, Some(thread.as_str())),
+            Self::Member(viewer) => (Some(viewer.account.as_str()), None),
+            Self::Run { thread, .. } => (None, Some(thread.as_str())),
         }
     }
 
@@ -130,6 +139,14 @@ pub struct Artifact {
     pub created_by: ArtifactAuthor,
     /// The number of its latest version, counting from 1.
     pub version: i32,
+    /// The member it belongs to; `None` only for a row older than the column whose maker is
+    /// gone. Who sees it, and who changes that, hangs on this.
+    pub owner: Option<AccountId>,
+    /// Who may open it.
+    pub visibility: ArtifactVisibility,
+    /// Its link asks for a password (only `external` has one). Never the password or the link:
+    /// the link is read with [`Database::artifact_share`].
+    pub has_password: bool,
     /// When, as ISO 8601.
     pub created_at: String,
     /// When it last changed, as ISO 8601.
@@ -200,20 +217,18 @@ pub struct ArtifactFilter {
     pub query: Option<String>,
 }
 
-/// The SQL condition "the actor sees artifact `alias`", with `$2` the member's account, `$3`
-/// whether they administer the workspace and `$4` the run's thread, the member's side or the
-/// run's being null. Constants only: it is the one definition of seeing an artifact.
+/// The SQL condition "the actor sees artifact `alias`", with `$2` the member's account and `$3`
+/// the run's thread, the member's side or the run's being null. Constants only: it is the one
+/// definition of seeing an artifact.
 pub(crate) fn artifact_visible_sql(alias: &str) -> String {
-    let thread = thread_visible_sql("t", "$2", "$3");
-    let project = project_visible_sql("p", "$2");
     format!(
-        "(CASE WHEN $4::text IS NOT NULL THEN \
-            ({alias}.thread_id = $4 OR ({alias}.project_id IS NOT NULL AND {alias}.project_id = \
-              (SELECT tp.project_id FROM thread_projects tp WHERE tp.thread_id = $4))) \
-          ELSE (EXISTS (SELECT 1 FROM threads t WHERE t.id = {alias}.thread_id AND {thread}) \
-            OR EXISTS (SELECT 1 FROM projects p WHERE p.id = {alias}.project_id AND {project}) \
-            OR ({alias}.thread_id IS NULL AND {alias}.project_id IS NULL \
-                AND ($3 OR {alias}.created_by_account = $2))) END)"
+        "(CASE WHEN $3::text IS NOT NULL THEN \
+            ({alias}.thread_id = $3 OR ({alias}.project_id IS NOT NULL AND {alias}.project_id = \
+              (SELECT tp.project_id FROM thread_projects tp WHERE tp.thread_id = $3))) \
+          ELSE ({alias}.owner_member = $2 \
+            OR {alias}.visibility IN ('workspace', 'external') \
+            OR ({alias}.visibility = 'members' AND EXISTS (SELECT 1 FROM artifact_members m \
+                WHERE m.artifact_id = {alias}.id AND m.account_id = $2))) END)"
     )
 }
 
@@ -230,6 +245,9 @@ struct Row {
     created_by_account: Option<String>,
     created_by_agent: Option<String>,
     latest: i32,
+    owner_member: Option<String>,
+    visibility: String,
+    has_password: bool,
     created_at: String,
     updated_at: String,
 }
@@ -258,6 +276,11 @@ impl Row {
             project: self.project_id.map(ProjectId::new),
             created_by,
             version: self.latest,
+            owner: self.owner_member.map(AccountId::new),
+            visibility: ArtifactVisibility::parse(&self.visibility).ok_or(
+                StoreError::InvalidWorkspace("a stored artifact has an unknown visibility"),
+            )?,
+            has_password: self.has_password,
             created_at: self.created_at,
             updated_at: self.updated_at,
         })
@@ -266,7 +289,8 @@ impl Row {
 
 pub(crate) const ARTIFACT_COLUMNS: &str = concat!(
     "a.id, a.seq, a.kind, a.title, a.folder_id, a.pinned, a.thread_id, a.project_id, \
-     a.created_by_account, a.created_by_agent, a.latest, ",
+     a.created_by_account, a.created_by_agent, a.latest, \
+     a.owner_member, a.visibility, (a.password_hash IS NOT NULL) AS has_password, ",
     iso!("a.created_at"),
     " AS created_at, ",
     iso!("a.updated_at"),
@@ -300,6 +324,14 @@ impl VersionRow {
             tweaks: self.tweaks,
             created_at: self.created_at,
         })
+    }
+}
+
+impl Artifact {
+    /// Whether `viewer`, who sees it, may delete it: its owner, or an admin (who sees it only when
+    /// it is shared with the whole workspace, so this is moderation, never a way in).
+    pub(crate) fn deletable_by(&self, viewer: &Viewer) -> bool {
+        viewer.admin || self.owner.as_ref() == Some(&viewer.account)
     }
 }
 
@@ -379,10 +411,14 @@ impl Database {
             ArtifactAuthor::Agent(agent) => (None, Some(agent.as_str())),
         };
         let id = random_id("art_")?;
+        let owner = self.artifact_owner(ctx, actor).await?;
+        // Every artifact starts `owner`: private, with no password, and (on a server) a link.
+        let link = self.new_link(ctx, &id, None).await?;
         let mut tx = self.begin(ctx).await?;
         sqlx::query(
             "INSERT INTO artifacts (id, kind, title, thread_id, project_id, created_by_account, \
-                created_by_agent) VALUES ($1, $2, $3, $4, $5, $6, $7)",
+                created_by_agent, owner_member, link_hash, link_envelope) \
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
         )
         .bind(&id)
         .bind(new.kind.as_str())
@@ -391,6 +427,9 @@ impl Database {
         .bind(project.as_ref().map(ProjectId::as_str))
         .bind(account)
         .bind(agent)
+        .bind(owner.as_str())
+        .bind(link.as_ref().map(|l| l.hash.as_str()))
+        .bind(link.as_ref().map(|l| &l.envelope))
         .execute(&mut *tx)
         .await
         .map_err(StoreError::query(ACTION))?;
@@ -419,6 +458,34 @@ impl Database {
         Ok(Some((artifact, version)))
     }
 
+    /// The member a new artifact by `actor` belongs to: the member themself; for a run, the
+    /// member who started it, else whoever made the agent.
+    async fn artifact_owner(
+        &self,
+        ctx: &TenantCtx,
+        actor: ArtifactActor<'_>,
+    ) -> Result<AccountId, StoreError> {
+        let (agent, run) = match actor {
+            ArtifactActor::Member(viewer) => return Ok(viewer.account.clone()),
+            ArtifactActor::Run { agent, run, .. } => (agent, run),
+        };
+        let mut tx = self.begin(ctx).await?;
+        let owner: Option<String> = sqlx::query_scalar(
+            "SELECT COALESCE((SELECT started_by FROM runs WHERE id = $1), \
+                (SELECT created_by FROM agents WHERE id = $2))",
+        )
+        .bind(run)
+        .bind(agent.as_str())
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(StoreError::query("find whose an artifact is"))?;
+        owner
+            .map(AccountId::new)
+            .ok_or(StoreError::InvalidWorkspace(
+                "an artifact needs a member to belong to",
+            ))
+    }
+
     /// One artifact, when the actor sees it.
     pub async fn artifact(
         &self,
@@ -426,7 +493,7 @@ impl Database {
         actor: ArtifactActor<'_>,
         id: &ArtifactId,
     ) -> Result<Option<Artifact>, StoreError> {
-        let (account, admin, thread) = actor.binds();
+        let (account, thread) = actor.binds();
         let mut tx = self.begin(ctx).await?;
         let row: Option<Row> = sqlx::query_as(AssertSqlSafe(format!(
             "SELECT {ARTIFACT_COLUMNS} FROM artifacts a WHERE a.id = $1 AND {}",
@@ -434,7 +501,6 @@ impl Database {
         )))
         .bind(id.as_str())
         .bind(account)
-        .bind(admin)
         .bind(thread)
         .fetch_optional(&mut *tx)
         .await
@@ -451,17 +517,16 @@ impl Database {
         id: &ArtifactId,
         version: Option<i32>,
     ) -> Result<Option<ArtifactVersion>, StoreError> {
-        let (account, admin, thread) = actor.binds();
+        let (account, thread) = actor.binds();
         let mut tx = self.begin(ctx).await?;
         let row: Option<VersionRow> = sqlx::query_as(AssertSqlSafe(format!(
             "SELECT {VERSION_COLUMNS} FROM artifacts a \
              JOIN artifact_versions v ON v.artifact_id = a.id \
-             AND v.version = COALESCE($5, a.latest) WHERE a.id = $1 AND {}",
+             AND v.version = COALESCE($4, a.latest) WHERE a.id = $1 AND {}",
             artifact_visible_sql("a")
         )))
         .bind(id.as_str())
         .bind(account)
-        .bind(admin)
         .bind(thread)
         .bind(version)
         .fetch_optional(&mut *tx)
@@ -478,7 +543,7 @@ impl Database {
         actor: ArtifactActor<'_>,
         id: &ArtifactId,
     ) -> Result<Option<Vec<ArtifactVersionInfo>>, StoreError> {
-        let (account, admin, thread) = actor.binds();
+        let (account, thread) = actor.binds();
         let mut tx = self.begin(ctx).await?;
         let rows: Vec<(i32, String, String, i64, String)> = sqlx::query_as(AssertSqlSafe(format!(
             "SELECT v.version, v.author_kind, v.author_id, length(v.content)::bigint, {} \
@@ -489,7 +554,6 @@ impl Database {
         )))
         .bind(id.as_str())
         .bind(account)
-        .bind(admin)
         .bind(thread)
         .fetch_all(&mut *tx)
         .await
@@ -521,23 +585,22 @@ impl Database {
         limit: u32,
     ) -> Result<Page<Artifact>, StoreError> {
         let limit = limit.clamp(1, MAX_PAGE);
-        let (account, admin, thread) = actor.binds();
+        let (account, thread) = actor.binds();
         let mut tx = self.begin(ctx).await?;
         let rows: Vec<Row> = sqlx::query_as(AssertSqlSafe(format!(
             // The visibility rule numbers from $2; $1 is bound to null so the numbers line up.
-            "SELECT {ARTIFACT_COLUMNS} FROM artifacts a WHERE $1::text IS NULL AND {} AND a.seq < $5 \
-             AND ($6::text IS NULL OR a.thread_id = $6) \
-             AND ($7::text IS NULL OR a.project_id = $7) \
-             AND ($8::text IS NULL OR a.folder_id = $8) \
-             AND ($9::boolean IS NULL OR a.pinned = $9) \
-             AND ($10::text IS NULL OR a.kind = $10) \
-             AND ($11::text IS NULL OR strpos(lower(a.title), lower($11)) > 0) \
-             ORDER BY a.seq DESC LIMIT $12",
+            "SELECT {ARTIFACT_COLUMNS} FROM artifacts a WHERE $1::text IS NULL AND {} AND a.seq < $4 \
+             AND ($5::text IS NULL OR a.thread_id = $5) \
+             AND ($6::text IS NULL OR a.project_id = $6) \
+             AND ($7::text IS NULL OR a.folder_id = $7) \
+             AND ($8::boolean IS NULL OR a.pinned = $8) \
+             AND ($9::text IS NULL OR a.kind = $9) \
+             AND ($10::text IS NULL OR strpos(lower(a.title), lower($10)) > 0) \
+             ORDER BY a.seq DESC LIMIT $11",
             artifact_visible_sql("a")
         )))
         .bind(Option::<&str>::None)
         .bind(account)
-        .bind(admin)
         .bind(thread)
         .bind(before.unwrap_or(i64::MAX))
         .bind(filter.thread.as_ref().map(ThreadId::as_str))

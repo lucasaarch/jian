@@ -1,43 +1,49 @@
-//! Who hears about an artifact: the same people who may read it, found the other way round (by
-//! the thread and the project it is linked to) so a change can be pushed to them.
+//! Who hears about an artifact: the same members who may read it, found the other way round so
+//! a change can be pushed to them.
 
-use crate::artifacts::{Artifact, ArtifactAuthor};
+use crate::artifact_sharing::ArtifactVisibility;
+use crate::artifacts::Artifact;
 use crate::machines::MAX_PAGE;
 use crate::tokens::AccountId;
-use crate::{Database, Role, StoreError, TenantCtx};
+use crate::{Database, StoreError, TenantCtx};
 
 impl Database {
-    /// The members who see `artifact` right now: those who see its thread, those who see its
-    /// project, and, when it has neither, the member who made it and the admins. It mirrors the
-    /// rule in `artifact_visible_sql`; the tests pin the two together.
+    /// The members who see `artifact` right now: its owner, the members listed for `members`,
+    /// every active member for `workspace` and `external`. It mirrors the rule in
+    /// `artifact_visible_sql`; the tests pin the two together.
     pub async fn artifact_audience(
         &self,
         ctx: &TenantCtx,
         artifact: &Artifact,
     ) -> Result<Vec<AccountId>, StoreError> {
-        let mut audience = Vec::new();
-        if let Some(thread) = &artifact.thread {
-            audience.extend(self.thread_audience(ctx, thread).await?);
-        }
-        if let Some(project) = &artifact.project {
-            audience.extend(self.project_audience(ctx, project).await?);
-        }
-        if artifact.thread.is_none() && artifact.project.is_none() {
-            if let ArtifactAuthor::Member(account) = &artifact.created_by {
-                audience.push(account.clone());
+        let mut audience: Vec<AccountId> = artifact.owner.iter().cloned().collect();
+        match artifact.visibility {
+            ArtifactVisibility::Owner => {}
+            ArtifactVisibility::Members => {
+                let mut tx = self.begin(ctx).await?;
+                let listed: Vec<String> = sqlx::query_scalar(
+                    "SELECT account_id FROM artifact_members WHERE artifact_id = $1",
+                )
+                .bind(artifact.id.as_str())
+                .fetch_all(&mut *tx)
+                .await
+                .map_err(StoreError::query("read who an artifact is shared with"))?;
+                audience.extend(listed.into_iter().map(AccountId::new));
             }
-            let mut after = None;
-            loop {
-                let page = self.list_members(ctx, after, MAX_PAGE).await?;
-                audience.extend(
-                    page.items
-                        .into_iter()
-                        .filter(|m| m.role == Role::Admin && !m.disabled)
-                        .map(|m| m.account_id),
-                );
-                match page.next {
-                    Some(next) => after = Some(next),
-                    None => break,
+            ArtifactVisibility::Workspace | ArtifactVisibility::External => {
+                let mut after = None;
+                loop {
+                    let page = self.list_members(ctx, after, MAX_PAGE).await?;
+                    audience.extend(
+                        page.items
+                            .into_iter()
+                            .filter(|m| !m.disabled)
+                            .map(|m| m.account_id),
+                    );
+                    match page.next {
+                        Some(next) => after = Some(next),
+                        None => break,
+                    }
                 }
             }
         }
