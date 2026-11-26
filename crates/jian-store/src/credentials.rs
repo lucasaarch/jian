@@ -2,8 +2,10 @@
 //!
 //! The store keeps what a credential is and checks nothing about it: whether a password is
 //! right, and whether a deploy accepts a kind at all, are `jian-auth`'s. Only the password is
-//! implemented. The others (`github`, `email_link`, `passkey`, `totp`) exist so the table and
-//! [`CredentialKind`] need no migration when they arrive.
+//! implemented in the store's own terms; `github` keeps GitHub's numeric user id as `subject` and
+//! the login as `label` (see `logins`), `email_link` needs no row (the address is the account's),
+//! and `passkey` and `totp` exist so the table and [`CredentialKind`] need no migration when they
+//! arrive.
 //!
 //! A password credential's `secret` is the argon2id hash in PHC form, never the password. The
 //! material of a future passkey or TOTP is encrypted, through the vault, before it is written
@@ -20,9 +22,9 @@ use crate::{Database, StoreError, TenantCtx};
 pub enum CredentialKind {
     /// An email address and a password.
     Password,
-    /// A GitHub login (the Cloud).
+    /// A GitHub login.
     Github,
-    /// A link sent to the address, a magic link (the Cloud).
+    /// A link sent to the address, a magic link.
     EmailLink,
     /// A passkey. Not implemented yet.
     Passkey,

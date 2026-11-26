@@ -1,5 +1,4 @@
-//! Transactional e-mail of the platform: the invitation today, the sign-in link of the Cloud
-//! later.
+//! Transactional e-mail of the platform: the invitation and the sign-in link.
 //!
 //! This is not the agents' mailbox. It sends a message the platform itself writes, from one
 //! configured sender, and does nothing else: no inbox, no templates chosen by users, no queue.
@@ -18,8 +17,8 @@
 //!   crate); [`NoMailer`] is what a deploy without e-mail has, and refuses with a permanent
 //!   error.
 //! - [`Mailbox`]: a validated sender (`Name <a@b>` or `a@b`).
-//! - [`invite_message`]: the invitation, in English, as text and HTML with every user-supplied
-//!   value escaped.
+//! - [`invite_message`] and [`login_link_message`]: the invitation and the sign-in link, in
+//!   English, as text and HTML with every user-supplied value escaped.
 
 mod mailbox;
 mod resend;
@@ -29,7 +28,7 @@ use futures_util::future::BoxFuture;
 
 pub use mailbox::{InvalidMailbox, Mailbox};
 pub use resend::{DEFAULT_BASE_URL, ResendMailer};
-pub use template::{InviteMail, invite_message};
+pub use template::{InviteMail, LoginLinkMail, invite_message, login_link_message};
 
 /// One message to one recipient.
 #[derive(Clone, Debug, PartialEq, Eq)]

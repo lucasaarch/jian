@@ -1,7 +1,9 @@
 //! Signing in with a password, and changing it.
 
 use jian_store::secrets::Secret;
-use jian_store::{AccountId, CredentialKind, Database, Member, TenantId, TokenHash};
+use jian_store::{
+    AccountId, CredentialKind, Database, LoginCandidate, Member, TenantId, TokenHash,
+};
 
 use crate::password::{MAX_PASSWORD_BYTES, check_password};
 use crate::{Auth, AuthError};
@@ -72,22 +74,65 @@ impl Auth {
         if !right || found.account.disabled {
             return Err(AuthError::InvalidCredentials);
         }
-        let tenant = match (request.tenant, found.tenants.as_slice()) {
-            (Some(wanted), tenants) => tenants
+        self.open_session(
+            db,
+            &found,
+            request.tenant,
+            CredentialKind::Password,
+            AuthError::InvalidCredentials,
+        )
+        .await
+    }
+
+    /// Picks the workspace a person who has proved who they are opens: the one they asked for,
+    /// or their only one. `None` when they may not open the one asked for, or any.
+    /// [`AuthError::TenantRequired`] when they could open several and did not say.
+    pub(crate) fn choose_tenant<'a>(
+        found: &'a LoginCandidate,
+        wanted: Option<&TenantId>,
+    ) -> Result<Option<&'a TenantId>, AuthError> {
+        if found.account.disabled {
+            return Ok(None);
+        }
+        match (wanted, found.tenants.as_slice()) {
+            (Some(wanted), tenants) => Ok(tenants
                 .iter()
                 .find(|(tenant, _)| tenant == wanted)
-                .map(|(tenant, _)| tenant),
-            (None, [(only, _)]) => Some(only),
-            (None, []) => None,
-            (None, _) => return Err(AuthError::TenantRequired),
+                .map(|(tenant, _)| tenant)),
+            (None, [(only, _)]) => Ok(Some(only)),
+            (None, []) => Ok(None),
+            (None, _) => Err(AuthError::TenantRequired),
         }
-        .ok_or(AuthError::InvalidCredentials)?;
+    }
+
+    /// Starts the session of a person who has proved who they are, whichever way: the same
+    /// token, lifetime and member as a password sign-in. `refused` is what a workspace they may
+    /// not open is told as.
+    pub(crate) async fn open_session(
+        &self,
+        db: &Database,
+        found: &LoginCandidate,
+        wanted: Option<&TenantId>,
+        kind: CredentialKind,
+        refused: AuthError,
+    ) -> Result<LoginOutcome, AuthError> {
+        let tenant = Self::choose_tenant(found, wanted)?.ok_or(refused)?;
+        self.start(db, found, tenant, kind).await
+    }
+
+    /// Writes the session once the workspace is chosen.
+    pub(crate) async fn start(
+        &self,
+        db: &Database,
+        found: &LoginCandidate,
+        tenant: &TenantId,
+        kind: CredentialKind,
+    ) -> Result<LoginOutcome, AuthError> {
         let ctx = db.tenant(tenant.clone()).await?;
         let session = db
             .start_session(&ctx, &found.account.id, self.session_ttl)
             .await?;
-        db.touch_credential(&found.account.id, CredentialKind::Password)
-            .await?;
+        db.touch_credential(&found.account.id, kind).await?;
         let member = db
             .member(&ctx, &found.account.id)
             .await?

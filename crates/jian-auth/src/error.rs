@@ -40,6 +40,35 @@ pub enum AuthError {
         "not a list of sign-in methods ({0:?}): use password, github, email_link, passkey, totp"
     )]
     InvalidPolicy(String),
+    /// The deploy allows this way of signing in but has not set it up (no GitHub OAuth App, say).
+    #[error("signing in with {0:?} is not set up here")]
+    NotConfigured(CredentialKind),
+    /// The state of a GitHub round trip is unknown, used, expired, or not for this caller. Which
+    /// one is not said.
+    #[error("this sign-in expired or was already used: start again")]
+    InvalidState,
+    /// GitHub did not accept the code, so the person did not sign in with it.
+    #[error("GitHub did not accept the sign-in: start again")]
+    GithubRefused,
+    /// GitHub could not be reached or said something unexpected. No token is in the message.
+    #[error("could not reach GitHub: {0}")]
+    GithubUnavailable(&'static str),
+    /// The GitHub account is not linked to anybody and none of its verified addresses is a
+    /// member's. A self-hosted install does not make accounts from a sign-in.
+    #[error("no member matches this GitHub account: ask an admin to add you")]
+    GithubNotAMember,
+    /// The link is unknown, used, replaced or expired. Which one is not said.
+    #[error("the sign-in link is not valid")]
+    InvalidLink,
+    /// Removing this would leave the account with no way to sign in.
+    #[error("that is the only way you can sign in: add another before removing it")]
+    LastSignInMethod,
+    /// The account has no GitHub linked.
+    #[error("no GitHub account is linked")]
+    NotLinked,
+    /// The workspace asked for does not exist.
+    #[error("no such workspace")]
+    UnknownTenant,
     /// The store failed, or refused for a reason of its own (an address that is not one, a member
     /// that already exists, a reset that crosses workspaces).
     #[error(transparent)]

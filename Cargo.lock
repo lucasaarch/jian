@@ -1407,11 +1407,17 @@ name = "jian-auth"
 version = "0.1.0"
 dependencies = [
  "argon2",
+ "base64 0.23.1",
  "getrandom 0.3.4",
  "jian-store",
  "jian-testkit",
+ "reqwest",
+ "rustls",
+ "serde",
+ "sha2 0.10.9",
  "thiserror",
  "tokio",
+ "url",
  "zeroize",
 ]
 

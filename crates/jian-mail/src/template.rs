@@ -65,6 +65,55 @@ pub fn invite_message(mail: &InviteMail<'_>) -> Message {
     }
 }
 
+/// What the sign-in link e-mail says.
+#[derive(Clone, Copy, Debug)]
+pub struct LoginLinkMail<'a> {
+    /// The sender.
+    pub from: &'a Mailbox,
+    /// The address that asked.
+    pub to: &'a str,
+    /// The workspace the link opens. Typed by a person: escaped here.
+    pub workspace: &'a str,
+    /// Where to go: the whole link, token included.
+    pub link: &'a str,
+    /// How long the link works, in minutes, as the text says it.
+    pub minutes: u64,
+}
+
+/// The sign-in link as a message: plain text and HTML that say the same. It never says whether
+/// the person has been here before.
+#[must_use]
+pub fn login_link_message(mail: &LoginLinkMail<'_>) -> Message {
+    let workspace = plain(mail.workspace);
+    let text = format!(
+        "Use this link to sign in to {workspace} on Jian: {link}\n\n\
+         It works once and stops working in {minutes} minutes. \
+         If you did not ask for it, ignore this message.\n",
+        link = mail.link,
+        minutes = mail.minutes,
+    );
+    let mut html = String::new();
+    // Writing to a String cannot fail.
+    let _ = write!(
+        html,
+        "<p>Use this link to sign in to <strong>{}</strong> on Jian.</p>\
+         <p><a href=\"{link}\">Sign in</a></p>\
+         <p>Or paste this link into your browser:<br>{link}</p>\
+         <p>It works once and stops working in {} minutes. \
+         If you did not ask for it, ignore this message.</p>",
+        escape_html(&workspace),
+        mail.minutes,
+        link = escape_html(mail.link),
+    );
+    Message {
+        from: mail.from.clone(),
+        to: mail.to.to_owned(),
+        subject: format!("Your sign-in link for {workspace}"),
+        text,
+        html,
+    }
+}
+
 /// Control characters (line breaks above all) become spaces.
 fn plain(text: &str) -> String {
     text.chars()
@@ -130,5 +179,23 @@ mod tests {
         assert!(!message.subject.contains(['\r', '\n']));
         assert!(message.text.lines().count() < 8, "{}", message.text);
         assert!(!message.text.contains('\r'));
+    }
+
+    #[test]
+    fn the_sign_in_link_is_in_both_bodies_and_the_workspace_is_escaped() {
+        let from = Mailbox::parse("Jian <login@example.com>").unwrap();
+        let message = login_link_message(&LoginLinkMail {
+            from: &from,
+            to: "ana@example.com",
+            workspace: "<b>Acme</b>\r\nBcc: x@y.test",
+            link: "https://jian.example.com/login/link#token=jll_abc",
+            minutes: 15,
+        });
+        for body in [&message.text, &message.html] {
+            assert!(body.contains("https://jian.example.com/login/link#token=jll_abc"));
+            assert!(body.contains("15 minutes"));
+        }
+        assert!(!message.html.contains("<b>"));
+        assert!(!message.subject.contains(['\r', '\n']));
     }
 }

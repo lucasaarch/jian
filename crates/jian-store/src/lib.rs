@@ -136,6 +136,7 @@ mod legacy;
 mod legacy_memories;
 mod legacy_schedules;
 mod legacy_threads;
+mod logins;
 mod machines;
 mod members;
 mod memories;
@@ -190,6 +191,9 @@ pub use legacy::{DeviceImport, ImportOutcome, LegacyDevice, LegacyMachine, Machi
 pub use legacy_memories::{LegacyMemory, LegacyMemoryLink, LegacyProject};
 pub use legacy_schedules::LegacySchedule;
 pub use legacy_threads::{LegacyAgent, LegacyChat, LegacyMessage, LegacyThread};
+pub use logins::{
+    GithubLink, LiveLoginLink, LoginPurpose, MAX_LOGIN_VALUE_LEN, NewLoginState, UsedLoginState,
+};
 pub use machines::{MAX_PAGE, Machine, MachineReport, Page};
 pub use members::{AddedMember, Member, NewMember, Role};
 pub use memories::{

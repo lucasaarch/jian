@@ -183,6 +183,12 @@ pub enum StoreError {
     /// change what the person signs in with there.
     #[error("the account is also a member of another workspace")]
     AccountInOtherTenants,
+    /// That GitHub user is already the sign-in of another account.
+    #[error("that GitHub account is already linked to another person")]
+    GithubTaken,
+    /// The account has a different GitHub linked already: unlink it first.
+    #[error("this account already has a different GitHub account linked")]
+    GithubAlreadyLinked,
     /// A request about agents or threads that cannot be done as asked; the text says which part
     /// is wrong and never carries a value.
     #[error("invalid request: {0}")]

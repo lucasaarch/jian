@@ -31,8 +31,10 @@ impl AuthPolicy {
         Self::new([CredentialKind::Password])
     }
 
-    /// The Cloud: GitHub and a link by email, no password. Their code is the Cloud
-    /// backend's; the policy only says that they, and not a password, are how people come in.
+    /// The Cloud: GitHub and a link by email, no password ("password off"). The flows are
+    /// [`Auth::github_sign_in`](crate::Auth::github_sign_in) and
+    /// [`Auth::redeem_login_link`](crate::Auth::redeem_login_link); making the account and the
+    /// workspace of a new person is the Cloud backend's.
     pub fn cloud() -> Self {
         Self::new([CredentialKind::Github, CredentialKind::EmailLink])
     }
