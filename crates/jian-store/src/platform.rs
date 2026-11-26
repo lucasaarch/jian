@@ -148,13 +148,13 @@ impl Database {
     /// savepoint of `tx`, so one that fails undoes the ones before it when `tx` is dropped.
     pub(crate) async fn migrate_in(
         &self,
-        tx: &mut Transaction<'static, Postgres>,
+        tx: &mut sqlx::PgConnection,
         tenant: &TenantId,
     ) -> Result<(), StoreError> {
         scope_to_tenant(tx, tenant).await?;
         self.migrations
             .tenant
-            .run(&mut **tx)
+            .run(&mut *tx)
             .await
             .map_err(|source| StoreError::TenantMigration {
                 tenant: tenant.clone(),
@@ -192,15 +192,13 @@ impl Database {
     }
 }
 
-pub(crate) async fn scope_to_platform(
-    tx: &mut Transaction<'static, Postgres>,
-) -> Result<(), StoreError> {
+pub(crate) async fn scope_to_platform(tx: &mut sqlx::PgConnection) -> Result<(), StoreError> {
     sqlx::query("SET LOCAL ROLE jian_platform")
-        .execute(&mut **tx)
+        .execute(&mut *tx)
         .await
         .map_err(StoreError::query("act as the platform role"))?;
     sqlx::query("SET LOCAL search_path TO platform")
-        .execute(&mut **tx)
+        .execute(&mut *tx)
         .await
         .map_err(StoreError::query("point the search path at platform"))?;
     Ok(())
@@ -212,16 +210,16 @@ pub(crate) async fn scope_to_platform(
 ///
 /// The text is a validated id behind a fixed prefix, quoted: no caller text reaches the SQL.
 pub(crate) async fn scope_to_tenant(
-    tx: &mut Transaction<'static, Postgres>,
+    tx: &mut sqlx::PgConnection,
     tenant: &TenantId,
 ) -> Result<(), StoreError> {
     let name = tenant.quoted();
     sqlx::query(AssertSqlSafe(format!("SET LOCAL ROLE {name}")))
-        .execute(&mut **tx)
+        .execute(&mut *tx)
         .await
         .map_err(StoreError::query("act as the tenant's role"))?;
     sqlx::query(AssertSqlSafe(format!("SET LOCAL search_path TO {name}")))
-        .execute(&mut **tx)
+        .execute(&mut *tx)
         .await
         .map_err(StoreError::query("point the search path at the tenant"))?;
     Ok(())

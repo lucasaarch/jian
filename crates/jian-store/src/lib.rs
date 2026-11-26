@@ -128,6 +128,7 @@ mod database;
 mod devices;
 pub mod embedded;
 mod error;
+mod gate;
 mod grants;
 mod imports;
 mod invites;
@@ -177,6 +178,7 @@ pub use credentials::{CredentialKind, PasswordCredential};
 pub use database::{Database, DatabaseHealth, DatabaseSource, DatabaseUrl};
 pub use devices::Device;
 pub use error::StoreError;
+pub use gate::{TenantLimits, TenantTx};
 pub use grants::{GRANTS, MemberGrant};
 pub use imports::{ImportMarker, ImportResult, ImportStatus};
 pub use invites::{

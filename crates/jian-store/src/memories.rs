@@ -498,7 +498,7 @@ impl Database {
 
 /// The origin to store for a write made in `thread`: its kind and who is in it now.
 async fn origin_of(
-    tx: &mut sqlx::Transaction<'static, sqlx::Postgres>,
+    tx: &mut sqlx::PgConnection,
     thread: Option<&ThreadId>,
 ) -> Result<(OriginKind, Option<String>, Vec<String>), StoreError> {
     let Some(thread) = thread else {
@@ -506,7 +506,7 @@ async fn origin_of(
     };
     let kind: Option<(String,)> = sqlx::query_as("SELECT kind FROM threads WHERE id = $1")
         .bind(thread.as_str())
-        .fetch_optional(&mut **tx)
+        .fetch_optional(&mut *tx)
         .await
         .map_err(StoreError::query("read a memory's origin"))?;
     let Some((kind,)) = kind else {
@@ -519,7 +519,7 @@ async fn origin_of(
          FROM thread_participants WHERE thread_id = $1 AND left_at IS NULL ORDER BY id",
     )
     .bind(thread.as_str())
-    .fetch_all(&mut **tx)
+    .fetch_all(&mut *tx)
     .await
     .map_err(StoreError::query("read a memory's origin"))?;
     Ok((

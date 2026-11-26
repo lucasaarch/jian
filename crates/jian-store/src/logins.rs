@@ -76,12 +76,12 @@ pub struct LiveLoginLink {
 }
 
 /// Sweeps what ran out a day ago, so the tables do not grow for ever. Done by whoever writes.
-async fn sweep(tx: &mut sqlx::Transaction<'static, sqlx::Postgres>) -> Result<(), StoreError> {
+async fn sweep(tx: &mut sqlx::PgConnection) -> Result<(), StoreError> {
     for table in ["login_states", "login_links"] {
         sqlx::query(sqlx::AssertSqlSafe(format!(
             "DELETE FROM {table} WHERE expires_at < now() - interval '1 day'"
         )))
-        .execute(&mut **tx)
+        .execute(&mut *tx)
         .await
         .map_err(StoreError::query("sweep sign-in rows"))?;
     }

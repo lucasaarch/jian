@@ -121,6 +121,11 @@ pub(crate) fn store_failure(error: &StoreError) -> Refusal {
             "account_in_other_workspaces",
             "this person belongs to other workspaces too: their password is theirs to change",
         ),
+        StoreError::TenantBusy(_) => refuse(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "busy",
+            "this workspace is busy: try again shortly",
+        ),
         other => internal(other),
     }
 }

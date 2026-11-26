@@ -5,7 +5,7 @@
 //! part as the tenant, then steps to the platform's role for the token. A failure in either undoes
 //! both: there is never a machine without a token to pair it with, or a token without a machine.
 
-use sqlx::{AssertSqlSafe, Postgres, Transaction};
+use sqlx::AssertSqlSafe;
 
 use crate::platform::scope_to_platform;
 use crate::secrets::Secret;
@@ -61,11 +61,9 @@ pub(crate) fn clean_name(name: &str) -> Result<String, StoreError> {
 
 /// Leaves the tenant's role for the platform's inside the same transaction, which is how the token
 /// is written in the transaction that wrote the row. Store code only: it is `RESET ROLE`.
-pub(crate) async fn into_platform(
-    tx: &mut Transaction<'static, Postgres>,
-) -> Result<(), StoreError> {
+pub(crate) async fn into_platform(tx: &mut sqlx::PgConnection) -> Result<(), StoreError> {
     sqlx::query("RESET ROLE")
-        .execute(&mut **tx)
+        .execute(&mut *tx)
         .await
         .map_err(StoreError::query("leave the tenant's role"))?;
     scope_to_platform(tx).await
@@ -74,7 +72,7 @@ pub(crate) async fn into_platform(
 /// Writes one token row. `revoked_at` is an ISO timestamp for a token that arrives already
 /// revoked (an import), `None` for a live one.
 pub(crate) async fn insert_token(
-    tx: &mut Transaction<'static, Postgres>,
+    tx: &mut sqlx::PgConnection,
     ctx: &TenantCtx,
     kind: TokenKind,
     subject: &str,
@@ -90,14 +88,14 @@ pub(crate) async fn insert_token(
     .bind(kind.as_str())
     .bind(subject)
     .bind(revoked_at)
-    .execute(&mut **tx)
+    .execute(&mut *tx)
     .await
     .map(|done| done.rows_affected())
     .map_err(StoreError::query("store a token"))
 }
 
 async fn revoke_tokens(
-    tx: &mut Transaction<'static, Postgres>,
+    tx: &mut sqlx::PgConnection,
     ctx: &TenantCtx,
     kind: TokenKind,
     subject: &str,
@@ -109,7 +107,7 @@ async fn revoke_tokens(
     .bind(ctx.id().as_str())
     .bind(kind.as_str())
     .bind(subject)
-    .execute(&mut **tx)
+    .execute(&mut *tx)
     .await
     .map(drop)
     .map_err(StoreError::query("revoke a token"))

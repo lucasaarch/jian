@@ -234,21 +234,21 @@ fn style_of(text: Option<String>) -> Result<Option<String>, StoreError> {
 }
 
 async fn write_viewers(
-    tx: &mut sqlx::Transaction<'static, sqlx::Postgres>,
+    tx: &mut sqlx::PgConnection,
     project: &str,
     viewers: &[AccountId],
 ) -> Result<(), StoreError> {
     const ACTION: &str = "write a project's viewers";
     sqlx::query("DELETE FROM project_viewers WHERE project_id = $1")
         .bind(project)
-        .execute(&mut **tx)
+        .execute(&mut *tx)
         .await
         .map_err(StoreError::query(ACTION))?;
     for viewer in viewers {
         sqlx::query("INSERT INTO project_viewers (project_id, account_id) VALUES ($1, $2)")
             .bind(project)
             .bind(viewer.as_str())
-            .execute(&mut **tx)
+            .execute(&mut *tx)
             .await
             .map_err(StoreError::query(ACTION))?;
     }

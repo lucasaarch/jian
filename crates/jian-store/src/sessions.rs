@@ -8,8 +8,6 @@
 
 use std::time::Duration;
 
-use sqlx::{Postgres, Transaction};
-
 use crate::accounts::{Account, normalize_email};
 use crate::credentials::{PasswordCredential, password_of};
 use crate::members::Role;
@@ -40,7 +38,7 @@ pub struct NewSession {
 /// Ends the sessions of an account: in one tenant when `tenant` is given, in every tenant when
 /// not; all but `keep` when given. Only sessions: a machine's or a phone's token is not one.
 pub(crate) async fn revoke_sessions(
-    tx: &mut Transaction<'static, Postgres>,
+    tx: &mut sqlx::PgConnection,
     account: &AccountId,
     tenant: Option<&str>,
     keep: Option<&TokenHash>,
@@ -53,7 +51,7 @@ pub(crate) async fn revoke_sessions(
     .bind(account.as_str())
     .bind(tenant)
     .bind(keep.map(TokenHash::as_str))
-    .execute(&mut **tx)
+    .execute(&mut *tx)
     .await
     .map(drop)
     .map_err(StoreError::query("end sessions"))

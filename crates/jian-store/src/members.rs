@@ -10,7 +10,7 @@
 //! an invitation was accepted ([`Database::accept_invite`]), or they are the tenant's first
 //! admin ([`Database::add_first_admin`], which is what the import of the old Jian calls).
 
-use sqlx::{AssertSqlSafe, Postgres, Transaction};
+use sqlx::AssertSqlSafe;
 
 use crate::accounts::{NewAccount, default_name, find_or_create_account, normalize_email};
 use crate::machines::{MAX_PAGE, Page, iso};
@@ -146,7 +146,7 @@ pub struct AddedMember {
 
 /// The tenant's member with this account, read inside a transaction.
 pub(crate) async fn member_in(
-    tx: &mut Transaction<'static, Postgres>,
+    tx: &mut sqlx::PgConnection,
     tenant: &str,
     account: &AccountId,
 ) -> Result<Option<Member>, StoreError> {
@@ -155,7 +155,7 @@ pub(crate) async fn member_in(
     )))
     .bind(tenant)
     .bind(account.as_str())
-    .fetch_optional(&mut **tx)
+    .fetch_optional(&mut *tx)
     .await
     .map_err(StoreError::query("read a member"))?;
     Ok(row.map(Member::from))
@@ -164,7 +164,7 @@ pub(crate) async fn member_in(
 /// Writes the membership. [`StoreError::MemberExists`] when the account already has one here,
 /// disabled or not: a disabled member is not added again.
 pub(crate) async fn insert_member(
-    tx: &mut Transaction<'static, Postgres>,
+    tx: &mut sqlx::PgConnection,
     tenant: &str,
     account: &AccountId,
     role: Role,
@@ -178,7 +178,7 @@ pub(crate) async fn insert_member(
     .bind(account.as_str())
     .bind(role.as_str())
     .bind(invited_by.map(AccountId::as_str))
-    .execute(&mut **tx)
+    .execute(&mut *tx)
     .await
     .map_err(StoreError::query("add a member"))?
     .rows_affected();

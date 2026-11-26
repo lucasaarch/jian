@@ -9,7 +9,6 @@ use std::collections::HashSet;
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use futures_util::{StreamExt, stream};
-use sqlx::{Postgres, Transaction};
 
 use crate::platform::scope_to_tenant;
 use crate::{Database, StoreError, TenantId};
@@ -116,7 +115,7 @@ impl Database {
     /// and only when the tenant is not in the verified set.
     pub(crate) async fn verify_in(
         &self,
-        tx: &mut Transaction<'static, Postgres>,
+        tx: &mut sqlx::PgConnection,
         tenant: &TenantId,
     ) -> Result<(), StoreError> {
         if self.verified.contains(tenant) {
@@ -159,13 +158,13 @@ impl Database {
     /// one on the search path).
     async fn read_version(
         &self,
-        tx: &mut Transaction<'static, Postgres>,
+        tx: &mut sqlx::PgConnection,
         tenant: &TenantId,
     ) -> Result<TenantVersion, StoreError> {
         const ACTION: &str = "read a tenant's version";
         let has_table: bool =
             sqlx::query_scalar("SELECT to_regclass('_sqlx_migrations') IS NOT NULL")
-                .fetch_one(&mut **tx)
+                .fetch_one(&mut *tx)
                 .await
                 .map_err(StoreError::query(ACTION))?;
         let found = if has_table {
@@ -174,7 +173,7 @@ impl Database {
             sqlx::query_scalar(
                 "SELECT COALESCE(max(version), 0) FROM _sqlx_migrations WHERE success",
             )
-            .fetch_one(&mut **tx)
+            .fetch_one(&mut *tx)
             .await
             .map_err(StoreError::query(ACTION))?
         } else {

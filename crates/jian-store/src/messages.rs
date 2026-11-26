@@ -313,14 +313,14 @@ pub(crate) struct Append<'a> {
 /// Writes one message in the caller's transaction, under the thread's row lock. `None` when the
 /// thread does not exist.
 pub(crate) async fn append(
-    tx: &mut sqlx::Transaction<'static, sqlx::Postgres>,
+    tx: &mut sqlx::PgConnection,
     new: &Append<'_>,
 ) -> Result<Option<Posted>, StoreError> {
     const ACTION: &str = "write a message";
     let locked: Option<i64> =
         sqlx::query_scalar("SELECT next_seq FROM threads WHERE id = $1 FOR UPDATE")
             .bind(new.thread.as_str())
-            .fetch_optional(&mut **tx)
+            .fetch_optional(&mut *tx)
             .await
             .map_err(StoreError::query(ACTION))?;
     let Some(seq) = locked else {
@@ -334,7 +334,7 @@ pub(crate) async fn append(
         .bind(new.thread.as_str())
         .bind(new.author.key())
         .bind(key)
-        .fetch_optional(&mut **tx)
+        .fetch_optional(&mut *tx)
         .await
         .map_err(StoreError::query(ACTION))?;
         if let Some(row) = known {
@@ -349,7 +349,7 @@ pub(crate) async fn append(
             sqlx::query_scalar("SELECT 1 FROM messages WHERE id = $1 AND thread_id = $2")
                 .bind(reply.as_str())
                 .bind(new.thread.as_str())
-                .fetch_optional(&mut **tx)
+                .fetch_optional(&mut *tx)
                 .await
                 .map_err(StoreError::query(ACTION))?;
         if same.is_none() {
@@ -386,7 +386,7 @@ pub(crate) async fn append(
     .bind(new.client_key)
     .bind(new.created_at)
     .bind(new.legacy_id)
-    .fetch_one(&mut **tx)
+    .fetch_one(&mut *tx)
     .await
     .map_err(StoreError::query(ACTION))?;
     sqlx::query(
@@ -396,7 +396,7 @@ pub(crate) async fn append(
     )
     .bind(new.thread.as_str())
     .bind(new.created_at)
-    .execute(&mut **tx)
+    .execute(&mut *tx)
     .await
     .map_err(StoreError::query(ACTION))?;
     Ok(Some(Posted {
@@ -645,7 +645,7 @@ impl Database {
 
 /// The agents in a thread now.
 pub(crate) async fn agents_in(
-    tx: &mut sqlx::Transaction<'static, sqlx::Postgres>,
+    tx: &mut sqlx::PgConnection,
     thread: &ThreadId,
 ) -> Result<Vec<AgentId>, StoreError> {
     let ids: Vec<String> = sqlx::query_scalar(
@@ -653,7 +653,7 @@ pub(crate) async fn agents_in(
          WHERE thread_id = $1 AND agent_id IS NOT NULL AND left_at IS NULL ORDER BY id",
     )
     .bind(thread.as_str())
-    .fetch_all(&mut **tx)
+    .fetch_all(&mut *tx)
     .await
     .map_err(StoreError::query("read the agents of a thread"))?;
     Ok(ids.into_iter().map(AgentId::new).collect())

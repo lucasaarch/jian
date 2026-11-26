@@ -56,14 +56,14 @@ fn single_line(text: &str, max: usize, what: &'static str) -> Result<String, Sto
 
 /// The repositories of each project in `ids`, oldest first, in the order of `ids`.
 pub(crate) async fn repositories_of(
-    tx: &mut sqlx::Transaction<'static, sqlx::Postgres>,
+    tx: &mut sqlx::PgConnection,
     ids: &[String],
 ) -> Result<Vec<Vec<ProjectRepository>>, StoreError> {
     let rows: Vec<Row> = sqlx::query_as(AssertSqlSafe(format!(
         "SELECT {COLUMNS} FROM project_repositories WHERE project_id = ANY($1) ORDER BY seq"
     )))
     .bind(ids)
-    .fetch_all(&mut **tx)
+    .fetch_all(&mut *tx)
     .await
     .map_err(StoreError::query("read repositories"))?;
     let mut by_project: HashMap<String, Vec<ProjectRepository>> = HashMap::new();

@@ -491,21 +491,21 @@ pub(crate) fn distinct_viewers(
 
 /// Replaces the agent's viewers, in the caller's transaction.
 async fn write_viewers(
-    tx: &mut sqlx::Transaction<'static, sqlx::Postgres>,
+    tx: &mut sqlx::PgConnection,
     agent: &str,
     viewers: &[AccountId],
 ) -> Result<(), StoreError> {
     const ACTION: &str = "write an agent's viewers";
     sqlx::query("DELETE FROM agent_viewers WHERE agent_id = $1")
         .bind(agent)
-        .execute(&mut **tx)
+        .execute(&mut *tx)
         .await
         .map_err(StoreError::query(ACTION))?;
     for viewer in viewers {
         sqlx::query("INSERT INTO agent_viewers (agent_id, account_id) VALUES ($1, $2)")
             .bind(agent)
             .bind(viewer.as_str())
-            .execute(&mut **tx)
+            .execute(&mut *tx)
             .await
             .map_err(StoreError::query(ACTION))?;
     }

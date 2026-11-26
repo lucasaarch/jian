@@ -1,7 +1,8 @@
 //! Creating, finding and deleting tenants, and opening a transaction as one.
 
-use sqlx::{AssertSqlSafe, Postgres, Transaction};
+use sqlx::AssertSqlSafe;
 
+use crate::gate::TenantTx;
 use crate::platform::scope_to_tenant;
 use crate::{Database, StoreError, TenantCtx, TenantId};
 
@@ -148,6 +149,7 @@ impl Database {
         tx.commit().await.map_err(StoreError::query(ACTION))?;
         self.verified.remove(id);
         self.deks.remove(id);
+        self.gate.forget(id);
         tracing::info!(tenant = %id, "tenant deleted");
         Ok(())
     }
@@ -158,19 +160,21 @@ impl Database {
     ///
     /// The SQL run inside must be the store's own, never text from a user: the transaction can
     /// still `RESET ROLE` (see the crate docs).
-    pub async fn begin(
-        &self,
-        ctx: &TenantCtx,
-    ) -> Result<Transaction<'static, Postgres>, StoreError> {
+    pub async fn begin(&self, ctx: &TenantCtx) -> Result<TenantTx, StoreError> {
+        let permit = self.gate.enter(ctx.id(), &self.limits).await?;
         let mut tx = self
             .pool
             .begin()
             .await
             .map_err(StoreError::query("start a tenant transaction"))?;
         scope_to_tenant(&mut tx, ctx.id()).await?;
+        sqlx::raw_sql(AssertSqlSafe(self.limits.settings_sql()))
+            .execute(&mut *tx)
+            .await
+            .map_err(StoreError::query("start a tenant transaction"))?;
         // Also here, not only in `tenant`: a context can outlive the migrations it was checked
         // against. A tenant already verified costs nothing.
         self.verify_in(&mut tx, ctx.id()).await?;
-        Ok(tx)
+        Ok(TenantTx::new(tx, permit))
     }
 }

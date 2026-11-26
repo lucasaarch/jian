@@ -10,7 +10,7 @@
 //! Reading an account by id or address is for the code that already has the right to know that
 //! it exists: a login, an invitation. A tenant's own view of its people is its members.
 
-use sqlx::{AssertSqlSafe, Postgres, Transaction};
+use sqlx::AssertSqlSafe;
 
 use crate::machines::iso;
 use crate::subjects::clean_name;
@@ -100,7 +100,7 @@ pub struct NewAccount<'a> {
 /// The id of the account with this (normalized) address, made now if there is none. The `bool`
 /// says it was made. The credentials of one that existed are not touched.
 pub(crate) async fn find_or_create_account(
-    tx: &mut Transaction<'static, Postgres>,
+    tx: &mut sqlx::PgConnection,
     email: &str,
     new: &NewAccount<'_>,
 ) -> Result<(AccountId, bool), StoreError> {
@@ -113,13 +113,13 @@ pub(crate) async fn find_or_create_account(
     .bind(random_id("acc_")?)
     .bind(email)
     .bind(name)
-    .fetch_optional(&mut **tx)
+    .fetch_optional(&mut *tx)
     .await
     .map_err(StoreError::query(ACTION))?;
     let Some(id) = made else {
         let id: String = sqlx::query_scalar("SELECT id FROM accounts WHERE email = $1")
             .bind(email)
-            .fetch_one(&mut **tx)
+            .fetch_one(&mut *tx)
             .await
             .map_err(StoreError::query(ACTION))?;
         return Ok((AccountId::new(id), false));
@@ -133,7 +133,7 @@ pub(crate) async fn find_or_create_account(
         .bind(&id)
         .bind(hash)
         .bind(new.must_change)
-        .execute(&mut **tx)
+        .execute(&mut *tx)
         .await
         .map_err(StoreError::query(ACTION))?;
     }

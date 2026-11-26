@@ -82,6 +82,10 @@ pub enum StoreError {
     /// the platform's migrations stays applied.
     #[error("the platform migrations failed: {0}")]
     PlatformMigration(#[source] MigrateError),
+    /// The tenant already holds all the connections it may and none freed up in time. Only that
+    /// tenant is refused: the others keep their own share of the pool.
+    #[error("tenant {0} is using all the database connections it may; try again shortly")]
+    TenantBusy(TenantId),
     /// The tenant's schema is older than this build expects, usually because its last migration
     /// failed. It is not served until `migrate` brings it up to date.
     #[error(

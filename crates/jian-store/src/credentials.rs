@@ -183,14 +183,14 @@ impl Database {
 }
 
 pub(crate) async fn password_of(
-    tx: &mut sqlx::Transaction<'static, sqlx::Postgres>,
+    tx: &mut sqlx::PgConnection,
     account: &AccountId,
 ) -> Result<Option<PasswordCredential>, StoreError> {
     let row: Option<(String, bool)> = sqlx::query_as(
         "SELECT secret, must_change FROM credentials WHERE account_id = $1 AND kind = 'password'",
     )
     .bind(account.as_str())
-    .fetch_optional(&mut **tx)
+    .fetch_optional(&mut *tx)
     .await
     .map_err(StoreError::query("read a credential"))?;
     Ok(row.map(|(hash, must_change)| PasswordCredential {

@@ -271,8 +271,23 @@ fn default_data_dir() -> anyhow::Result<PathBuf> {
     Ok(dirs.data_dir().to_path_buf())
 }
 
-#[tokio::main]
-async fn main() -> anyhow::Result<()> {
+/// The most threads the blocking pool may run at once (tokio's default is 512). Everything that
+/// blocks runs there (password hashing, hashing uploads, git and file work on a machine), and an
+/// argon2id hash alone holds tens of MiB while it runs, so an unbounded pool lets one tenant's
+/// burst of sign-ins exhaust the host's memory for every tenant. Past the limit work queues
+/// instead of failing. Raise it only with the memory to match.
+const MAX_BLOCKING_THREADS: usize = 32;
+
+fn main() -> anyhow::Result<()> {
+    tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .max_blocking_threads(MAX_BLOCKING_THREADS)
+        .build()
+        .context("start the async runtime")?
+        .block_on(run())
+}
+
+async fn run() -> anyhow::Result<()> {
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()

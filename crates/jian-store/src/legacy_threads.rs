@@ -341,7 +341,7 @@ fn outcome(rows: u64) -> ImportOutcome {
 }
 
 async fn insert_thread(
-    tx: &mut sqlx::Transaction<'static, sqlx::Postgres>,
+    tx: &mut sqlx::PgConnection,
     id: &str,
     kind: &str,
     title: Option<&str>,
@@ -363,7 +363,7 @@ async fn insert_thread(
     .bind(origin.map(|o| o.2))
     .bind(&thread.created_at)
     .bind(&thread.id)
-    .execute(&mut **tx)
+    .execute(&mut *tx)
     .await
     .map_err(StoreError::query("import a thread"))?;
     Ok(())

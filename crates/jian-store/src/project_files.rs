@@ -131,6 +131,25 @@ fn mime_of(mime: Option<&str>) -> String {
     }
 }
 
+/// Above this size the hash runs on the blocking pool: hashing a 25 MiB upload on a runtime
+/// thread would hold it for tens of milliseconds, and every tenant's requests share those threads.
+const HASH_OFF_THREAD_BYTES: usize = 256 * 1024;
+
+async fn sha256_hex(bytes: &[u8]) -> Result<String, StoreError> {
+    if bytes.len() <= HASH_OFF_THREAD_BYTES {
+        return Ok(format!("{:x}", Sha256::digest(bytes)));
+    }
+    let owned = bytes.to_vec();
+    tokio::task::spawn_blocking(move || format!("{:x}", Sha256::digest(&owned)))
+        .await
+        .map_err(|error| {
+            StoreError::Blob(BlobError::Io {
+                action: "hash",
+                source: std::io::Error::other(error),
+            })
+        })
+}
+
 impl Database {
     fn blob_store(&self) -> Result<&dyn crate::BlobStore, StoreError> {
         self.blobs.as_deref().ok_or(StoreError::NoFileStorage)
@@ -167,7 +186,7 @@ impl Database {
         }
         let blobs = self.blob_store()?;
         self.check_disk_room(ctx, size).await?;
-        let sha256 = format!("{:x}", Sha256::digest(bytes));
+        let sha256 = sha256_hex(bytes).await?;
         let key = BlobKey::generate()?;
         let id = random_id("pfl_")?;
         let mut tx = self.begin(ctx).await?;

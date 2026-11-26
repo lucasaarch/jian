@@ -3,8 +3,6 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
-use sqlx::{Postgres, Transaction};
-
 use super::cipher::data_key_context;
 use super::{Dek, MasterKeys, WrappedDek};
 use crate::{Database, StoreError, TenantId};
@@ -58,7 +56,7 @@ impl Database {
     /// its key on the first secret it stores ([`data_key`](Database::data_key)).
     pub(crate) async fn create_data_key_in(
         &self,
-        tx: &mut Transaction<'static, Postgres>,
+        tx: &mut sqlx::PgConnection,
         tenant: &TenantId,
     ) -> Result<(), StoreError> {
         if self.master_keys.is_some() {
@@ -71,7 +69,7 @@ impl Database {
     /// stays, so two first writes agree.
     async fn insert_data_key(
         &self,
-        tx: &mut Transaction<'static, Postgres>,
+        tx: &mut sqlx::PgConnection,
         tenant: &TenantId,
     ) -> Result<(), StoreError> {
         let dek = Dek::generate()?;
@@ -86,7 +84,7 @@ impl Database {
         .bind(tenant.as_str())
         .bind(&wrapped.key_id)
         .bind(&wrapped.bytes)
-        .execute(&mut **tx)
+        .execute(&mut *tx)
         .await
         .map_err(StoreError::query("store a data key"))?;
         Ok(())
@@ -119,12 +117,12 @@ impl Database {
 
     async fn stored_data_key(
         &self,
-        tx: &mut Transaction<'static, Postgres>,
+        tx: &mut sqlx::PgConnection,
         tenant: &TenantId,
     ) -> Result<Option<(String, Vec<u8>)>, StoreError> {
         sqlx::query_as("SELECT master_key_id, wrapped_dek FROM tenant_keys WHERE tenant_id = $1")
             .bind(tenant.as_str())
-            .fetch_optional(&mut **tx)
+            .fetch_optional(&mut *tx)
             .await
             .map_err(StoreError::query("read a data key"))
     }

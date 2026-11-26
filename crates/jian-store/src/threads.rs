@@ -168,10 +168,7 @@ fn who_of(row: &PartRow) -> Option<Who> {
     }
 }
 
-async fn assemble(
-    tx: &mut sqlx::Transaction<'static, sqlx::Postgres>,
-    rows: Vec<Row>,
-) -> Result<Vec<Thread>, StoreError> {
+async fn assemble(tx: &mut sqlx::PgConnection, rows: Vec<Row>) -> Result<Vec<Thread>, StoreError> {
     let ids: Vec<&str> = rows.iter().map(|r| r.id.as_str()).collect();
     let parts: Vec<PartRow> = sqlx::query_as(AssertSqlSafe(format!(
         "SELECT thread_id, account_id, agent_id, external_id, external_label, {} AS joined_at \
@@ -179,7 +176,7 @@ async fn assemble(
         iso!("joined_at")
     )))
     .bind(&ids)
-    .fetch_all(&mut **tx)
+    .fetch_all(&mut *tx)
     .await
     .map_err(StoreError::query("read the participants of threads"))?;
     rows.into_iter()
@@ -605,7 +602,7 @@ impl Database {
 
 /// Writes one participation in the caller's transaction. Already in: nothing changes.
 pub(crate) async fn insert_participant(
-    tx: &mut sqlx::Transaction<'static, sqlx::Postgres>,
+    tx: &mut sqlx::PgConnection,
     thread: &str,
     who: &Who,
 ) -> Result<(), StoreError> {
@@ -623,7 +620,7 @@ pub(crate) async fn insert_participant(
     .bind(agent)
     .bind(external)
     .bind(label)
-    .execute(&mut **tx)
+    .execute(&mut *tx)
     .await
     .map_err(StoreError::query("add a participant"))?;
     Ok(())

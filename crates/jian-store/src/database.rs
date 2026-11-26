@@ -6,6 +6,7 @@ use sqlx::PgPool;
 use sqlx::postgres::PgPoolOptions;
 
 use crate::embedded::{EmbeddedConfig, EmbeddedPostgres};
+use crate::gate::{TenantGate, TenantLimits};
 use crate::schema_version::VerifiedTenants;
 use crate::secrets::{DekCache, MasterKeys};
 use crate::{BlobStore, Migrations, NoObserver, StoreError, ThreadObserver};
@@ -16,7 +17,7 @@ const ACQUIRE_TIMEOUT: Duration = Duration::from_secs(5);
 /// The longest [`DatabaseHealth::is_up`] waits for an answer before saying no.
 const HEALTH_TIMEOUT: Duration = Duration::from_secs(2);
 
-const MAX_CONNECTIONS: u32 = 10;
+pub(crate) const MAX_CONNECTIONS: u32 = 10;
 
 /// How many tenant migrations may hold a connection at once: the pool less the one the migration
 /// lock holds for the whole run and one spare for `/health` and the startup path.
@@ -64,6 +65,8 @@ pub struct Database {
     pub(crate) deks: DekCache,
     pub(crate) observer: Arc<dyn ThreadObserver>,
     pub(crate) blobs: Option<Arc<dyn BlobStore>>,
+    pub(crate) limits: TenantLimits,
+    pub(crate) gate: TenantGate,
     embedded: Option<EmbeddedPostgres>,
 }
 
@@ -89,6 +92,8 @@ impl Database {
                 deks: DekCache::default(),
                 observer: Arc::new(NoObserver),
                 blobs: None,
+                limits: TenantLimits::default(),
+                gate: TenantGate::default(),
                 embedded,
             }),
             Err(error) => {
@@ -115,6 +120,13 @@ impl Database {
     #[must_use]
     pub fn with_blobs(mut self, blobs: Arc<dyn BlobStore>) -> Self {
         self.blobs = Some(blobs);
+        self
+    }
+
+    /// Runs tenants under these limits instead of the defaults. For tests.
+    #[must_use]
+    pub fn with_tenant_limits(mut self, limits: TenantLimits) -> Self {
+        self.limits = limits;
         self
     }
 
