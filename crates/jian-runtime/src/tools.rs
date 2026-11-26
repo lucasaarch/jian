@@ -125,6 +125,10 @@ impl Tool for ReadFile {
         true
     }
 
+    fn read_only(&self) -> bool {
+        true
+    }
+
     fn call<'a>(
         &'a self,
         input: &'a Value,
@@ -250,6 +254,10 @@ impl Tool for OpenSkill {
 
     fn needs_machine(&self) -> bool {
         false
+    }
+
+    fn read_only(&self) -> bool {
+        true
     }
 
     fn call<'a>(

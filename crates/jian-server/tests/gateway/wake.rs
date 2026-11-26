@@ -89,9 +89,9 @@ async fn an_event_of_one_tenant_never_wakes_the_agent_of_another() {
             got,
             call(&gateway, "POST", never, token, Some(body.clone())).await
         );
-        let path = format!("/v1/agents/{mine}/budget");
+        let path = format!("/v1/agents/{mine}/proactivity");
         assert_eq!(call(&gateway, "GET", &path, token, None).await.0, 404);
-        let set = json!({ "wakesPerHour": 1000, "proactiveRunsPerHour": 1000 });
+        let set = json!({ "mode": "act", "maxWakesPerDay": 1000, "maxProactiveRunsPerDay": 1000 });
         assert_eq!(call(&gateway, "PUT", &path, token, Some(set)).await.0, 404);
     }
     // And through the store: B's context cannot write into A's agent either.
@@ -127,12 +127,16 @@ async fn an_event_of_one_tenant_never_wakes_the_agent_of_another() {
     assert_eq!(waiting(&tenants.a, mine).await.len(), 2);
     assert!(waiting(&tenants.b, theirs).await.is_empty());
 
-    // The budget: the defaults, then a limit of its own that only a manager sets.
-    let path = format!("/v1/agents/{mine}/budget");
+    // The mode and the budget: the defaults, then a setting of its own that only a manager makes.
+    let path = format!("/v1/agents/{mine}/proactivity");
     let (_, view) = call(&gateway, "GET", &path, peer, None).await;
-    assert_eq!(view["wakesPerHour"], 12, "{view}");
-    assert_eq!(view["wakesCustom"], false);
-    let set = json!({ "wakesPerHour": 3, "proactiveRunsPerHour": null });
+    assert_eq!(view["mode"], "suggest", "{view}");
+    assert_eq!(view["maxWakesPerDay"], 24, "{view}");
+    assert_eq!(view["maxProactiveRunsPerDay"], 3, "{view}");
+    // The old route is gone.
+    let old = format!("/v1/agents/{mine}/budget");
+    assert!(call(&gateway, "GET", &old, admin, None).await.0 >= 404);
+    let set = json!({ "mode": "act", "maxWakesPerDay": 3, "maxProactiveRunsPerDay": null });
     assert_eq!(
         call(&gateway, "PUT", &path, peer, Some(set.clone()))
             .await
@@ -141,9 +145,10 @@ async fn an_event_of_one_tenant_never_wakes_the_agent_of_another() {
     );
     let (status, view) = call(&gateway, "PUT", &path, admin, Some(set)).await;
     assert_eq!(status, 200, "{view}");
-    assert_eq!(view["wakesPerHour"], 3);
-    assert_eq!(view["proactiveRunsPerHour"], 4);
-    let too_big = json!({ "wakesPerHour": 5000, "proactiveRunsPerHour": null });
+    assert_eq!(view["mode"], "act");
+    assert_eq!(view["maxWakesPerDay"], 3);
+    assert_eq!(view["maxProactiveRunsPerDay"], 3);
+    let too_big = json!({ "mode": "off", "maxWakesPerDay": 5000, "maxProactiveRunsPerDay": null });
     assert_eq!(
         call(&gateway, "PUT", &path, admin, Some(too_big)).await.0,
         400

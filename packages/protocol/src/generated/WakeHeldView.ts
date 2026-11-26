@@ -2,7 +2,7 @@
 import type { BudgetLimitView } from "./BudgetLimitView";
 
 /**
- * An agent's events are being kept, not acted on, because its budget for the hour is spent.
+ * An agent's events are being kept, not acted on, because its budget for the day is spent.
  * They stay in its box and are looked at when the budget has room again. Sent to the people
  * who see the conversation of an event that waits.
  */
@@ -20,9 +20,9 @@ threadId: string,
  */
 limit: BudgetLimitView, 
 /**
- * How many per hour it allows.
+ * How many per day it allows.
  */
-perHour: number, 
+perDay: number, 
 /**
  * How many events of this conversation wait.
  */

@@ -32,7 +32,8 @@ use jian_runtime::{
 };
 use jian_skills::Catalog;
 use jian_store::{
-    Database, NewEvent, RUN_FAILED_EVENT, Run, RunLease, RunOrigin, RunState, StoreError, TenantCtx,
+    Database, NewEvent, Proactivity, RUN_FAILED_EVENT, Run, RunLease, RunOrigin, RunState,
+    StoreError, TenantCtx,
 };
 
 use serde_json::json;
@@ -219,8 +220,11 @@ impl RunEvents for Listener<'_> {
 }
 
 /// The tools a run has. A subagent's thread keeps no objective of its own (it works for another
-/// run's), and one at the deepest level hands nothing on. A depth that cannot be read is taken as
-/// the deepest: the run gets less, never more.
+/// run's), and one at the deepest level hands nothing on. A run a wake started (`origin = wake`)
+/// has every tool only when its agent is in `act` mode; otherwise it has the read-only ones, so
+/// what it says is a suggestion. This is a filter on the tool list, not a line in a prompt: a
+/// call to a tool outside it is refused as an unknown tool. What cannot be read is taken the
+/// strict way: the run gets less, never more.
 async fn tools_for(db: &Database, ctx: &TenantCtx, run: &Run) -> jian_runtime::Tools {
     let depth = db
         .subagent_depth(ctx, &run.thread)
@@ -230,6 +234,15 @@ async fn tools_for(db: &Database, ctx: &TenantCtx, run: &Run) -> jian_runtime::T
             MAX_SUBAGENT_DEPTH
         });
     let mut tools = standard_tools();
+    if run.origin == RunOrigin::Wake {
+        let mode = db
+            .agent_proactivity(ctx, &run.agent)
+            .await
+            .map_or(Proactivity::Suggest, |config| config.mode);
+        if mode != Proactivity::Act {
+            tools = tools.read_only();
+        }
+    }
     if depth > 0 {
         tools = tools.without(&OBJECTIVE_TOOLS);
     }

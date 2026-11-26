@@ -184,8 +184,8 @@ pub const ROUTES: &[&str] = &[
     "GET /v1/agents/{id}/model (a member who sees the agent)",
     "PUT /v1/agents/{id}/model (a member who manages the agent)",
     "POST /v1/agents/{id}/events (the owner token, an admin, or the member who manages the agent)",
-    "GET /v1/agents/{id}/budget (the owner token, or a member who sees the agent)",
-    "PUT /v1/agents/{id}/budget (the owner token, or a member who manages the agent)",
+    "GET /v1/agents/{id}/proactivity (the owner token, or a member who sees the agent)",
+    "PUT /v1/agents/{id}/proactivity (the owner token, or a member who manages the agent)",
     "GET /v1/agents/{id}/memories (a member who sees the agent)",
     "GET /v1/agents/{id}/memories/{key} (a member who sees the agent)",
     "PUT /v1/agents/{id}/memories/{key} (a member who sees the agent)",
@@ -464,8 +464,8 @@ pub fn router_with(state: AppState, extra: Router<AppState>) -> Router {
         .route("/v1/agents/{id}/inbox", get(schedules::inbox))
         .route("/v1/agents/{id}/events", post(agent_events::post))
         .route(
-            "/v1/agents/{id}/budget",
-            get(agent_events::get_budget).put(agent_events::put_budget),
+            "/v1/agents/{id}/proactivity",
+            get(agent_events::get_proactivity).put(agent_events::put_proactivity),
         )
         .route("/v1/skills", get(skills::list).post(skills::create))
         .route("/v1/skills/import", post(skills::import))

@@ -123,8 +123,8 @@ const ROUTE_TESTS: &[(&str, &str)] = &[
     ("GET /v1/agents/{id}/model", AGENT_MODEL_TEST),
     ("PUT /v1/agents/{id}/model", AGENT_MODEL_TEST),
     ("POST /v1/agents/{id}/events", WAKE_TEST),
-    ("GET /v1/agents/{id}/budget", WAKE_TEST),
-    ("PUT /v1/agents/{id}/budget", WAKE_TEST),
+    ("GET /v1/agents/{id}/proactivity", WAKE_TEST),
+    ("PUT /v1/agents/{id}/proactivity", WAKE_TEST),
     ("GET /v1/agents/{id}/skills", SKILLS_TEST),
     ("PUT /v1/agents/{id}/skills/{name}", SKILLS_TEST),
     (

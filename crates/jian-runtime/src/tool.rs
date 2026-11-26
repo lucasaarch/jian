@@ -111,6 +111,13 @@ pub trait Tool: Send + Sync {
     /// Whether it runs on the run's machine. Such a tool wakes the machine on its first call.
     fn needs_machine(&self) -> bool;
 
+    /// Whether the tool only reads: it changes nothing, here or on the machine. A run that may
+    /// only suggest (a wake of an agent in `suggest` mode) has these and no other. The default
+    /// is no, so a new tool is out of such a run until someone says it is safe.
+    fn read_only(&self) -> bool {
+        false
+    }
+
     /// Runs the call.
     fn call<'a>(
         &'a self,
@@ -160,6 +167,13 @@ impl Tools {
     #[must_use]
     pub fn without(mut self, names: &[&str]) -> Self {
         self.0.retain(|tool| !names.contains(&tool.name()));
+        self
+    }
+
+    /// The same set with only the tools that [`read_only`](Tool::read_only).
+    #[must_use]
+    pub fn read_only(mut self) -> Self {
+        self.0.retain(|tool| tool.read_only());
         self
     }
 

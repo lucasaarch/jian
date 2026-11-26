@@ -1,6 +1,6 @@
 //! Proactivity through the `agent.wake` job, a scripted model and a real Postgres. The wake's
 //! clock is the test's: events are read as of a time the test sets, so debounce, delays and the
-//! hour of the budget are crossed by setting a number, never by waiting. Jobs are driven by
+//! day of the budget are crossed by setting a number, never by waiting. Jobs are driven by
 //! hand.
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
@@ -18,13 +18,14 @@ use jian_server::{
 };
 use jian_store::{
     AgentEvent, AgentId, AgentModel, BudgetLimits, Database, DatabaseSource, NewAgent, NewJob,
-    NewMessage, NewThread, Run, RunOrigin, RunState, TenantCtx, ThreadId, Viewer, Window,
+    NewMessage, NewThread, Proactivity, ProactivityConfig, Run, RunOrigin, RunState, TenantCtx,
+    ThreadId, Viewer, Window,
 };
 use jian_testkit::{FakeExecutor, FakeMachineScript, FakeProvider, Script, TestDb, TwoTenants};
 use jian_testkit::{call, say};
 use serde_json::{Value, json};
 
-const HOUR: i64 = 3_600_000;
+const DAY: i64 = 24 * 3_600_000;
 
 struct Shared(Arc<FakeProvider>);
 
@@ -197,6 +198,21 @@ impl Rig {
         self.waker.handle(job).await
     }
 
+    /// Sets the agent's mode and limits.
+    async fn proactivity(&self, agent: &AgentId, mode: Proactivity, limits: BudgetLimits) {
+        let config = ProactivityConfig { mode, limits };
+        self.db()
+            .set_agent_proactivity(self.ctx(), agent, config)
+            .await
+            .unwrap();
+    }
+
+    /// The names of the tools of the `n`th request the model got.
+    fn tools_of(&self, n: usize) -> Vec<String> {
+        let requests = self.provider.requests();
+        requests[n].tools.iter().map(|t| t.name.clone()).collect()
+    }
+
     async fn work(&self, run: &str) {
         let job = self.context(RUN_KIND, json!({ "runId": run })).await;
         self.runner.handle(job).await.unwrap();
@@ -349,10 +365,8 @@ async fn a_spent_wake_budget_costs_no_call_and_no_run_and_keeps_the_event() {
         wakes: Some(1),
         runs: None,
     };
-    rig.db()
-        .set_agent_budget(rig.ctx(), &rig.pear, limits)
-        .await
-        .unwrap();
+    rig.proactivity(&rig.pear, Proactivity::Suggest, limits)
+        .await;
     let sub = rig
         .bus
         .subscribe_scoped(
@@ -383,12 +397,12 @@ async fn a_spent_wake_budget_costs_no_call_and_no_run_and_keeps_the_event() {
         })
         .collect();
     assert_eq!(held.len(), 1);
-    assert_eq!(held[0].per_hour, 1);
+    assert_eq!(held[0].per_day, 1);
     assert_eq!(held[0].waiting, 1);
 
     // The tick leaves it be until room opens, then it is woken on.
     assert_eq!(wake_tick(rig.db(), first + 2_000).await.unwrap(), 1);
-    let frees = first + HOUR;
+    let frees = first + DAY;
     assert_eq!(wake_tick(rig.db(), frees - 1).await.unwrap(), 0);
     rig.wake(&rig.pear, frees).await.unwrap();
     assert_eq!(rig.provider.streams(), 2);
@@ -402,10 +416,8 @@ async fn a_spent_run_budget_costs_no_call_and_no_run() {
         wakes: None,
         runs: Some(0),
     };
-    rig.db()
-        .set_agent_budget(rig.ctx(), &rig.pear, limits)
-        .await
-        .unwrap();
+    rig.proactivity(&rig.pear, Proactivity::Suggest, limits)
+        .await;
     rig.post(&rig.group, "help").await;
     let ready = rig.settled(&rig.pear).await;
     rig.wake(&rig.pear, ready).await.unwrap();
@@ -553,6 +565,8 @@ async fn an_event_of_one_tenant_is_never_in_the_box_of_the_other_tenants_agent()
 async fn a_wake_run_is_held_to_the_machine_quota_like_any_other() {
     let shell = call("s1", "shell", json!({ "command": "ls" }));
     let rig = Rig::new(vec![decide("act", None), shell, say("no machine, then")]).await;
+    rig.proactivity(&rig.pear, Proactivity::Act, BudgetLimits::default())
+        .await;
     let limit = jian_store::Quotas {
         machine_minutes: Some(1),
         ..jian_store::Quotas::default()
@@ -591,6 +605,8 @@ async fn a_wake_run_is_held_to_the_machine_quota_like_any_other() {
 async fn a_wake_run_calls_a_machine_tool_at_once_and_never_waits_for_a_person() {
     let shell = call("s1", "shell", json!({ "command": "ls" }));
     let rig = Rig::new(vec![decide("act", None), shell, say("listed")]).await;
+    rig.proactivity(&rig.pear, Proactivity::Act, BudgetLimits::default())
+        .await;
     rig.post(&rig.group, "the build is red").await;
     let ready = rig.settled(&rig.pear).await;
     rig.wake(&rig.pear, ready).await.unwrap();
@@ -613,4 +629,184 @@ async fn a_wake_run_calls_a_machine_tool_at_once_and_never_waits_for_a_person() 
         .flat_map(|m| m.parts.iter())
         .any(|part| matches!(part, MessagePart::ToolResult { id, .. } if id == "s1"));
     assert!(answered);
+}
+
+const READS: [&str; 2] = ["read_file", "skill"];
+const CHANGES: [&str; 6] = [
+    "shell",
+    "write_file",
+    "remember",
+    "spawn_subagent",
+    "set_objective",
+    "wake_me_later",
+];
+
+#[tokio::test]
+async fn in_suggest_mode_a_wake_run_has_only_tools_that_read_and_a_forged_call_is_refused() {
+    let forged = call("s1", "shell", json!({ "command": "rm -rf /" }));
+    let rig = Rig::new(vec![
+        decide("act", None),
+        forged,
+        say("I would clean it up; say the word."),
+        say("hi"),
+    ])
+    .await;
+    // The default mode is `suggest`: nothing is set here.
+    rig.post(&rig.group, "the disk is full").await;
+    let ready = rig.settled(&rig.pear).await;
+    rig.wake(&rig.pear, ready).await.unwrap();
+    let run = rig.runs(&rig.group, &rig.pear).await.remove(0);
+    assert_eq!(run.origin, RunOrigin::Wake);
+    rig.work(&run.id).await;
+
+    // The model was offered the reading tools and none that change anything.
+    let offered = rig.tools_of(1);
+    for name in READS {
+        assert!(offered.iter().any(|t| t == name), "{offered:?}");
+    }
+    for name in CHANGES {
+        assert!(!offered.iter().any(|t| t == name), "{name} in {offered:?}");
+    }
+    // It called `shell` anyway: refused, and the run still ends with its suggestion.
+    let page = rig
+        .db()
+        .list_messages(rig.ctx(), &rig.who, &rig.group, Window::Latest, 100)
+        .await
+        .unwrap()
+        .unwrap();
+    let refused = page.items.iter().flat_map(|m| m.parts.iter()).any(|part| {
+        matches!(part, MessagePart::ToolResult { id, text, is_error: true }
+            if id == "s1" && text.contains("there is no tool called `shell`"))
+    });
+    assert!(refused);
+    let done = rig.runs(&rig.group, &rig.pear).await.remove(0);
+    assert_eq!(done.state, RunState::Done);
+    let texts = rig.texts(&rig.group).await;
+    assert!(
+        texts
+            .iter()
+            .any(|t| t.contains("You may only suggest: say what you would do")),
+        "{texts:?}"
+    );
+
+    // The same agent, answering a person, has the whole set.
+    let (dm_run, _) = rig
+        .db()
+        .start_run(
+            rig.ctx(),
+            &rig.dm,
+            &rig.pear,
+            Some(&rig.who.account),
+            1,
+            RunOrigin::Message,
+        )
+        .await
+        .unwrap();
+    rig.work(&dm_run.id).await;
+    let full = rig.tools_of(3);
+    for name in READS.iter().chain(CHANGES.iter()) {
+        assert!(full.iter().any(|t| t == name), "{name} missing in {full:?}");
+    }
+}
+
+#[tokio::test]
+async fn in_act_mode_a_wake_run_has_every_tool() {
+    let rig = Rig::new(vec![decide("act", None), say("done")]).await;
+    rig.proactivity(&rig.pear, Proactivity::Act, BudgetLimits::default())
+        .await;
+    rig.post(&rig.group, "the build is red").await;
+    let ready = rig.settled(&rig.pear).await;
+    rig.wake(&rig.pear, ready).await.unwrap();
+    let run = rig.runs(&rig.group, &rig.pear).await.remove(0);
+    rig.work(&run.id).await;
+    let offered = rig.tools_of(1);
+    for name in READS.iter().chain(CHANGES.iter()) {
+        assert!(offered.iter().any(|t| t == name), "{name} in {offered:?}");
+    }
+    let texts = rig.texts(&rig.group).await;
+    assert!(
+        !texts.iter().any(|t| t.contains("only suggest")),
+        "{texts:?}"
+    );
+}
+
+#[tokio::test]
+async fn an_agent_that_is_off_is_not_woken_keeps_its_events_and_wakes_again_when_turned_on() {
+    let rig = Rig::new(vec![
+        call(
+            "c1",
+            "wake_me_later",
+            json!({ "in_minutes": 2, "reason": "check" }),
+        ),
+        say("ok"),
+        decide("act", None),
+        say("here is a suggestion"),
+    ])
+    .await;
+    rig.proactivity(&rig.pear, Proactivity::Off, BudgetLimits::default())
+        .await;
+    rig.post(&rig.group, "anyone there?").await;
+    let ready = rig
+        .settled(&rig.pear)
+        .await
+        .max(rig.settled(&rig.plum).await);
+    // No job is queued for it (plum's is), and a job queued before it was turned off does nothing.
+    assert_eq!(wake_tick(rig.db(), ready).await.unwrap(), 1, "plum only");
+    rig.wake(&rig.pear, ready).await.unwrap();
+    assert_eq!(rig.provider.streams(), 0, "no model call");
+    assert!(rig.runs(&rig.group, &rig.pear).await.is_empty());
+    assert_eq!(rig.pending(&rig.pear).await.len(), 1, "the event waits");
+
+    // `wake_me_later` still writes, for when the agent is turned on again.
+    rig.post(&rig.dm, "watch the deploy").await;
+    let (run, _) = rig
+        .db()
+        .start_run(
+            rig.ctx(),
+            &rig.dm,
+            &rig.pear,
+            Some(&rig.who.account),
+            1,
+            RunOrigin::Message,
+        )
+        .await
+        .unwrap();
+    rig.work(&run.id).await;
+    let events = rig.pending(&rig.pear).await;
+    assert_eq!(events.len(), 2, "{events:?}");
+    assert!(events.iter().any(|e| e.kind == "wake_later"));
+    let streams = rig.provider.streams();
+
+    // Turned on, the same events are woken on.
+    rig.proactivity(&rig.pear, Proactivity::Suggest, BudgetLimits::default())
+        .await;
+    let later = rig.settled(&rig.pear).await + 10 * 60_000;
+    // Plum's job for the same event was queued by the first tick; only pear's is new.
+    assert_eq!(wake_tick(rig.db(), later).await.unwrap(), 1);
+    rig.wake(&rig.pear, later).await.unwrap();
+    assert_eq!(rig.provider.streams(), streams + 1);
+    assert!(!rig.runs(&rig.group, &rig.pear).await.is_empty());
+}
+
+#[tokio::test]
+async fn the_budget_is_per_day_and_the_window_opens_after_24_hours() {
+    let rig = Rig::new(vec![decide("ignore", None), decide("ignore", None)]).await;
+    let limits = BudgetLimits {
+        wakes: Some(1),
+        runs: None,
+    };
+    rig.proactivity(&rig.pear, Proactivity::Suggest, limits)
+        .await;
+    rig.post(&rig.group, "one").await;
+    let first = rig.settled(&rig.pear).await;
+    rig.wake(&rig.pear, first).await.unwrap();
+    rig.post(&rig.group, "two").await;
+    // Hours later, still the same day: held, no call.
+    rig.wake(&rig.pear, first + 23 * 3_600_000).await.unwrap();
+    assert_eq!(rig.provider.streams(), 1);
+    assert_eq!(rig.pending(&rig.pear).await.len(), 1);
+    // A day after the first wake the room is back.
+    rig.wake(&rig.pear, first + DAY).await.unwrap();
+    assert_eq!(rig.provider.streams(), 2);
+    assert!(rig.pending(&rig.pear).await.is_empty());
 }

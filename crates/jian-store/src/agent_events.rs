@@ -9,8 +9,9 @@
 //! the message ([`record_message_events`]); the runtime writes the others through
 //! [`Database::add_event`]; a webhook of the workspace goes through the same call.
 //!
-//! The budget is per agent and per hour, sliding: the wakes and the runs a wake started in the
+//! The budget is per agent and per day, sliding: the wakes and the runs a wake started in the
 //! last [`BUDGET_WINDOW_MS`]. A limit is the agent's own (`agent_config`) or the default here.
+//! The agent's [`Proactivity`] mode says what a wake may do at all.
 //! Every time is a Unix-millisecond argument, so the job that wakes an agent and its tests read
 //! one clock.
 //!
@@ -30,15 +31,15 @@ use crate::{AgentId, Database, StoreError, TenantCtx};
 /// The largest payload an event may have, in bytes of its JSON text. The table allows more, for
 /// what a schedule carries; a webhook or a tool is held to this.
 pub const MAX_EVENT_PAYLOAD_BYTES: usize = 32 * 1024;
-/// The most wakes an agent gets per hour when its config says nothing. Each costs one short
+/// The most wakes an agent gets per day when its config says nothing. Each costs one short
 /// model call.
-pub const DEFAULT_WAKES_PER_HOUR: i32 = 12;
-/// The most runs a wake may start for an agent per hour when its config says nothing.
-pub const DEFAULT_PROACTIVE_RUNS_PER_HOUR: i32 = 4;
-/// The most an agent's config may allow per hour, for either limit.
-pub const MAX_BUDGET_PER_HOUR: i32 = 1000;
-/// The length of the budget's window: one hour, in milliseconds.
-pub const BUDGET_WINDOW_MS: i64 = 60 * 60 * 1000;
+pub const DEFAULT_WAKES_PER_DAY: i32 = 24;
+/// The most runs a wake may start for an agent per day when its config says nothing.
+pub const DEFAULT_PROACTIVE_RUNS_PER_DAY: i32 = 3;
+/// The most an agent's config may allow per day, for either limit.
+pub const MAX_BUDGET_PER_DAY: i32 = 1000;
+/// The length of the budget's window: one day, in milliseconds.
+pub const BUDGET_WINDOW_MS: i64 = 24 * 60 * 60 * 1000;
 /// The most `wake_later` events an agent may have waiting.
 pub const MAX_PENDING_LATER: i64 = 10;
 
@@ -78,28 +79,70 @@ impl BudgetKind {
     }
 }
 
-/// An agent's own limits per hour. `None` is the default.
+/// What an agent may do when something wakes it.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Proactivity {
+    /// Nothing: events wait in its box, and no wake costs a model call.
+    Off,
+    /// It may look and say what it would do, never change anything: a wake run has only the
+    /// tools that read. The default.
+    #[default]
+    Suggest,
+    /// A wake run has every tool, as a run a person started.
+    Act,
+}
+
+impl Proactivity {
+    /// The name in the database and the API.
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Off => "off",
+            Self::Suggest => "suggest",
+            Self::Act => "act",
+        }
+    }
+
+    fn parse(text: &str) -> Result<Self, StoreError> {
+        match text {
+            "off" => Ok(Self::Off),
+            "suggest" => Ok(Self::Suggest),
+            "act" => Ok(Self::Act),
+            _ => Err(StoreError::InvalidWorkspace("unknown proactivity mode")),
+        }
+    }
+}
+
+/// An agent's own limits per day. `None` is the default.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct BudgetLimits {
-    /// Wakes per hour.
+    /// Wakes per day.
     pub wakes: Option<i32>,
-    /// Runs started by wakes per hour.
+    /// Runs started by wakes per day.
     pub runs: Option<i32>,
 }
 
 impl BudgetLimits {
-    /// The wakes per hour that count: the agent's, or [`DEFAULT_WAKES_PER_HOUR`].
+    /// The wakes per day that count: the agent's, or [`DEFAULT_WAKES_PER_DAY`].
     #[must_use]
-    pub fn wakes_per_hour(self) -> i32 {
-        self.wakes.unwrap_or(DEFAULT_WAKES_PER_HOUR)
+    pub fn wakes_per_day(self) -> i32 {
+        self.wakes.unwrap_or(DEFAULT_WAKES_PER_DAY)
     }
 
-    /// The proactive runs per hour that count: the agent's, or
-    /// [`DEFAULT_PROACTIVE_RUNS_PER_HOUR`].
+    /// The proactive runs per day that count: the agent's, or [`DEFAULT_PROACTIVE_RUNS_PER_DAY`].
     #[must_use]
-    pub fn runs_per_hour(self) -> i32 {
-        self.runs.unwrap_or(DEFAULT_PROACTIVE_RUNS_PER_HOUR)
+    pub fn runs_per_day(self) -> i32 {
+        self.runs.unwrap_or(DEFAULT_PROACTIVE_RUNS_PER_DAY)
     }
+}
+
+/// How much an agent may do on its own: the mode and the budget.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct ProactivityConfig {
+    /// What a wake may do.
+    pub mode: Proactivity,
+    /// How often.
+    pub limits: BudgetLimits,
 }
 
 /// Where a thread stands for a wake that would start a run in it.
@@ -335,7 +378,9 @@ impl Database {
         let rows: Vec<(String, i64)> = sqlx::query_as(
             "SELECT i.agent_id, min(i.seq) FROM agent_inbox i \
              JOIN agents a ON a.id = i.agent_id \
+             LEFT JOIN agent_config c ON c.agent_id = i.agent_id \
              WHERE i.consumed_at IS NULL AND a.archived_at IS NULL \
+               AND COALESCE(c.proactivity, 'suggest') <> 'off' \
                AND i.available_ms + $2 <= $1 \
              GROUP BY i.agent_id ORDER BY min(i.seq)",
         )
@@ -402,60 +447,67 @@ impl Database {
         .map_err(StoreError::query("count the wakes an agent asked for"))
     }
 
-    /// `agent`'s own limits; both `None` when it has set none.
-    pub async fn agent_budget(
+    /// `agent`'s mode and own limits; `suggest` and no limits when it has set none.
+    pub async fn agent_proactivity(
         &self,
         ctx: &TenantCtx,
         agent: &AgentId,
-    ) -> Result<BudgetLimits, StoreError> {
+    ) -> Result<ProactivityConfig, StoreError> {
         let mut tx = self.begin(ctx).await?;
-        let row: Option<(Option<i32>, Option<i32>)> = sqlx::query_as(
-            "SELECT max_wakes_per_hour, max_proactive_runs_per_hour \
+        let row: Option<(String, Option<i32>, Option<i32>)> = sqlx::query_as(
+            "SELECT proactivity, max_wakes_per_day, max_proactive_runs_per_day \
              FROM agent_config WHERE agent_id = $1",
         )
         .bind(agent.as_str())
         .fetch_optional(&mut *tx)
         .await
-        .map_err(StoreError::query("read an agent's budget"))?;
-        Ok(
-            row.map_or_else(BudgetLimits::default, |(wakes, runs)| BudgetLimits {
-                wakes,
-                runs,
-            }),
+        .map_err(StoreError::query("read an agent's proactivity"))?;
+        row.map_or_else(
+            || Ok(ProactivityConfig::default()),
+            |(mode, wakes, runs)| {
+                Ok(ProactivityConfig {
+                    mode: Proactivity::parse(&mode)?,
+                    limits: BudgetLimits { wakes, runs },
+                })
+            },
         )
     }
 
-    /// Sets `agent`'s limits (`None` is the default). Each is 0 to [`MAX_BUDGET_PER_HOUR`]; 0
-    /// switches that kind off.
-    pub async fn set_agent_budget(
+    /// Sets `agent`'s mode and limits (`None` is the default). Each limit is 0 to
+    /// [`MAX_BUDGET_PER_DAY`]; 0 switches that kind off.
+    pub async fn set_agent_proactivity(
         &self,
         ctx: &TenantCtx,
         agent: &AgentId,
-        limits: BudgetLimits,
+        config: ProactivityConfig,
     ) -> Result<(), StoreError> {
-        const ACTION: &str = "set an agent's budget";
-        let bad = |n: Option<i32>| n.is_some_and(|n| !(0..=MAX_BUDGET_PER_HOUR).contains(&n));
+        const ACTION: &str = "set an agent's proactivity";
+        let limits = config.limits;
+        let bad = |n: Option<i32>| n.is_some_and(|n| !(0..=MAX_BUDGET_PER_DAY).contains(&n));
         if bad(limits.wakes) || bad(limits.runs) {
             return Err(StoreError::InvalidWorkspace(
-                "a budget limit is 0 to 1000 per hour",
+                "a budget limit is 0 to 1000 per day",
             ));
         }
         let mut tx = self.begin(ctx).await?;
         sqlx::query(
-            "INSERT INTO agent_config (agent_id, max_wakes_per_hour, max_proactive_runs_per_hour) \
-             VALUES ($1, $2, $3) ON CONFLICT (agent_id) DO UPDATE \
-             SET max_wakes_per_hour = $2, max_proactive_runs_per_hour = $3, updated_at = now()",
+            "INSERT INTO agent_config \
+                 (agent_id, proactivity, max_wakes_per_day, max_proactive_runs_per_day) \
+             VALUES ($1, $4, $2, $3) ON CONFLICT (agent_id) DO UPDATE \
+             SET proactivity = $4, max_wakes_per_day = $2, max_proactive_runs_per_day = $3, \
+                 updated_at = now()",
         )
         .bind(agent.as_str())
         .bind(limits.wakes)
         .bind(limits.runs)
+        .bind(config.mode.as_str())
         .execute(&mut *tx)
         .await
         .map_err(StoreError::query(ACTION))?;
         tx.commit().await.map_err(StoreError::query(ACTION))
     }
 
-    /// How many of `kind` `agent` spent in the hour before `now_ms`.
+    /// How many of `kind` `agent` spent in the day before `now_ms`.
     pub async fn budget_used(
         &self,
         ctx: &TenantCtx,
@@ -508,7 +560,7 @@ impl Database {
         tx.commit().await.map_err(StoreError::query(ACTION))
     }
 
-    /// When the oldest of `kind` that `agent` spent leaves the hour, so room opens again; `None`
+    /// When the oldest of `kind` that `agent` spent leaves the day, so room opens again; `None`
     /// when it spent none in it.
     pub async fn budget_frees_at(
         &self,

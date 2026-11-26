@@ -319,7 +319,7 @@ async fn the_embedded_migrations_apply_to_the_platform_and_to_each_tenant() {
         .await,
         [
             "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16",
-            "17"
+            "17", "18"
         ]
     );
     // After a restart the tenant is migrated again with nothing to do.
@@ -412,7 +412,8 @@ async fn tool_approval_is_dropped_and_a_run_that_waited_on_one_ends_failed() {
         .map(|entry| entry.unwrap().file_name().into_string().unwrap())
         .collect::<Vec<_>>();
     shipped.sort();
-    // The release before: everything but the last migration.
+    // The release before: everything up to 0016 (0017 is under test, 0018 comes after it).
+    assert!(shipped.pop().unwrap().starts_with("0018_"));
     let last = shipped.pop().unwrap();
     assert!(last.starts_with("0017_"), "{last}");
     let before = shipped
@@ -492,6 +493,71 @@ async fn tool_approval_is_dropped_and_a_run_that_waited_on_one_ends_failed() {
         )
         .await,
         ["true"]
+    );
+    db.close().await.unwrap();
+    server.stop().await;
+}
+
+#[tokio::test]
+async fn proactivity_defaults_to_suggest_and_an_hourly_limit_resets_except_off() {
+    let server = Server::start().await;
+    let real = Path::new(env!("CARGO_MANIFEST_DIR")).join("migrations/tenant");
+    let mut shipped = std::fs::read_dir(&real)
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name().into_string().unwrap())
+        .collect::<Vec<_>>();
+    shipped.sort();
+    // The release before: everything but the last migration.
+    let last = shipped.pop().unwrap();
+    assert!(last.starts_with("0018_"), "{last}");
+    let before = shipped
+        .iter()
+        .map(|name| {
+            (
+                name.clone(),
+                std::fs::read_to_string(real.join(name)).unwrap(),
+            )
+        })
+        .collect::<Vec<_>>();
+    let files = before
+        .iter()
+        .map(|(name, sql)| (name.as_str(), sql.as_str()))
+        .collect::<Vec<_>>();
+    let db = database(&server, "v17", &files).await;
+    db.migrate().await.unwrap();
+    let alpha = tenant(&db, "alpha").await;
+    exec(
+        &db,
+        &alpha,
+        "INSERT INTO agents (id, name, visibility, created_by) VALUES \
+         ('agt_1', 'A', 'workspace', 'acc'), ('agt_2', 'B', 'workspace', 'acc'), \
+         ('agt_3', 'C', 'workspace', 'acc')",
+    )
+    .await;
+    exec(
+        &db,
+        &alpha,
+        "INSERT INTO agent_config (agent_id, max_wakes_per_hour, max_proactive_runs_per_hour) \
+         VALUES ('agt_1', 12, 0), ('agt_2', 0, 5), ('agt_3', NULL, NULL)",
+    )
+    .await;
+
+    let db = db.with_migrations(Migrations::new(
+        platform_migrator().await,
+        Migrator::new(real.as_path()).await.unwrap(),
+    ));
+    assert!(db.migrate().await.unwrap().failed.is_empty());
+    // Every agent is in `suggest`; a number of the hour is the default now, a 0 stays 0.
+    assert_eq!(
+        texts(
+            &db,
+            &alpha,
+            "SELECT agent_id || '/' || proactivity || '/' || COALESCE(max_wakes_per_day::text, '-') \
+             || '/' || COALESCE(max_proactive_runs_per_day::text, '-') \
+             FROM agent_config ORDER BY agent_id"
+        )
+        .await,
+        ["agt_1/suggest/-/0", "agt_2/suggest/0/-", "agt_3/suggest/-/-"]
     );
     db.close().await.unwrap();
     server.stop().await;

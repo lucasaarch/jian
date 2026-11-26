@@ -10,7 +10,11 @@
 //! system message that says what woke it, and consumes that thread's events; the one active
 //! run per thread and agent still holds, so a wake never opens a second run where one is going.
 //!
-//! The budget comes first: when the agent has used its wakes or its proactive runs for the hour
+//! The agent's mode comes first. `off`: nothing is read or consumed (the tick does not queue it,
+//! and a job already queued stops here), the events wait for the day it is turned on. `suggest`
+//! and `act` decide what the run may do (see `run_job`), and the system message says so.
+//!
+//! The budget is next: when the agent has used its wakes or its proactive runs for the day
 //! there is no model call and no run. The events stay, are moved to when room opens, and the
 //! people of their threads are told (`wake.held`). Events a wake cannot act on yet (the agent
 //! is mid-run in that thread) are moved a minute on, and ones whose thread the agent left are
@@ -25,8 +29,8 @@ use jian_protocol::client::DeltaPayload;
 use jian_protocol::wake::{BudgetLimitView, WakeHeldView};
 use jian_runtime::{Decider, Decision, RUN_KIND, WakeError};
 use jian_store::{
-    AgentEvent, AgentId, BUDGET_WINDOW_MS, BudgetKind, Database, NewJob, RunOrigin, StoreError,
-    Target, TenantCtx, ThreadId,
+    AgentEvent, AgentId, BUDGET_WINDOW_MS, BudgetKind, BudgetLimits, Database, NewJob, Proactivity,
+    RunOrigin, StoreError, Target, TenantCtx, ThreadId,
 };
 use serde_json::json;
 
@@ -47,6 +51,10 @@ const BUSY_RETRY_MS: i64 = 60_000;
 const FAILED_RETRY_MS: i64 = 10 * 60_000;
 /// The most events one wake reads; the rest are the next wake's.
 const BATCH: u32 = 20;
+/// The line that tells a wake run in `suggest` mode what it may do. The tool list enforces it;
+/// this is so the model does not try.
+const SUGGEST_ONLY: &str =
+    "You may only suggest: say what you would do and wait for a person to ask.";
 /// How much of an event's text a run's system message carries, in characters.
 const LINE_CHARS: usize = 300;
 
@@ -116,6 +124,14 @@ fn ids(events: &[&AgentEvent]) -> Vec<String> {
 impl Work<'_> {
     async fn run(&self) -> Result<(), JobError> {
         let now = (self.waker.now)();
+        let config = self
+            .db
+            .agent_proactivity(self.ctx, &self.agent)
+            .await
+            .map_err(|e| store(&e))?;
+        if config.mode == Proactivity::Off {
+            return Ok(());
+        }
         let batch = self
             .db
             .pending_events(self.ctx, &self.agent, now, BATCH)
@@ -149,7 +165,7 @@ impl Work<'_> {
         if ready.is_empty() {
             return Ok(());
         }
-        if self.over_budget(&ready, now).await? {
+        if self.over_budget(&ready, config.limits, now).await? {
             return Ok(());
         }
         // Spent before the call, once per job: a retry of the job does not pay twice.
@@ -160,7 +176,9 @@ impl Work<'_> {
         let events: Vec<AgentEvent> = ready.iter().map(|e| (*e).clone()).collect();
         match self.decide(&events, now).await? {
             Decision::Ignore => self.consume(&ready).await,
-            Decision::Act { thread, reason } => self.act(&ready, thread, &reason, now).await,
+            Decision::Act { thread, reason } => {
+                self.act(&ready, thread, &reason, config.mode, now).await
+            }
         }
     }
 
@@ -204,24 +222,24 @@ impl Work<'_> {
         }
     }
 
-    /// Whether the hour's budget is spent. If so the events are moved to when room opens and
+    /// Whether the day's budget is spent. If so the events are moved to when room opens and
     /// the people of their threads are told.
-    async fn over_budget(&self, ready: &[&AgentEvent], now: i64) -> Result<bool, JobError> {
-        let limits = self
-            .db
-            .agent_budget(self.ctx, &self.agent)
-            .await
-            .map_err(|e| store(&e))?;
-        for (kind, limit_view, per_hour) in [
+    async fn over_budget(
+        &self,
+        ready: &[&AgentEvent],
+        limits: BudgetLimits,
+        now: i64,
+    ) -> Result<bool, JobError> {
+        for (kind, limit_view, per_day) in [
             (
                 BudgetKind::Wake,
                 BudgetLimitView::Wakes,
-                limits.wakes_per_hour(),
+                limits.wakes_per_day(),
             ),
             (
                 BudgetKind::Run,
                 BudgetLimitView::Runs,
-                limits.runs_per_hour(),
+                limits.runs_per_day(),
             ),
         ] {
             let used = self
@@ -229,7 +247,7 @@ impl Work<'_> {
                 .budget_used(self.ctx, &self.agent, kind, now)
                 .await
                 .map_err(|e| store(&e))?;
-            if used < i64::from(per_hour) {
+            if used < i64::from(per_day) {
                 continue;
             }
             let frees = self
@@ -239,13 +257,13 @@ impl Work<'_> {
                 .map_err(|e| store(&e))?
                 .unwrap_or(now + BUDGET_WINDOW_MS);
             self.defer(ready, frees).await?;
-            self.warn(ready, limit_view, per_hour).await;
+            self.warn(ready, limit_view, per_day).await;
             return Ok(true);
         }
         Ok(false)
     }
 
-    async fn warn(&self, held: &[&AgentEvent], limit: BudgetLimitView, per_hour: i32) {
+    async fn warn(&self, held: &[&AgentEvent], limit: BudgetLimitView, per_day: i32) {
         let mut threads: Vec<&ThreadId> = held.iter().filter_map(|e| e.thread.as_ref()).collect();
         threads.sort();
         threads.dedup();
@@ -258,7 +276,7 @@ impl Work<'_> {
                 agent_id: self.agent.to_string(),
                 thread_id: thread.to_string(),
                 limit,
-                per_hour,
+                per_day,
                 waiting: u32::try_from(waiting).unwrap_or(u32::MAX),
             });
             announce_with(
@@ -278,6 +296,7 @@ impl Work<'_> {
         ready: &[&AgentEvent],
         chosen: Option<ThreadId>,
         reason: &str,
+        mode: Proactivity,
         now: i64,
     ) -> Result<(), JobError> {
         // The model's pick when it is one of the events' threads, else the oldest event's.
@@ -293,7 +312,7 @@ impl Work<'_> {
             .copied()
             .filter(|e| e.thread.as_ref().is_none_or(|t| *t == thread))
             .collect();
-        let text = summary(&mine, reason);
+        let text = summary(&mine, reason, mode);
         let parts = MessageParts::text(&text).map_err(|e| JobError::permanent(e.to_string()))?;
         let key = format!("wake:{}", self.job);
         let posted = self
@@ -388,7 +407,7 @@ impl Work<'_> {
 }
 
 /// What the system message that opens a wake run says: the events of its thread and why.
-fn summary(events: &[&AgentEvent], reason: &str) -> String {
+fn summary(events: &[&AgentEvent], reason: &str, mode: Proactivity) -> String {
     let mut text = String::from("You were woken by:\n");
     for event in events {
         let body = ["text", "reason", "message"]
@@ -400,6 +419,10 @@ fn summary(events: &[&AgentEvent], reason: &str) -> String {
     }
     if !reason.is_empty() {
         let _ = writeln!(text, "Why you chose to act: {reason}");
+    }
+    if mode != Proactivity::Act {
+        text.push_str(SUGGEST_ONLY);
+        text.push('\n');
     }
     text
 }

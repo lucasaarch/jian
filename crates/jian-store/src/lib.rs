@@ -176,9 +176,10 @@ mod usage;
 pub use accounts::{Account, NewAccount, default_name, normalize_email};
 pub use agent_config::{AgentMachine, AgentModel};
 pub use agent_events::{
-    AgentEvent, BUDGET_WINDOW_MS, BudgetKind, BudgetLimits, DEFAULT_PROACTIVE_RUNS_PER_HOUR,
-    DEFAULT_WAKES_PER_HOUR, EXTERNAL_EVENT, MAX_BUDGET_PER_HOUR, MAX_EVENT_PAYLOAD_BYTES,
-    MAX_PENDING_LATER, MESSAGE_EVENT, NewEvent, RUN_FAILED_EVENT, Target, WAKE_LATER_EVENT,
+    AgentEvent, BUDGET_WINDOW_MS, BudgetKind, BudgetLimits, DEFAULT_PROACTIVE_RUNS_PER_DAY,
+    DEFAULT_WAKES_PER_DAY, EXTERNAL_EVENT, MAX_BUDGET_PER_DAY, MAX_EVENT_PAYLOAD_BYTES,
+    MAX_PENDING_LATER, MESSAGE_EVENT, NewEvent, Proactivity, ProactivityConfig, RUN_FAILED_EVENT,
+    Target, WAKE_LATER_EVENT,
 };
 pub use agents::{
     Agent, AgentId, AgentPatch, MAX_AGENT_AVATAR_BYTES, MAX_AGENT_DESCRIPTION_CHARS,

@@ -1,20 +1,22 @@
-//! Events from outside, and the budget they are acted on within: `/v1/agents/{id}/events` and
-//! `/v1/agents/{id}/budget`.
+//! Events from outside, and how much the agent may do about them: `/v1/agents/{id}/events` and
+//! `/v1/agents/{id}/proactivity`.
 //!
 //! `POST …/events` is the raw webhook: anything that can hold a token of the workspace (its
 //! owner's, or an admin's or the agent's creator's) writes an event into one agent's box and the
 //! agent's next wake looks at it. It is also the place a plugin (M4) hooks in: a plugin turns
 //! what it hears into an event, through this route or, in the gateway, through
-//! [`jian_store::Database::add_event`], which is all that route does. The budget is read by
-//! whoever sees the agent and changed by whoever manages it.
+//! [`jian_store::Database::add_event`], which is all that route does. The mode and the budget
+//! are read by whoever sees the agent and changed by whoever manages it.
 
 use axum::Json;
 use axum::extract::{Path, State};
 use jian_protocol::wake::{
-    AgentBudgetView, AgentEventAccepted, PostAgentEventRequest, SetAgentBudgetRequest,
+    AgentEventAccepted, AgentProactivityView, PostAgentEventRequest, ProactivityModeView,
+    SetAgentProactivityRequest,
 };
 use jian_store::{
-    AgentId, BudgetKind, BudgetLimits, EXTERNAL_EVENT, NewEvent, TenantCtx, ThreadId,
+    AgentId, BudgetKind, BudgetLimits, EXTERNAL_EVENT, NewEvent, Proactivity, ProactivityConfig,
+    TenantCtx, ThreadId,
 };
 
 use crate::AppState;
@@ -75,14 +77,14 @@ pub(crate) async fn post(
     }))
 }
 
-async fn budget_view(
+async fn proactivity_view(
     app: &AppState,
     ctx: &TenantCtx,
     agent: &AgentId,
-) -> Result<AgentBudgetView, Refusal> {
-    let limits = app
+) -> Result<AgentProactivityView, Refusal> {
+    let ProactivityConfig { mode, limits } = app
         .db
-        .agent_budget(ctx, agent)
+        .agent_proactivity(ctx, agent)
         .await
         .map_err(|e| failure(&e))?;
     let now = now_ms();
@@ -92,48 +94,58 @@ async fn budget_view(
             .await
             .map_err(|e| failure(&e))
     };
-    Ok(AgentBudgetView {
-        wakes_per_hour: limits.wakes_per_hour(),
-        proactive_runs_per_hour: limits.runs_per_hour(),
-        wakes_custom: limits.wakes.is_some(),
-        runs_custom: limits.runs.is_some(),
+    Ok(AgentProactivityView {
+        mode: match mode {
+            Proactivity::Off => ProactivityModeView::Off,
+            Proactivity::Suggest => ProactivityModeView::Suggest,
+            Proactivity::Act => ProactivityModeView::Act,
+        },
+        max_wakes_per_day: limits.wakes_per_day(),
+        max_proactive_runs_per_day: limits.runs_per_day(),
         wakes_used: used(BudgetKind::Wake).await?,
         runs_used: used(BudgetKind::Run).await?,
     })
 }
 
-/// `GET /v1/agents/{id}/budget`.
-pub(crate) async fn get_budget(
+/// `GET /v1/agents/{id}/proactivity`.
+pub(crate) async fn get_proactivity(
     State(app): State<AppState>,
     principal: Principal,
     Path(id): Path<String>,
-) -> Result<Json<AgentBudgetView>, Refusal> {
+) -> Result<Json<AgentProactivityView>, Refusal> {
     let ctx = tenant_ctx(&app, &principal.tenant).await?;
     let (agent, _) = agent_of(&app, &principal, &ctx, id).await?;
-    Ok(Json(budget_view(&app, &ctx, &agent).await?))
+    Ok(Json(proactivity_view(&app, &ctx, &agent).await?))
 }
 
-/// `PUT /v1/agents/{id}/budget`.
-pub(crate) async fn put_budget(
+/// `PUT /v1/agents/{id}/proactivity`.
+pub(crate) async fn put_proactivity(
     State(app): State<AppState>,
     principal: Principal,
     Path(id): Path<String>,
-    Json(body): Json<SetAgentBudgetRequest>,
-) -> Result<Json<AgentBudgetView>, Refusal> {
+    Json(body): Json<SetAgentProactivityRequest>,
+) -> Result<Json<AgentProactivityView>, Refusal> {
     let ctx = tenant_ctx(&app, &principal.tenant).await?;
     let (agent, manages) = agent_of(&app, &principal, &ctx, id).await?;
     if !manages {
         return Err(forbidden(
-            "only the agent's creator or an admin may change its budget",
+            "only the agent's creator or an admin may change how proactive it is",
         ));
     }
-    let limits = BudgetLimits {
-        wakes: body.wakes_per_hour,
-        runs: body.proactive_runs_per_hour,
+    let config = ProactivityConfig {
+        mode: match body.mode {
+            ProactivityModeView::Off => Proactivity::Off,
+            ProactivityModeView::Suggest => Proactivity::Suggest,
+            ProactivityModeView::Act => Proactivity::Act,
+        },
+        limits: BudgetLimits {
+            wakes: body.max_wakes_per_day,
+            runs: body.max_proactive_runs_per_day,
+        },
     };
     app.db
-        .set_agent_budget(&ctx, &agent, limits)
+        .set_agent_proactivity(&ctx, &agent, config)
         .await
         .map_err(|e| failure(&e))?;
-    Ok(Json(budget_view(&app, &ctx, &agent).await?))
+    Ok(Json(proactivity_view(&app, &ctx, &agent).await?))
 }

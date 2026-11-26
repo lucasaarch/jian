@@ -1,4 +1,4 @@
-//! Proactivity: the JSON bodies of `/v1/agents/{id}/events` and `/v1/agents/{id}/budget`, and
+//! Proactivity: the JSON bodies of `/v1/agents/{id}/events` and `/v1/agents/{id}/proactivity`, and
 //! what a client hears when the budget holds an agent's events back.
 
 use serde::{Deserialize, Serialize};
@@ -33,37 +33,50 @@ pub struct AgentEventAccepted {
     pub id: Option<String>,
 }
 
-/// An agent's budget for acting on its own, per hour, and how much of it is spent.
+/// What an agent may do when something wakes it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+#[serde(rename_all = "snake_case")]
+pub enum ProactivityModeView {
+    /// Nothing: events wait in its box and cost no model call.
+    Off,
+    /// It looks and says what it would do; it changes nothing. The default.
+    Suggest,
+    /// A wake run has every tool.
+    Act,
+}
+
+/// How much an agent may do on its own, and how much of its budget for the day is spent.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[ts(export)]
 #[serde(rename_all = "camelCase")]
-pub struct AgentBudgetView {
-    /// The most wakes (one short model call each) per hour.
-    pub wakes_per_hour: i32,
-    /// The most runs a wake may start per hour.
-    pub proactive_runs_per_hour: i32,
-    /// Whether the agent has its own wake limit; `false` is the default.
-    pub wakes_custom: bool,
-    /// Whether the agent has its own run limit; `false` is the default.
-    pub runs_custom: bool,
-    /// Wakes spent in the last hour.
+pub struct AgentProactivityView {
+    /// The mode.
+    pub mode: ProactivityModeView,
+    /// The most wakes (one short model call each) per day.
+    pub max_wakes_per_day: i32,
+    /// The most runs a wake may start per day.
+    pub max_proactive_runs_per_day: i32,
+    /// Wakes spent in the last day.
     #[ts(type = "number")]
     pub wakes_used: i64,
-    /// Proactive runs spent in the last hour.
+    /// Proactive runs spent in the last day.
     #[ts(type = "number")]
     pub runs_used: i64,
 }
 
-/// `PUT /v1/agents/{id}/budget`. Each is 0 to 1000, or `null` for the default; 0 switches that
-/// kind off.
+/// `PUT /v1/agents/{id}/proactivity`. Each limit is 0 to 1000, or `null` for the default; 0
+/// switches that kind off.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[ts(export)]
 #[serde(rename_all = "camelCase")]
-pub struct SetAgentBudgetRequest {
-    /// Wakes per hour.
-    pub wakes_per_hour: Option<i32>,
-    /// Proactive runs per hour.
-    pub proactive_runs_per_hour: Option<i32>,
+pub struct SetAgentProactivityRequest {
+    /// The mode.
+    pub mode: ProactivityModeView,
+    /// Wakes per day.
+    pub max_wakes_per_day: Option<i32>,
+    /// Proactive runs per day.
+    pub max_proactive_runs_per_day: Option<i32>,
 }
 
 /// Which of the budget's limits held events back.
@@ -71,13 +84,13 @@ pub struct SetAgentBudgetRequest {
 #[ts(export)]
 #[serde(rename_all = "snake_case")]
 pub enum BudgetLimitView {
-    /// The wakes per hour.
+    /// The wakes per day.
     Wakes,
-    /// The runs per hour that wakes start.
+    /// The runs per day that wakes start.
     Runs,
 }
 
-/// An agent's events are being kept, not acted on, because its budget for the hour is spent.
+/// An agent's events are being kept, not acted on, because its budget for the day is spent.
 /// They stay in its box and are looked at when the budget has room again. Sent to the people
 /// who see the conversation of an event that waits.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -90,8 +103,8 @@ pub struct WakeHeldView {
     pub thread_id: String,
     /// The limit that was reached.
     pub limit: BudgetLimitView,
-    /// How many per hour it allows.
-    pub per_hour: i32,
+    /// How many per day it allows.
+    pub per_day: i32,
     /// How many events of this conversation wait.
     pub waiting: u32,
 }
