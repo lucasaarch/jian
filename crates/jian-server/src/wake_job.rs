@@ -5,6 +5,11 @@
 //! events route). [`tick`] looks for agents whose oldest waiting event has settled for
 //! [`SETTLE_MS`] and queues one job per agent, so a burst is one wake, never one per event.
 //!
+//! A schedule's firing is NOT one of these events. A schedule was made by a person, so it is
+//! authorised work and opens a run of its own (`schedule.run`, see [`crate::schedule_run_job`]):
+//! no `decide` call, no proactive budget, every tool in every mode. The wake neither reads nor
+//! consumes the inbox rows of kind `schedule`, and `off` does not stop them.
+//!
 //! The job reads the batch and makes ONE short model call (see [`jian_runtime::Decider`]).
 //! `ignore` consumes the batch. `act` opens a run with `origin = wake` in one thread, after a
 //! system message that says what woke it, and consumes that thread's events; the one active

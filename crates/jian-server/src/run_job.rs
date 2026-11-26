@@ -224,7 +224,8 @@ impl RunEvents for Listener<'_> {
 /// has every tool only when its agent is in `act` mode; otherwise it has the read-only ones, so
 /// what it says is a suggestion. This is a filter on the tool list, not a line in a prompt: a
 /// call to a tool outside it is refused as an unknown tool. What cannot be read is taken the
-/// strict way: the run gets less, never more.
+/// strict way: the run gets less, never more. A scheduled run (`origin = schedule`) is work a
+/// person authorised and keeps every tool in every mode, `off` included.
 async fn tools_for(db: &Database, ctx: &TenantCtx, run: &Run) -> jian_runtime::Tools {
     let depth = db
         .subagent_depth(ctx, &run.thread)
@@ -395,6 +396,29 @@ impl AgentRunner {
         if let Finish::Failed(why) = &finish {
             tell_the_agent_it_failed(db, tenant, run, why).await;
         }
+        if run.origin == RunOrigin::Schedule {
+            let error = match &finish {
+                Finish::Done => Some(None),
+                Finish::Failed(why) => Some(Some(why.as_str())),
+                Finish::Stopped => Some(Some("the run was stopped")),
+                Finish::Waiting => None,
+            };
+            if let Some(error) = error {
+                say_on_schedule(db, tenant, run, error).await;
+            }
+        }
+    }
+}
+
+/// A scheduled run's end goes to the schedule's `last_error` (cleared when it went well).
+async fn say_on_schedule(db: &Database, tenant: &TenantCtx, run: &Run, error: Option<&str>) {
+    let result = match db.run_schedule(tenant, &run.id).await {
+        Ok(Some(schedule)) => db.set_schedule_error(tenant, &schedule, error).await,
+        Ok(None) => Ok(()),
+        Err(error) => Err(error),
+    };
+    if let Err(error) = result {
+        tracing::warn!(%error, "could not record a scheduled run's end on its schedule");
     }
 }
 

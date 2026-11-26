@@ -7,12 +7,17 @@
 //! at that very time: a job that runs twice, or one that outlives a schedule that was edited or
 //! deleted, fires nothing. The queue forgets finished jobs, so that guard, not the key, is what
 //! holds forever.
+//!
+//! A schedule is work a person authorised, so a firing is not an event of the wake (see
+//! [`crate::wake_job`]): right after writing it the job queues `schedule.run`
+//! ([`crate::schedule_run_job`]), which opens the run. The same ticker also queues the run of
+//! any firing still waiting (its thread was busy, or the gateway stopped before the job ran).
 
 use std::sync::Arc;
 use std::time::Duration;
 
 use futures_util::future::BoxFuture;
-use jian_store::{Database, NewJob, ScheduleId, StoreError, TenantCtx};
+use jian_store::{Database, Fired, NewJob, ScheduleId, StoreError, TenantCtx};
 use serde_json::json;
 use tokio_util::sync::CancellationToken;
 
@@ -40,10 +45,28 @@ impl JobHandler for ScheduleFirer {
             let due = job.payload["dueMs"]
                 .as_i64()
                 .ok_or_else(|| JobError::permanent("the payload has no dueMs"))?;
-            db.fire_schedule(&tenant, &ScheduleId::new(id), due, now_ms())
+            let retry = |error: StoreError| JobError::retry(error.to_string());
+            let (schedule, now) = (ScheduleId::new(id), now_ms());
+            if db
+                .fire_schedule(&tenant, &schedule, due, now)
                 .await
-                .map(|_| ())
-                .map_err(|error| JobError::retry(error.to_string()))
+                .map_err(retry)?
+                == Fired::Stale
+            {
+                return Ok(());
+            }
+            // The firing counts from `now`, as the key of its first run job says; if this
+            // enqueue is lost, the ticker queues it.
+            if let Some(event) = db
+                .schedule_event_id(&tenant, &schedule, due)
+                .await
+                .map_err(retry)?
+            {
+                db.enqueue_job(&tenant, crate::schedule_run_job::job_for(&event, now))
+                    .await
+                    .map_err(retry)?;
+            }
+            Ok(())
         })
     }
 }
@@ -78,6 +101,10 @@ pub async fn run_ticker(db: Arc<Database>, closing: CancellationToken) {
         }
         if let Err(error) = tick(&db, now_ms()).await {
             tracing::warn!(%error, "looking for due schedules failed");
+        }
+        // Firings that have no run yet (a thread was busy) get theirs queued.
+        if let Err(error) = crate::schedule_run_job::dispatch_tick(&db, now_ms()).await {
+            tracing::warn!(%error, "looking for schedule firings to run failed");
         }
         // The same beat looks for agents whose events have settled.
         if let Err(error) = crate::wake_job::tick(&db, now_ms()).await {

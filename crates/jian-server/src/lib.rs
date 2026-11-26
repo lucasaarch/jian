@@ -90,6 +90,7 @@ mod rate;
 mod run_job;
 mod runs;
 mod schedule_job;
+mod schedule_run_job;
 mod schedules;
 mod sign_in;
 mod skills;
@@ -133,6 +134,7 @@ pub use public_url::{InvalidPublicUrl, PublicUrl};
 pub use rate::{Clock, Limit, ManualClock, MemoryRateLimiter, RateLimiter, SystemClock, Verdict};
 pub use run_job::{AgentRunner, RUN_KIND};
 pub use schedule_job::{SCHEDULE_FIRE_KIND, ScheduleFirer, run_ticker, tick};
+pub use schedule_run_job::{SCHEDULE_RUN_KIND, ScheduleRunner, dispatch_tick};
 pub use slots::{DrainReport, NoRunQueue, RunRequeue, SlotKeeper, SlotOwnership};
 pub use wake_job::{AGENT_WAKE_KIND, AgentWaker, NowMs, SETTLE_MS, tick as wake_tick};
 

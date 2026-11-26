@@ -1,8 +1,9 @@
 //! The agent's event box and its budget: what reaches an agent without a person asking, and how
 //! much of it may cost a model call or a run.
 //!
-//! The box is `agent_inbox` (schedules write it too). An event has a kind, an optional thread it
-//! is about, a JSON payload under [`MAX_EVENT_PAYLOAD_BYTES`], the time it counts from
+//! The box is `agent_inbox`. Schedule firings are rows of it too but are NOT events of the wake:
+//! a schedule is authorised work, so the wake never reads them (`schedule_runs` dispatches
+//! them straight to a run). An event has a kind, an optional thread it is about, a JSON payload under [`MAX_EVENT_PAYLOAD_BYTES`], the time it counts from
 //! (`available_ms`, which a `wake_later` sets in the future) and, once a wake took it, the time it
 //! was consumed. A source's own key makes a second delivery one row. Events are written in three
 //! ways: a group message that does not cite an agent writes one for it in the same transaction as
@@ -330,7 +331,7 @@ impl Database {
         let mut tx = self.begin(ctx).await?;
         let rows: Vec<EventRow> = sqlx::query_as(AssertSqlSafe(format!(
             "SELECT {EVENT_COLUMNS} FROM agent_inbox \
-             WHERE agent_id = $1 AND consumed_at IS NULL AND available_ms <= $2 \
+             WHERE agent_id = $1 AND consumed_at IS NULL AND kind <> 'schedule' AND available_ms <= $2 \
              ORDER BY seq LIMIT $3"
         )))
         .bind(agent.as_str())
@@ -379,7 +380,7 @@ impl Database {
             "SELECT i.agent_id, min(i.seq) FROM agent_inbox i \
              JOIN agents a ON a.id = i.agent_id \
              LEFT JOIN agent_config c ON c.agent_id = i.agent_id \
-             WHERE i.consumed_at IS NULL AND a.archived_at IS NULL \
+             WHERE i.consumed_at IS NULL AND i.kind <> 'schedule' AND a.archived_at IS NULL \
                AND COALESCE(c.proactivity, 'suggest') <> 'off' \
                AND i.available_ms + $2 <= $1 \
              GROUP BY i.agent_id ORDER BY min(i.seq)",

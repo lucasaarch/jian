@@ -13,6 +13,14 @@
 //! transaction: a repeating schedule gets its next time **after now** (a gateway that was off
 //! fires a missed schedule once, not once per missed time), a one-shot turns itself off.
 //!
+//! # A firing is authorised work
+//!
+//! A schedule was made by a person, so its firing is not proactivity: the inbox row is not read
+//! by the wake. It is the queue from which `schedule_runs` opens a run with `origin = schedule`
+//! (full tools in any mode, no proactive budget), in the schedule's thread or, without one, the
+//! direct chat with whoever made it. `last_run_at` is the time of the last firing; `last_error`
+//! says why a firing opened no run, or how its run ended.
+//!
 //! Time is injected as `now_ms` (Unix milliseconds), as in memories.
 //!
 //! [`due_schedules`]: Database::due_schedules

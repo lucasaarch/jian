@@ -80,6 +80,9 @@ pub enum RunOrigin {
     Subagent,
     /// The agent's inbox woke it.
     Wake,
+    /// A schedule a person made fired: authorised work, not proactivity. It has every tool in
+    /// any proactivity mode and spends none of the proactive budget.
+    Schedule,
 }
 
 impl RunOrigin {
@@ -91,13 +94,20 @@ impl RunOrigin {
             Self::Continue => "continue",
             Self::Subagent => "subagent",
             Self::Wake => "wake",
+            Self::Schedule => "schedule",
         }
     }
 
     fn parse(text: &str) -> Option<Self> {
-        [Self::Message, Self::Continue, Self::Subagent, Self::Wake]
-            .into_iter()
-            .find(|origin| origin.as_str() == text)
+        [
+            Self::Message,
+            Self::Continue,
+            Self::Subagent,
+            Self::Wake,
+            Self::Schedule,
+        ]
+        .into_iter()
+        .find(|origin| origin.as_str() == text)
     }
 }
 
@@ -146,7 +156,7 @@ pub struct Run {
 }
 
 #[derive(sqlx::FromRow)]
-struct RunRow {
+pub(crate) struct RunRow {
     id: String,
     seq: i64,
     thread_id: String,
@@ -168,7 +178,7 @@ struct RunRow {
     finished_at: Option<String>,
 }
 
-const RUN_COLUMNS: &str = concat!(
+pub(crate) const RUN_COLUMNS: &str = concat!(
     "id, seq, thread_id, agent_id, started_by, trigger_seq, seen_seq, state, steps, tokens, \
      used_machine, machine_ms, error, stop_requested, origin, resume::text AS resume, ",
     iso!("created_at"),
@@ -210,7 +220,7 @@ impl TryFrom<RunRow> for Run {
 }
 
 /// The states in which a run still counts as the thread's active one.
-const ACTIVE: &str = "('queued', 'running', 'waiting')";
+pub(crate) const ACTIVE: &str = "('queued', 'running', 'waiting')";
 /// The longest reason or error kept, in characters.
 const MAX_REASON: usize = 500;
 

@@ -30,8 +30,8 @@ use jian_server::{
     AGENT_WAKE_KIND, AccountModels, AgentMachines, AgentRunner, AgentWaker, AppState, EventBus,
     INVITE_SEND_KIND, InviteSender, JobOptions, JobRegistry, JobRequeue, JobRunner,
     LOGIN_LINK_SEND_KIND, LlmAccess, LoginLinkSender, MachineHub, MemoryEventBus, ModelSource,
-    PublicUrl, RUN_KIND, SCHEDULE_FIRE_KIND, ScheduleFirer, Settings, SlotKeeper,
-    THREAD_COMPACT_KIND, ThreadCompactor,
+    PublicUrl, RUN_KIND, SCHEDULE_FIRE_KIND, SCHEDULE_RUN_KIND, ScheduleFirer, ScheduleRunner,
+    Settings, SlotKeeper, THREAD_COMPACT_KIND, ThreadCompactor,
 };
 use jian_store::embedded::EmbeddedConfig;
 use jian_store::secrets::{LocalKeyring, MasterKeys as _};
@@ -504,6 +504,10 @@ fn job_registry(
             Arc::new(LoginLinkSender::new(settings)),
         )
         .register(SCHEDULE_FIRE_KIND, Arc::new(ScheduleFirer))
+        .register(
+            SCHEDULE_RUN_KIND,
+            Arc::new(ScheduleRunner::new(events.clone())),
+        )
         .register(
             AGENT_WAKE_KIND,
             Arc::new(AgentWaker::new(models.clone(), events.clone())),

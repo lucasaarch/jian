@@ -19,6 +19,10 @@ pub const JOB_KINDS: &[(&str, &str)] = &[
         "jian-server/tests/gateway/schedules.rs: a_schedule_fires_into_its_agents_inbox_once_and_never_into_another_tenants",
     ),
     (
+        "schedule.run",
+        "jian-server/tests/schedule_runs.rs: a_schedule_of_one_tenant_never_opens_a_run_in_another",
+    ),
+    (
         "thread.compact",
         "jian-server/tests/compact_job.rs: a_compaction_job_runs_as_its_own_tenant_and_a_tenant_over_its_limit_costs_the_provider_nothing",
     ),
