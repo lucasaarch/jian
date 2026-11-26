@@ -15,6 +15,8 @@ use jian_store::{AgentId, Database, TenantCtx, ThreadId};
 use serde_json::Value;
 use tokio::sync::OnceCell;
 
+use crate::run::RunEvents;
+
 /// The machine of one run, woken the first time a tool asks for it and never twice.
 ///
 /// It lives outside the loop's future, so whoever drives the loop can still read how long the
@@ -95,6 +97,8 @@ pub struct ToolEnv<'a> {
     pub skills: &'a RunSkills,
     /// The run's machine.
     pub machine: &'a MachineSlot,
+    /// Whoever listens to the run, for a tool that makes something the person should see now.
+    pub events: &'a dyn RunEvents,
     /// Now, in Unix milliseconds.
     pub now_ms: i64,
 }

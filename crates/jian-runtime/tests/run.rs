@@ -8,18 +8,20 @@ use std::sync::{Arc, Mutex};
 
 use futures_util::future::BoxFuture;
 use jian_core::{
-    MAX_TOOL_RESULT_BYTES, MessagePart, MessageParts, ProviderKind, ThreadKind, Visibility,
+    ArtifactKind, MAX_TOOL_RESULT_BYTES, MessagePart, MessageParts, ProviderKind, ThreadKind,
+    Visibility,
 };
 use jian_exec::{Executor, Scope};
 use jian_llm::Part;
 use jian_runtime::{
-    MachineSlot, ModelRef, OBJECTIVE_TOOLS, Outcome, RunConfig, RunEvent, RunEvents, Runner, Tools,
-    standard_tools, system_now_ms,
+    ArtifactEvent, MachineSlot, ModelRef, OBJECTIVE_TOOLS, Outcome, RunConfig, RunEvent, RunEvents,
+    Runner, Tools, standard_tools, system_now_ms,
 };
 use jian_skills::Catalog;
 use jian_store::{
-    AgentId, Message, NewAgent, NewMessage, NewThread, Quotas, Run, RunOrigin, ThreadId, Viewer,
-    Window,
+    AgentId, Artifact, ArtifactActor, ArtifactAuthor, ArtifactFilter, ArtifactId, ArtifactVersion,
+    Message, NewAgent, NewArtifact, NewMessage, NewProject, NewThread, Quotas, Run, RunOrigin,
+    ThreadId, Viewer, Window,
 };
 use jian_testkit::{
     FakeExecutor, FakeMachineScript, FakeProvider, Gate, Script, TestDb, TwoTenants, call, say,
@@ -254,7 +256,10 @@ async fn a_chat_is_answered_in_the_thread_with_the_tools_and_the_instructions_in
             "block_objective",
             "spawn_subagent",
             "stop_subagent",
-            "wake_me_later"
+            "wake_me_later",
+            "create_artifact",
+            "update_artifact",
+            "read_artifact"
         ]
     );
     assert!(
@@ -555,4 +560,206 @@ async fn crossing_the_limit_lets_the_running_tool_finish_and_refuses_the_next() 
     // The time is never written back smaller: a resumed run adds to what it spent before.
     assert!(the_run(&set).await.machine_ms >= 60_000);
     set.test.stop().await;
+}
+
+async fn made_by_the_run(set: &Setup, thread: &ThreadId, title: &str, content: &str) -> Artifact {
+    set.test
+        .db
+        .create_artifact(
+            &set.side.ctx,
+            ArtifactActor::Run {
+                thread,
+                agent: &set.agent,
+            },
+            &NewArtifact {
+                kind: ArtifactKind::Markdown,
+                title: title.to_owned(),
+                content: content.to_owned(),
+                thread: None,
+                project: None,
+            },
+        )
+        .await
+        .unwrap()
+        .unwrap()
+        .0
+}
+
+#[tokio::test]
+async fn an_artifact_made_by_a_run_is_the_agents_in_its_thread_and_project_and_announced() {
+    let set = setup().await;
+    let project = set
+        .test
+        .db
+        .create_project(&set.side.ctx, &set.viewer, &NewProject::named("site"))
+        .await
+        .unwrap();
+    set.test
+        .db
+        .set_thread_project(&set.side.ctx, &set.viewer, &set.thread, Some(&project.id))
+        .await
+        .unwrap()
+        .unwrap();
+    let turns = vec![
+        call(
+            "a1",
+            "create_artifact",
+            json!({ "kind": "markdown", "title": "Plan", "content": "# Plan" }),
+        ),
+        call(
+            "a2",
+            "create_artifact",
+            json!({ "kind": "whiteboard", "title": "Nope", "content": "x" }),
+        ),
+        say("made it"),
+    ];
+    let parts = Parts::new(&set, turns, FakeMachineScript::default());
+    let slot = parts.slot();
+    assert_eq!(parts.run(&slot).await, Outcome::Done);
+
+    let seen = set
+        .test
+        .db
+        .list_artifacts(
+            &set.side.ctx,
+            ArtifactActor::Member(&set.viewer),
+            &ArtifactFilter::default(),
+            None,
+            10,
+        )
+        .await
+        .unwrap()
+        .items;
+    assert_eq!(seen.len(), 1);
+    let made = &seen[0];
+    assert_eq!(
+        (made.kind, made.title.as_str()),
+        (ArtifactKind::Markdown, "Plan")
+    );
+    assert_eq!(made.thread.as_ref(), Some(&set.thread));
+    assert_eq!(made.project.as_ref(), Some(&project.id));
+    assert_eq!(made.created_by, ArtifactAuthor::Agent(set.agent.clone()));
+    // No machine was needed, and a kind the core does not know is the model's error to read.
+    assert!(parts.executor.commands().is_empty());
+    let results = tool_results(&thread_parts(&set).await);
+    assert!(
+        !results[0].1 && results[0].0.contains(&made.id.to_string()),
+        "{results:?}"
+    );
+    assert!(
+        results[1].1 && results[1].0.contains("`kind` is"),
+        "{results:?}"
+    );
+    // The listener heard it being written, and then what was saved.
+    let written: Vec<ArtifactEvent> = parts
+        .events
+        .0
+        .lock()
+        .unwrap()
+        .iter()
+        .filter_map(|e| match e {
+            RunEvent::Artifact(event) => Some(event.clone()),
+            _ => None,
+        })
+        .collect();
+    assert!(matches!(
+        written.as_slice(),
+        [
+            ArtifactEvent::Writing { call_id, chars: 6, .. },
+            ArtifactEvent::Created(artifact)
+        ] if call_id == "a1" && artifact.id == made.id
+    ));
+    set.test.stop().await;
+}
+
+async fn latest(set: &Setup, id: &ArtifactId) -> ArtifactVersion {
+    set.test
+        .db
+        .artifact_version(&set.side.ctx, ArtifactActor::Member(&set.viewer), id, None)
+        .await
+        .unwrap()
+        .unwrap()
+}
+
+#[tokio::test]
+async fn a_run_edits_and_reads_what_its_thread_has_and_nothing_of_another_thread() {
+    let set = setup().await;
+    let mine = made_by_the_run(&set, &set.thread, "Mine", "one two two").await;
+    let other_thread = set
+        .test
+        .db
+        .create_thread(
+            &set.side.ctx,
+            &set.viewer,
+            &NewThread {
+                kind: ThreadKind::Dm,
+                title: None,
+                members: Vec::new(),
+                agents: vec![set.agent.clone()],
+            },
+        )
+        .await
+        .unwrap()
+        .unwrap()
+        .id;
+    let theirs = made_by_the_run(&set, &other_thread, "Theirs", "secret").await;
+    let swap = |find: &str, replace: &str| json!([{ "find": find, "replace": replace }]);
+    let turns = vec![
+        // `two` occurs twice, so nothing changes.
+        call(
+            "u1",
+            "update_artifact",
+            json!({ "id": mine.id.to_string(), "edits": swap("two", "2") }),
+        ),
+        call(
+            "u2",
+            "update_artifact",
+            json!({ "id": mine.id.to_string(), "edits": swap("one", "1") }),
+        ),
+        call("r1", "read_artifact", json!({ "id": mine.id.to_string() })),
+        call(
+            "r2",
+            "read_artifact",
+            json!({ "id": mine.id.to_string(), "version": 1 }),
+        ),
+        call(
+            "r3",
+            "read_artifact",
+            json!({ "id": theirs.id.to_string() }),
+        ),
+        call(
+            "u3",
+            "update_artifact",
+            json!({ "id": theirs.id.to_string(), "edits": swap("secret", "x") }),
+        ),
+        say("done"),
+    ];
+    let parts = Parts::new(&set, turns, FakeMachineScript::default());
+    let slot = parts.slot();
+    assert_eq!(parts.run(&slot).await, Outcome::Done);
+
+    let results = tool_results(&thread_parts(&set).await);
+    assert!(results[0].1, "{results:?}");
+    assert!(
+        !results[1].1 && results[1].0.contains("version 2"),
+        "{results:?}"
+    );
+    assert_eq!(results[2], ("1 two two".to_owned(), false));
+    assert_eq!(results[3], ("one two two".to_owned(), false));
+    assert!(
+        results[4].1 && !results[4].0.contains("secret"),
+        "{results:?}"
+    );
+    assert!(results[5].1, "{results:?}");
+    // Only the good edit wrote a version, and the other thread's artifact is as it was.
+    assert_eq!(latest(&set, &mine.id).await.version, 2);
+    assert_eq!(latest(&set, &theirs.id).await.content, "secret");
+    set.test.stop().await;
+}
+
+#[test]
+fn a_run_that_may_only_suggest_keeps_read_artifact_and_loses_the_other_two() {
+    let names = standard_tools().read_only().names();
+    assert!(names.contains(&"read_artifact"));
+    assert!(!names.contains(&"create_artifact") && !names.contains(&"update_artifact"));
 }

@@ -8,6 +8,7 @@ use jian_llm::ToolSpec;
 use jian_store::MemoryWrite;
 use serde_json::{Value, json};
 
+use crate::artifact_tools::artifact_tools;
 use crate::objective_tools::objective_tools;
 use crate::subagent_tools::subagent_tools;
 use crate::tool::{Tool, ToolEnv, Tools};
@@ -32,6 +33,7 @@ pub fn standard_tools() -> Tools {
         .with_all(objective_tools())
         .with_all(subagent_tools())
         .with_all(wake_tools())
+        .with_all(artifact_tools())
 }
 
 fn spec(name: &str, description: &str, schema: Value) -> ToolSpec {

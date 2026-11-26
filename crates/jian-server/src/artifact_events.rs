@@ -110,9 +110,19 @@ pub(crate) async fn send(
 
 /// `artifact.created` to everyone who sees the artifact.
 pub(crate) async fn announce_created(app: &AppState, ctx: &TenantCtx, artifact: &Artifact) {
-    let to = audience(&app.db, ctx, artifact).await;
+    announce_created_with(&app.db, app.events.as_ref(), ctx, artifact).await;
+}
+
+/// [`announce_created`] for what holds a database and a bus but no [`AppState`], as a run does.
+pub(crate) async fn announce_created_with(
+    db: &Database,
+    events: &dyn EventBus,
+    ctx: &TenantCtx,
+    artifact: &Artifact,
+) {
+    let to = audience(db, ctx, artifact).await;
     let payload = DeltaPayload::ArtifactCreated(artifact_view(artifact));
-    send(app.events.as_ref(), ctx, &to, &payload).await;
+    send(events, ctx, &to, &payload).await;
 }
 
 /// `artifact.updated` after a change of title, folder or pin.

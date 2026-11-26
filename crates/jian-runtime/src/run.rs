@@ -34,6 +34,7 @@ use jian_store::{
     RunOrigin, RunState, StoreError, Subagent, TenantCtx, TokenCounts,
 };
 
+use crate::artifact_tools::ArtifactEvent;
 use crate::context::{COMPACT_AT_PERCENT, StoreHistory, build_context};
 use crate::objective_tools::is_objective_tool;
 use crate::subagent_tools::{SPAWN, queue_resume};
@@ -93,6 +94,8 @@ pub enum RunEvent {
     Objective(Objective),
     /// The run started a subagent: its state now.
     Subagent(Subagent),
+    /// An artifact tool wrote or is writing an artifact of the run's thread.
+    Artifact(ArtifactEvent),
 }
 
 /// Whoever listens to a run. It must not fail the run: a listener that cannot deliver drops
@@ -664,6 +667,7 @@ impl Runner<'_> {
             call_id: &call.id,
             skills,
             machine: self.machine,
+            events: self.events,
             now_ms: (self.now)(),
         };
         let result = tool.settle(&call.input, &env).await;

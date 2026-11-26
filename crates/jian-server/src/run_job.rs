@@ -23,12 +23,13 @@ use std::time::Duration;
 
 use futures_util::future::BoxFuture;
 use jian_exec::{Executor, Scope};
+use jian_protocol::artifacts::ArtifactWriting;
 use jian_protocol::client::DeltaPayload;
 use jian_protocol::runs::RunDelta;
 pub use jian_runtime::RUN_KIND;
 use jian_runtime::{
-    MAX_SUBAGENT_DEPTH, MachineSlot, ModelRef, OBJECTIVE_TOOLS, Outcome, RunConfig, RunEvent,
-    RunEvents, Runner, SUBAGENT_TOOLS, standard_tools, system_now_ms,
+    ArtifactEvent, MAX_SUBAGENT_DEPTH, MachineSlot, ModelRef, OBJECTIVE_TOOLS, Outcome, RunConfig,
+    RunEvent, RunEvents, Runner, SUBAGENT_TOOLS, standard_tools, system_now_ms,
 };
 use jian_skills::Catalog;
 use jian_store::{
@@ -38,6 +39,7 @@ use jian_store::{
 
 use serde_json::json;
 
+use crate::artifact_events::{announce_created_with, announce_version};
 use crate::auto_continue::{after_run, still_wanted};
 use crate::events::EventBus;
 use crate::guard::catching;
@@ -189,6 +191,37 @@ impl Listener<'_> {
     }
 }
 
+impl Listener<'_> {
+    /// What an artifact tool did: the writing goes to the thread's audience, what was saved to
+    /// whoever sees the artifact.
+    async fn artifact(&self, event: ArtifactEvent) {
+        match event {
+            ArtifactEvent::Writing {
+                call_id,
+                kind,
+                title,
+                chars,
+            } => {
+                let writing = ArtifactWriting {
+                    run_id: self.run.id.clone(),
+                    thread_id: self.run.thread.to_string(),
+                    call_id,
+                    kind,
+                    title,
+                    chars: u32::try_from(chars).unwrap_or(u32::MAX),
+                };
+                self.send(DeltaPayload::ArtifactWriting(writing)).await;
+            }
+            ArtifactEvent::Created(artifact) => {
+                announce_created_with(self.db, self.events, self.ctx, &artifact).await;
+            }
+            ArtifactEvent::Version { artifact, version } => {
+                announce_version(self.db, self.events, self.ctx, &artifact, &version).await;
+            }
+        }
+    }
+}
+
 impl RunEvents for Listener<'_> {
     fn emit(&self, event: RunEvent) -> BoxFuture<'_, ()> {
         Box::pin(async move {
@@ -214,6 +247,7 @@ impl RunEvents for Listener<'_> {
                     self.send(DeltaPayload::SubagentUpdated(subagent_view(&sub)))
                         .await;
                 }
+                RunEvent::Artifact(event) => self.artifact(event).await,
             }
         })
     }

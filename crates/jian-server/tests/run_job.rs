@@ -313,6 +313,74 @@ async fn a_member_hears_the_run_write_and_the_message_that_holds_it() {
 }
 
 #[tokio::test]
+async fn a_member_hears_an_artifact_being_written_and_then_made() {
+    let test = TestDb::start(env!("CARGO_TARGET_TMPDIR")).await;
+    let a = TwoTenants::seed(&test.db).await.a;
+    let w = world(&test, &a).await;
+    let mut models = Source::default();
+    let turns = vec![
+        call(
+            "a1",
+            "create_artifact",
+            json!({ "kind": "html", "title": "Page", "content": "<p>hi</p>" }),
+        ),
+        say("made it"),
+    ];
+    let chat: Arc<dyn Provider> = Arc::new(Shared(FakeProvider::new(turns)));
+    models.0.insert(a.id.to_string(), chat);
+    let bus = Arc::new(MemoryEventBus::new());
+    let handler = runner(
+        models,
+        FakeExecutor::new(FakeMachineScript::default()),
+        bus.clone(),
+    );
+    let account = Some(a.admin.account_id.as_str());
+    let mut threads = bus
+        .subscribe_scoped(&a.id, Topic::Threads, account, None)
+        .await;
+    let mut artifacts = bus
+        .subscribe_scoped(&a.id, Topic::Artifacts, account, None)
+        .await;
+
+    handler
+        .handle(context(&test, &a, &w.run).await)
+        .await
+        .unwrap();
+    assert_eq!(state(&test, &a, &w.run).await.state, RunState::Done);
+    // The writing goes to the thread's audience, before what was saved.
+    let writing: Vec<_> = drain(&mut threads)
+        .into_iter()
+        .filter_map(|d| match d.payload {
+            DeltaPayload::ArtifactWriting(writing) => Some(writing),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(writing.len(), 1);
+    assert_eq!(writing[0].thread_id, w.thread.to_string());
+    assert_eq!(
+        (
+            writing[0].kind.as_str(),
+            writing[0].title.as_str(),
+            writing[0].chars
+        ),
+        ("html", "Page", 9)
+    );
+    let made: Vec<_> = drain(&mut artifacts)
+        .into_iter()
+        .filter_map(|d| match d.payload {
+            DeltaPayload::ArtifactCreated(view) => Some(view),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(made.len(), 1);
+    assert_eq!(
+        made[0].thread_id.as_deref(),
+        Some(w.thread.to_string().as_str())
+    );
+    test.stop().await;
+}
+
+#[tokio::test]
 async fn a_stop_cuts_the_stream_and_the_running_tool() {
     let test = TestDb::start(env!("CARGO_TARGET_TMPDIR")).await;
     let a = TwoTenants::seed(&test.db).await.a;

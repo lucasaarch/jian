@@ -9,6 +9,7 @@
 //! compaction that keeps it small, [`Compactor`]), the tools ([`Tool`], [`standard_tools`]) and
 //! the loop itself ([`Runner`]).
 
+mod artifact_tools;
 mod compact;
 mod context;
 mod objective_tools;
@@ -19,6 +20,7 @@ mod tools;
 mod wake;
 mod wake_tools;
 
+pub use artifact_tools::{ARTIFACT_TOOLS, ArtifactEvent};
 pub use compact::{
     CLAIM_TTL_MS, CompactError, Compacted, Compactor, THREAD_COMPACT_KIND, queue_compaction_if_due,
 };

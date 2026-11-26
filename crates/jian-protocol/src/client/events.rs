@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use super::MachineSummary;
-use crate::artifacts::{ArtifactGone, ArtifactVersioned, ArtifactView};
+use crate::artifacts::{ArtifactGone, ArtifactVersioned, ArtifactView, ArtifactWriting};
 use crate::objectives::ObjectiveView;
 use crate::projects::{ProjectFileChange, ProjectGone, ProjectThreadChange, ProjectView};
 use crate::runs::{RunDelta, RunView};
@@ -101,6 +101,10 @@ pub enum DeltaPayload {
     /// An artifact was deleted, or the client no longer sees it.
     #[serde(rename = "artifact.deleted")]
     ArtifactDeleted(ArtifactGone),
+    /// An agent is writing an artifact in a thread of the client. Sent to the thread's audience,
+    /// before the artifact exists; not replayed.
+    #[serde(rename = "artifact.writing")]
+    ArtifactWriting(ArtifactWriting),
     /// A library skill was made, changed or imported: its state now.
     #[serde(rename = "skill.updated")]
     SkillUpdated(SkillSummary),

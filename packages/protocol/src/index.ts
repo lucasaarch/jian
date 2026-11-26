@@ -24,6 +24,7 @@ export type { ArtifactVersionView } from "./generated/ArtifactVersionView";
 export type { ArtifactVersioned } from "./generated/ArtifactVersioned";
 export type { ArtifactVersionsList } from "./generated/ArtifactVersionsList";
 export type { ArtifactView } from "./generated/ArtifactView";
+export type { ArtifactWriting } from "./generated/ArtifactWriting";
 export type { ArtifactsPage } from "./generated/ArtifactsPage";
 export type { AttachRepositoryRequest } from "./generated/AttachRepositoryRequest";
 export type { AuthorView } from "./generated/AuthorView";

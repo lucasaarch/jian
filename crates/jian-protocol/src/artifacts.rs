@@ -228,6 +228,27 @@ pub struct ArtifactVersioned {
     pub author: ArtifactAuthorView,
 }
 
+/// An agent is writing an artifact in a run of a thread. The model hands a tool call over whole,
+/// so this comes once per call, just before the artifact is saved; `artifact.created` or
+/// `artifact.version` follows. Not replayed: a client that missed it reads the artifact.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+#[serde(rename_all = "camelCase")]
+pub struct ArtifactWriting {
+    /// The run.
+    pub run_id: String,
+    /// The thread it runs in.
+    pub thread_id: String,
+    /// The model's id for the tool call, to tell two writings of one run apart.
+    pub call_id: String,
+    /// What it is drawn as.
+    pub kind: String,
+    /// Its title.
+    pub title: String,
+    /// How long the text being written is, in characters.
+    pub chars: u32,
+}
+
 /// An artifact was deleted, or the client no longer sees it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[ts(export)]
