@@ -449,8 +449,7 @@ impl Runner<'_> {
                 &call.id,
                 &call.name,
                 &call.input.to_string(),
-                ttl,
-                now,
+                now.saturating_add(ttl),
             )
             .await?;
         self.db

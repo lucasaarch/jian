@@ -26,9 +26,10 @@ use std::time::{Duration, Instant};
 use anyhow::Context as _;
 use clap::{Parser, Subcommand};
 use jian_server::{
-    AppState, INVITE_SEND_KIND, InviteSender, JobOptions, JobRegistry, JobRequeue, JobRunner,
-    LOGIN_LINK_SEND_KIND, LoginLinkSender, Model, ModelSource, PublicUrl, SCHEDULE_FIRE_KIND,
-    ScheduleFirer, Settings, SlotKeeper, THREAD_COMPACT_KIND, ThreadCompactor,
+    AccountModels, AgentRunner, AppState, EventBus, INVITE_SEND_KIND, InviteSender, JobOptions,
+    JobRegistry, JobRequeue, JobRunner, LOGIN_LINK_SEND_KIND, LlmAccess, LoginLinkSender,
+    MemoryEventBus, ModelSource, PublicUrl, RUN_KIND, SCHEDULE_FIRE_KIND, ScheduleFirer, Settings,
+    SlotKeeper, THREAD_COMPACT_KIND, ThreadCompactor,
 };
 use jian_store::embedded::EmbeddedConfig;
 use jian_store::secrets::{LocalKeyring, MasterKeys as _};
@@ -465,18 +466,12 @@ async fn import_command(database: &Database, cli: &Cli, args: ImportArgs) -> any
     import_cli::run(database, &ctx, &cli.import, &cli.data_dir()?, args).await
 }
 
-/// No tenant has a model to summarize with yet: they come from the provider accounts when the
-/// agent loop lands. Until then a `thread.compact` job ends as dead, with that reason.
-struct NoModels;
-
-impl ModelSource for NoModels {
-    fn model(&self, _: &TenantCtx) -> futures_util::future::BoxFuture<'_, Option<Model>> {
-        Box::pin(async { None })
-    }
-}
-
 /// Every job kind this binary runs.
-fn job_registry(settings: &Settings) -> JobRegistry {
+fn job_registry(
+    settings: &Settings,
+    models: &Arc<dyn ModelSource>,
+    events: &Arc<dyn EventBus>,
+) -> JobRegistry {
     debug_jobs::registry()
         .register(INVITE_SEND_KIND, Arc::new(InviteSender::new(settings)))
         .register(
@@ -486,7 +481,17 @@ fn job_registry(settings: &Settings) -> JobRegistry {
         .register(SCHEDULE_FIRE_KIND, Arc::new(ScheduleFirer))
         .register(
             THREAD_COMPACT_KIND,
-            Arc::new(ThreadCompactor::new(Arc::new(NoModels))),
+            Arc::new(ThreadCompactor::new(models.clone())),
+        )
+        // No hub-backed machine yet: a run that needs one fails that tool call, and the light
+        // tools still work.
+        .register(
+            RUN_KIND,
+            Arc::new(AgentRunner::new(
+                models.clone(),
+                Arc::new(jian_exec::NoMachine),
+                events.clone(),
+            )),
         )
 }
 
@@ -537,11 +542,14 @@ async fn serve(
         "this instance serves its slots"
     );
     // After the slots: the runner takes jobs only from slots this instance holds.
+    let llm = LlmAccess::default();
+    let events: Arc<dyn EventBus> = Arc::new(MemoryEventBus::new());
+    let models: Arc<dyn ModelSource> = Arc::new(AccountModels::new(database.clone(), llm.clone()));
     let runner = JobRunner::start(
         database.clone(),
         keeper.instance().clone(),
         slots.clone(),
-        job_registry(&settings),
+        job_registry(&settings, &models, &events),
         JobOptions::default(),
     )
     .await;
@@ -550,7 +558,11 @@ async fn serve(
     // holds the database, which must be closable after the drain.
     let ticking = CancellationToken::new();
     let ticker = tokio::spawn(jian_server::run_ticker(database.clone(), ticking.clone()));
-    let state = AppState::new(database.clone(), slots, closing.clone(), settings);
+    let mut state = AppState::new(database.clone(), slots, closing.clone(), settings);
+    // The runs' deltas and the routes' must meet on one bus, and the models on one set of
+    // breakers.
+    state.events = events;
+    state.llm = llm;
     let (stop, stopped) = oneshot::channel::<()>();
     let mut server = tokio::spawn(
         // Connect info is how the server tells callers apart for its rate limit.

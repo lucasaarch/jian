@@ -5,7 +5,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use jian_core::{ThreadKind, Visibility};
-use jian_store::{ApprovalState, NewAgent, NewThread, RunState, Viewer};
+use jian_store::{Answer, ApprovalState, NewAgent, NewThread, RunState, Viewer};
 use jian_testkit::{Side, TestDb, TwoTenants};
 
 async fn thread_and_agent(
@@ -121,15 +121,20 @@ async fn an_approval_is_answered_once_before_it_expires_and_another_tenant_sees_
 
     let ask = |call: &'static str, ttl: i64| {
         test.db
-            .create_approval(&a.ctx, &run.id, call, "shell", "{}", ttl, 1_000)
+            .create_approval(&a.ctx, &run.id, call, "shell", "{}", 1_000 + ttl)
     };
     let first = ask("c1", 60_000).await.unwrap();
     // Asking again for the same call is the same approval.
     assert_eq!(ask("c1", 60_000).await.unwrap().id, first.id);
 
     let answer = |approve: bool, now: i64| {
-        test.db
-            .decide_approval(&a.ctx, &thread, &run.id, approve, &by, None, now)
+        let answer = Answer {
+            approve,
+            by: &by,
+            reason: None,
+        };
+        let (db, ctx, thread, run) = (&test.db, &a.ctx, &thread, &run.id);
+        async move { db.decide_approval(ctx, thread, run, &answer, now).await }
     };
     assert!(answer(true, 2_000).await.unwrap().is_some());
     assert!(answer(false, 2_000).await.unwrap().is_none());

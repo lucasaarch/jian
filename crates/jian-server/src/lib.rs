@@ -54,6 +54,7 @@
 //! The [`EventBus`] and the [`RateLimiter`] keep their state in this process. Both are traits so a
 //! gateway with several replicas can put a shared store behind them without touching a handler.
 
+mod account_models;
 mod accounts;
 mod agents;
 mod auth;
@@ -80,6 +81,8 @@ mod projects;
 mod providers;
 mod public_url;
 mod rate;
+mod run_job;
+mod runs;
 mod schedule_job;
 mod schedules;
 mod sign_in;
@@ -105,6 +108,7 @@ use jian_store::{Database, Subject};
 use serde::Serialize;
 use tokio_util::sync::CancellationToken;
 
+pub use account_models::AccountModels;
 pub use auth::{AuthRejection, Principal};
 pub use compact_job::{Model, ModelSource, ThreadCompactor};
 pub use events::{BUFFER_DELTAS, EventBus, MemoryEventBus, Scope, Subscription};
@@ -117,6 +121,7 @@ pub use login_link_job::{LOGIN_LINK_SEND_KIND, LoginLinkSender};
 pub use mail::{DeployMail, MailConfig};
 pub use public_url::{InvalidPublicUrl, PublicUrl};
 pub use rate::{Clock, Limit, ManualClock, MemoryRateLimiter, RateLimiter, SystemClock, Verdict};
+pub use run_job::{AgentRunner, RUN_KIND};
 pub use schedule_job::{SCHEDULE_FIRE_KIND, ScheduleFirer, run_ticker, tick};
 pub use slots::{DrainReport, NoRunQueue, RunRequeue, SlotKeeper, SlotOwnership};
 
@@ -210,6 +215,10 @@ pub const ROUTES: &[&str] = &[
     "POST /v1/threads/{id}/participants (a member in it)",
     "DELETE /v1/threads/{id}/participants/{kind}/{who} (a member in it)",
     "GET /v1/threads/{id}/messages (a member who sees it)",
+    "GET /v1/threads/{id}/runs (a member who sees it)",
+    "POST /v1/threads/{id}/runs (a member of the thread)",
+    "POST /v1/threads/{id}/runs/{run_id}/stop (a member of the thread)",
+    "POST /v1/threads/{id}/runs/{run_id}/approval (a member of the thread)",
     "POST /v1/threads/{id}/messages (a member in it)",
     "PATCH /v1/threads/{id}/messages/{message_id} (its author)",
     "DELETE /v1/threads/{id}/messages/{message_id} (its author)",
@@ -464,6 +473,12 @@ pub fn router_with(state: AppState, extra: Router<AppState>) -> Router {
         .route("/v1/grants/revoke", post(agents::revoke))
         .route("/v1/threads", get(threads::list).post(threads::create))
         .route("/v1/threads/{id}", get(threads::get))
+        .route("/v1/threads/{id}/runs", get(runs::list).post(runs::start))
+        .route("/v1/threads/{id}/runs/{run_id}/stop", post(runs::stop))
+        .route(
+            "/v1/threads/{id}/runs/{run_id}/approval",
+            post(runs::approval),
+        )
         .route(
             "/v1/threads/{id}/participants",
             get(threads::participants).post(threads::add),

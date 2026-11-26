@@ -33,6 +33,7 @@ const INVITES_FILE: &str = include_str!("invites.rs");
 const PROVIDERS_FILE: &str = include_str!("providers.rs");
 const MEMORIES_FILE: &str = include_str!("memories.rs");
 const PROJECTS_FILE: &str = include_str!("projects.rs");
+const RUNS_FILE: &str = include_str!("runs.rs");
 const SCHEDULES_FILE: &str = include_str!("schedules.rs");
 const SIGN_IN_FILE: &str = include_str!("sign_in.rs");
 const SKILLS_FILE: &str = include_str!("skills.rs");
@@ -51,6 +52,7 @@ fn is_a_test_here(name: &str) -> bool {
         || PROVIDERS_FILE.contains(&declared)
         || MEMORIES_FILE.contains(&declared)
         || PROJECTS_FILE.contains(&declared)
+        || RUNS_FILE.contains(&declared)
         || SCHEDULES_FILE.contains(&declared)
         || SIGN_IN_FILE.contains(&declared)
         || SKILLS_FILE.contains(&declared)
@@ -172,6 +174,10 @@ const ROUTE_TESTS: &[(&str, &str)] = &[
         "DELETE /v1/threads/{id}/messages/{message_id}",
         THREADS_TEST,
     ),
+    ("GET /v1/threads/{id}/runs", RUNS_TEST),
+    ("POST /v1/threads/{id}/runs", RUNS_TEST),
+    ("POST /v1/threads/{id}/runs/{run_id}/stop", RUNS_TEST),
+    ("POST /v1/threads/{id}/runs/{run_id}/approval", RUNS_TEST),
     (
         "GET /v1/machines/connect",
         "a_worker_of_one_tenant_neither_gets_nor_answers_the_others_tasks",
@@ -205,6 +211,8 @@ const SCHEDULES_TEST: &str =
 const USAGE_TEST: &str = "usage_is_each_workspaces_own_and_a_workspace_over_its_limit_is_refused";
 
 /// The test that shows tenant B reaches no agent, thread or message of tenant A.
+const RUNS_TEST: &str =
+    "a_thread_has_one_active_run_per_agent_and_only_its_members_start_stop_and_answer_it";
 const THREADS_TEST: &str = "agents_threads_and_messages_of_the_other_tenant_are_out_of_reach";
 
 /// The test that shows tenant B reaches no model provider account of tenant A, and no key.

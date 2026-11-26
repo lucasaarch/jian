@@ -53,6 +53,7 @@ impl ModelSource for Source {
                 provider,
                 kind: ProviderKind::Anthropic,
                 model: "m".to_owned(),
+                context_window: 100_000,
             })
         })
     }

@@ -48,7 +48,19 @@ pub fn registry() -> JobRegistry {
 
 #[cfg(test)]
 mod tests {
-    use jian_server::Settings;
+    use std::sync::Arc;
+
+    use futures_util::future::BoxFuture;
+    use jian_server::{EventBus, MemoryEventBus, Model, ModelSource, Settings};
+    use jian_store::TenantCtx;
+
+    struct NoModels;
+
+    impl ModelSource for NoModels {
+        fn model(&self, _: &TenantCtx) -> BoxFuture<'_, Option<Model>> {
+            Box::pin(async { None })
+        }
+    }
 
     /// A job kind registered here runs code as a tenant; it must come with a test that shows it
     /// sees nothing of another tenant.
@@ -58,7 +70,13 @@ mod tests {
             .iter()
             .map(|(kind, _)| *kind)
             .collect();
-        for kind in crate::job_registry(&Settings::default()).kinds() {
+        for kind in crate::job_registry(
+            &Settings::default(),
+            &(Arc::new(NoModels) as Arc<dyn ModelSource>),
+            &(Arc::new(MemoryEventBus::new()) as Arc<dyn EventBus>),
+        )
+        .kinds()
+        {
             assert!(
                 listed.contains(&kind.as_str()),
                 "job kind {kind:?} has no isolation test: write one (see crates/AGENTS.md) and \

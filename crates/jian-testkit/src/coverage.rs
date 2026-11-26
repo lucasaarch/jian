@@ -23,6 +23,10 @@ pub const JOB_KINDS: &[(&str, &str)] = &[
         "jian-server/tests/compact_job.rs: a_compaction_job_runs_as_its_own_tenant_and_a_tenant_over_its_limit_costs_the_provider_nothing",
     ),
     (
+        "agent.run",
+        "jian-server/tests/run_job.rs: a_panicking_tool_fails_its_run_while_another_tenants_run_finishes",
+    ),
+    (
         "invite.send",
         "jian-server/tests/gateway/invites.rs: an_invitation_is_sent_with_its_own_workspaces_mail_account_and_nobody_elses",
     ),

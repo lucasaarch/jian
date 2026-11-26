@@ -27,10 +27,11 @@ pub struct Model {
     pub kind: ProviderKind,
     /// The provider's id of the model.
     pub model: String,
+    /// How many tokens it reads at once: what a run keeps its context under.
+    pub context_window: u32,
 }
 
-/// Where a tenant's summarizing model comes from. The agent loop (not part of this change) will
-/// implement it from the tenant's provider accounts.
+/// Where a tenant's summarizing model comes from. Agent runs use it too.
 pub trait ModelSource: Send + Sync {
     /// The model for `tenant`, or `None` when it has none to use.
     fn model(&self, tenant: &TenantCtx) -> BoxFuture<'_, Option<Model>>;

@@ -141,6 +141,16 @@ impl ApprovalState {
     }
 }
 
+/// A person's answer to a tool call that waits.
+pub struct Answer<'a> {
+    /// Whether the call may run.
+    pub approve: bool,
+    /// Who answers.
+    pub by: &'a AccountId,
+    /// What they said, in a few words.
+    pub reason: Option<&'a str>,
+}
+
 /// A tool call that waits for a person.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Approval {
@@ -314,20 +324,19 @@ impl Database {
         .fetch_optional(&mut *tx)
         .await
         .map_err(StoreError::query(ACTION))?;
-        let (row, created) = match made {
-            Some(row) => (row, true),
-            None => {
-                let row: RunRow = sqlx::query_as(AssertSqlSafe(format!(
-                    "SELECT {RUN_COLUMNS} FROM runs \
-                     WHERE thread_id = $1 AND agent_id = $2 AND state IN {ACTIVE}"
-                )))
-                .bind(thread.as_str())
-                .bind(agent.as_str())
-                .fetch_one(&mut *tx)
-                .await
-                .map_err(StoreError::query(ACTION))?;
-                (row, false)
-            }
+        let (row, created) = if let Some(row) = made {
+            (row, true)
+        } else {
+            let row: RunRow = sqlx::query_as(AssertSqlSafe(format!(
+                "SELECT {RUN_COLUMNS} FROM runs \
+                 WHERE thread_id = $1 AND agent_id = $2 AND state IN {ACTIVE}"
+            )))
+            .bind(thread.as_str())
+            .bind(agent.as_str())
+            .fetch_one(&mut *tx)
+            .await
+            .map_err(StoreError::query(ACTION))?;
+            (row, false)
         };
         tx.commit().await.map_err(StoreError::query(ACTION))?;
         Ok((Run::try_from(row)?, created))
@@ -518,8 +527,8 @@ impl Database {
         Ok(asked.unwrap_or(false))
     }
 
-    /// Puts a tool call to the people of the thread for `ttl_ms`. The same call twice is the
-    /// same approval, so a worker that retries does not ask twice.
+    /// Puts a tool call to the people of the thread until `expires_at_ms` (Unix milliseconds).
+    /// The same call twice is the same approval, so a worker that retries does not ask twice.
     pub async fn create_approval(
         &self,
         ctx: &TenantCtx,
@@ -527,8 +536,7 @@ impl Database {
         call_id: &str,
         tool: &str,
         input: &str,
-        ttl_ms: i64,
-        now_ms: i64,
+        expires_at_ms: i64,
     ) -> Result<Approval, StoreError> {
         const ACTION: &str = "ask for an approval";
         let id = random_id("apv_")?;
@@ -545,7 +553,7 @@ impl Database {
         .bind(call_id)
         .bind(tool)
         .bind(input)
-        .bind(now_ms.saturating_add(ttl_ms))
+        .bind(expires_at_ms)
         .fetch_one(&mut *tx)
         .await
         .map_err(StoreError::query(ACTION))?;
@@ -597,9 +605,7 @@ impl Database {
         ctx: &TenantCtx,
         thread: &ThreadId,
         run: &str,
-        approve: bool,
-        by: &AccountId,
-        reason: Option<&str>,
+        answer: &Answer<'_>,
         now_ms: i64,
     ) -> Result<Option<Approval>, StoreError> {
         const ACTION: &str = "answer an approval";
@@ -613,9 +619,13 @@ impl Database {
         )))
         .bind(run)
         .bind(thread.as_str())
-        .bind(if approve { "approved" } else { "refused" })
-        .bind(by.as_str())
-        .bind(reason.map(clip))
+        .bind(if answer.approve {
+            "approved"
+        } else {
+            "refused"
+        })
+        .bind(answer.by.as_str())
+        .bind(answer.reason.map(clip))
         .bind(now_ms)
         .fetch_optional(&mut *tx)
         .await

@@ -119,7 +119,7 @@ async fn say_as(
     side: &jian_testkit::Side,
     viewer: &Viewer,
     thread: &ThreadId,
-    text: &str,
+    words: &str,
 ) -> Message {
     test.db
         .post_message(
@@ -127,7 +127,7 @@ async fn say_as(
             viewer,
             thread,
             NewMessage {
-                parts: MessageParts::text(text).unwrap(),
+                parts: MessageParts::text(words).unwrap(),
                 reply_to: None,
                 client_key: None,
             },
@@ -375,9 +375,11 @@ async fn answer(set: &Setup, approve: bool) {
             &set.side.ctx,
             &set.thread,
             &set.run.id,
-            approve,
-            &set.side.admin.account_id,
-            approve.then_some("go").or(Some("not that")),
+            &jian_store::Answer {
+                approve,
+                by: &set.side.admin.account_id,
+                reason: approve.then_some("go").or(Some("not that")),
+            },
             system_now_ms(),
         )
         .await
@@ -474,9 +476,11 @@ async fn an_approval_nobody_answers_expires_and_the_call_never_runs() {
             &set.side.ctx,
             &set.thread,
             &set.run.id,
-            true,
-            &set.side.admin.account_id,
-            None,
+            &jian_store::Answer {
+                approve: true,
+                by: &set.side.admin.account_id,
+                reason: None,
+            },
             system_now_ms(),
         )
         .await

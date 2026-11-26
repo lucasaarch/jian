@@ -15,12 +15,13 @@ use jian_protocol::threads::{
     ThreadOrigin, ThreadSummary,
 };
 use jian_store::{
-    AccountId, Agent, Author, Message, Participant, StoreError, TenantCtx, Thread, ThreadId,
-    Viewer, Who, can_manage_agent,
+    AccountId, Agent, Author, Database, Message, Participant, StoreError, TenantCtx, Thread,
+    ThreadId, Viewer, Who, can_manage_agent,
 };
 
 use crate::AppState;
 use crate::auth::Principal;
+use crate::events::EventBus;
 use crate::http::{Refusal, forbidden, internal, refuse, store_failure};
 
 /// How many rows a page holds when the caller does not say.
@@ -208,7 +209,19 @@ pub(crate) async fn announce(
     also: Option<&AccountId>,
     payload: DeltaPayload,
 ) {
-    let mut audience = match app.db.thread_audience(ctx, thread).await {
+    announce_with(&app.db, app.events.as_ref(), ctx, thread, also, payload).await;
+}
+
+/// [`announce`] for what holds a database and a bus but no [`AppState`], as a job does.
+pub(crate) async fn announce_with(
+    db: &Database,
+    events: &dyn EventBus,
+    ctx: &TenantCtx,
+    thread: &ThreadId,
+    also: Option<&AccountId>,
+    payload: DeltaPayload,
+) {
+    let mut audience = match db.thread_audience(ctx, thread).await {
         Ok(audience) => audience,
         Err(error) => {
             tracing::warn!(%error, "could not find who hears about a thread");
@@ -219,7 +232,7 @@ pub(crate) async fn announce(
     audience.sort();
     audience.dedup();
     for account in &audience {
-        app.events
+        events
             .publish_scoped(
                 ctx.id(),
                 Topic::Threads,

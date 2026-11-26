@@ -11,6 +11,7 @@ mod isolation;
 mod memories;
 mod projects;
 mod providers;
+mod runs;
 mod schedules;
 mod sign_in;
 mod skills;

@@ -46,7 +46,8 @@ pub enum Script {
     Event(Event),
     /// Waits at a gate.
     Gate(Gate),
-    /// Fails the stream with this error.
+    /// Fails with this error: the request itself when it is the turn's first step, else the
+    /// stream from that point.
     Fail(LlmError),
 }
 
@@ -126,16 +127,23 @@ impl Provider for FakeProvider {
                 .ok()
                 .and_then(|mut turns| turns.pop_front())
                 .unwrap_or_else(|| say("ok"));
-            let stream =
-                futures_util::stream::unfold(VecDeque::from(turn), |mut left| async move {
-                    loop {
-                        match left.pop_front()? {
-                            Script::Event(event) => return Some((Ok(event), left)),
-                            Script::Fail(error) => return Some((Err(error), left)),
-                            Script::Gate(gate) => gate.pass().await,
-                        }
+            let mut turn = VecDeque::from(turn);
+            // A failure first in the turn is the provider refusing the request, as a breaker
+            // sees it; later ones break the stream in the middle.
+            if matches!(turn.front(), Some(Script::Fail(_)))
+                && let Some(Script::Fail(error)) = turn.pop_front()
+            {
+                return Err(error);
+            }
+            let stream = futures_util::stream::unfold(turn, |mut left| async move {
+                loop {
+                    match left.pop_front()? {
+                        Script::Event(event) => return Some((Ok(event), left)),
+                        Script::Fail(error) => return Some((Err(error), left)),
+                        Script::Gate(gate) => gate.pass().await,
                     }
-                });
+                }
+            });
             Ok(stream.boxed())
         })
     }
@@ -150,9 +158,9 @@ impl Provider for FakeProvider {
 pub struct FakeMachineScript {
     /// Printed by every command.
     pub output: String,
-    /// A gate every command waits at.
+    /// A gate every command and file read waits at.
     pub gate: Option<Gate>,
-    /// Every command panics.
+    /// Every command and file read panics.
     pub panics: bool,
 }
 
@@ -247,6 +255,10 @@ impl Machine for FakeMachine {
     fn read_file<'a>(&'a self, path: &'a str) -> BoxFuture<'a, Result<String, ExecError>> {
         Box::pin(async move {
             self.note(format!("read {path}"));
+            assert!(!self.script.panics, "the fake machine was told to panic");
+            if let Some(gate) = &self.script.gate {
+                gate.pass().await;
+            }
             Ok(self.script.output.clone())
         })
     }
