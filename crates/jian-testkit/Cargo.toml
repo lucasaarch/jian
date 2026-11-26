@@ -10,6 +10,7 @@ publish = false
 futures-util.workspace = true
 jian-core.workspace = true
 jian-exec.workspace = true
+jian-protocol.workspace = true
 jian-llm.workspace = true
 jian-store.workspace = true
 serde_json.workspace = true

@@ -11,6 +11,7 @@ mod artifacts;
 mod codex;
 mod invites;
 mod isolation;
+mod machine_files;
 mod machines;
 mod memories;
 mod projects;

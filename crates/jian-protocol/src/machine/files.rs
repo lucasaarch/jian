@@ -25,6 +25,13 @@ pub enum FilesOp {
         /// The most bytes to read; more is refused as `too-large`.
         #[ts(type = "number")]
         max_bytes: u64,
+        /// Return only lines from this one (1-based) on. Null reads from the start. With a
+        /// range the text limit applies to the lines returned, not to the whole file.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        from_line: Option<usize>,
+        /// Return at most this many lines. Null reads to the end.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        max_lines: Option<usize>,
     },
     /// Writes a text file, creating its parents.
     Write {
@@ -35,6 +42,13 @@ pub enum FilesOp {
         /// The mtime the writer read, in ms; null means the file must not exist yet. A file that
         /// changed since is refused as `changed`.
         expected_mtime_ms: Option<f64>,
+    },
+    /// Changes one or more files by exact replacements, all or nothing: every file is checked
+    /// and every replacement applied in memory first, and nothing is written if any step fails.
+    /// The work runs on the machine, so no file crosses the wire.
+    Edit {
+        /// The files to change, each at most once.
+        files: Vec<FileEdit>,
     },
     /// Lists a directory's entries.
     List {
@@ -117,11 +131,30 @@ pub enum FilesOp {
 }
 
 impl FilesOp {
+    /// Every path the operation names (a repository's `root` included), for a caller that
+    /// resolves them before the operation runs.
+    pub fn paths_mut(&mut self) -> Vec<&mut String> {
+        match self {
+            Self::Read { path, .. }
+            | Self::Write { path, .. }
+            | Self::List { path, .. }
+            | Self::Find { path, .. }
+            | Self::Search { path, .. }
+            | Self::ReadBytes { path, .. }
+            | Self::WriteBytes { path, .. } => vec![path],
+            Self::GitStatus { root, .. }
+            | Self::GitFile { root, .. }
+            | Self::MergeBase { root, .. } => vec![root],
+            Self::Edit { files } => files.iter_mut().map(|file| &mut file.path).collect(),
+        }
+    }
+
     /// The operation's name alone, for matching an answer to its request.
     pub fn name(&self) -> FilesOpName {
         match self {
             Self::Read { .. } => FilesOpName::Read,
             Self::Write { .. } => FilesOpName::Write,
+            Self::Edit { .. } => FilesOpName::Edit,
             Self::List { .. } => FilesOpName::List,
             Self::Find { .. } => FilesOpName::Find,
             Self::Search { .. } => FilesOpName::Search,
@@ -134,6 +167,39 @@ impl FilesOp {
     }
 }
 
+/// What an edit does to one file.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export)]
+#[serde(rename_all = "camelCase")]
+pub struct FileEdit {
+    /// Absolute path of the file.
+    pub path: String,
+    /// The whole text of a file that must not exist yet. Then `replacements` is empty.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub create: Option<String>,
+    /// The mtime the editor read, in ms; the file is refused as `changed` if it differs. Null
+    /// skips the check.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expected_mtime_ms: Option<f64>,
+    /// Applied in order, each to the text the one before left.
+    #[serde(default)]
+    pub replacements: Vec<Replacement>,
+}
+
+/// One exact substitution.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+#[serde(rename_all = "camelCase")]
+pub struct Replacement {
+    /// The text to replace, exactly as in the file, not empty.
+    pub old: String,
+    /// What takes its place.
+    pub new: String,
+    /// Replace every occurrence; otherwise `old` must occur exactly once.
+    #[serde(default)]
+    pub replace_all: bool,
+}
+
 /// The name of a [`FilesOp`] without its arguments.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[ts(export)]
@@ -143,6 +209,8 @@ pub enum FilesOpName {
     Read,
     /// [`FilesOp::Write`].
     Write,
+    /// [`FilesOp::Edit`].
+    Edit,
     /// [`FilesOp::List`].
     List,
     /// [`FilesOp::Find`].
@@ -250,6 +318,25 @@ pub struct ListEntry {
     pub kind: EntryKind,
 }
 
+fn first_line() -> usize {
+    1
+}
+
+/// One file an edit changed.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export)]
+#[serde(rename_all = "camelCase")]
+pub struct EditedFile {
+    /// The path, as the request gave it.
+    pub path: String,
+    /// The new modification time, in milliseconds since the epoch.
+    pub mtime_ms: f64,
+    /// The occurrences replaced; 0 for a file created.
+    pub replaced: usize,
+    /// The file did not exist before.
+    pub created: bool,
+}
+
 /// A successful answer; `op` repeats the request's.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[ts(export)]
@@ -264,6 +351,17 @@ pub enum FilesDone {
         /// The file's size, in bytes.
         #[ts(type = "number")]
         bytes: u64,
+        /// The line the text starts at (1-based).
+        #[serde(default = "first_line")]
+        first_line: usize,
+        /// The lines the whole file has.
+        #[serde(default)]
+        total_lines: usize,
+    },
+    /// The files were changed.
+    Edit {
+        /// One per file, in the request's order.
+        files: Vec<EditedFile>,
     },
     /// The file was written.
     Write {

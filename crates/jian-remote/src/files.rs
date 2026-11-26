@@ -1,8 +1,9 @@
-//! File operations: read, write, list, find, search and git, with the file system and git
+//! File operations: read, write, edit, list, find, search and git, with the file system and git
 //! programs, never a shell. Every operation acts on the real path the checks saw, never on the
 //! spelling given: `..` after a link, `./`, case and a link as the root all lead where the real
 //! path leads.
 
+mod edit;
 mod find;
 mod git;
 mod paths;
@@ -100,6 +101,21 @@ async fn run(op: &FilesOp, config: &FilesConfig, timeout: Duration) -> Result<Fi
             max_bytes,
         } => return git::file(root, path, against, *max_bytes, &roots).await,
         FilesOp::MergeBase { root, base } => return git::merge_base(root, base, &roots).await,
+        FilesOp::Edit { files } => {
+            let files = files.clone();
+            return blocking(move || {
+                let mut reals = Vec::new();
+                for file in &files {
+                    let real = paths::real_location(Path::new(&file.path))?;
+                    if paths::is_refused(&real, &roots) {
+                        return Err(Problem::new(FilesProblem::Refused, REFUSED_MESSAGE));
+                    }
+                    reals.push(real);
+                }
+                edit::edit(&files, reals)
+            })
+            .await;
+        }
         FilesOp::Read { path, .. }
         | FilesOp::Write { path, .. }
         | FilesOp::List { path, .. }
@@ -117,9 +133,12 @@ async fn run(op: &FilesOp, config: &FilesConfig, timeout: Duration) -> Result<Fi
     }
     let shower = find::Shower::new(&given, &real);
     match op.clone() {
-        FilesOp::Read { max_bytes, .. } => {
-            blocking(move || text::read_text(&real, max_bytes)).await
-        }
+        FilesOp::Read {
+            max_bytes,
+            from_line,
+            max_lines,
+            ..
+        } => blocking(move || text::read_text(&real, max_bytes, from_line, max_lines)).await,
         FilesOp::ReadBytes { max_bytes, .. } => {
             blocking(move || text::read_bytes(&real, max_bytes)).await
         }
@@ -155,7 +174,10 @@ async fn run(op: &FilesOp, config: &FilesConfig, timeout: Duration) -> Result<Fi
             };
             search::search(&real, &request, &roots, &shower, timeout).await
         }
-        FilesOp::GitStatus { .. } | FilesOp::GitFile { .. } | FilesOp::MergeBase { .. } => {
+        FilesOp::GitStatus { .. }
+        | FilesOp::GitFile { .. }
+        | FilesOp::MergeBase { .. }
+        | FilesOp::Edit { .. } => {
             unreachable!("answered above")
         }
     }

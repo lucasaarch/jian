@@ -241,6 +241,8 @@ async fn the_workers_own_files_are_refused() {
         let op = FilesOp::Read {
             path: path.to_string_lossy().into_owned(),
             max_bytes: 1000,
+            from_line: None,
+            max_lines: None,
         };
         peer.send(&GatewayMessage::Task(Task {
             id: id.into(),
@@ -264,6 +266,8 @@ async fn the_workers_own_files_are_refused() {
     let op = FilesOp::Read {
         path: dir.join("notes.txt").to_string_lossy().into_owned(),
         max_bytes: 1000,
+        from_line: None,
+        max_lines: None,
     };
     peer.send(&GatewayMessage::Task(Task {
         id: "plain".into(),

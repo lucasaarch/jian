@@ -14,6 +14,9 @@ use futures_util::StreamExt;
 use futures_util::future::BoxFuture;
 use jian_exec::{ExecError, Executor, Machine, Scope, ShellOutput};
 use jian_llm::{Event, EventStream, LlmError, Provider, Request, StopReason, ToolCall, Usage};
+use jian_protocol::machine::{
+    EditedFile, FilesAnswer, FilesDone, FilesFailure, FilesOp, FilesProblem,
+};
 use tokio::sync::Notify;
 
 /// A point where a script waits for the test: it tells the test it got there (`reached`), then
@@ -234,6 +237,61 @@ impl FakeMachine {
 }
 
 impl Machine for FakeMachine {
+    /// A read gives the script's output, a write or an edit is only noted; nothing else exists.
+    fn files(&self, op: FilesOp) -> BoxFuture<'_, Result<FilesAnswer, ExecError>> {
+        Box::pin(async move {
+            let failed = |message: &str| {
+                FilesAnswer::Failed(FilesFailure {
+                    op: op.name(),
+                    problem: FilesProblem::Failed,
+                    message: message.to_owned(),
+                })
+            };
+            Ok(match &op {
+                FilesOp::Read { path, .. } => {
+                    self.note(format!("read {path}"));
+                    assert!(!self.script.panics, "the fake machine was told to panic");
+                    if let Some(gate) = &self.script.gate {
+                        gate.pass().await;
+                    }
+                    let text = self.script.output.clone();
+                    FilesAnswer::Done(FilesDone::Read {
+                        bytes: text.len() as u64,
+                        total_lines: text.lines().count(),
+                        text,
+                        mtime_ms: 1.0,
+                        first_line: 1,
+                    })
+                }
+                FilesOp::Write { path, content, .. } => {
+                    self.note(format!("write {path}"));
+                    FilesAnswer::Done(FilesDone::Write {
+                        mtime_ms: 1.0,
+                        bytes: content.len() as u64,
+                        created: false,
+                    })
+                }
+                FilesOp::Edit { files } => {
+                    for file in files {
+                        self.note(format!("edit {}", file.path));
+                    }
+                    FilesAnswer::Done(FilesDone::Edit {
+                        files: files
+                            .iter()
+                            .map(|file| EditedFile {
+                                path: file.path.clone(),
+                                mtime_ms: 1.0,
+                                replaced: file.replacements.len(),
+                                created: file.create.is_some(),
+                            })
+                            .collect(),
+                    })
+                }
+                _ => failed("the fake machine has no such file operation"),
+            })
+        })
+    }
+
     fn shell<'a>(
         &'a self,
         command: &'a str,

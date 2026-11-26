@@ -15,6 +15,8 @@ use std::time::Duration;
 
 use futures_util::future::BoxFuture;
 use jian_core::MAX_TOOL_RESULT_BYTES;
+use jian_protocol::machine::{FilesAnswer, FilesOp};
+use jian_remote::files::{FilesConfig, SEARCH_TIMEOUT, answer};
 use jian_remote::process::run_bounded;
 use jian_remote::shell::child_env;
 use tokio::process::Command;
@@ -86,7 +88,8 @@ struct LocalMachine {
     dir: PathBuf,
 }
 
-/// What a command printed, kept up to a limit; the rest is only counted.
+/// What a command printed, the last bytes up to a limit; the earlier ones are only counted. The
+/// end is what is kept because that is where a build or a test says why it failed.
 #[derive(Default)]
 struct Capture {
     kept: Vec<u8>,
@@ -94,18 +97,27 @@ struct Capture {
 }
 
 impl Capture {
+    const ROOM: usize = MAX_TOOL_RESULT_BYTES - NOTICE_ROOM;
+
     fn push(&mut self, bytes: &[u8]) {
         self.total += bytes.len();
-        let room = (MAX_TOOL_RESULT_BYTES - NOTICE_ROOM).saturating_sub(self.kept.len());
-        self.kept.extend_from_slice(&bytes[..bytes.len().min(room)]);
+        self.kept.extend_from_slice(bytes);
+        // Trimmed in steps, not at every chunk, so a long output is not copied over and over.
+        if self.kept.len() > 2 * Self::ROOM {
+            self.kept.drain(..self.kept.len() - Self::ROOM);
+        }
     }
 
     fn text(&self) -> String {
-        let mut text = String::from_utf8_lossy(&self.kept).into_owned();
-        if self.total > self.kept.len() {
-            let left = self.total - self.kept.len();
-            let _ = write!(text, "\n[output cut: {left} more bytes were left out]");
+        let from = self.kept.len().saturating_sub(Self::ROOM);
+        let tail = String::from_utf8_lossy(&self.kept[from..]);
+        let left = self.total - (self.kept.len() - from);
+        if left == 0 {
+            return tail.into_owned();
         }
+        let mut text = String::new();
+        let _ = writeln!(text, "[output cut: the first {left} bytes were left out]");
+        text.push_str(&tail);
         text
     }
 }
@@ -176,7 +188,32 @@ impl LocalMachine {
     }
 }
 
+/// A path as the worker's checks want it: Windows' `\\?\C:\` form (what canonicalizing gives)
+/// is not an absolute path to them.
+fn plain_path(real: &Path) -> String {
+    let text = real.to_string_lossy();
+    text.strip_prefix(r"\\?\").unwrap_or(&text).to_owned()
+}
+
+impl LocalMachine {
+    /// Puts every path of `op` through [`Self::inside`]: the operation then names real paths in
+    /// the folder, which the file code (the same the connected machines run) takes from there.
+    async fn confine(&self, op: &mut FilesOp) -> Result<(), ExecError> {
+        for path in op.paths_mut() {
+            *path = plain_path(&self.inside(path).await?);
+        }
+        Ok(())
+    }
+}
+
 impl Machine for LocalMachine {
+    fn files(&self, mut op: FilesOp) -> BoxFuture<'_, Result<FilesAnswer, ExecError>> {
+        Box::pin(async move {
+            self.confine(&mut op).await?;
+            Ok(answer(&op, &FilesConfig::default(), SEARCH_TIMEOUT).await)
+        })
+    }
+
     fn shell<'a>(
         &'a self,
         command: &'a str,

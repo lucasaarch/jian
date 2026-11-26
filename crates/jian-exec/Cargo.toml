@@ -7,6 +7,7 @@ license.workspace = true
 [dependencies]
 futures-util.workspace = true
 jian-core.workspace = true
+jian-protocol.workspace = true
 jian-remote.workspace = true
 thiserror.workspace = true
 tokio = { workspace = true, features = ["fs", "process", "time"] }

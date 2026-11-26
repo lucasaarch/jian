@@ -3,4 +3,4 @@
 /**
  * The name of a [`FilesOp`] without its arguments.
  */
-export type FilesOpName = "read" | "write" | "list" | "find" | "search" | "read-bytes" | "write-bytes" | "git-status" | "git-file" | "merge-base";
+export type FilesOpName = "read" | "write" | "edit" | "list" | "find" | "search" | "read-bytes" | "write-bytes" | "git-status" | "git-file" | "merge-base";

@@ -47,10 +47,12 @@ export const workerMessages = [
     "exitCode": 0,
     "files": {
       "bytes": 2,
+      "firstLine": 1,
       "mtimeMs": 1.5,
       "op": "read",
       "status": "done",
-      "text": "hi"
+      "text": "hi",
+      "totalLines": 0
     },
     "id": "t3",
     "stderr": "",

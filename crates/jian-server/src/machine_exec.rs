@@ -20,6 +20,7 @@ use jian_protocol::machine::{
     TaskSpec,
 };
 use jian_store::{AgentId, AgentMachine, Database, MachineId, TenantId};
+use tokio::sync::OnceCell;
 use tokio_util::sync::CancellationToken;
 
 use crate::{DispatchError, MachineHub, Settings};
@@ -104,6 +105,7 @@ impl AgentMachines {
             hub: self.hub.clone(),
             tenant,
             machine: id,
+            home: OnceCell::new(),
         })
     }
 }
@@ -136,6 +138,17 @@ struct HubMachine {
     hub: MachineHub,
     tenant: TenantId,
     machine: MachineId,
+    /// The folder the machine's shell starts in, where a relative path of the agent's leads.
+    home: OnceCell<String>,
+}
+
+fn is_absolute(path: &str) -> bool {
+    let bytes = path.as_bytes();
+    path.starts_with('/')
+        || (bytes.len() >= 3
+            && bytes[0].is_ascii_alphabetic()
+            && bytes[1] == b':'
+            && matches!(bytes[2], b'/' | b'\\'))
 }
 
 fn dispatch_error(error: DispatchError) -> ExecError {
@@ -167,6 +180,41 @@ impl HubMachine {
         }
     }
 
+    /// Where the shell starts: the file operations of the worker take absolute paths only, and
+    /// the agent writes relative ones as it does on the gateway's machine. The last line of
+    /// `pwd` is the folder in a POSIX shell and in PowerShell alike (which prints a table).
+    async fn home(&self) -> Result<&str, ExecError> {
+        let home = self
+            .home
+            .get_or_try_init(|| async {
+                let spec = TaskSpec::Shell(ShellTask {
+                    command: "pwd".to_owned(),
+                    cwd: None,
+                    env: BTreeMap::default(),
+                });
+                let result = self.run(spec, Duration::from_secs(10)).await?;
+                result
+                    .stdout
+                    .lines()
+                    .map(str::trim)
+                    .rfind(|line| is_absolute(line))
+                    .map(str::to_owned)
+                    .ok_or_else(|| {
+                        ExecError::Failed("cannot tell the machine's working folder".to_owned())
+                    })
+            })
+            .await?;
+        Ok(home.as_str())
+    }
+
+    async fn resolve(&self, path: &str) -> Result<String, ExecError> {
+        if is_absolute(path) {
+            return Ok(path.to_owned());
+        }
+        let home = self.home().await?.trim_end_matches(['/', '\\']);
+        Ok(format!("{home}/{}", path.trim_start_matches("./")))
+    }
+
     async fn files(&self, op: FilesOp) -> Result<FilesDone, ExecError> {
         match self.answer(op).await? {
             FilesAnswer::Done(done) => Ok(done),
@@ -174,7 +222,10 @@ impl HubMachine {
         }
     }
 
-    async fn answer(&self, op: FilesOp) -> Result<FilesAnswer, ExecError> {
+    async fn answer(&self, mut op: FilesOp) -> Result<FilesAnswer, ExecError> {
+        for path in op.paths_mut() {
+            *path = self.resolve(path).await?;
+        }
         let result = self.run(TaskSpec::Files(op), FILES_TIMEOUT).await?;
         result.files.ok_or_else(|| {
             let why = result.stderr.trim();
@@ -188,6 +239,10 @@ impl HubMachine {
 }
 
 impl Machine for HubMachine {
+    fn files(&self, op: FilesOp) -> BoxFuture<'_, Result<FilesAnswer, ExecError>> {
+        Box::pin(self.answer(op))
+    }
+
     fn shell<'a>(
         &'a self,
         command: &'a str,
@@ -218,6 +273,8 @@ impl Machine for HubMachine {
             let op = FilesOp::Read {
                 path: path.to_owned(),
                 max_bytes: FILES_MAX_READ_BYTES,
+                from_line: None,
+                max_lines: None,
             };
             match self.files(op).await? {
                 FilesDone::Read { text, .. } => Ok(text),
@@ -239,6 +296,8 @@ impl Machine for HubMachine {
             let read = FilesOp::Read {
                 path: path.to_owned(),
                 max_bytes: FILES_MAX_READ_BYTES,
+                from_line: None,
+                max_lines: None,
             };
             let expected_mtime_ms = match self.answer(read).await? {
                 FilesAnswer::Done(FilesDone::Read { mtime_ms, .. }) => Some(mtime_ms),

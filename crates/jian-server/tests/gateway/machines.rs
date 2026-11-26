@@ -26,7 +26,7 @@ async fn call(
     (status, serde_json::from_str(&answer).unwrap_or(Value::Null))
 }
 
-async fn agent_of(gateway: &Gateway, side: &Side) -> AgentId {
+pub(super) async fn agent_of(gateway: &Gateway, side: &Side) -> AgentId {
     let (status, agent) = call(
         gateway,
         "POST",
@@ -39,7 +39,7 @@ async fn agent_of(gateway: &Gateway, side: &Side) -> AgentId {
     AgentId::new(agent["id"].as_str().unwrap())
 }
 
-fn scope(side: &Side, agent: &AgentId) -> Scope {
+pub(super) fn scope(side: &Side, agent: &AgentId) -> Scope {
     Scope {
         tenant: side.id.to_string(),
         agent: agent.to_string(),
@@ -47,7 +47,7 @@ fn scope(side: &Side, agent: &AgentId) -> Scope {
     }
 }
 
-async fn choose(gateway: &Gateway, side: &Side, agent: &AgentId, choice: AgentMachine) {
+pub(super) async fn choose(gateway: &Gateway, side: &Side, agent: &AgentId, choice: AgentMachine) {
     gateway
         .db
         .set_agent_machine(&side.ctx, agent, Some(&choice))
@@ -62,7 +62,7 @@ async fn open_error(executor: &AgentMachines, scope: &Scope) -> String {
     }
 }
 
-async fn online(gateway: &Gateway, side: &Side) {
+pub(super) async fn online(gateway: &Gateway, side: &Side) {
     let deadline = tokio::time::Instant::now() + WAIT;
     while !gateway.state.hub.is_online(&side.id, &side.machine_id()) {
         assert!(

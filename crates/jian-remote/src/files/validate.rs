@@ -65,8 +65,35 @@ fn within(value: usize, min: usize, max: usize) -> bool {
 
 pub fn is_valid(op: &FilesOp) -> bool {
     match op {
-        FilesOp::Read { path: p, max_bytes } | FilesOp::ReadBytes { path: p, max_bytes } => {
+        FilesOp::Read {
+            path: p,
+            max_bytes,
+            from_line,
+            max_lines,
+        } => {
+            path(p)
+                && (1..=FILES_MAX_READ_BYTES).contains(max_bytes)
+                && from_line.is_none_or(|n| n >= 1)
+                && max_lines.is_none_or(|n| n >= 1)
+        }
+        FilesOp::ReadBytes { path: p, max_bytes } => {
             path(p) && (1..=FILES_MAX_READ_BYTES).contains(max_bytes)
+        }
+        FilesOp::Edit { files } => {
+            // Any characters in the texts: a file's text may hold NUL, unlike a path.
+            within(files.len(), 1, 50)
+                && files.iter().all(|file| {
+                    path(&file.path)
+                        && file.expected_mtime_ms.is_none_or(f64::is_finite)
+                        && within(file.replacements.len(), 0, 200)
+                        && file.create.as_ref().is_none_or(|text| {
+                            text.chars().count() <= FILES_MAX_TEXT && file.replacements.is_empty()
+                        })
+                        && file.replacements.iter().all(|r| {
+                            r.old.chars().count() <= FILES_MAX_TEXT
+                                && r.new.chars().count() <= FILES_MAX_TEXT
+                        })
+                })
         }
         FilesOp::Write {
             path: p,
@@ -165,6 +192,8 @@ mod tests {
         let read = |path: &str| FilesOp::Read {
             path: path.into(),
             max_bytes: 10,
+            from_line: None,
+            max_lines: None,
         };
         assert!(is_valid(&read("/etc/hosts")));
         assert!(is_valid(&read("C:\\Users\\ana\\a.txt")));

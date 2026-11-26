@@ -83,26 +83,54 @@ fn read_within(real: &Path, max_bytes: u64) -> Result<Vec<u8>, Problem> {
     Ok(buffer)
 }
 
-pub fn read_text(real: &Path, max_bytes: u64) -> Result<FilesDone, Problem> {
+/// The text of a regular file read whole, with its metadata, refusing binary files.
+pub fn read_whole(real: &Path, max_bytes: u64) -> Result<(String, Metadata), Problem> {
     let meta = regular_file(real, max_bytes)?;
     let buffer = read_within(real, max_bytes)?;
     if is_binary(&buffer) {
         return Err(Problem::new(FilesProblem::Binary, "The file is binary."));
     }
-    let text = String::from_utf8_lossy(&buffer).into_owned();
+    Ok((String::from_utf8_lossy(&buffer).into_owned(), meta))
+}
+
+/// The lines `from_line..` (1-based), at most `max_lines`, as they are in the file.
+fn slice_lines(text: &str, from_line: usize, max_lines: Option<usize>) -> String {
+    text.split_inclusive('\n')
+        .skip(from_line.saturating_sub(1))
+        .take(max_lines.unwrap_or(usize::MAX))
+        .collect()
+}
+
+pub fn read_text(
+    real: &Path,
+    max_bytes: u64,
+    from_line: Option<usize>,
+    max_lines: Option<usize>,
+) -> Result<FilesDone, Problem> {
+    let (whole, meta) = read_whole(real, max_bytes)?;
+    let bytes = whole.len() as u64;
+    let total_lines = whole.split_inclusive('\n').count();
+    let ranged = from_line.is_some() || max_lines.is_some();
+    let first_line = from_line.unwrap_or(1).max(1);
+    let text = if ranged {
+        slice_lines(&whole, first_line, max_lines)
+    } else {
+        whole
+    };
     if text.chars().count() > FILES_MAX_TEXT {
         return Err(Problem::new(
             FilesProblem::TooLarge,
             format!(
-                "The file has {} bytes, more than a result can carry.",
-                buffer.len()
+                "The file has {bytes} bytes, more than a result can carry; read a range of lines."
             ),
         ));
     }
     Ok(FilesDone::Read {
         text,
         mtime_ms: mtime_ms(&meta),
-        bytes: buffer.len() as u64,
+        bytes,
+        first_line,
+        total_lines,
     })
 }
 
@@ -142,12 +170,12 @@ fn current(real: &Path) -> Result<Option<Metadata>, Problem> {
     clippy::unnecessary_wraps,
     reason = "the same signature as the non-Unix build"
 )]
-fn mode_of(meta: &Metadata) -> Option<u32> {
+pub(super) fn mode_of(meta: &Metadata) -> Option<u32> {
     Some(std::os::unix::fs::PermissionsExt::mode(&meta.permissions()) & 0o7777)
 }
 
 #[cfg(not(unix))]
-fn mode_of(_meta: &Metadata) -> Option<u32> {
+pub(super) fn mode_of(_meta: &Metadata) -> Option<u32> {
     None
 }
 

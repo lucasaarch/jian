@@ -13,6 +13,7 @@
 mod local;
 
 use futures_util::future::BoxFuture;
+use jian_protocol::machine::{FilesAnswer, FilesDone, FilesOp};
 
 pub use local::LocalExecutor;
 
@@ -65,6 +66,12 @@ pub trait Machine: Send + Sync {
         timeout_ms: u64,
     ) -> BoxFuture<'a, Result<ShellOutput, ExecError>>;
 
+    /// One file operation (read a range, list, find, search, edit, write), run on the machine
+    /// itself: nothing is downloaded to be changed and uploaded again. Paths are the agent's:
+    /// relative ones start in the machine's working folder. A machine that cannot do the
+    /// operation answers with a failure, not an error.
+    fn files(&self, op: FilesOp) -> BoxFuture<'_, Result<FilesAnswer, ExecError>>;
+
     /// The text of the file at `path`.
     fn read_file<'a>(&'a self, path: &'a str) -> BoxFuture<'a, Result<String, ExecError>>;
 
@@ -74,6 +81,14 @@ pub trait Machine: Send + Sync {
         path: &'a str,
         content: &'a str,
     ) -> BoxFuture<'a, Result<(), ExecError>>;
+}
+
+/// Runs a file operation and turns a refusal into the error the agent reads.
+pub async fn files_done(machine: &dyn Machine, op: FilesOp) -> Result<FilesDone, ExecError> {
+    match machine.files(op).await? {
+        FilesAnswer::Done(done) => Ok(done),
+        FilesAnswer::Failed(failed) => Err(ExecError::Failed(failed.message)),
+    }
 }
 
 /// An [`Executor`] with no machine behind it: every `open` is [`ExecError::Unavailable`]. For
