@@ -34,8 +34,11 @@ use jian_runtime::{
 };
 use jian_skills::Catalog;
 use jian_store::{
-    ApprovalState, Database, Run, RunLease, RunOrigin, RunState, StoreError, TenantCtx,
+    ApprovalState, Database, NewEvent, RUN_FAILED_EVENT, Run, RunLease, RunOrigin, RunState,
+    StoreError, TenantCtx,
 };
+
+use serde_json::json;
 
 use crate::auto_continue::{after_run, still_wanted};
 use crate::events::EventBus;
@@ -396,6 +399,28 @@ impl AgentRunner {
         if matches!(finish, Finish::Done) {
             after_run(db, self.events.as_ref(), tenant, run).await;
         }
+        if let Finish::Failed(why) = &finish {
+            tell_the_agent_it_failed(db, tenant, run, why).await;
+        }
+    }
+}
+
+/// A run that failed is an event in its own agent's box, so its next wake may try again or
+/// say what went wrong. A wake's own failed run is not: that would be a loop the budget alone
+/// ends.
+async fn tell_the_agent_it_failed(db: &Database, tenant: &TenantCtx, run: &Run, why: &str) {
+    if run.origin == RunOrigin::Wake {
+        return;
+    }
+    let event = NewEvent {
+        kind: RUN_FAILED_EVENT.to_owned(),
+        thread: Some(run.thread.clone()),
+        payload: json!({ "runId": run.id, "why": why.chars().take(500).collect::<String>() }),
+        available_ms: system_now_ms(),
+        key: Some(format!("run_failed:{}", run.id)),
+    };
+    if let Err(error) = db.add_event(tenant, &run.agent, event).await {
+        tracing::warn!(%error, "could not tell an agent its run failed");
     }
 }
 

@@ -27,6 +27,10 @@ pub const JOB_KINDS: &[(&str, &str)] = &[
         "jian-server/tests/run_job.rs: a_panicking_tool_fails_its_run_while_another_tenants_run_finishes",
     ),
     (
+        "agent.wake",
+        "jian-server/tests/gateway/wake.rs: an_event_of_one_tenant_never_wakes_the_agent_of_another",
+    ),
+    (
         "invite.send",
         "jian-server/tests/gateway/invites.rs: an_invitation_is_sent_with_its_own_workspaces_mail_account_and_nobody_elses",
     ),

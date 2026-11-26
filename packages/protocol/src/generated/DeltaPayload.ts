@@ -13,9 +13,10 @@ import type { SkillGone } from "./SkillGone";
 import type { SkillSummary } from "./SkillSummary";
 import type { SubagentView } from "./SubagentView";
 import type { ThreadSummary } from "./ThreadSummary";
+import type { WakeHeldView } from "./WakeHeldView";
 
 /**
  * What changed. Whole values, not patches: applying one twice is harmless, which is what lets a
  * resume replay a few deltas the client already had.
  */
-export type DeltaPayload = { "type": "machine" } & MachineSummary | { "type": "message.created" } & MessageView | { "type": "message.updated" } & MessageView | { "type": "thread.updated" } & ThreadSummary | { "type": "participant.joined" } & ParticipantChange | { "type": "participant.left" } & ParticipantChange | { "type": "project.updated" } & ProjectView | { "type": "project.deleted" } & ProjectGone | { "type": "project.file.added" } & ProjectFileChange | { "type": "project.file.removed" } & ProjectFileChange | { "type": "project.thread.changed" } & ProjectThreadChange | { "type": "skill.updated" } & SkillSummary | { "type": "skill.deleted" } & SkillGone | { "type": "run.updated" } & RunView | { "type": "run.delta" } & RunDelta | { "type": "objective.updated" } & ObjectiveView | { "type": "subagent.updated" } & SubagentView;
+export type DeltaPayload = { "type": "machine" } & MachineSummary | { "type": "message.created" } & MessageView | { "type": "message.updated" } & MessageView | { "type": "thread.updated" } & ThreadSummary | { "type": "participant.joined" } & ParticipantChange | { "type": "participant.left" } & ParticipantChange | { "type": "project.updated" } & ProjectView | { "type": "project.deleted" } & ProjectGone | { "type": "project.file.added" } & ProjectFileChange | { "type": "project.file.removed" } & ProjectFileChange | { "type": "project.thread.changed" } & ProjectThreadChange | { "type": "skill.updated" } & SkillSummary | { "type": "skill.deleted" } & SkillGone | { "type": "run.updated" } & RunView | { "type": "run.delta" } & RunDelta | { "type": "objective.updated" } & ObjectiveView | { "type": "subagent.updated" } & SubagentView | { "type": "wake.held" } & WakeHeldView;

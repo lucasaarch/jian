@@ -56,6 +56,7 @@
 
 mod account_models;
 mod accounts;
+mod agent_events;
 mod agent_model;
 mod agents;
 mod auth;
@@ -96,6 +97,7 @@ mod summary;
 mod thread_messages;
 mod threads;
 mod usage;
+mod wake_job;
 mod worker_ws;
 mod workspace;
 
@@ -129,6 +131,7 @@ pub use rate::{Clock, Limit, ManualClock, MemoryRateLimiter, RateLimiter, System
 pub use run_job::{AgentRunner, RUN_KIND};
 pub use schedule_job::{SCHEDULE_FIRE_KIND, ScheduleFirer, run_ticker, tick};
 pub use slots::{DrainReport, NoRunQueue, RunRequeue, SlotKeeper, SlotOwnership};
+pub use wake_job::{AGENT_WAKE_KIND, AgentWaker, NowMs, SETTLE_MS, tick as wake_tick};
 
 /// The routes `router` serves, for the binary to print at start-up: there is no panel yet to
 /// show what is reachable. Keep it in step with `router`.
@@ -175,6 +178,9 @@ pub const ROUTES: &[&str] = &[
     "GET /v1/agents/{id}/threads (a member who sees it)",
     "GET /v1/agents/{id}/model (a member who sees the agent)",
     "PUT /v1/agents/{id}/model (a member who manages the agent)",
+    "POST /v1/agents/{id}/events (the owner token, an admin, or the member who manages the agent)",
+    "GET /v1/agents/{id}/budget (the owner token, or a member who sees the agent)",
+    "PUT /v1/agents/{id}/budget (the owner token, or a member who manages the agent)",
     "GET /v1/agents/{id}/memories (a member who sees the agent)",
     "GET /v1/agents/{id}/memories/{key} (a member who sees the agent)",
     "PUT /v1/agents/{id}/memories/{key} (a member who sees the agent)",
@@ -447,6 +453,11 @@ pub fn router_with(state: AppState, extra: Router<AppState>) -> Router {
                 .delete(schedules::delete),
         )
         .route("/v1/agents/{id}/inbox", get(schedules::inbox))
+        .route("/v1/agents/{id}/events", post(agent_events::post))
+        .route(
+            "/v1/agents/{id}/budget",
+            get(agent_events::get_budget).put(agent_events::put_budget),
+        )
         .route("/v1/skills", get(skills::list).post(skills::create))
         .route("/v1/skills/import", post(skills::import))
         .route(

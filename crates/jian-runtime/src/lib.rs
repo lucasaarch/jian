@@ -16,6 +16,8 @@ mod run;
 mod subagent_tools;
 mod tool;
 mod tools;
+mod wake;
+mod wake_tools;
 
 pub use compact::{
     CLAIM_TTL_MS, CompactError, Compacted, Compactor, THREAD_COMPACT_KIND, queue_compaction_if_due,
@@ -31,3 +33,5 @@ pub use subagent_tools::{
 };
 pub use tool::{MachineSlot, Tool, ToolEnv, Tools};
 pub use tools::standard_tools;
+pub use wake::{Decider, Decision, WAKE_KIND, WakeError};
+pub use wake_tools::WAKE_TOOLS;

@@ -9,7 +9,7 @@ export type InboxEventView = {
  */
 id: string, 
 /**
- * What it is: `schedule`.
+ * What it is: `schedule`, `message`, `run.failed`, `wake_later`, `external`.
  */
 kind: string, 
 /**

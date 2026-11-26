@@ -92,7 +92,7 @@ pub struct UpdateScheduleRequest {
 pub struct InboxEventView {
     /// Its id.
     pub id: String,
-    /// What it is: `schedule`.
+    /// What it is: `schedule`, `message`, `run.failed`, `wake_later`, `external`.
     pub kind: String,
     /// Its content; for a schedule, `scheduleId`, `name` and `instruction`.
     #[ts(type = "unknown")]

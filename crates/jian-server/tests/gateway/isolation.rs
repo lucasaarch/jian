@@ -35,6 +35,7 @@ const MEMORIES_FILE: &str = include_str!("memories.rs");
 const PROJECTS_FILE: &str = include_str!("projects.rs");
 const RUNS_FILE: &str = include_str!("runs.rs");
 const SCHEDULES_FILE: &str = include_str!("schedules.rs");
+const WAKE_FILE: &str = include_str!("wake.rs");
 const SIGN_IN_FILE: &str = include_str!("sign_in.rs");
 const SKILLS_FILE: &str = include_str!("skills.rs");
 const THREADS_FILE: &str = include_str!("threads.rs");
@@ -54,6 +55,7 @@ fn is_a_test_here(name: &str) -> bool {
         || PROJECTS_FILE.contains(&declared)
         || RUNS_FILE.contains(&declared)
         || SCHEDULES_FILE.contains(&declared)
+        || WAKE_FILE.contains(&declared)
         || SIGN_IN_FILE.contains(&declared)
         || SKILLS_FILE.contains(&declared)
         || USAGE_FILE.contains(&declared)
@@ -116,6 +118,9 @@ const ROUTE_TESTS: &[(&str, &str)] = &[
     ("GET /v1/skills/{name}/versions", SKILLS_TEST),
     ("GET /v1/agents/{id}/model", AGENT_MODEL_TEST),
     ("PUT /v1/agents/{id}/model", AGENT_MODEL_TEST),
+    ("POST /v1/agents/{id}/events", WAKE_TEST),
+    ("GET /v1/agents/{id}/budget", WAKE_TEST),
+    ("PUT /v1/agents/{id}/budget", WAKE_TEST),
     ("GET /v1/agents/{id}/skills", SKILLS_TEST),
     ("PUT /v1/agents/{id}/skills/{name}", SKILLS_TEST),
     (
@@ -842,3 +847,7 @@ async fn users_and_sessions_of_the_other_tenant_are_out_of_reach() {
     assert_eq!(wrong, aimed);
     gateway.stop().await;
 }
+
+/// The test that shows tenant A's events wake no agent of tenant B, and that a webhook with
+/// another workspace's token reaches nobody's box.
+const WAKE_TEST: &str = "an_event_of_one_tenant_never_wakes_the_agent_of_another";

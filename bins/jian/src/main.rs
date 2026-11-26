@@ -26,10 +26,10 @@ use std::time::{Duration, Instant};
 use anyhow::Context as _;
 use clap::{Parser, Subcommand};
 use jian_server::{
-    AccountModels, AgentRunner, AppState, EventBus, INVITE_SEND_KIND, InviteSender, JobOptions,
-    JobRegistry, JobRequeue, JobRunner, LOGIN_LINK_SEND_KIND, LlmAccess, LoginLinkSender,
-    MemoryEventBus, ModelSource, PublicUrl, RUN_KIND, SCHEDULE_FIRE_KIND, ScheduleFirer, Settings,
-    SlotKeeper, THREAD_COMPACT_KIND, ThreadCompactor,
+    AGENT_WAKE_KIND, AccountModels, AgentRunner, AgentWaker, AppState, EventBus, INVITE_SEND_KIND,
+    InviteSender, JobOptions, JobRegistry, JobRequeue, JobRunner, LOGIN_LINK_SEND_KIND, LlmAccess,
+    LoginLinkSender, MemoryEventBus, ModelSource, PublicUrl, RUN_KIND, SCHEDULE_FIRE_KIND,
+    ScheduleFirer, Settings, SlotKeeper, THREAD_COMPACT_KIND, ThreadCompactor,
 };
 use jian_store::embedded::EmbeddedConfig;
 use jian_store::secrets::{LocalKeyring, MasterKeys as _};
@@ -479,6 +479,10 @@ fn job_registry(
             Arc::new(LoginLinkSender::new(settings)),
         )
         .register(SCHEDULE_FIRE_KIND, Arc::new(ScheduleFirer))
+        .register(
+            AGENT_WAKE_KIND,
+            Arc::new(AgentWaker::new(models.clone(), events.clone())),
+        )
         .register(
             THREAD_COMPACT_KIND,
             Arc::new(ThreadCompactor::new(models.clone())),

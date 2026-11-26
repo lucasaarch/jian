@@ -10,6 +10,7 @@ use crate::runs::{RunDelta, RunView};
 use crate::skills::{SkillGone, SkillSummary};
 use crate::subagents::SubagentView;
 use crate::threads::{MessageView, ParticipantChange, ThreadSummary};
+use crate::wake::WakeHeldView;
 
 /// What a client can subscribe to. One topic today; each domain adds its own with its issue.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize, TS)]
@@ -105,6 +106,10 @@ pub enum DeltaPayload {
     /// A subagent of a thread of the client started or ended: its state now.
     #[serde(rename = "subagent.updated")]
     SubagentUpdated(SubagentView),
+    /// An agent's budget for acting on its own is spent, so events of a conversation of the
+    /// client wait.
+    #[serde(rename = "wake.held")]
+    WakeHeld(WakeHeldView),
 }
 
 /// One change on a topic.

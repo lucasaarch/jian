@@ -13,9 +13,9 @@
 //!
 //! After a message is written to a thread that has an agent in it, the database calls its
 //! [`ThreadObserver`] ([`Database::with_thread_observer`]). Today that is a no-op that only logs.
-//! LUC-78 plugs the agent event inbox in here: it turns the call into an event for each agent in
-//! `agents`, and it does so for messages of every author, so it must ignore the agent's own.
-//! The observer runs after the commit, must not block, and its failure never undoes a message.
+//! The agent event box does not hang on it: a group message writes its events itself, in its own
+//! transaction (see `agent_events`). The observer runs after the commit, must not block, and its
+//! failure never undoes a message.
 
 use std::sync::Arc;
 
@@ -560,6 +560,13 @@ impl Database {
             Some(posted) if posted.created => agents_in(&mut tx, thread).await?,
             _ => Vec::new(),
         };
+        if let Some(posted) = &posted
+            && posted.created
+        {
+            // In the message's transaction, so a message and the events it makes stand or fall
+            // together.
+            crate::agent_events::record_message_events(&mut tx, &posted.message, &agents).await?;
+        }
         tx.commit()
             .await
             .map_err(StoreError::query("write a message"))?;

@@ -67,7 +67,8 @@
 //! place (see the `agents` and `threads` modules' notes), and what a caller may not see is
 //! `None`, never an error that says it exists. Only a [`Viewer`] built from a member's token
 //! reaches these calls. A message written to a thread with an agent in it reaches the
-//! [`ThreadObserver`], which is where the agent loop (LUC-78) plugs in.
+//! [`ThreadObserver`]; a group message also writes the agents' events (the `agent_events` module)
+//! in its own transaction.
 //!
 //! # Migrations and schema versions
 //!
@@ -120,6 +121,7 @@
 
 mod accounts;
 mod agent_config;
+mod agent_events;
 mod agents;
 mod backup;
 mod blobs;
@@ -173,6 +175,11 @@ mod usage;
 
 pub use accounts::{Account, NewAccount, default_name, normalize_email};
 pub use agent_config::AgentModel;
+pub use agent_events::{
+    AgentEvent, BUDGET_WINDOW_MS, BudgetKind, BudgetLimits, DEFAULT_PROACTIVE_RUNS_PER_HOUR,
+    DEFAULT_WAKES_PER_HOUR, EXTERNAL_EVENT, MAX_BUDGET_PER_HOUR, MAX_EVENT_PAYLOAD_BYTES,
+    MAX_PENDING_LATER, MESSAGE_EVENT, NewEvent, RUN_FAILED_EVENT, Target, WAKE_LATER_EVENT,
+};
 pub use agents::{
     Agent, AgentId, AgentPatch, MAX_AGENT_AVATAR_BYTES, MAX_AGENT_DESCRIPTION_CHARS,
     MAX_AGENT_INSTRUCTIONS_CHARS, MAX_AGENT_NAME_CHARS, MAX_AGENT_VIEWERS, NewAgent, Viewer,

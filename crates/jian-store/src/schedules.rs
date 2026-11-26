@@ -235,7 +235,8 @@ fn next_of(cron: &str, zone: &str, after_ms: i64) -> Result<Option<i64>, StoreEr
         .map_err(|_| StoreError::InvalidWorkspace("that cron expression cannot be scheduled"))
 }
 
-/// What firing reads of a schedule: agent, name, instruction, cron, zone, enabled, next time.
+/// What firing reads of a schedule: agent, name, instruction, cron, zone, enabled, next time,
+/// thread.
 type FireRow = (
     String,
     String,
@@ -244,6 +245,7 @@ type FireRow = (
     String,
     bool,
     Option<i64>,
+    Option<String>,
 );
 
 impl Database {
@@ -514,14 +516,14 @@ impl Database {
         let mut tx = self.begin(ctx).await?;
         let row: Option<FireRow> = sqlx::query_as(
             "SELECT agent_id, name, instruction, cron, time_zone, enabled, \
-                    (extract(epoch FROM next_run_at) * 1000)::bigint \
+                    (extract(epoch FROM next_run_at) * 1000)::bigint, thread_id \
                  FROM schedules WHERE id = $1 FOR UPDATE",
         )
         .bind(id.as_str())
         .fetch_optional(&mut *tx)
         .await
         .map_err(StoreError::query(ACTION))?;
-        let Some((agent, name, instruction, cron, zone, enabled, next)) = row else {
+        let Some((agent, name, instruction, cron, zone, enabled, next, thread)) = row else {
             return Ok(Fired::Stale);
         };
         if !enabled || next != Some(due_ms) {
@@ -530,8 +532,9 @@ impl Database {
         let payload =
             json!({ "scheduleId": id.as_str(), "name": name, "instruction": instruction });
         sqlx::query(AssertSqlSafe(format!(
-            "INSERT INTO agent_inbox (id, agent_id, kind, payload, schedule_id, due_at) \
-             VALUES ($1, $2, $3, $4::text::jsonb, $5, {due}) ON CONFLICT DO NOTHING",
+            "INSERT INTO agent_inbox (id, agent_id, kind, payload, schedule_id, due_at, \
+                thread_id, available_ms) \
+             VALUES ($1, $2, $3, $4::text::jsonb, $5, {due}, $7, $8) ON CONFLICT DO NOTHING",
             due = at("$6")
         )))
         .bind(random_id("inb_")?)
@@ -540,6 +543,8 @@ impl Database {
         .bind(payload.to_string())
         .bind(id.as_str())
         .bind(due_ms)
+        .bind(thread)
+        .bind(now_ms)
         .execute(&mut *tx)
         .await
         .map_err(StoreError::query(ACTION))?;

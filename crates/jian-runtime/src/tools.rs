@@ -11,6 +11,7 @@ use serde_json::{Value, json};
 use crate::objective_tools::objective_tools;
 use crate::subagent_tools::subagent_tools;
 use crate::tool::{Tool, ToolEnv, Tools};
+use crate::wake_tools::wake_tools;
 
 /// The longest a shell command may run, in milliseconds, whatever the model asks.
 const SHELL_LIMIT_MS: u64 = 120_000;
@@ -30,6 +31,7 @@ pub fn standard_tools() -> Tools {
         .with(Arc::new(OpenSkill))
         .with_all(objective_tools())
         .with_all(subagent_tools())
+        .with_all(wake_tools())
 }
 
 fn spec(name: &str, description: &str, schema: Value) -> ToolSpec {

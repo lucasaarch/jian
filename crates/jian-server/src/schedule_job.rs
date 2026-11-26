@@ -79,5 +79,9 @@ pub async fn run_ticker(db: Arc<Database>, closing: CancellationToken) {
         if let Err(error) = tick(&db, now_ms()).await {
             tracing::warn!(%error, "looking for due schedules failed");
         }
+        // The same beat looks for agents whose events have settled.
+        if let Err(error) = crate::wake_job::tick(&db, now_ms()).await {
+            tracing::warn!(%error, "looking for agents to wake failed");
+        }
     }
 }

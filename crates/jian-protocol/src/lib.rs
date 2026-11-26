@@ -22,3 +22,4 @@ pub mod schedules;
 pub mod skills;
 pub mod subagents;
 pub mod threads;
+pub mod wake;

@@ -19,6 +19,7 @@ mod slots;
 mod support;
 mod threads;
 mod usage;
+mod wake;
 
 use std::time::Duration;
 
