@@ -9,9 +9,10 @@
 //! What the core cannot say yet is kept, not dropped: a message's reactions, the channel's own
 //! copy of it, its tool call and its purpose go into one `legacy` part, whole. What is dropped:
 //! a profile's model, identity, context policy and shell switch; a session's summary, mode,
-//! objective, project, machine and protection; a contact's approval state. Sessions between two
-//! agents are not imported (the core has no thread of agents with no member); the threads
-//! marker counts them.
+//! objective, project, machine and protection (Ask first is gone, so a run's pending tool
+//! approval maps to nothing; the run and its messages stay); a contact's approval state.
+//! Sessions between two agents are not imported (the core has no thread of agents with no
+//! member); the threads marker counts them.
 
 use jian_store::{
     AccountId, Database, ImportOutcome, ImportResult, ImportStatus, StoreError, TenantCtx,

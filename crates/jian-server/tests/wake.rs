@@ -570,7 +570,7 @@ async fn a_wake_run_is_held_to_the_machine_quota_like_any_other() {
         .unwrap();
 
     rig.work(&run.id).await;
-    // Refused at once: no approval was asked for a call that could not run, and nothing woke.
+    // Refused at once: the call never ran, and nothing woke.
     let done = rig.runs(&rig.group, &rig.pear).await.remove(0);
     assert_eq!(done.state, RunState::Done);
     assert_eq!(done.machine_ms, 60_000);
@@ -585,4 +585,32 @@ async fn a_wake_run_is_held_to_the_machine_quota_like_any_other() {
             if text.contains("machine minutes used up this month"))
     });
     assert!(refused);
+}
+
+#[tokio::test]
+async fn a_wake_run_calls_a_machine_tool_at_once_and_never_waits_for_a_person() {
+    let shell = call("s1", "shell", json!({ "command": "ls" }));
+    let rig = Rig::new(vec![decide("act", None), shell, say("listed")]).await;
+    rig.post(&rig.group, "the build is red").await;
+    let ready = rig.settled(&rig.pear).await;
+    rig.wake(&rig.pear, ready).await.unwrap();
+    let run = rig.runs(&rig.group, &rig.pear).await.remove(0);
+    assert_eq!(run.origin, RunOrigin::Wake);
+
+    // One job takes it from the call to the end: no parked state in between.
+    rig.work(&run.id).await;
+    let done = rig.runs(&rig.group, &rig.pear).await.remove(0);
+    assert_eq!(done.state, RunState::Done);
+    let page = rig
+        .db()
+        .list_messages(rig.ctx(), &rig.who, &rig.group, Window::Latest, 100)
+        .await
+        .unwrap()
+        .unwrap();
+    let answered = page
+        .items
+        .iter()
+        .flat_map(|m| m.parts.iter())
+        .any(|part| matches!(part, MessagePart::ToolResult { id, .. } if id == "s1"));
+    assert!(answered);
 }

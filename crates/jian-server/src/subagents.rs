@@ -167,7 +167,7 @@ async fn deliver(
             SubagentState::Stopped,
             "the subagent was stopped".to_owned(),
         ),
-        RunState::Queued | RunState::Running | RunState::WaitingApproval => return Ok(()),
+        RunState::Queued | RunState::Running | RunState::Waiting => return Ok(()),
     };
     // A report is a tool result or a message: both are held to the same size.
     let (report, _) = cap_tool_result(&report);

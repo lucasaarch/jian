@@ -8,14 +8,12 @@
 //! A run that was already `running` when its job came back (the process died) is not redone: its
 //! tools may have had effects, so it ends `failed`.
 //!
-//! A run that waits for an approval holds no job and no worker: its job ends with the run
-//! parked as `waiting_approval`. Two things queue a job of the same kind with the run's
-//! `callId` in the payload: the answer (the route) and the end of the time to answer (queued by
-//! the loop when it asked). Whichever comes first takes the run back to `running` and goes on
-//! from the call; the other finds the run no longer waiting on that call and does nothing.
-//!
-//! A run that waits for a subagent's report is parked the same way: the report queues the job
-//! with the call's id ([`crate::subagents`]), and the call, run again, answers with it.
+//! No run waits for a person to allow a tool: agents are bots. A run that waits for a subagent's
+//! report holds no job and no worker: its job ends with the run parked as `waiting`. The report
+//! queues a job of the same kind with the run's `callId` in the payload ([`crate::subagents`]);
+//! it takes the run back to `running` and goes on from the call, which, run again, answers with
+//! the report. A second job for the same call finds the run no longer waiting on it and does
+//! nothing.
 //!
 //! A run that ends `done` while its thread has an open objective queues the next one
 //! ([`crate::auto_continue`]); one that ends `failed` or `stopped` does not.
@@ -34,8 +32,7 @@ use jian_runtime::{
 };
 use jian_skills::Catalog;
 use jian_store::{
-    ApprovalState, Database, NewEvent, RUN_FAILED_EVENT, Run, RunLease, RunOrigin, RunState,
-    StoreError, TenantCtx,
+    Database, NewEvent, RUN_FAILED_EVENT, Run, RunLease, RunOrigin, RunState, StoreError, TenantCtx,
 };
 
 use serde_json::json;
@@ -44,7 +41,7 @@ use crate::auto_continue::{after_run, still_wanted};
 use crate::events::EventBus;
 use crate::guard::catching;
 use crate::objectives::objective_view;
-use crate::runs::current_view;
+use crate::runs::run_view;
 use crate::subagents::{report_back, subagent_view};
 use crate::workspace::{announce_with, message_view};
 use crate::{JobContext, JobError, JobHandler, Model, ModelSource};
@@ -83,7 +80,7 @@ impl AgentRunner {
         }
     }
 
-    /// The same with other limits, for a test that cannot wait ten minutes for an approval.
+    /// The same with other limits.
     #[must_use]
     pub fn with_config(mut self, config: RunConfig) -> Self {
         self.config = config;
@@ -155,7 +152,7 @@ impl AgentRunner {
 
 enum Finish {
     Done,
-    /// Parked on an approval: the run is `waiting_approval` already and holds nothing.
+    /// Parked on a call: the run is `waiting` already and holds nothing.
     Waiting,
     Failed(String),
     Stopped,
@@ -172,10 +169,7 @@ struct Listener<'a> {
 impl Listener<'_> {
     async fn state(&self) {
         match self.db.run_by_id(self.ctx, &self.run.id).await {
-            Ok(Some(run)) => match current_view(self.db, self.ctx, &run).await {
-                Ok(view) => self.send(DeltaPayload::RunUpdated(view)).await,
-                Err(error) => tracing::warn!(%error, "could not read a run to announce it"),
-            },
+            Ok(Some(run)) => self.send(DeltaPayload::RunUpdated(run_view(&run))).await,
             Ok(None) => {}
             Err(error) => tracing::warn!(%error, "could not read a run to announce it"),
         }
@@ -210,7 +204,7 @@ impl RunEvents for Listener<'_> {
                     self.send(DeltaPayload::MessageCreated(message_view(&message)))
                         .await;
                 }
-                RunEvent::Approval(_) | RunEvent::State(_) => self.state().await,
+                RunEvent::State(_) => self.state().await,
                 RunEvent::Objective(objective) => {
                     let view = objective_view(&objective);
                     self.send(DeltaPayload::ObjectiveUpdated(view)).await;
@@ -302,8 +296,8 @@ impl AgentRunner {
         Ok(())
     }
 
-    /// The job after a call's answer, or after its time ran out: takes the run back from
-    /// `waiting_approval` and goes on from that call.
+    /// The job after a call's answer (a subagent's report): takes the run back from `waiting`
+    /// and goes on from that call.
     async fn go_on(
         &self,
         db: &Database,
@@ -312,30 +306,15 @@ impl AgentRunner {
         call_id: &str,
     ) -> Result<(), JobError> {
         let store = |e: StoreError| JobError::retry(e.to_string());
-        if run.state != RunState::WaitingApproval {
+        if run.state != RunState::Waiting {
             return Ok(());
         }
-        let approval = db.approval(tenant, &run.id, call_id).await.map_err(store)?;
-        let Some(approval) = approval else {
-            // Not a call that waited for a person: it may have waited for a subagent's report.
-            if !db
-                .subagent_ended(tenant, &run.id, call_id)
-                .await
-                .map_err(store)?
-            {
-                return Ok(());
-            }
-            return self.resume(db, tenant, &run.id, call_id).await;
-        };
-        if approval.state == ApprovalState::Pending {
-            // Only the end of the time to answer finds it so.
-            db.expire_approval(tenant, &run.id, call_id, system_now_ms())
-                .await
-                .map_err(store)?;
-            let still = db.approval(tenant, &run.id, call_id).await.map_err(store)?;
-            if still.is_none_or(|a| a.state == ApprovalState::Pending) {
-                return Err(JobError::retry("the time to answer has not passed"));
-            }
+        if !db
+            .subagent_ended(tenant, &run.id, call_id)
+            .await
+            .map_err(store)?
+        {
+            return Ok(());
         }
         self.resume(db, tenant, &run.id, call_id).await
     }

@@ -24,7 +24,7 @@ pub struct MachineSlot {
     scope: Scope,
     machine: OnceCell<Box<dyn Machine>>,
     woke_at: Mutex<Option<Instant>>,
-    /// Machine time the run spent in earlier jobs (it was parked on an approval and resumed):
+    /// Machine time the run spent in earlier jobs (it was parked on a subagent and resumed):
     /// each job has its own slot, and the run's recorded time must only ever grow.
     base_ms: u64,
 }
@@ -110,11 +110,6 @@ pub trait Tool: Send + Sync {
 
     /// Whether it runs on the run's machine. Such a tool wakes the machine on its first call.
     fn needs_machine(&self) -> bool;
-
-    /// Whether a person must allow this call before it runs.
-    fn needs_approval(&self, _input: &Value) -> bool {
-        false
-    }
 
     /// Runs the call.
     fn call<'a>(

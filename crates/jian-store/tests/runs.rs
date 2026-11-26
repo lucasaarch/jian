@@ -1,13 +1,11 @@
 //! Runs against a real Postgres: one active run per thread and agent however many start at
-//! once, a run that ended never changes, an approval is answered once and in time, and another
-//! tenant reaches none of it.
+//! once, a run that ended never changes, a parked run is taken back once, and another tenant
+//! reaches none of it.
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use jian_core::{ThreadKind, Visibility};
-use jian_store::{
-    Answer, ApprovalState, NewAgent, NewThread, Quotas, RunOrigin, RunState, StoreError, Viewer,
-};
+use jian_store::{NewAgent, NewThread, Quotas, RunOrigin, RunState, StoreError, Viewer};
 use jian_testkit::{Side, TestDb, TwoTenants};
 
 async fn thread_and_agent(
@@ -113,7 +111,7 @@ async fn a_thread_and_agent_have_one_active_run_whoever_starts_it_and_when() {
 }
 
 #[tokio::test]
-async fn an_approval_is_answered_once_before_it_expires_and_another_tenant_sees_no_run() {
+async fn a_parked_run_is_taken_back_once_and_another_tenant_sees_no_run() {
     let test = TestDb::start(env!("CARGO_TARGET_TMPDIR")).await;
     let tenants = TwoTenants::seed(&test.db).await;
     let (a, b) = (&tenants.a, &tenants.b);
@@ -125,54 +123,20 @@ async fn an_approval_is_answered_once_before_it_expires_and_another_tenant_sees_
         .await
         .unwrap();
 
-    let ask = |call: &'static str, ttl: i64| {
-        test.db
-            .create_approval(&a.ctx, &run.id, call, "shell", "{}", 1_000 + ttl)
-    };
-    let first = ask("c1", 60_000).await.unwrap();
-    // Asking again for the same call is the same approval.
-    assert_eq!(ask("c1", 60_000).await.unwrap().id, first.id);
-    // Only a run parked on its call takes an answer.
+    // Only a running run parks, and only on the call it names does it come back, once.
     assert!(test.db.claim_run(&a.ctx, &run.id).await.unwrap());
-    test.db
-        .pause_run(&a.ctx, &run.id, r#"{"callId":"c1"}"#)
-        .await
-        .unwrap();
-
-    let answer = |approve: bool, now: i64| {
-        let answer = Answer {
-            approve,
-            by: &by,
-            reason: None,
-        };
-        let (db, ctx, thread, run) = (&test.db, &a.ctx, &thread, &run.id);
-        async move { db.decide_approval(ctx, thread, run, &answer, now).await }
-    };
-    assert!(answer(true, 2_000).await.unwrap().is_some());
-    assert!(answer(false, 2_000).await.unwrap().is_none());
-    let kept = test
-        .db
-        .approval(&a.ctx, &run.id, "c1")
-        .await
-        .unwrap()
-        .unwrap();
-    assert_eq!(kept.state, ApprovalState::Approved);
-
-    ask("c2", 10).await.unwrap();
-    assert!(answer(true, 5_000).await.unwrap().is_none());
-    test.db
-        .expire_approval(&a.ctx, &run.id, "c2", 5_000)
-        .await
-        .unwrap();
-    let expired = test
-        .db
-        .approval(&a.ctx, &run.id, "c2")
-        .await
-        .unwrap()
-        .unwrap();
-    assert_eq!(expired.state, ApprovalState::Expired);
-
-    // Tenant B has no such run, cannot stop it and cannot answer its approvals.
+    assert!(
+        test.db
+            .pause_run(&a.ctx, &run.id, r#"{"callId":"c1"}"#)
+            .await
+            .unwrap()
+    );
+    let parked = test.db.run_by_id(&a.ctx, &run.id).await.unwrap().unwrap();
+    assert_eq!(parked.state, RunState::Waiting);
+    assert!(!test.db.resume_run(&a.ctx, &run.id, "c2").await.unwrap());
+    assert!(test.db.resume_run(&a.ctx, &run.id, "c1").await.unwrap());
+    assert!(!test.db.resume_run(&a.ctx, &run.id, "c1").await.unwrap());
+    // The tenant's other runs stay out of it: B has no such run and cannot stop it.
     assert!(
         test.db
             .run(&b.ctx, &thread, &run.id)

@@ -188,7 +188,6 @@ const ROUTE_TESTS: &[(&str, &str)] = &[
     ("GET /v1/threads/{id}/runs", RUNS_TEST),
     ("POST /v1/threads/{id}/runs", RUNS_TEST),
     ("POST /v1/threads/{id}/runs/{run_id}/stop", RUNS_TEST),
-    ("POST /v1/threads/{id}/runs/{run_id}/approval", RUNS_TEST),
     (
         "GET /v1/threads/{id}/agents/{agent_id}/objective",
         OBJECTIVE_TEST,
@@ -246,7 +245,7 @@ const USAGE_TEST: &str = "usage_is_each_workspaces_own_and_a_workspace_over_its_
 
 /// The test that shows tenant B reaches no agent, thread or message of tenant A.
 const RUNS_TEST: &str =
-    "a_thread_has_one_active_run_per_agent_and_only_its_members_start_stop_and_answer_it";
+    "a_thread_has_one_active_run_per_agent_and_only_its_members_start_and_stop_it";
 /// The test that shows tenant B and a member outside the thread reach no objective of tenant A.
 const OBJECTIVE_TEST: &str = "an_objective_is_seen_by_its_thread_and_set_only_by_its_members";
 /// The test that shows tenant B and a member outside the thread reach no subagent of tenant A.

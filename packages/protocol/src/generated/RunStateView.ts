@@ -3,4 +3,4 @@
 /**
  * Where a run is.
  */
-export type RunStateView = "queued" | "running" | "waiting_approval" | "done" | "failed" | "stopped";
+export type RunStateView = "queued" | "running" | "waiting" | "done" | "failed" | "stopped";

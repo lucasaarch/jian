@@ -14,13 +14,13 @@ use jian_exec::Executor;
 use jian_llm::{BreakerConfig, CircuitBreakers, Event, EventStream, LlmError, Provider, Request};
 use jian_protocol::client::{Delta, DeltaPayload, Topic};
 use jian_protocol::runs::RunStateView;
-use jian_runtime::{RunConfig, system_now_ms};
+use jian_runtime::RunConfig;
 use jian_server::{
     AgentRunner, EventBus, JobContext, JobHandler, MemoryEventBus, Model, ModelSource, RUN_KIND,
 };
 use jian_store::{
-    AgentModel, Answer, Database, DatabaseSource, NewAgent, NewJob, NewMessage, NewThread, Run,
-    RunOrigin, RunState, TenantCtx, ThreadId, Viewer,
+    AgentModel, Database, DatabaseSource, NewAgent, NewJob, NewMessage, NewThread, Run, RunOrigin,
+    RunState, TenantCtx, ThreadId, Viewer,
 };
 use jian_testkit::{
     FakeExecutor, FakeMachineScript, FakeProvider, Gate, Script, Side, TestDb, TwoTenants, call,
@@ -430,55 +430,6 @@ async fn an_open_breaker_fails_the_run_without_calling_the_provider() {
     test.stop().await;
 }
 
-/// The job that goes on after `call_id`: what the answer route queues, and what the end of the
-/// time to answer queues too.
-async fn resume_context(
-    test: &TestDb,
-    side: &Side,
-    run: &Run,
-    call_id: &str,
-    key: &str,
-) -> JobContext {
-    let job = test
-        .db
-        .enqueue_job(
-            &side.ctx,
-            NewJob::new(RUN_KIND, json!({ "runId": run.id, "callId": call_id }))
-                .idempotent(format!("run:{}:{key}:{call_id}", run.id)),
-        )
-        .await
-        .unwrap()
-        .job;
-    let db = Database::open(DatabaseSource::External(test.url.clone()))
-        .await
-        .unwrap()
-        .with_master_keys(jian_testkit::master_keys());
-    JobContext {
-        job,
-        tenant: side.ctx.clone(),
-        db: Arc::new(db),
-    }
-}
-
-async fn decide(test: &TestDb, side: &Side, w: &World, approve: bool) {
-    let decided = test
-        .db
-        .decide_approval(
-            &side.ctx,
-            &w.thread,
-            &w.run.id,
-            &Answer {
-                approve,
-                by: &side.admin.account_id,
-                reason: None,
-            },
-            system_now_ms(),
-        )
-        .await
-        .unwrap();
-    assert!(decided.is_some());
-}
-
 fn shell_runner(
     test_side: &Side,
     shell: Vec<Vec<Script>>,
@@ -504,7 +455,7 @@ fn shell_runner(
 }
 
 #[tokio::test]
-async fn a_run_waiting_for_an_approval_holds_no_job_and_the_answer_resumes_it_once() {
+async fn a_shell_call_runs_in_the_same_job_and_the_run_never_waits_for_a_person() {
     let test = TestDb::start(env!("CARGO_TARGET_TMPDIR")).await;
     let a = TwoTenants::seed(&test.db).await.a;
     let w = world(&test, &a).await;
@@ -514,86 +465,16 @@ async fn a_run_waiting_for_an_approval_holds_no_job_and_the_answer_resumes_it_on
     ];
     let (handler, machine, _) = shell_runner(&a, turns, RunConfig::default());
 
-    // The job ends (this returns) with the run parked: nothing waits inside a worker.
     tokio::time::timeout(
         Duration::from_secs(10),
         handler.handle(context(&test, &a, &w.run).await),
     )
     .await
-    .expect("the job held its worker while the run waited")
+    .expect("the job did not finish")
     .unwrap();
-    let parked = state(&test, &a, &w.run).await;
-    assert_eq!(parked.state, RunState::WaitingApproval, "{parked:?}");
-    assert_eq!(machine.opened(), 0);
-
-    // The loop queued the job that ends the wait, for its time.
-    let expiry = test
-        .db
-        .enqueue_job(
-            &a.ctx,
-            NewJob::new(RUN_KIND, json!({})).idempotent(format!("run:{}:expire:c1", w.run.id)),
-        )
-        .await
-        .unwrap();
-    assert!(!expiry.created);
-    assert_eq!(expiry.job.payload["callId"], "c1");
-
-    decide(&test, &a, &w, true).await;
-    let answer = resume_context(&test, &a, &w.run, "c1", "answer").await;
-    handler.handle(answer).await.unwrap();
+    // One job, start to end: no parked run, no second job to answer.
     assert_eq!(state(&test, &a, &w.run).await.state, RunState::Done);
     assert_eq!(machine.commands(), ["ls"]);
-
-    // The answer's job and the expiry's job both arrive: the second finds the run done.
-    let late = resume_context(&test, &a, &w.run, "c1", "expire").await;
-    handler.handle(late).await.unwrap();
-    assert_eq!(machine.commands(), ["ls"]);
-    test.stop().await;
-}
-
-#[tokio::test]
-async fn an_approval_nobody_answers_is_expired_by_its_job_and_the_model_reads_the_error() {
-    let test = TestDb::start(env!("CARGO_TARGET_TMPDIR")).await;
-    let a = TwoTenants::seed(&test.db).await.a;
-    let w = world(&test, &a).await;
-    let turns = vec![
-        call("c1", "shell", json!({ "command": "ls" })),
-        say("gave up"),
-    ];
-    let config = RunConfig {
-        approval_ttl_ms: 3_000,
-        ..RunConfig::default()
-    };
-    let (handler, machine, _) = shell_runner(&a, turns, config);
-    handler
-        .handle(context(&test, &a, &w.run).await)
-        .await
-        .unwrap();
-    assert_eq!(
-        state(&test, &a, &w.run).await.state,
-        RunState::WaitingApproval
-    );
-
-    // Early, the expiry job gives the job back to be tried again and the run keeps waiting.
-    let early = resume_context(&test, &a, &w.run, "c1", "expire").await;
-    assert!(handler.handle(early).await.is_err());
-    assert_eq!(
-        state(&test, &a, &w.run).await.state,
-        RunState::WaitingApproval
-    );
-    tokio::time::sleep(Duration::from_millis(3_500)).await;
-    let due = resume_context(&test, &a, &w.run, "c1", "expire-again").await;
-    handler.handle(due).await.unwrap();
-
-    assert_eq!(state(&test, &a, &w.run).await.state, RunState::Done);
-    assert!(machine.commands().is_empty());
-    let approval = test
-        .db
-        .approval(&a.ctx, &w.run.id, "c1")
-        .await
-        .unwrap()
-        .unwrap();
-    assert_eq!(approval.state, jian_store::ApprovalState::Expired);
     test.stop().await;
 }
 

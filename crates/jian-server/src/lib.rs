@@ -236,7 +236,6 @@ pub const ROUTES: &[&str] = &[
     "GET /v1/threads/{id}/runs (a member who sees it)",
     "POST /v1/threads/{id}/runs (a member of the thread)",
     "POST /v1/threads/{id}/runs/{run_id}/stop (a member of the thread)",
-    "POST /v1/threads/{id}/runs/{run_id}/approval (a member of the thread)",
     "GET /v1/threads/{id}/agents/{agent_id}/objective (a member who sees the thread)",
     "PUT /v1/threads/{id}/agents/{agent_id}/objective (a member of the thread)",
     "DELETE /v1/threads/{id}/agents/{agent_id}/objective (a member of the thread)",
@@ -516,10 +515,6 @@ pub fn router_with(state: AppState, extra: Router<AppState>) -> Router {
         .route("/v1/threads/{id}", get(threads::get))
         .route("/v1/threads/{id}/runs", get(runs::list).post(runs::start))
         .route("/v1/threads/{id}/runs/{run_id}/stop", post(runs::stop))
-        .route(
-            "/v1/threads/{id}/runs/{run_id}/approval",
-            post(runs::approval),
-        )
         .route(
             "/v1/threads/{id}/agents/{agent_id}/objective",
             get(objectives::get)

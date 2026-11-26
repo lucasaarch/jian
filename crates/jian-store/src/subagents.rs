@@ -457,7 +457,7 @@ impl Database {
         let mut tx = self.begin(ctx).await?;
         let found: Option<i32> = sqlx::query_scalar(
             "SELECT 1 FROM runs \
-             WHERE id = $1 AND state = 'waiting_approval' AND resume->>'callId' = $2",
+             WHERE id = $1 AND state = 'waiting' AND resume->>'callId' = $2",
         )
         .bind(run)
         .bind(call)

@@ -374,7 +374,7 @@ impl Database {
         }
         let busy: Option<i32> = sqlx::query_scalar(
             "SELECT 1 FROM runs WHERE thread_id = $1 AND agent_id = $2 \
-             AND state IN ('queued', 'running', 'waiting_approval')",
+             AND state IN ('queued', 'running', 'waiting')",
         )
         .bind(thread.as_str())
         .bind(agent.as_str())

@@ -5,7 +5,10 @@
 
 mod support;
 
+use std::path::Path;
+
 use jian_store::{Database, Migrations, StoreError, TenantStatus};
+use sqlx::migrate::Migrator;
 use support::{Server, exec, id, migrator, platform_migrator, tenant, texts};
 
 const ITEMS: (&str, &str) = ("0001_items.sql", "CREATE TABLE items (name text NOT NULL);");
@@ -315,7 +318,8 @@ async fn the_embedded_migrations_apply_to_the_platform_and_to_each_tenant() {
         )
         .await,
         [
-            "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16"
+            "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16",
+            "17"
         ]
     );
     // After a restart the tenant is migrated again with nothing to do.
@@ -395,6 +399,100 @@ async fn the_threads_migration_upgrades_a_tenant_and_keeps_what_it_had() {
         "INSERT INTO agents (id, name, visibility, created_by) VALUES ('agt_1', 'A', 'workspace', 'acc')",
     )
     .await;
+    db.close().await.unwrap();
+    server.stop().await;
+}
+
+#[tokio::test]
+async fn tool_approval_is_dropped_and_a_run_that_waited_on_one_ends_failed() {
+    let server = Server::start().await;
+    let real = Path::new(env!("CARGO_MANIFEST_DIR")).join("migrations/tenant");
+    let mut shipped = std::fs::read_dir(&real)
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name().into_string().unwrap())
+        .collect::<Vec<_>>();
+    shipped.sort();
+    // The release before: everything but the last migration.
+    let last = shipped.pop().unwrap();
+    assert!(last.starts_with("0017_"), "{last}");
+    let before = shipped
+        .iter()
+        .map(|name| {
+            (
+                name.clone(),
+                std::fs::read_to_string(real.join(name)).unwrap(),
+            )
+        })
+        .collect::<Vec<_>>();
+    let files = before
+        .iter()
+        .map(|(name, sql)| (name.as_str(), sql.as_str()))
+        .collect::<Vec<_>>();
+    let db = database(&server, "v16", &files).await;
+    db.migrate().await.unwrap();
+    let alpha = tenant(&db, "alpha").await;
+    exec(
+        &db,
+        &alpha,
+        "INSERT INTO agents (id, name, visibility, created_by) \
+         VALUES ('agt_1', 'A', 'workspace', 'acc')",
+    )
+    .await;
+    exec(
+        &db,
+        &alpha,
+        "INSERT INTO threads (id, kind) VALUES ('thr_1', 'dm'), ('thr_2', 'dm')",
+    )
+    .await;
+    // thr_1 waited on a tool approval, thr_2 waits on a subagent's report.
+    exec(
+        &db,
+        &alpha,
+        "INSERT INTO runs (id, thread_id, agent_id, trigger_seq, seen_seq, state, resume) VALUES \
+         ('run_1', 'thr_1', 'agt_1', 1, 1, 'waiting_approval', '{\"callId\":\"c1\"}'), \
+         ('run_2', 'thr_2', 'agt_1', 1, 1, 'waiting_approval', '{\"callId\":\"c2\"}')",
+    )
+    .await;
+    exec(
+        &db,
+        &alpha,
+        "INSERT INTO run_approvals (id, run_id, call_id, tool, input, expires_at) \
+         VALUES ('apr_1', 'run_1', 'c1', 'shell', '{}', now() + interval '1 hour')",
+    )
+    .await;
+
+    let db = db.with_migrations(Migrations::new(
+        platform_migrator().await,
+        Migrator::new(real.as_path()).await.unwrap(),
+    ));
+    assert!(db.migrate().await.unwrap().failed.is_empty());
+    assert_eq!(
+        texts(
+            &db,
+            &alpha,
+            "SELECT id || '/' || state || '/' || (resume IS NULL)::text FROM runs ORDER BY id"
+        )
+        .await,
+        ["run_1/failed/true", "run_2/waiting/false"]
+    );
+    assert!(
+        texts(
+            &db,
+            &alpha,
+            "SELECT error FROM runs WHERE id = 'run_1' AND finished_at IS NOT NULL"
+        )
+        .await[0]
+            .contains("tool approval")
+    );
+    assert_eq!(
+        texts(
+            &db,
+            &alpha,
+            "SELECT (to_regclass('run_approvals') IS NULL)::text"
+        )
+        .await,
+        ["true"]
+    );
     db.close().await.unwrap();
     server.stop().await;
 }

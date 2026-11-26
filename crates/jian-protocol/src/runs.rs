@@ -13,33 +13,14 @@ pub enum RunStateView {
     Queued,
     /// A worker is on it.
     Running,
-    /// Paused on a tool call that a person must allow, or on a subagent's report.
-    WaitingApproval,
+    /// Paused on a call that has no answer yet (a subagent's report), holding no worker.
+    Waiting,
     /// Ended with an answer.
     Done,
     /// Ended on an error.
     Failed,
     /// A person stopped it.
     Stopped,
-}
-
-/// A tool call that waits for a person.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[ts(export)]
-#[serde(rename_all = "camelCase")]
-pub struct ApprovalView {
-    /// The model's id for the call.
-    pub call_id: String,
-    /// The tool.
-    pub tool: String,
-    /// Its arguments, as JSON text.
-    pub input: String,
-    /// `pending`, `approved`, `refused` or `expired`.
-    pub state: String,
-    /// When it stops waiting, UTC ISO 8601.
-    pub expires_at: String,
-    /// What the person who answered said.
-    pub reason: Option<String>,
 }
 
 /// One run.
@@ -68,8 +49,6 @@ pub struct RunView {
     pub machine_ms: i64,
     /// Why it failed.
     pub error: Option<String>,
-    /// The call it waits on, while it waits.
-    pub approval: Option<ApprovalView>,
     /// When it was made, UTC ISO 8601.
     pub created_at: String,
     /// When it last changed, UTC ISO 8601.
@@ -98,17 +77,6 @@ pub struct RunDelta {
 pub struct StartRunRequest {
     /// The agent that answers; it must be in the thread.
     pub agent_id: String,
-}
-
-/// `POST /v1/threads/{id}/runs/{run}/approval`: a person's answer to the call a run waits on.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[ts(export)]
-#[serde(rename_all = "camelCase")]
-pub struct DecideApprovalRequest {
-    /// Whether the call may run.
-    pub approve: bool,
-    /// Why, in a few words. The model reads it when the call is refused.
-    pub reason: Option<String>,
 }
 
 /// `GET /v1/threads/{id}/runs`: the newest runs.

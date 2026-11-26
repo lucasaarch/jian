@@ -345,7 +345,7 @@ impl Work<'_> {
             .await
             .map_err(|e| store(&e))?;
         self.consume(&mine).await?;
-        let payload = DeltaPayload::RunUpdated(run_view(&run, None));
+        let payload = DeltaPayload::RunUpdated(run_view(&run));
         announce_with(
             self.db,
             self.waker.events.as_ref(),

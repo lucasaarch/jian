@@ -3,7 +3,7 @@
 //! A subagent is a thread of its own, with the same agent and the people of the thread that
 //! asked, and a run (`origin = subagent`) that works on a brief and answers once. When that run
 //! ends its last answer, whole, goes back to the parent thread. With `wait` the parent run parks
-//! on the call like on an approval: it holds no job, and the report queues the job that goes on
+//! on the call (state `waiting`): it holds no job, and the report queues the job that goes on
 //! (see `Runner`); without it the report is a message in the parent thread and the parent run
 //! does not stop for it.
 //!

@@ -1,9 +1,8 @@
-//! Runs through the routes: one active run per thread and agent, who may start, stop and answer
+//! Runs through the routes: one active run per thread and agent, who may start and stop
 //! one, and what another tenant or a member outside the thread reaches. No test calls a model:
 //! the job that works a run is `tests/run_job.rs`.
 
-use jian_runtime::RUN_KIND;
-use jian_store::{ApprovalState, NewJob, NewProviderAccount};
+use jian_store::NewProviderAccount;
 use serde_json::{Value, json};
 
 use super::accounts::{open_settings, start};
@@ -33,7 +32,7 @@ fn id(value: &Value) -> String {
 }
 
 #[tokio::test]
-async fn a_thread_has_one_active_run_per_agent_and_only_its_members_start_stop_and_answer_it() {
+async fn a_thread_has_one_active_run_per_agent_and_only_its_members_start_and_stop_it() {
     let (gateway, tenants) = start(open_settings()).await;
     let a = &tenants.a;
     let token = a.admin_session.as_str();
@@ -82,14 +81,11 @@ async fn a_thread_has_one_active_run_per_agent_and_only_its_members_start_stop_a
 
     // The member who cannot see the thread, and the other tenant, meet a 404 on every route.
     let stop = format!("{runs}/{}/stop", id(&run));
-    let approval = format!("{runs}/{}/approval", id(&run));
-    let answer = json!({ "approve": true });
     for outsider in [a.peer_session.as_str(), tenants.b.admin_session.as_str()] {
         for (method, path, body) in [
             ("GET", runs.clone(), None),
             ("POST", runs.clone(), Some(body.clone())),
             ("POST", stop.clone(), None),
-            ("POST", approval.clone(), Some(answer.clone())),
         ] {
             let got = call(&gateway, method, &path, outsider, body).await;
             assert_eq!(got.0, 404, "{method} {path}: {}", got.1);
@@ -98,42 +94,27 @@ async fn a_thread_has_one_active_run_per_agent_and_only_its_members_start_stop_a
     let (_, listed) = call(&gateway, "GET", &runs, token, None).await;
     assert_eq!(listed["items"][0]["state"], "queued");
 
-    // Nothing waits for an answer: a 409. Then the run parks on a call (as the loop does when it
-    // lets its worker go), and the call is answered once.
-    let decide = || call(&gateway, "POST", &approval, token, Some(answer.clone()));
-    assert_eq!(decide().await.0, 409);
-    let now = jian_runtime::system_now_ms();
+    // Per-tool approval is gone: the route does not exist, for the owner either.
+    let approval = format!("{runs}/{}/approval", id(&run));
+    let got = call(
+        &gateway,
+        "POST",
+        &approval,
+        token,
+        Some(json!({ "approve": true })),
+    )
+    .await;
+    assert!(matches!(got.0, 404 | 405), "{}: {}", got.0, got.1);
+    // The run parks on a subagent call (as the loop does when it lets its worker go).
     let db = &gateway.db;
     assert!(db.claim_run(&a.ctx, &id(&run)).await.unwrap());
-    db.create_approval(&a.ctx, &id(&run), "c1", "shell", "{}", now + 60_000)
-        .await
-        .unwrap();
     assert!(
         db.pause_run(&a.ctx, &id(&run), r#"{"callId":"c1"}"#)
             .await
             .unwrap()
     );
-    let (status, decided) = decide().await;
-    assert_eq!(status, 200, "{decided}");
-    assert_eq!(decided["approval"]["state"], "approved");
-    assert_eq!(decide().await.0, 409);
-    // The answer queued the job that takes the run back, once.
-    let queued = db
-        .enqueue_job(
-            &a.ctx,
-            NewJob::new(RUN_KIND, json!({})).idempotent(format!("run:{}:answer:c1", id(&run))),
-        )
-        .await
-        .unwrap();
-    assert!(!queued.created);
-    assert_eq!(queued.job.payload["callId"], "c1");
-    let kept = gateway
-        .db
-        .approval(&a.ctx, &id(&run), "c1")
-        .await
-        .unwrap()
-        .unwrap();
-    assert_eq!(kept.state, ApprovalState::Approved);
+    let (_, listed) = call(&gateway, "GET", &runs, token, None).await;
+    assert_eq!(listed["items"][0]["state"], "waiting");
 
     // A run that waits on a call, like one that has not started, has no worker to stop: it
     // stops at once, and then the thread takes a new one.

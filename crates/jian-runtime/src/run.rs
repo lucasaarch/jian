@@ -30,11 +30,9 @@ use jian_llm::ToolCall;
 use jian_llm::{Event, Message as LlmMessage, Params, Part, Provider, Request, Role, TextBlock};
 use jian_skills::{Catalog, RunSkills};
 use jian_store::{
-    Agent, Approval, ApprovalState, Database, HistoryRow, Message, NewJob, Objective,
-    ObjectiveState, ProjectContext, Run, RunOrigin, RunState, StoreError, Subagent, TenantCtx,
-    TokenCounts,
+    Agent, Database, HistoryRow, Message, Objective, ObjectiveState, ProjectContext, Run,
+    RunOrigin, RunState, StoreError, Subagent, TenantCtx, TokenCounts,
 };
-use serde_json::json;
 
 use crate::context::{COMPACT_AT_PERCENT, StoreHistory, build_context};
 use crate::objective_tools::is_objective_tool;
@@ -49,12 +47,8 @@ const FLUSH_BYTES: usize = 200;
 const FLUSH_AFTER: Duration = Duration::from_millis(50);
 
 /// The job kind of a run. The payload is `{"runId": "..."}` for a run that starts, and also
-/// `"callId"` for the job that goes on after that call was answered or expired.
+/// `"callId"` for the job that goes on after the call the run waited on was answered.
 pub const RUN_KIND: &str = "agent.run";
-
-/// Slack added to the approval's time before the job that expires it fires, so it never meets an
-/// approval whose time has not quite passed on the database's clock.
-const EXPIRY_GRACE: Duration = Duration::from_millis(250);
 
 /// The model of one run.
 pub struct ModelRef<'a> {
@@ -73,9 +67,6 @@ pub struct ModelRef<'a> {
 pub struct RunConfig {
     /// Model calls a run may make.
     pub max_steps: u32,
-    /// How long a person has to answer an approval, in milliseconds. Nothing holds the run
-    /// meanwhile: a job queued for the end of this time expires the call if nobody answered.
-    pub approval_ttl_ms: i64,
     /// The most tokens the model may write in one step.
     pub max_output_tokens: u32,
 }
@@ -84,7 +75,6 @@ impl Default for RunConfig {
     fn default() -> Self {
         Self {
             max_steps: 25,
-            approval_ttl_ms: 10 * 60 * 1000,
             max_output_tokens: 4096,
         }
     }
@@ -97,8 +87,6 @@ pub enum RunEvent {
     Text(String),
     /// A message the run wrote to the thread: the model's step, or its tool results.
     Message(Message),
-    /// A tool call that waits for a person.
-    Approval(Approval),
     /// The run moved between running and waiting.
     State(RunState),
     /// The run changed the thread's objective: its state now.
@@ -119,9 +107,9 @@ pub trait RunEvents: Send + Sync {
 pub enum Outcome {
     /// The model answered.
     Done,
-    /// The run is parked on a call a person must answer ([`Run::state`] is `waiting_approval`).
-    /// Nothing holds it: the answer, or the end of the time to answer, queues the job that goes
-    /// on, and [`Runner::run`] picks the run up again from that call.
+    /// The run is parked on a call that has no answer yet, a subagent's report ([`Run::state`]
+    /// is `waiting`). Nothing holds it: the answer queues the job that goes on, and
+    /// [`Runner::run`] picks the run up again from that call.
     Waiting,
     /// A stop reached the run as it was about to wait.
     Stopped,
@@ -266,16 +254,14 @@ impl Step {
 enum Exec {
     /// It ran, or was not allowed to: `(text, is_error)`.
     Result(String, bool),
-    /// A person has to answer first.
-    Wait(Approval),
-    /// The call cannot answer yet and nobody has to be asked: the run parks on it until the job
-    /// that goes on (queued by whatever ends the wait) finds it can.
+    /// The call cannot answer yet: the run parks on it until the job that goes on (queued by
+    /// whatever ends the wait) finds it can.
     Park,
 }
 
 impl Runner<'_> {
-    /// Runs `run`, which must be `running`: from the start, or, when it was paused on an
-    /// approval that has its answer now, from the call it waited on. Errors are the store's; a
+    /// Runs `run`, which must be `running`: from the start, or, when it was paused on a call
+    /// that has its answer now, from the call it waited on. Errors are the store's; a
     /// provider that fails or a quota that is spent end the run as [`Outcome::Failed`], with
     /// words for the person.
     pub async fn run(&self, run: &Run) -> Result<Outcome, StoreError> {
@@ -477,7 +463,7 @@ impl Runner<'_> {
     }
 
     /// Runs the calls of `step` that have no result yet, in order, then writes the results to
-    /// the thread. `Some` is how the run ends here: it waits on a person, or it cannot go on.
+    /// the thread. `Some` is how the run ends here: it waits on a call, or it cannot go on.
     async fn answer_calls(
         &self,
         run: &Run,
@@ -493,11 +479,7 @@ impl Runner<'_> {
             } else {
                 match self.execute(run, &call, skills).await? {
                     Exec::Result(text, is_error) => (text, is_error),
-                    Exec::Wait(asked) => {
-                        let call_id = asked.call_id.clone();
-                        return self.pause(run, step, &call_id, Some(asked)).await;
-                    }
-                    Exec::Park => return self.pause(run, step, &call.id, None).await,
+                    Exec::Park => return self.pause(run, step, &call.id).await,
                 }
             };
             let (text, _) = cap_tool_result(&text);
@@ -532,16 +514,14 @@ impl Runner<'_> {
     }
 
     /// Parks the run on the call `call_id`: writes down where it stands, tells the thread, and
-    /// lets the worker go. For an approval (`asked`) the answer, or the end of the time to
-    /// answer, queues the job that goes on. Otherwise the call waits on a subagent: its report
-    /// queues that job, unless it already ended before the run was parked, which is checked
-    /// here, after parking, so one side or the other always sees the other.
+    /// lets the worker go. The call waits on a subagent: its report queues the job that goes
+    /// on, unless it already ended before the run was parked, which is checked here, after
+    /// parking, so one side or the other always sees the other.
     async fn pause(
         &self,
         run: &Run,
         step: &Step,
         call_id: &str,
-        asked: Option<Approval>,
     ) -> Result<Option<Outcome>, StoreError> {
         if !self
             .db
@@ -551,16 +531,9 @@ impl Runner<'_> {
             // Not running any more: a stop got there first.
             return Ok(Some(Outcome::Stopped));
         }
-        self.events
-            .emit(RunEvent::State(RunState::WaitingApproval))
-            .await;
-        match asked {
-            Some(asked) => self.events.emit(RunEvent::Approval(asked)).await,
-            None => {
-                if self.db.subagent_ended(self.ctx, &run.id, call_id).await? {
-                    queue_resume(self.db, self.ctx, &run.id, call_id, "child").await?;
-                }
-            }
+        self.events.emit(RunEvent::State(RunState::Waiting)).await;
+        if self.db.subagent_ended(self.ctx, &run.id, call_id).await? {
+            queue_resume(self.db, self.ctx, &run.id, call_id, "child").await?;
         }
         Ok(Some(Outcome::Waiting))
     }
@@ -665,9 +638,8 @@ impl Runner<'_> {
         Ok(added)
     }
 
-    /// Runs one tool call, or says a person has to answer first. A call that was answered is
-    /// not asked again: the approval's row is the memory, so the same call, met again by
-    /// whichever worker resumes the run, runs once if it was allowed and never if it was not.
+    /// Runs one tool call. No call waits for a person: the agent is a bot, and a tool either
+    /// runs or is refused for a reason the model reads.
     async fn execute(
         &self,
         run: &Run,
@@ -680,40 +652,7 @@ impl Runner<'_> {
                 true,
             ));
         };
-        // Before a person is asked: nobody should allow a call that cannot run.
         if let Some(refusal) = self.machine_refusal(run, tool.needs_machine()).await? {
-            return Ok(Exec::Result(refusal, true));
-        }
-        if tool.needs_approval(&call.input) {
-            let known = self.db.approval(self.ctx, &run.id, &call.id).await?;
-            let approval = match known {
-                Some(approval) => approval,
-                None => self.ask(run, call).await?,
-            };
-            match approval.state {
-                ApprovalState::Approved => {}
-                ApprovalState::Pending => return Ok(Exec::Wait(approval)),
-                ApprovalState::Refused => {
-                    return Ok(Exec::Result(
-                        match approval.reason {
-                            Some(reason) => format!("a person refused this call: {reason}"),
-                            None => "a person refused this call".to_owned(),
-                        },
-                        true,
-                    ));
-                }
-                ApprovalState::Expired => {
-                    return Ok(Exec::Result(
-                        "nobody answered in time; the call was not run".to_owned(),
-                        true,
-                    ));
-                }
-            }
-        }
-        // The answer may have come days later, in another month.
-        if tool.needs_approval(&call.input)
-            && let Some(refusal) = self.machine_refusal(run, tool.needs_machine()).await?
-        {
             return Ok(Exec::Result(refusal, true));
         }
         let env = ToolEnv {
@@ -778,31 +717,6 @@ impl Runner<'_> {
             )),
             Err(other) => Err(other),
         }
-    }
-
-    /// Puts a call to the people of the thread and queues the job that ends the wait when nobody
-    /// answers. The job comes first: a run that is parked always has one on its way.
-    async fn ask(&self, run: &Run, call: &ToolCall) -> Result<Approval, StoreError> {
-        let ttl = self.config.approval_ttl_ms;
-        let wait = Duration::from_millis(u64::try_from(ttl).unwrap_or(0)) + EXPIRY_GRACE;
-        self.db
-            .enqueue_job(
-                self.ctx,
-                NewJob::new(RUN_KIND, json!({ "runId": run.id, "callId": call.id }))
-                    .idempotent(format!("run:{}:expire:{}", run.id, call.id))
-                    .delayed(wait),
-            )
-            .await?;
-        self.db
-            .create_approval(
-                self.ctx,
-                &run.id,
-                &call.id,
-                &call.name,
-                &call.input.to_string(),
-                (self.now)().saturating_add(ttl),
-            )
-            .await
     }
 
     /// What follows a finished run: queue a summary when the thread has grown long. A failure

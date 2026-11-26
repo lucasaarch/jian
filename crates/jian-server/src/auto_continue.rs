@@ -99,7 +99,7 @@ async fn continue_after(
         return Ok(());
     }
     if let Some(next) = queue_continue(db, ctx, &run.thread, &run.agent).await? {
-        let payload = DeltaPayload::RunUpdated(run_view(&next, None));
+        let payload = DeltaPayload::RunUpdated(run_view(&next));
         announce_with(db, events, ctx, &run.thread, None, payload).await;
     }
     Ok(())

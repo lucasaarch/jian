@@ -1,5 +1,4 @@
-//! Runs: the record of each pass of the agent loop over a thread, and the tool calls that wait
-//! for a person.
+//! Runs: the record of each pass of the agent loop over a thread.
 //!
 //! The loop itself lives in `jian-runtime` and runs as a job; this is what it writes down as it
 //! goes, so a person can read it and a worker that takes the job over knows where it stood. A
@@ -12,7 +11,6 @@
 use sqlx::AssertSqlSafe;
 
 use crate::machines::iso;
-use crate::memories::at;
 use crate::threads::ThreadId;
 use crate::tokens::{AccountId, random_id};
 use crate::{AgentId, Database, StoreError, TenantCtx, Viewer};
@@ -24,8 +22,9 @@ pub enum RunState {
     Queued,
     /// A worker is on it.
     Running,
-    /// Paused on a tool call that a person must allow, or on a subagent's report.
-    WaitingApproval,
+    /// Paused on a call that has no answer yet (a subagent's report), holding no worker. Agents
+    /// are bots: no run waits for a person to allow a tool.
+    Waiting,
     /// Ended with an answer.
     Done,
     /// Ended on an error.
@@ -41,7 +40,7 @@ impl RunState {
         match self {
             Self::Queued => "queued",
             Self::Running => "running",
-            Self::WaitingApproval => "waiting_approval",
+            Self::Waiting => "waiting",
             Self::Done => "done",
             Self::Failed => "failed",
             Self::Stopped => "stopped",
@@ -54,7 +53,7 @@ impl RunState {
         [
             Self::Queued,
             Self::Running,
-            Self::WaitingApproval,
+            Self::Waiting,
             Self::Done,
             Self::Failed,
             Self::Stopped,
@@ -135,7 +134,7 @@ pub struct Run {
     pub stop_requested: bool,
     /// Why it exists.
     pub origin: RunOrigin,
-    /// Where it paused, as JSON text, while it waits on an approval and no worker holds it. The
+    /// Where it paused, as JSON text, while it waits on a call and no worker holds it. The
     /// runtime writes and reads it; its `callId` names the call that waits.
     pub resume: Option<String>,
     /// When it was made.
@@ -144,71 +143,6 @@ pub struct Run {
     pub updated_at: String,
     /// When it ended.
     pub finished_at: Option<String>,
-}
-
-/// What became of a tool call that waited for a person.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum ApprovalState {
-    /// Nobody has answered.
-    Pending,
-    /// Allowed.
-    Approved,
-    /// Refused.
-    Refused,
-    /// Nobody answered in time.
-    Expired,
-}
-
-impl ApprovalState {
-    /// The name in the database and on the wire.
-    #[must_use]
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::Pending => "pending",
-            Self::Approved => "approved",
-            Self::Refused => "refused",
-            Self::Expired => "expired",
-        }
-    }
-
-    fn parse(text: &str) -> Option<Self> {
-        [Self::Pending, Self::Approved, Self::Refused, Self::Expired]
-            .into_iter()
-            .find(|state| state.as_str() == text)
-    }
-}
-
-/// A person's answer to a tool call that waits.
-pub struct Answer<'a> {
-    /// Whether the call may run.
-    pub approve: bool,
-    /// Who answers.
-    pub by: &'a AccountId,
-    /// What they said, in a few words.
-    pub reason: Option<&'a str>,
-}
-
-/// A tool call that waits for a person.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Approval {
-    /// Its id.
-    pub id: String,
-    /// The run that waits.
-    pub run: String,
-    /// The model's id for the call.
-    pub call_id: String,
-    /// The tool.
-    pub tool: String,
-    /// Its arguments, as JSON text.
-    pub input: String,
-    /// Where it is.
-    pub state: ApprovalState,
-    /// When it stops waiting, as an ISO time.
-    pub expires_at: String,
-    /// Who answered.
-    pub decided_by: Option<AccountId>,
-    /// What they said, when they said.
-    pub reason: Option<String>,
 }
 
 #[derive(sqlx::FromRow)]
@@ -275,47 +209,8 @@ impl TryFrom<RunRow> for Run {
     }
 }
 
-#[derive(sqlx::FromRow)]
-struct ApprovalRow {
-    id: String,
-    run_id: String,
-    call_id: String,
-    tool: String,
-    input: String,
-    state: String,
-    expires_at: String,
-    decided_by: Option<String>,
-    reason: Option<String>,
-}
-
-const APPROVAL_COLUMNS: &str = concat!(
-    "id, run_id, call_id, tool, input, state, ",
-    iso!("expires_at"),
-    " AS expires_at, decided_by, reason"
-);
-
-impl TryFrom<ApprovalRow> for Approval {
-    type Error = StoreError;
-
-    fn try_from(row: ApprovalRow) -> Result<Self, StoreError> {
-        Ok(Self {
-            state: ApprovalState::parse(&row.state).ok_or(StoreError::InvalidWorkspace(
-                "a stored approval has no state",
-            ))?,
-            id: row.id,
-            run: row.run_id,
-            call_id: row.call_id,
-            tool: row.tool,
-            input: row.input,
-            expires_at: row.expires_at,
-            decided_by: row.decided_by.map(AccountId::new),
-            reason: row.reason,
-        })
-    }
-}
-
 /// The states in which a run still counts as the thread's active one.
-const ACTIVE: &str = "('queued', 'running', 'waiting_approval')";
+const ACTIVE: &str = "('queued', 'running', 'waiting')";
 /// The longest reason or error kept, in characters.
 const MAX_REASON: usize = 500;
 
@@ -324,8 +219,8 @@ fn clip(text: &str) -> String {
 }
 
 impl Database {
-    /// Whether the viewer sees the thread and is in it, which is who may start, stop and approve
-    /// a run: `None` when they do not see it, else whether they are in it.
+    /// Whether the viewer sees the thread and is in it, which is who may start and stop a
+    /// run: `None` when they do not see it, else whether they are in it.
     pub async fn can_use_thread(
         &self,
         ctx: &TenantCtx,
@@ -479,7 +374,7 @@ impl Database {
         Ok(changed == 1)
     }
 
-    /// Parks a running run on an approval: it becomes `waiting_approval` with `resume` (JSON
+    /// Parks a running run on a call: it becomes `waiting` with `resume` (JSON
     /// text) to go on from, and its worker may let go. `false` when it was not running (it was
     /// stopped meanwhile).
     pub async fn pause_run(
@@ -491,7 +386,7 @@ impl Database {
         const ACTION: &str = "pause a run";
         let mut tx = self.begin(ctx).await?;
         let changed = sqlx::query(
-            "UPDATE runs SET state = 'waiting_approval', resume = $2::jsonb, updated_at = now() \
+            "UPDATE runs SET state = 'waiting', resume = $2::jsonb, updated_at = now() \
              WHERE id = $1 AND state = 'running'",
         )
         .bind(id)
@@ -518,7 +413,7 @@ impl Database {
         let mut tx = self.begin(ctx).await?;
         let changed = sqlx::query(
             "UPDATE runs SET state = 'running', updated_at = now() \
-             WHERE id = $1 AND state = 'waiting_approval' AND resume->>'callId' = $2",
+             WHERE id = $1 AND state = 'waiting' AND resume->>'callId' = $2",
         )
         .bind(id)
         .bind(call_id)
@@ -603,11 +498,11 @@ impl Database {
         let mut tx = self.begin(ctx).await?;
         sqlx::query(
             "UPDATE runs SET stop_requested = true, updated_at = now(), \
-             state = CASE WHEN state IN ('queued', 'waiting_approval') \
+             state = CASE WHEN state IN ('queued', 'waiting') \
                  THEN 'stopped' ELSE state END, \
-             finished_at = CASE WHEN state IN ('queued', 'waiting_approval') \
+             finished_at = CASE WHEN state IN ('queued', 'waiting') \
                  THEN now() ELSE finished_at END, \
-             resume = CASE WHEN state = 'waiting_approval' THEN NULL ELSE resume END \
+             resume = CASE WHEN state = 'waiting' THEN NULL ELSE resume END \
              WHERE id = $1 AND thread_id = $2 AND state NOT IN ('done', 'failed', 'stopped')",
         )
         .bind(id)
@@ -637,137 +532,5 @@ impl Database {
                 .await
                 .map_err(StoreError::query("read a run's stop"))?;
         Ok(asked.unwrap_or(false))
-    }
-
-    /// Puts a tool call to the people of the thread until `expires_at_ms` (Unix milliseconds).
-    /// The same call twice is the same approval, so a worker that retries does not ask twice.
-    pub async fn create_approval(
-        &self,
-        ctx: &TenantCtx,
-        run: &str,
-        call_id: &str,
-        tool: &str,
-        input: &str,
-        expires_at_ms: i64,
-    ) -> Result<Approval, StoreError> {
-        const ACTION: &str = "ask for an approval";
-        let id = random_id("apv_")?;
-        let mut tx = self.begin(ctx).await?;
-        let row: ApprovalRow = sqlx::query_as(AssertSqlSafe(format!(
-            "INSERT INTO run_approvals (id, run_id, call_id, tool, input, expires_at) \
-             VALUES ($1, $2, $3, $4, $5, {}) \
-             ON CONFLICT (run_id, call_id) DO UPDATE SET tool = run_approvals.tool \
-             RETURNING {APPROVAL_COLUMNS}",
-            at("$6")
-        )))
-        .bind(id)
-        .bind(run)
-        .bind(call_id)
-        .bind(tool)
-        .bind(input)
-        .bind(expires_at_ms)
-        .fetch_one(&mut *tx)
-        .await
-        .map_err(StoreError::query(ACTION))?;
-        tx.commit().await.map_err(StoreError::query(ACTION))?;
-        Approval::try_from(row)
-    }
-
-    /// The approval a run waits on now, if any.
-    pub async fn pending_approval(
-        &self,
-        ctx: &TenantCtx,
-        run: &str,
-    ) -> Result<Option<Approval>, StoreError> {
-        let mut tx = self.begin(ctx).await?;
-        let row: Option<ApprovalRow> = sqlx::query_as(AssertSqlSafe(format!(
-            "SELECT {APPROVAL_COLUMNS} FROM run_approvals \
-             WHERE run_id = $1 AND state = 'pending' ORDER BY created_at DESC LIMIT 1"
-        )))
-        .bind(run)
-        .fetch_optional(&mut *tx)
-        .await
-        .map_err(StoreError::query("read an approval"))?;
-        row.map(Approval::try_from).transpose()
-    }
-
-    /// One approval, as it stands.
-    pub async fn approval(
-        &self,
-        ctx: &TenantCtx,
-        run: &str,
-        call_id: &str,
-    ) -> Result<Option<Approval>, StoreError> {
-        let mut tx = self.begin(ctx).await?;
-        let row: Option<ApprovalRow> = sqlx::query_as(AssertSqlSafe(format!(
-            "SELECT {APPROVAL_COLUMNS} FROM run_approvals WHERE run_id = $1 AND call_id = $2"
-        )))
-        .bind(run)
-        .bind(call_id)
-        .fetch_optional(&mut *tx)
-        .await
-        .map_err(StoreError::query("read an approval"))?;
-        row.map(Approval::try_from).transpose()
-    }
-
-    /// A person's answer to the pending approval of a run of `thread`. `None` when nothing is
-    /// pending any more: it was answered, it expired, or the thread has no such run.
-    pub async fn decide_approval(
-        &self,
-        ctx: &TenantCtx,
-        thread: &ThreadId,
-        run: &str,
-        answer: &Answer<'_>,
-        now_ms: i64,
-    ) -> Result<Option<Approval>, StoreError> {
-        const ACTION: &str = "answer an approval";
-        let mut tx = self.begin(ctx).await?;
-        let row: Option<ApprovalRow> = sqlx::query_as(AssertSqlSafe(format!(
-            "UPDATE run_approvals SET state = $3, decided_by = $4, reason = $5, decided_at = now() \
-             WHERE state = 'pending' AND expires_at > {} AND run_id = $1 \
-               AND EXISTS (SELECT 1 FROM runs WHERE id = $1 AND thread_id = $2 \
-                             AND state = 'waiting_approval') \
-             RETURNING {APPROVAL_COLUMNS}",
-            at("$6")
-        )))
-        .bind(run)
-        .bind(thread.as_str())
-        .bind(if answer.approve {
-            "approved"
-        } else {
-            "refused"
-        })
-        .bind(answer.by.as_str())
-        .bind(answer.reason.map(clip))
-        .bind(now_ms)
-        .fetch_optional(&mut *tx)
-        .await
-        .map_err(StoreError::query(ACTION))?;
-        tx.commit().await.map_err(StoreError::query(ACTION))?;
-        row.map(Approval::try_from).transpose()
-    }
-
-    /// Marks a pending approval whose time is up as expired. A no-op when it was answered.
-    pub async fn expire_approval(
-        &self,
-        ctx: &TenantCtx,
-        run: &str,
-        call_id: &str,
-        now_ms: i64,
-    ) -> Result<(), StoreError> {
-        const ACTION: &str = "expire an approval";
-        let mut tx = self.begin(ctx).await?;
-        sqlx::query(AssertSqlSafe(format!(
-            "UPDATE run_approvals SET state = 'expired', decided_at = now() \
-             WHERE run_id = $1 AND call_id = $2 AND state = 'pending' AND expires_at <= {}",
-            at("$3")
-        )))
-        .bind(run)
-        .bind(call_id)
-        .bind(now_ms)
-        .execute(&mut *tx)
-        .await
-        .map_err(StoreError::query(ACTION))?;
-        tx.commit().await.map_err(StoreError::query(ACTION))
     }
 }

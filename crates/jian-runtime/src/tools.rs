@@ -76,10 +76,6 @@ impl Tool for Shell {
         true
     }
 
-    fn needs_approval(&self, _input: &Value) -> bool {
-        true
-    }
-
     fn call<'a>(
         &'a self,
         input: &'a Value,
@@ -165,10 +161,6 @@ impl Tool for WriteFile {
     }
 
     fn needs_machine(&self) -> bool {
-        true
-    }
-
-    fn needs_approval(&self, _input: &Value) -> bool {
         true
     }
 

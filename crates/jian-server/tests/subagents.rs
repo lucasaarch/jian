@@ -318,7 +318,7 @@ async fn a_report_of_many_paragraphs_goes_back_whole_and_the_run_that_waited_goe
 
     // The parent parks on the call and holds no job; the child waits for its worker.
     rig.work(&rig.run.id).await;
-    assert_eq!(rig.run(&rig.run.id).await.state, RunState::WaitingApproval);
+    assert_eq!(rig.run(&rig.run.id).await.state, RunState::Waiting);
     let child = rig.child("c1").await;
     assert_eq!(child.state, SubagentState::Running);
     assert_eq!(child.depth, 1);
