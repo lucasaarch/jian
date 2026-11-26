@@ -1374,6 +1374,7 @@ INSERT INTO public.gateway_secrets VALUES ('provider:cccccccc-cccc-4ccc-8ccc-ccc
 -- Data for Name: gateway_settings; Type: TABLE DATA; Schema: public; Owner: -
 --
 
+INSERT INTO public.gateway_settings (key, value) VALUES ('disabledSkills', '["night-owl", "discernment-nudge"]');
 
 
 --
@@ -1623,6 +1624,9 @@ INSERT INTO public.secrets VALUES ('11111111-1111-4111-8111-111111111111', 'chan
 -- Data for Name: skills; Type: TABLE DATA; Schema: public; Owner: -
 --
 
+INSERT INTO public.skills (name, description, instructions, origin, created_at, updated_at) VALUES ('brief-writer', 'Use when asked to write a brief.', 'Ask who reads it, then write it in five lines.', '{"url": "https://github.com/example/skills", "ref": "HEAD", "license": "MIT", "importedAt": "2026-11-20T10:00:00.000Z"}', '2026-11-20 10:00:00+00', '2026-11-21 10:00:00+00');
+INSERT INTO public.skills (name, description, instructions, created_at, updated_at) VALUES ('night-owl', 'Use when it is late.', 'Keep answers short after midnight.', '2026-11-22 10:00:00+00', '2026-11-22 10:00:00+00');
+INSERT INTO public.skills (name, description, instructions, created_at, updated_at) VALUES ('Bad Name', 'A name the core does not accept.', 'Nothing.', '2026-11-23 10:00:00+00', '2026-11-23 10:00:00+00');
 
 
 --

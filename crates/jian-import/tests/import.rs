@@ -40,8 +40,9 @@ fn rows(which: Domain) -> u32 {
         // Three schedules (the one every minute is left out).
         Domain::Secrets | Domain::Providers | Domain::Memories | Domain::Schedules => 3,
         Domain::Messages => 5,
-        // Two sessions with a person (the one between two agents is left).
-        Domain::Threads => 2,
+        // Two sessions with a person (the one between two agents is left); two skills, the ones
+        // with a name the core accepts ("Bad Name" is left out).
+        Domain::Threads | Domain::Skills => 2,
         _ => 1,
     }
 }
@@ -182,6 +183,7 @@ async fn a_dump_of_the_old_desktop_database_comes_over_once() {
     );
     owners_chats_came_over(&new.db, &ctx, &members[0].account_id).await;
     memories_and_projects_came_over(&new.db, &ctx, &first, &members[0].account_id).await;
+    skills_came_over(&new.db, &ctx, &first, &members[0].account_id).await;
     // The scratch server is gone with its directory.
     assert!(!dir.path().join("scratch").exists());
 
@@ -222,7 +224,7 @@ async fn a_dump_of_the_old_desktop_database_comes_over_once() {
         .unwrap();
     assert!(pending.domains.is_empty());
     let markers = new.db.imports(&ctx).await.unwrap();
-    assert_eq!(markers.len(), 11);
+    assert_eq!(markers.len(), 12);
     assert!(markers.iter().all(|m| m.status == ImportStatus::Done));
     new.stop().await;
 }
@@ -316,7 +318,8 @@ async fn a_run_that_stopped_or_lacked_a_key_is_finished_by_the_next() {
             Domain::Messages,
             Domain::Memories,
             Domain::Projects,
-            Domain::Schedules
+            Domain::Schedules,
+            Domain::Skills
         ]
     );
     // No owner address was given, so the chats wait for one and say so.
@@ -327,6 +330,7 @@ async fn a_run_that_stopped_or_lacked_a_key_is_finished_by_the_next() {
         Domain::Memories,
         Domain::Projects,
         Domain::Schedules,
+        Domain::Skills,
     ] {
         assert_eq!(domain(&second, which).status, ImportStatus::Skipped);
     }
@@ -664,6 +668,49 @@ async fn memories_and_projects_came_over(
     let detail = domain(report, Domain::Schedules).detail.clone().unwrap();
     assert!(
         detail.contains("1 left out") && detail.contains("too frequent"),
+        "{detail}"
+    );
+}
+
+async fn skills_came_over(
+    db: &Database,
+    ctx: &TenantCtx,
+    report: &ImportReport,
+    owner: &jian_store::AccountId,
+) {
+    let viewer = Viewer {
+        account: owner.clone(),
+        admin: true,
+    };
+    let names: Vec<String> = db
+        .list_skills(ctx)
+        .await
+        .unwrap()
+        .into_iter()
+        .map(|s| s.name)
+        .collect();
+    // Once each, however many runs: the second run of the test found them already there.
+    assert_eq!(names, ["brief-writer", "night-owl"]);
+    let brief = db.skill(ctx, "brief-writer").await.unwrap().unwrap();
+    assert_eq!(brief.text.license.as_deref(), Some("MIT"));
+    assert_eq!(&brief.created_by, owner);
+    assert_eq!(brief.created_at, "2026-11-20T10:00:00.000Z");
+    // What was switched off in the old setting stays off for the agent; the rest is on.
+    let agent = db.list_agents(ctx, &viewer, None, 10).await.unwrap().items[0]
+        .id
+        .clone();
+    let on: Vec<String> = db
+        .agent_skills(ctx, &agent)
+        .await
+        .unwrap()
+        .library
+        .into_iter()
+        .map(|s| s.name)
+        .collect();
+    assert_eq!(on, ["brief-writer"]);
+    let detail = domain(report, Domain::Skills).detail.clone().unwrap();
+    assert!(
+        detail.contains("1 left out") && detail.contains("name the core does not accept"),
         "{detail}"
     );
 }

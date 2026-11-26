@@ -12,6 +12,8 @@ use sqlx::{AssertSqlSafe, Connection as _, PgConnection};
 
 use crate::ImportError;
 
+mod skills;
+
 /// A secret of the old install as stored: its place and its sealed envelope, unopened.
 pub(crate) struct SealedSecret {
     /// The agent it belonged to; `None` for one the whole install shared (`gateway_secrets`).

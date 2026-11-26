@@ -36,11 +36,13 @@ pub enum Domain {
     /// The old schedules, into the agents made from their profiles. Needs the owner and the
     /// agents.
     Schedules,
+    /// The old skill library, with what was switched off. Needs the owner and the agents.
+    Skills,
 }
 
 impl Domain {
     /// Every domain, in the order a run takes them.
-    pub const ALL: [Self; 11] = [
+    pub const ALL: [Self; 12] = [
         Self::Owner,
         Self::Secrets,
         Self::Providers,
@@ -52,6 +54,7 @@ impl Domain {
         Self::Memories,
         Self::Projects,
         Self::Schedules,
+        Self::Skills,
     ];
 
     /// The name in a marker and in the report.
@@ -68,6 +71,7 @@ impl Domain {
             Self::Memories => "memories",
             Self::Projects => "projects",
             Self::Schedules => "schedules",
+            Self::Skills => "skills",
         }
     }
 
@@ -87,6 +91,7 @@ impl Domain {
             Self::Memories => &["memories", "memory_links"],
             Self::Projects => &["projects"],
             Self::Schedules => &["schedules"],
+            Self::Skills => &["skills"],
         }
     }
 }
@@ -261,6 +266,10 @@ impl<'a> Importer<'a> {
             Domain::Schedules => {
                 let email = self.options.owner_email.as_deref();
                 memories::schedules(self.db, self.ctx, reader, email).await
+            }
+            Domain::Skills => {
+                let email = self.options.owner_email.as_deref();
+                memories::skills(self.db, self.ctx, reader, email).await
             }
             Domain::Projects => {
                 let email = self.options.owner_email.as_deref();

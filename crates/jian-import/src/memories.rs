@@ -129,3 +129,39 @@ pub(crate) async fn projects(
     }
     Ok(tally.finish(None))
 }
+
+pub(crate) async fn skills(
+    db: &Database,
+    ctx: &TenantCtx,
+    reader: &mut LegacyReader,
+    email: Option<&str>,
+) -> Result<ImportResult, ImportError> {
+    let owner = match owner(db, ctx, email).await? {
+        Ok(owner) => owner,
+        Err(result) => return Ok(result),
+    };
+    let agents_done = db
+        .imports(ctx)
+        .await?
+        .iter()
+        .any(|m| m.domain == "agents" && m.status == ImportStatus::Done);
+    if !agents_done {
+        return Ok(skipped(
+            "the agents are not imported yet: a skill is switched on for the agents of the old profiles",
+        ));
+    }
+    if !reader.has_table("skills").await? {
+        return Ok(Tally::default().finish(Some(NO_TABLE)));
+    }
+    let mut tally = Tally::default();
+    for skill in reader.skills().await? {
+        let name = skill.name.clone();
+        count(
+            &mut tally,
+            "skill",
+            &name,
+            db.import_skill(ctx, &owner, &skill).await,
+        );
+    }
+    Ok(tally.finish(None))
+}
