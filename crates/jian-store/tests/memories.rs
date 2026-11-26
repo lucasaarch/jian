@@ -1,4 +1,4 @@
-//! An agent's memories and the workspace's projects against a real Postgres: versions, flash
+//! An agent's memories against a real Postgres: versions, flash
 //! expiry by an injected clock, full-text search, what a conversation may recall, links, and
 //! that tenant B reads and changes nothing of tenant A's.
 
@@ -6,8 +6,8 @@
 
 use jian_core::{ThreadKind, Visibility};
 use jian_store::{
-    Agent, AgentId, Database, MAX_MEMORY_LINKS, MemoryQuery, MemoryWrite, NewAgent, NewProject,
-    NewThread, OriginKind, ProjectPatch, RecallScope, StoreError, Thread, ThreadId, Viewer,
+    Agent, AgentId, Database, MAX_MEMORY_LINKS, MemoryQuery, MemoryWrite, NewAgent, NewThread,
+    OriginKind, RecallScope, StoreError, Thread, ThreadId, Viewer,
 };
 use jian_testkit::{Side, TestDb, TwoTenants};
 
@@ -527,126 +527,5 @@ async fn one_tenants_agent_and_memories_are_nothing_to_the_other() {
             .unwrap();
         assert_eq!((kept.content.as_str(), kept.version), ("theirs", 1));
     }
-    test.stop().await;
-}
-
-#[tokio::test]
-async fn projects_belong_to_the_workspace_and_a_thread_is_about_one() {
-    let test = TestDb::start(env!("CARGO_TARGET_TMPDIR")).await;
-    let tenants = TwoTenants::seed(&test.db).await;
-    let db = &test.db;
-    let side = &tenants.a;
-    let admin = viewer(side, true);
-    let member = viewer(side, false);
-    let made = db
-        .create_project(
-            &side.ctx,
-            &member,
-            &NewProject {
-                name: "Website".to_owned(),
-                repository_url: Some("https://example.com/acme/site.git".to_owned()),
-                instructions: "Use British spelling".to_owned(),
-            },
-        )
-        .await
-        .unwrap();
-    assert!(db.project(&side.ctx, &made.id).await.unwrap().is_some());
-    // The other tenant does not have it.
-    assert!(
-        db.project(&tenants.b.ctx, &made.id)
-            .await
-            .unwrap()
-            .is_none()
-    );
-    assert!(
-        db.list_projects(&tenants.b.ctx, None, 10)
-            .await
-            .unwrap()
-            .items
-            .is_empty()
-    );
-
-    // Its creator and an admin change it; another member may not.
-    let peer = Viewer {
-        account: side.peer.account_id.clone(),
-        admin: false,
-    };
-    let patch = ProjectPatch {
-        name: Some("Site".to_owned()),
-        repository_url: Some(None),
-        ..ProjectPatch::default()
-    };
-    assert!(matches!(
-        db.update_project(&side.ctx, &peer, &made.id, &patch).await,
-        Err(StoreError::Denied(_))
-    ));
-    let changed = db
-        .update_project(&side.ctx, &admin, &made.id, &patch)
-        .await
-        .unwrap()
-        .unwrap();
-    assert_eq!(
-        (changed.name.as_str(), changed.repository_url),
-        ("Site", None)
-    );
-    assert_eq!(changed.instructions, "Use British spelling");
-
-    let a = agent(db, side).await;
-    let chat = thread(db, side, &admin, ThreadKind::Dm, &a).await;
-    // Only someone in the thread chooses its project; the member is not in the admin's DM and
-    // does not even see it.
-    assert!(
-        !db.set_thread_project(&side.ctx, &member, &chat.id, Some(&made.id))
-            .await
-            .unwrap()
-    );
-    assert!(
-        db.set_thread_project(&side.ctx, &admin, &chat.id, Some(&made.id))
-            .await
-            .unwrap()
-    );
-    let about = db
-        .thread_project(&side.ctx, &admin, &chat.id)
-        .await
-        .unwrap();
-    assert_eq!(about.unwrap().unwrap().id, made.id);
-    assert!(
-        db.thread_project(&side.ctx, &member, &chat.id)
-            .await
-            .unwrap()
-            .is_none()
-    );
-    assert!(
-        !db.set_thread_project(
-            &side.ctx,
-            &admin,
-            &chat.id,
-            Some(&jian_store::ProjectId::new("prj_never"))
-        )
-        .await
-        .unwrap()
-    );
-    // Deleting the project ends the link; the thread stays.
-    assert!(matches!(
-        db.delete_project(&side.ctx, &peer, &made.id).await,
-        Err(StoreError::Denied(_))
-    ));
-    assert!(
-        db.delete_project(&side.ctx, &admin, &made.id)
-            .await
-            .unwrap()
-    );
-    assert!(
-        db.thread_project(&side.ctx, &admin, &chat.id)
-            .await
-            .unwrap()
-            .unwrap()
-            .is_none()
-    );
-    assert!(
-        !db.delete_project(&side.ctx, &admin, &made.id)
-            .await
-            .unwrap()
-    );
     test.stop().await;
 }

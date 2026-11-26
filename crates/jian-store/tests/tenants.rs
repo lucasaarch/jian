@@ -173,7 +173,7 @@ async fn creating_a_tenant_twice_changes_nothing_and_deleting_it_removes_schema_
             "SELECT version::text FROM _sqlx_migrations ORDER BY version"
         )
         .await,
-        ["1", "2", "3", "4", "5", "6", "7", "8"]
+        ["1", "2", "3", "4", "5", "6", "7", "8", "9"]
     );
 
     // The catalog is readable by every role, so a second tenant can tell what exists.

@@ -47,6 +47,8 @@ pub struct Gateway {
     pub state: AppState,
     pub clock: Arc<ManualClock>,
     pub url: DatabaseUrl,
+    /// Where the bytes of project files land.
+    pub blobs: std::path::PathBuf,
     stop: CancellationToken,
     server: JoinHandle<()>,
     keeper: Option<SlotKeeper>,
@@ -84,9 +86,13 @@ impl Gateway {
             .await
             .unwrap()
             // So `TwoTenants::seed` can store a secret in this database.
-            .with_master_keys(jian_testkit::master_keys());
+            .with_master_keys(jian_testkit::master_keys())
+            .with_blobs(Arc::new(jian_store::DiskBlobs::new(
+                dir.path().join("blobs"),
+            )));
         db.migrate().await.unwrap();
-        Self::serve(
+        let blobs = dir.path().join("blobs");
+        let mut gateway = Self::serve(
             Arc::new(db),
             url,
             settings,
@@ -95,7 +101,9 @@ impl Gateway {
             Some(dir),
             llm,
         )
-        .await
+        .await;
+        gateway.blobs = blobs;
+        gateway
     }
 
     /// A second gateway on the same database, as another replica would be: its own pool, its own
@@ -103,8 +111,9 @@ impl Gateway {
     pub async fn join(&self, settings: Settings, slots: SlotOptions) -> Self {
         let db = Database::open(DatabaseSource::External(self.url.clone()))
             .await
-            .unwrap();
-        Self::serve(
+            .unwrap()
+            .with_blobs(Arc::new(jian_store::DiskBlobs::new(self.blobs.clone())));
+        let mut gateway = Self::serve(
             Arc::new(db),
             self.url.clone(),
             settings,
@@ -113,7 +122,9 @@ impl Gateway {
             None,
             no_network(),
         )
-        .await
+        .await;
+        gateway.blobs.clone_from(&self.blobs);
+        gateway
     }
 
     async fn serve(
@@ -156,6 +167,7 @@ impl Gateway {
             state,
             clock,
             url,
+            blobs: std::path::PathBuf::new(),
             stop,
             server,
             keeper: Some(keeper),
@@ -531,4 +543,33 @@ pub fn no_network() -> jian_server::LlmAccess {
         http,
         ..jian_server::LlmAccess::default()
     }
+}
+
+/// A request with a body of raw bytes and the answer as bytes: the status, the head and the body.
+pub async fn http_bytes(
+    addr: SocketAddr,
+    method: &str,
+    path: &str,
+    token: &str,
+    body: Option<&[u8]>,
+) -> (u16, String, Vec<u8>) {
+    let mut stream = TcpStream::connect(addr).await.unwrap();
+    let length = body.map_or_else(String::new, |b| format!("Content-Length: {}\r\n", b.len()));
+    let head = format!(
+        "{method} {path} HTTP/1.1\r\nHost: test\r\nAuthorization: Bearer {token}\r\n\
+         Content-Type: application/octet-stream\r\n{length}Connection: close\r\n\r\n"
+    );
+    stream.write_all(head.as_bytes()).await.unwrap();
+    if let Some(body) = body {
+        stream.write_all(body).await.unwrap();
+    }
+    let mut answer = Vec::new();
+    stream.read_to_end(&mut answer).await.unwrap();
+    let split = answer
+        .windows(4)
+        .position(|w| w == b"\r\n\r\n")
+        .expect("a head");
+    let head = String::from_utf8_lossy(&answer[..split]).into_owned();
+    let status = head.split(' ').nth(1).unwrap().parse().unwrap();
+    (status, head, answer[split + 4..].to_vec())
 }

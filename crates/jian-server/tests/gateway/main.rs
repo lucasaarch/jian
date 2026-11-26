@@ -9,6 +9,7 @@ mod codex;
 mod invites;
 mod isolation;
 mod memories;
+mod projects;
 mod providers;
 mod schedules;
 mod slots;

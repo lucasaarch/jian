@@ -32,6 +32,7 @@ const CODEX_FILE: &str = include_str!("codex.rs");
 const INVITES_FILE: &str = include_str!("invites.rs");
 const PROVIDERS_FILE: &str = include_str!("providers.rs");
 const MEMORIES_FILE: &str = include_str!("memories.rs");
+const PROJECTS_FILE: &str = include_str!("projects.rs");
 const SCHEDULES_FILE: &str = include_str!("schedules.rs");
 const THREADS_FILE: &str = include_str!("threads.rs");
 const USAGE_FILE: &str = include_str!("usage.rs");
@@ -47,6 +48,7 @@ fn is_a_test_here(name: &str) -> bool {
         || INVITES_FILE.contains(&declared)
         || PROVIDERS_FILE.contains(&declared)
         || MEMORIES_FILE.contains(&declared)
+        || PROJECTS_FILE.contains(&declared)
         || SCHEDULES_FILE.contains(&declared)
         || USAGE_FILE.contains(&declared)
         || THREADS_FILE.contains(&declared)
@@ -104,6 +106,17 @@ const ROUTE_TESTS: &[(&str, &str)] = &[
     ("GET /v1/projects/{id}", MEMORIES_TEST),
     ("PATCH /v1/projects/{id}", MEMORIES_TEST),
     ("DELETE /v1/projects/{id}", MEMORIES_TEST),
+    ("GET /v1/projects/{id}/threads", PROJECTS_TEST),
+    ("GET /v1/projects/{id}/repositories", PROJECTS_TEST),
+    ("POST /v1/projects/{id}/repositories", PROJECTS_TEST),
+    (
+        "DELETE /v1/projects/{id}/repositories/{repository_id}",
+        PROJECTS_TEST,
+    ),
+    ("GET /v1/projects/{id}/files", PROJECTS_TEST),
+    ("POST /v1/projects/{id}/files", PROJECTS_TEST),
+    ("GET /v1/projects/{id}/files/{file_id}", PROJECTS_TEST),
+    ("DELETE /v1/projects/{id}/files/{file_id}", PROJECTS_TEST),
     ("GET /v1/threads/{id}/project", MEMORIES_TEST),
     ("PUT /v1/threads/{id}/project", MEMORIES_TEST),
     ("GET /v1/agents/{id}/schedules", SCHEDULES_TEST),
@@ -156,6 +169,10 @@ const INVITES_TEST: &str =
 /// The test that shows tenant B reaches no memory, project or thread-project link of tenant A.
 const MEMORIES_TEST: &str = "memories_and_projects_of_the_other_tenant_are_out_of_reach";
 
+/// The test that shows tenant B reaches no file or repository of tenant A's projects.
+const PROJECTS_TEST: &str =
+    "the_files_and_repositories_of_the_other_tenants_projects_are_out_of_reach";
+
 /// The test that shows tenant B reaches no schedule or inbox event of tenant A.
 const SCHEDULES_TEST: &str =
     "a_schedule_fires_into_its_agents_inbox_once_and_never_into_another_tenants";
@@ -200,6 +217,7 @@ fn topic_test(topic: Topic) -> &'static str {
     match topic {
         Topic::Machines => "a_delta_reaches_only_its_own_tenants_subscribers",
         Topic::Threads => "a_member_hears_only_the_threads_they_are_in",
+        Topic::Projects => "only_those_who_see_a_project_hear_of_it",
     }
 }
 
@@ -272,6 +290,7 @@ async fn every_route_request_and_topic_has_an_isolation_test() {
     }
     assert!(is_a_test_here(topic_test(Topic::Machines)));
     assert!(is_a_test_here(topic_test(Topic::Threads)));
+    assert!(is_a_test_here(topic_test(Topic::Projects)));
     // Compiling this is the check: a new worker message must be listed in `worker_message_test`.
     let _: fn(&WorkerMessage) -> &'static str = worker_message_test;
     gateway.stop().await;

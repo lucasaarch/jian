@@ -207,6 +207,14 @@ async fn a_dump_of_the_old_desktop_database_comes_over_once() {
             .len(),
         1
     );
+    // The project and its repository are still one each.
+    let admin = Viewer {
+        account: members[0].account_id.clone(),
+        admin: true,
+    };
+    let projects = new.db.list_projects(&ctx, &admin, None, 10).await.unwrap();
+    assert_eq!(projects.items.len(), 1);
+    assert_eq!(projects.items[0].repositories.len(), 1);
     // Finished domains are not read again at a start.
     let pending = Importer::new(&new.db, &ctx, &opts)
         .run(&source, Scope::Pending)
@@ -621,13 +629,21 @@ async fn memories_and_projects_came_over(
         .map(|t| t.name.as_str())
         .collect();
     assert!(left.contains(&"memory_projects") && !left.contains(&"memories"));
-    let projects = db.list_projects(ctx, None, 10).await.unwrap().items;
+    // The old repository is an attachment now, and the project is the workspace's, as it was.
+    let projects = db
+        .list_projects(ctx, &viewer, None, 10)
+        .await
+        .unwrap()
+        .items;
     assert_eq!(projects.len(), 1);
     assert_eq!(projects[0].name, "Synthetic site");
-    assert_eq!(
-        projects[0].repository_url.as_deref(),
-        Some("https://example.test/synthetic/site")
-    );
+    let urls: Vec<&str> = projects[0]
+        .repositories
+        .iter()
+        .map(|r| r.url.as_str())
+        .collect();
+    assert_eq!(urls, ["https://example.test/synthetic/site"]);
+    assert_eq!(projects[0].visibility, jian_core::Visibility::Workspace);
     assert_eq!(&projects[0].created_by, owner);
 
     // Schedules: the daily one is worked out from now and keeps its chat; the one far ahead stays

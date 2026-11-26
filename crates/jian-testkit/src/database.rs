@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use jian_store::embedded::{EmbeddedConfig, EmbeddedPostgres};
 use jian_store::secrets::LocalKeyring;
-use jian_store::{Database, DatabaseSource, DatabaseUrl, TenantCtx};
+use jian_store::{Database, DatabaseSource, DatabaseUrl, DiskBlobs, TenantCtx};
 use sqlx::AssertSqlSafe;
 
 /// 32 zero bytes in base64: a synthetic master key, worth nothing outside a test database.
@@ -24,7 +24,7 @@ pub struct TestDb {
     /// Where to reach the server, for a second pool or a raw connection.
     pub url: DatabaseUrl,
     postgres: EmbeddedPostgres,
-    _dir: tempfile::TempDir,
+    dir: tempfile::TempDir,
 }
 
 impl TestDb {
@@ -43,14 +43,20 @@ impl TestDb {
         let db = Database::open(DatabaseSource::External(url.clone()))
             .await
             .unwrap()
-            .with_master_keys(master_keys());
+            .with_master_keys(master_keys())
+            .with_blobs(Arc::new(DiskBlobs::new(dir.path().join("blobs"))));
         db.migrate().await.unwrap();
         Self {
             db,
             url,
             postgres,
-            _dir: dir,
+            dir,
         }
+    }
+
+    /// Where the bytes of project files are kept, for a test that looks at the disk.
+    pub fn blobs_dir(&self) -> std::path::PathBuf {
+        self.dir.path().join("blobs")
     }
 
     /// Closes the pool, then stops the server.
