@@ -9,7 +9,7 @@ use jian_exec::{Executor, LocalExecutor, Scope};
 use serde_json::json;
 
 use crate::tool::MachineSlot;
-use crate::{file_ops, script_ops, standard_tools};
+use crate::{file_ops, standard_tools};
 
 fn slot(root: &tempfile::TempDir, run: &str) -> MachineSlot {
     let executor: Arc<dyn Executor> = Arc::new(LocalExecutor::new(root.path()));
@@ -213,6 +213,7 @@ fn a_run_that_may_only_suggest_gets_the_reads_and_no_tool_that_writes() {
 #[cfg(unix)]
 mod unix {
     use super::*;
+    use crate::script_ops;
 
     #[tokio::test]
     async fn a_script_runs_inline_and_stops_at_its_time() {

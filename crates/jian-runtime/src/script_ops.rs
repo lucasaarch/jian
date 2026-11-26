@@ -165,13 +165,21 @@ pub async fn start(
         .take(24)
         .collect();
     let name = format!("{run}-{}-{}", clock(), std::process::id());
+    // The job leads its own session so stop_process can end its whole group. macOS ships no
+    // `setsid` binary but always has perl, whose setsid-then-exec keeps the pid, so `$!` is the
+    // group either way.
     let script = format!(
         "d=\"${{TMPDIR:-/tmp}}/jian-jobs\"; mkdir -p \"$d\" && chmod 700 \"$d\" || exit 1\n\
-         command -v setsid > /dev/null || {{ echo 'setsid is not installed'; exit 1; }}\n\
-         setsid nohup sh -c 'sh -c \"$1\"; echo $? > \"$2\"' sh {} \"$d/{name}.log.exit\" \
+         if command -v setsid > /dev/null; then\n\
+         setsid nohup sh -c 'sh -c \"$1\"; echo $? > \"$2\"' sh {cmd} \"$d/{name}.log.exit\" \
          > \"$d/{name}.log\" 2>&1 < /dev/null &\n\
+         elif command -v perl > /dev/null; then\n\
+         perl -MPOSIX -e 'POSIX::setsid() >= 0 or die; exec @ARGV or die' \
+         nohup sh -c 'sh -c \"$1\"; echo $? > \"$2\"' sh {cmd} \"$d/{name}.log.exit\" \
+         > \"$d/{name}.log\" 2>&1 < /dev/null &\n\
+         else echo 'starting a background job needs setsid or perl'; exit 1; fi\n\
          echo \"{MARK}$! $d/{name}.log\"\n",
-        quote(command)
+        cmd = quote(command)
     );
     let done = machine.shell(&script, 20_000).await.map_err(|e| exec(&e))?;
     let started = done
@@ -183,7 +191,7 @@ pub async fn start(
         .map(|(group, log)| (group.to_owned(), log.trim().to_owned()));
     let Some((group, log)) = started else {
         return Err(format!(
-            "could not start a background job here (it needs a POSIX shell with setsid and nohup): {}",
+            "could not start a background job here (it needs a POSIX shell with nohup, and setsid or perl): {}",
             done.output.trim()
         ));
     };
