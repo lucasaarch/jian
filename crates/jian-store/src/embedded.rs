@@ -31,6 +31,9 @@ pub const MAJOR_VERSION: u32 = 18;
 /// failure; a hang still ends.
 const COMMAND_TIMEOUT: Duration = Duration::from_secs(120);
 
+/// How many free ports a start with port `0` tries before it gives up (see `start`).
+const START_ATTEMPTS: u32 = 3;
+
 /// Loopback by literal address: `localhost` may resolve to `::1` first, where nothing listens on
 /// a machine without IPv6.
 const HOST: &str = "127.0.0.1";
@@ -102,13 +105,33 @@ impl EmbeddedPostgres {
             &server.settings().data_dir,
             &server.settings().binary_dir().join("pg_ctl"),
         )?;
-        server
-            .start()
-            .await
-            .map_err(|source| StoreError::Embedded {
-                action: "start",
-                source,
-            })?;
+        let mut attempt = 1;
+        loop {
+            match server.start().await {
+                Ok(()) => break,
+                // With port 0 the library binds a free port, releases it, and only then starts
+                // the server on it, so another process can take it in between: Windows hands a
+                // just-released port out again at once, and tests start servers side by side.
+                // Only then is another port worth a try; a fixed port fails at once.
+                Err(_) if config.port == 0 && attempt < START_ATTEMPTS => {
+                    attempt += 1;
+                    tracing::warn!(
+                        attempt,
+                        "embedded Postgres did not start; trying another port"
+                    );
+                    server = PostgreSQL::new(Settings {
+                        port: 0,
+                        ..server.settings().clone()
+                    });
+                }
+                Err(source) => {
+                    return Err(StoreError::Embedded {
+                        action: "start",
+                        source,
+                    });
+                }
+            }
+        }
         // Read after `start`: with port 0 the server picks the port there.
         let url = DatabaseUrl::new(
             server
