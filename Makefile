@@ -94,7 +94,9 @@ rust-check: ## The Rust workspace: format, clippy, tests and docs, as the rules 
 	RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --locked
 	$(MAKE) rust-editions
 
-rust-editions: ## The Cloud edition of the plugin fixture: its self-hosted-only plugin must not compile there
+rust-editions: ## The Cloud edition: the self-hosted-only plugin of the fixture must not compile or run there
+	cargo clippy -p jian-server --no-default-features --features cloud --all-targets --locked -- -D warnings
+	cargo nextest run -p jian-server --no-default-features --features cloud --locked -E 'binary(plugin_tools)'
 	cargo clippy -p jian-plugin-echo --no-default-features --features cloud --all-targets --locked -- -D warnings
 	cargo test -p jian-plugin-echo --no-default-features --features cloud --locked
 

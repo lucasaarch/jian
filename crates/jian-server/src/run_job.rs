@@ -23,6 +23,7 @@ use std::time::Duration;
 
 use futures_util::future::BoxFuture;
 use jian_exec::{Executor, Scope};
+use jian_plugin_api::PluginRegistry;
 use jian_protocol::artifacts::ArtifactWriting;
 use jian_protocol::client::DeltaPayload;
 use jian_protocol::runs::RunDelta;
@@ -44,6 +45,7 @@ use crate::auto_continue::{after_run, still_wanted};
 use crate::events::EventBus;
 use crate::guard::catching;
 use crate::objectives::objective_view;
+use crate::plugins::Plugins;
 use crate::runs::run_view;
 use crate::subagents::{report_back, subagent_view};
 use crate::workspace::{announce_with, message_view};
@@ -63,6 +65,7 @@ pub struct AgentRunner {
     events: Arc<dyn EventBus>,
     catalog: Arc<Catalog>,
     config: RunConfig,
+    plugins: Plugins,
 }
 
 impl AgentRunner {
@@ -80,7 +83,16 @@ impl AgentRunner {
             events,
             catalog: Arc::new(Catalog::core()),
             config: RunConfig::default(),
+            plugins: Plugins::new(PluginRegistry::new()),
         }
+    }
+
+    /// The same with the plugins of this build: a run gets the tools of the connector accounts
+    /// its agent reaches, for the plugins named here.
+    #[must_use]
+    pub fn with_plugins(mut self, registry: PluginRegistry) -> Self {
+        self.plugins = Plugins::new(registry);
+        self
     }
 
     /// The same with other limits.
@@ -98,7 +110,7 @@ impl AgentRunner {
         };
         let machine = MachineSlot::new(self.executor.clone(), scope)
             .with_base_ms(u64::try_from(run.machine_ms).unwrap_or(0));
-        let tools = tools_for(db, ctx, run).await;
+        let tools = tools_for(db, ctx, run, &self.plugins).await;
         let listener = Listener {
             db,
             ctx,
@@ -263,7 +275,12 @@ impl RunEvents for Listener<'_> {
 /// call to a tool outside it is refused as an unknown tool. What cannot be read is taken the
 /// strict way: the run gets less, never more. A scheduled run (`origin = schedule`) is work a
 /// person authorised and keeps every tool in every mode, `off` included.
-async fn tools_for(db: &Database, ctx: &TenantCtx, run: &Run) -> jian_runtime::Tools {
+async fn tools_for(
+    db: &Database,
+    ctx: &TenantCtx,
+    run: &Run,
+    plugins: &Plugins,
+) -> jian_runtime::Tools {
     let depth = db
         .subagent_depth(ctx, &run.thread)
         .await
@@ -271,7 +288,9 @@ async fn tools_for(db: &Database, ctx: &TenantCtx, run: &Run) -> jian_runtime::T
             tracing::warn!(%error, "could not read a thread's depth; giving the run fewer tools");
             MAX_SUBAGENT_DEPTH
         });
-    let mut tools = standard_tools();
+    // The plugins' tools join before the read-only cut: a run that may only suggest keeps the
+    // ones their plugin declared `read_only`, and no other.
+    let mut tools = standard_tools().with_all(plugins.tools(db, ctx, &run.agent).await);
     if run.origin == RunOrigin::Wake {
         let mode = db
             .agent_proactivity(ctx, &run.agent)

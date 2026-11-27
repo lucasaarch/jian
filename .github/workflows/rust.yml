@@ -87,3 +87,6 @@ jobs:
       # fixture crate proves it (its doctest only runs in this build).
       - run: cargo clippy -p jian-plugin-echo --no-default-features --features cloud --all-targets --locked -- -D warnings
       - run: cargo test -p jian-plugin-echo --no-default-features --features cloud --locked
+      # The gateway in the same edition: its test shows the self-hosted-only plugin gives no tool.
+      - run: cargo clippy -p jian-server --no-default-features --features cloud --all-targets --locked -- -D warnings
+      - run: cargo nextest run -p jian-server --no-default-features --features cloud --locked -E 'binary(plugin_tools)'

@@ -4,6 +4,14 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 
+[features]
+# What this build is. The self-hosted one is the default; a Cloud build is
+# `--no-default-features --features cloud`, and leaves out every plugin that may only run where
+# the operator owns the machine.
+default = ["self-hosted"]
+self-hosted = ["jian-server/self-hosted"]
+cloud = ["jian-server/cloud"]
+
 [dependencies]
 axum.workspace = true
 anyhow.workspace = true

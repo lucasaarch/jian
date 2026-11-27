@@ -521,11 +521,10 @@ fn job_registry(
         )
         .register(
             RUN_KIND,
-            Arc::new(AgentRunner::new(
-                models.clone(),
-                executor.clone(),
-                events.clone(),
-            )),
+            Arc::new(
+                AgentRunner::new(models.clone(), executor.clone(), events.clone())
+                    .with_plugins(jian_server::builtin_plugins()),
+            ),
         )
 }
 

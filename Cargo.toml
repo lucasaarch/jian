@@ -39,7 +39,8 @@ jian-plugin-api = { path = "crates/plugins/jian-plugin-api" }
 jian-protocol = { path = "crates/jian-protocol" }
 jian-remote = { path = "crates/jian-remote" }
 jian-runtime = { path = "crates/jian-runtime" }
-jian-server = { path = "crates/jian-server" }
+# No default features: the edition is chosen by the binary (`bins/jian`'s features).
+jian-server = { path = "crates/jian-server", default-features = false }
 jian-skills = { path = "crates/jian-skills" }
 jian-store = { path = "crates/jian-store" }
 # Test fixtures only: a crate lists them under [dev-dependencies].
