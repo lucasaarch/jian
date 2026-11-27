@@ -132,6 +132,7 @@ mod artifacts;
 mod backup;
 mod blobs;
 mod checkpoints;
+mod connectors;
 mod credentials;
 mod database;
 mod devices;
@@ -213,6 +214,11 @@ pub use artifacts::{
 pub use backup::tenant_dump_args;
 pub use blobs::{BlobError, BlobKey, BlobStore, DiskBlobs};
 pub use checkpoints::{Checkpoint, HistoryRow, MAX_HISTORY_PAGE, TailSize};
+pub use connectors::{
+    ConnectorAccount, ConnectorAccountId, ConnectorAccountPatch, ConnectorScope, LegacyConnector,
+    MAX_CONNECTOR_AGENTS, MAX_CONNECTOR_NAME_CHARS, NewConnectorAccount, can_manage_connector,
+    connector_secret_owner,
+};
 pub use credentials::{CredentialKind, PasswordCredential};
 pub use database::{Database, DatabaseHealth, DatabaseSource, DatabaseUrl};
 pub use devices::Device;

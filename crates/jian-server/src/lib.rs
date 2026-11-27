@@ -73,6 +73,7 @@ mod auto_continue;
 mod client_ws;
 mod codex_login;
 mod compact_job;
+mod connector_accounts;
 mod events;
 mod guard;
 mod http;
@@ -203,6 +204,10 @@ pub const ROUTES: &[&str] = &[
     "DELETE /v1/agents/{id}/memories/{key} (a member who sees the agent)",
     "PUT /v1/agents/{id}/memories/{key}/links/{other} (a member who sees the agent)",
     "DELETE /v1/agents/{id}/memories/{key}/links/{other} (a member who sees the agent)",
+    "GET /v1/connector-accounts (a member: the ones they see)",
+    "GET /v1/connector-accounts/{id} (a member who sees it)",
+    "PATCH /v1/connector-accounts/{id} (its creator or an admin)",
+    "DELETE /v1/connector-accounts/{id} (its creator or an admin)",
     "GET /v1/skills (a member)",
     "POST /v1/skills (a member)",
     "POST /v1/skills/import (a member)",
@@ -509,6 +514,13 @@ pub fn router_with(state: AppState, extra: Router<AppState>) -> Router {
         .route(
             "/v1/agents/{id}/proactivity",
             get(agent_events::get_proactivity).put(agent_events::put_proactivity),
+        )
+        .route("/v1/connector-accounts", get(connector_accounts::list))
+        .route(
+            "/v1/connector-accounts/{id}",
+            get(connector_accounts::get)
+                .patch(connector_accounts::update)
+                .delete(connector_accounts::delete),
         )
         .route("/v1/skills", get(skills::list).post(skills::create))
         .route("/v1/skills/import", post(skills::import))

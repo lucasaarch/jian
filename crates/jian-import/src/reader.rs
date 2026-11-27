@@ -14,6 +14,7 @@ use sqlx::{AssertSqlSafe, Connection as _, PgConnection};
 
 use crate::ImportError;
 
+mod connectors;
 mod skills;
 
 /// A secret of the old install as stored: its place and its sealed envelope, unopened.

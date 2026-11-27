@@ -57,6 +57,7 @@
 //! `artifacts` table is the output of tool calls, not these, and is still listed.)
 
 mod artifacts_import;
+mod connectors;
 mod conversations;
 mod error;
 mod machines;

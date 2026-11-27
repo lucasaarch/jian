@@ -1423,6 +1423,7 @@ INSERT INTO public.gateway_settings (key, value) VALUES ('disabledSkills', '["ni
 -- Data for Name: mcp_servers; Type: TABLE DATA; Schema: public; Owner: -
 --
 
+INSERT INTO public.mcp_servers (name, server, "position", created_at, updated_at) VALUES ('docs', '{"url": "https://docs.example.test/mcp"}', 0, '2026-11-24 10:00:00+00', '2026-11-24 10:00:00+00');
 
 
 --

@@ -32,6 +32,7 @@ const ARTIFACTS_FILE: &str = include_str!("artifacts.rs");
 const SHARING_FILE: &str = include_str!("artifact_sharing.rs");
 const EXPORT_FILE: &str = include_str!("artifact_export.rs");
 const CODEX_FILE: &str = include_str!("codex.rs");
+const CONNECTORS_FILE: &str = include_str!("connectors.rs");
 const INVITES_FILE: &str = include_str!("invites.rs");
 const PROVIDERS_FILE: &str = include_str!("providers.rs");
 const MEMORIES_FILE: &str = include_str!("memories.rs");
@@ -56,6 +57,7 @@ fn is_a_test_here(name: &str) -> bool {
         || SHARING_FILE.contains(&declared)
         || EXPORT_FILE.contains(&declared)
         || CODEX_FILE.contains(&declared)
+        || CONNECTORS_FILE.contains(&declared)
         || INVITES_FILE.contains(&declared)
         || PROVIDERS_FILE.contains(&declared)
         || MEMORIES_FILE.contains(&declared)
@@ -117,6 +119,10 @@ const ROUTE_TESTS: &[(&str, &str)] = &[
     ("GET /v1/agents/{id}/memories/{key}", MEMORIES_TEST),
     ("PUT /v1/agents/{id}/memories/{key}", MEMORIES_TEST),
     ("DELETE /v1/agents/{id}/memories/{key}", MEMORIES_TEST),
+    ("GET /v1/connector-accounts", CONNECTORS_TEST),
+    ("GET /v1/connector-accounts/{id}", CONNECTORS_TEST),
+    ("PATCH /v1/connector-accounts/{id}", CONNECTORS_TEST),
+    ("DELETE /v1/connector-accounts/{id}", CONNECTORS_TEST),
     ("GET /v1/skills", SKILLS_TEST),
     ("POST /v1/skills", SKILLS_TEST),
     ("POST /v1/skills/import", SKILLS_TEST),
@@ -267,6 +273,7 @@ const MEMORIES_TEST: &str = "memories_and_projects_of_the_other_tenant_are_out_o
 const AGENT_MACHINE_TEST: &str =
     "an_agents_machine_is_chosen_by_its_manager_and_is_out_of_reach_of_another_tenant";
 const AGENT_MODEL_TEST: &str = "an_agents_model_is_out_of_reach_of_another_tenant";
+const CONNECTORS_TEST: &str = "connector_accounts_of_the_other_tenant_are_out_of_reach";
 const SKILLS_TEST: &str = "skills_of_the_other_tenant_are_out_of_reach";
 
 /// The test that shows tenant B reaches no file or repository of tenant A's projects.

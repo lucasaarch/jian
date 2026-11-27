@@ -7,8 +7,8 @@ use jian_store::{Database, ImportResult, ImportStatus, TenantCtx};
 
 use crate::reader::{LegacyReader, LegacyTable};
 use crate::{
-    ImportError, Source, artifacts_import, conversations, machines, memories, owner, providers,
-    secrets,
+    ImportError, Source, artifacts_import, connectors, conversations, machines, memories, owner,
+    providers, secrets,
 };
 
 /// A part of the old Jian that has a table in the core, imported on its own: one marker, one
@@ -21,6 +21,9 @@ pub enum Domain {
     Secrets,
     /// Model provider accounts, with their keys.
     Providers,
+    /// The old MCP servers, as accounts of the `mcp` plugin every agent reaches. Needs the owner
+    /// and the secrets (their tokens come from there).
+    Connectors,
     /// Jian Remote workers and their tokens.
     Machines,
     /// Phones and their tokens.
@@ -48,10 +51,11 @@ pub enum Domain {
 
 impl Domain {
     /// Every domain, in the order a run takes them.
-    pub const ALL: [Self; 13] = [
+    pub const ALL: [Self; 14] = [
         Self::Owner,
         Self::Secrets,
         Self::Providers,
+        Self::Connectors,
         Self::Machines,
         Self::Devices,
         Self::Agents,
@@ -70,6 +74,7 @@ impl Domain {
             Self::Owner => "owner",
             Self::Secrets => "secrets",
             Self::Providers => "providers",
+            Self::Connectors => "connectors",
             Self::Machines => "machines",
             Self::Devices => "devices",
             Self::Agents => "agents",
@@ -89,6 +94,9 @@ impl Domain {
             Self::Owner => &[],
             Self::Secrets => &["gateway_secrets", "secrets"],
             Self::Providers => &["providers"],
+            // `github_installations` and `mcp_secret_moves` stay in the report of what was not
+            // imported.
+            Self::Connectors => &["mcp_servers"],
             Self::Machines => &["remote_machines"],
             Self::Devices => &["devices"],
             Self::Agents => &["profiles"],
@@ -261,6 +269,10 @@ impl<'a> Importer<'a> {
             }
             Domain::Providers => {
                 providers::import(self.db, self.ctx, reader, self.options.keys.as_ref()).await
+            }
+            Domain::Connectors => {
+                let email = self.options.owner_email.as_deref();
+                connectors::import(self.db, self.ctx, reader, email).await
             }
             Domain::Machines => machines::machines(self.db, self.ctx, reader).await,
             Domain::Devices => machines::devices(self.db, self.ctx, reader).await,

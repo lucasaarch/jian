@@ -180,7 +180,7 @@ async fn a_dump_of_the_old_desktop_database_comes_over_once() {
     assert!(!left.contains(&"profiles") && !left.contains(&"sessions"));
     assert!(!left.contains(&"messages") && !left.contains(&"contacts"));
     assert!(!left.contains(&"remote_machines") && !left.contains(&"secrets"));
-    assert!(!left.contains(&"providers"));
+    assert!(!left.contains(&"providers") && !left.contains(&"mcp_servers"));
     let threads = domain(&first, Domain::Threads).detail.clone().unwrap();
     assert!(
         threads.contains("1 sessions between two agents"),
@@ -189,6 +189,7 @@ async fn a_dump_of_the_old_desktop_database_comes_over_once() {
     owners_chats_came_over(&new.db, &ctx, &members[0].account_id).await;
     memories_and_projects_came_over(&new.db, &ctx, &first, &members[0].account_id).await;
     skills_came_over(&new.db, &ctx, &first, &members[0].account_id).await;
+    connectors_came_over(&new.db, &ctx, &members[0].account_id).await;
     artifacts_came_over(&new.db, &ctx, &first, &members[0].account_id).await;
     // The scratch server is gone with its directory.
     assert!(!dir.path().join("scratch").exists());
@@ -230,7 +231,7 @@ async fn a_dump_of_the_old_desktop_database_comes_over_once() {
         .unwrap();
     assert!(pending.domains.is_empty());
     let markers = new.db.imports(&ctx).await.unwrap();
-    assert_eq!(markers.len(), 13);
+    assert_eq!(markers.len(), 14);
     assert!(markers.iter().all(|m| m.status == ImportStatus::Done));
     new.stop().await;
 }
@@ -319,6 +320,7 @@ async fn a_run_that_stopped_or_lacked_a_key_is_finished_by_the_next() {
             Domain::Owner,
             Domain::Secrets,
             Domain::Providers,
+            Domain::Connectors,
             Domain::Agents,
             Domain::Threads,
             Domain::Messages,
@@ -331,6 +333,7 @@ async fn a_run_that_stopped_or_lacked_a_key_is_finished_by_the_next() {
     );
     // No owner address was given, so the chats wait for one and say so.
     for which in [
+        Domain::Connectors,
         Domain::Agents,
         Domain::Threads,
         Domain::Messages,
@@ -677,6 +680,31 @@ async fn memories_and_projects_came_over(
     assert!(
         detail.contains("1 left out") && detail.contains("too frequent"),
         "{detail}"
+    );
+}
+
+/// The old MCP server is one `shared` account of the `mcp` plugin, made by the owner. The second
+/// run of the test found it already there, so one is all there can be.
+async fn connectors_came_over(db: &Database, ctx: &TenantCtx, owner: &jian_store::AccountId) {
+    let admin = Viewer {
+        account: owner.clone(),
+        admin: true,
+    };
+    let accounts = db
+        .list_connector_accounts(ctx, &admin, None, 10)
+        .await
+        .unwrap()
+        .items;
+    assert_eq!(accounts.len(), 1);
+    assert_eq!(
+        (accounts[0].plugin.as_str(), accounts[0].name.as_str()),
+        ("mcp", "docs")
+    );
+    assert_eq!(accounts[0].scope, jian_store::ConnectorScope::Shared);
+    assert_eq!(&accounts[0].created_by, owner);
+    assert_eq!(
+        accounts[0].config,
+        serde_json::json!({"url": "https://docs.example.test/mcp"})
     );
 }
 

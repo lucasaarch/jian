@@ -9,6 +9,7 @@ mod artifact_export;
 mod artifact_sharing;
 mod artifacts;
 mod codex;
+mod connectors;
 mod invites;
 mod isolation;
 mod machine_files;
