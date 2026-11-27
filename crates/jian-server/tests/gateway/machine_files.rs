@@ -205,11 +205,17 @@ async fn the_same_script_gives_the_same_answers_on_the_gateways_machine_and_a_co
     std::fs::write(&outside, "no").unwrap();
     let refused = files_done(local.as_ref(), read(outside.to_str().unwrap(), None, None)).await;
     assert!(refused.is_err());
-    let secret = format!(
-        "{}/.config/jian-remote/state.json",
-        std::env::var("HOME").unwrap()
-    );
-    match hub.files(read(&secret, None, None)).await.unwrap() {
+    // The home the worker refuses under: Windows has no HOME, only USERPROFILE.
+    let home = std::env::var(if cfg!(windows) { "USERPROFILE" } else { "HOME" }).unwrap();
+    let secret = std::path::Path::new(&home)
+        .join(".config")
+        .join("jian-remote")
+        .join("state.json");
+    match hub
+        .files(read(secret.to_str().unwrap(), None, None))
+        .await
+        .unwrap()
+    {
         FilesAnswer::Failed(failed) => assert_eq!(failed.problem, FilesProblem::Refused),
         other @ FilesAnswer::Done(_) => panic!("the worker's own folder was read: {other:?}"),
     }
