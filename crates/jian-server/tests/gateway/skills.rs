@@ -206,7 +206,7 @@ async fn the_library_has_builtins_versions_and_a_limit() {
     let (admin, member) = (&tenants.a.admin_session, &tenants.a.member_session);
 
     let list = call(&gateway, "GET", "/v1/skills", member, None).await.1;
-    assert_eq!(names(&list), ["about-jian", "coding"]);
+    assert_eq!(names(&list), ["about-jian", "coding", "people"]);
     assert_eq!(list["limit"], 60);
     assert_eq!(list["items"][0]["origin"]["kind"], "builtin");
     assert_eq!(list["items"][0]["canManage"], false);
@@ -361,6 +361,7 @@ async fn an_agent_uses_the_skills_its_managers_switch_on() {
         [
             ("about-jian".to_owned(), true),
             ("coding".to_owned(), true),
+            ("people".to_owned(), true),
             ("helper".to_owned(), false)
         ]
     );
@@ -398,6 +399,7 @@ async fn an_agent_uses_the_skills_its_managers_switch_on() {
         [
             ("about-jian".to_owned(), false),
             ("coding".to_owned(), true),
+            ("people".to_owned(), true),
             ("helper".to_owned(), true)
         ]
     );
@@ -420,7 +422,8 @@ async fn an_agent_uses_the_skills_its_managers_switch_on() {
         enabled(&list),
         [
             ("about-jian".to_owned(), false),
-            ("coding".to_owned(), true)
+            ("coding".to_owned(), true),
+            ("people".to_owned(), true)
         ]
     );
     gateway.stop().await;

@@ -51,6 +51,7 @@ use crate::channel_hub::ChannelHub;
 use crate::events::EventBus;
 use crate::guard::catching;
 use crate::objectives::objective_view;
+use crate::people_tools::{people_tools, stranger_tools};
 use crate::plugins::Plugins;
 use crate::runs::run_view;
 use crate::subagents::{report_back, subagent_view};
@@ -145,7 +146,15 @@ impl AgentRunner {
         };
         let machine = MachineSlot::new(self.executor.clone(), scope)
             .with_base_ms(u64::try_from(run.machine_ms).unwrap_or(0));
-        let tools = tools_for(db, ctx, run, &self.plugins, self.browser.as_ref()).await;
+        let tools = tools_for(
+            db,
+            ctx,
+            run,
+            &self.plugins,
+            self.browser.as_ref(),
+            self.channels.as_ref(),
+        )
+        .await;
         let listener = Listener {
             db,
             ctx,
@@ -309,14 +318,21 @@ impl RunEvents for Listener<'_> {
 /// what it says is a suggestion. This is a filter on the tool list, not a line in a prompt: a
 /// call to a tool outside it is refused as an unknown tool. What cannot be read is taken the
 /// strict way: the run gets less, never more. A scheduled run (`origin = schedule`) is work a
-/// person authorised and keeps every tool in every mode, `off` included.
+/// person authorised and keeps every tool in every mode, `off` included. A run for someone the
+/// agent does not know (`origin = stranger`) has `tell_creator` and nothing else: no tool that
+/// reads or changes data, and none of the plugins'. The cut is made before anything is added, so
+/// a tool added later cannot reach it.
 async fn tools_for(
     db: &Database,
     ctx: &TenantCtx,
     run: &Run,
     plugins: &Plugins,
     browser: Option<&Arc<Sessions>>,
+    channels: Option<&ChannelHub>,
 ) -> jian_runtime::Tools {
+    if run.origin == RunOrigin::Stranger {
+        return stranger_tools(channels.cloned());
+    }
     let depth = db
         .subagent_depth(ctx, &run.thread)
         .await
@@ -326,7 +342,9 @@ async fn tools_for(
         });
     // The plugins' tools join before the read-only cut: a run that may only suggest keeps the
     // ones their plugin declared `read_only`, and no other.
-    let mut tools = standard_tools().with_all(plugins.tools(db, ctx, &run.agent).await);
+    let mut tools = standard_tools()
+        .with_all(plugins.tools(db, ctx, &run.agent).await)
+        .with_all(people_tools(channels.cloned()));
     if let Some(sessions) = browser {
         tools = tools.with_all(browser_tools(Arc::clone(sessions)));
     }

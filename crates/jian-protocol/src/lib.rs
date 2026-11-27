@@ -20,6 +20,7 @@ pub mod machine;
 pub mod mcp;
 pub mod memories;
 pub mod objectives;
+pub mod people;
 pub mod projects;
 pub mod providers;
 pub mod quotas;

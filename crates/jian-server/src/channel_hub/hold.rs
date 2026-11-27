@@ -12,8 +12,9 @@ use futures_util::stream::BoxStream;
 use jian_channel_api::{ChannelError, ChannelEvent, ConnectionState, Disconnect, PairingMethod};
 use jian_store::{ChannelAccount, ChannelAccountId, ChannelStatus, TenantCtx};
 
+use super::people::{answer_in_chat, engage};
 use super::{Inner, Live, locked};
-use crate::channel_intake::receive;
+use crate::channel_intake::{Intake, receive};
 
 /// What an event asks of the task.
 enum Step {
@@ -240,14 +241,36 @@ async fn handle(
         ChannelEvent::Paired { account: address } => {
             paired(inner, ctx, account, live, &address).await
         }
-        ChannelEvent::Message(message) => match receive(&inner.db, ctx, account, &message).await {
-            Ok(_) => Step::Go,
-            // Not acknowledged: closing and connecting again makes the provider send it over.
-            Err(error) => {
-                tracing::warn!(account = %account.id, %error, "writing a message to the inbox failed");
-                Step::Drop
+        ChannelEvent::Message(message) => {
+            let step = match receive(&inner.db, ctx, account, &message).await {
+                Ok(Intake::Stranger {
+                    thread,
+                    seq,
+                    first,
+                    text,
+                    label,
+                }) => {
+                    let chat = message.chat.as_str();
+                    let note = first.then_some((chat, label.as_str(), text.as_str()));
+                    engage(inner, ctx, account, &thread, seq, note).await
+                }
+                Ok(Intake::Decision { reply }) => {
+                    answer_in_chat(live, message.chat.as_str(), &reply).await;
+                    Ok(())
+                }
+                Ok(_) => Ok(()),
+                Err(error) => Err(error),
+            };
+            match step {
+                Ok(()) => Step::Go,
+                // Not acknowledged: closing and connecting again makes the provider send it
+                // over.
+                Err(error) => {
+                    tracing::warn!(account = %account.id, %error, "writing a message to the inbox failed");
+                    Step::Drop
+                }
             }
-        },
+        }
     }
 }
 

@@ -24,6 +24,10 @@ pub const CORE_BUILTINS: &[BuiltinSkill] = &[
         name: "coding",
         markdown: include_str!("../../../skills/builtin/coding.md"),
     },
+    BuiltinSkill {
+        name: "people",
+        markdown: include_str!("../../../skills/builtin/people.md"),
+    },
 ];
 
 /// A skill one run offers to an agent.

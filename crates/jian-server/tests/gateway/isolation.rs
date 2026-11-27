@@ -52,6 +52,7 @@ const GITHUB_ITEMS_FILE: &str = include_str!("github_items.rs");
 const LINEAR_FILE: &str = include_str!("linear.rs");
 const LINEAR_WEBHOOK_FILE: &str = include_str!("linear_webhook.rs");
 const CHANNELS_FILE: &str = include_str!("channels.rs");
+const PEOPLE_FILE: &str = include_str!("people.rs");
 
 async fn start() -> (Gateway, TwoTenants) {
     super::accounts::start(open_settings()).await
@@ -84,6 +85,7 @@ fn is_a_test_here(name: &str) -> bool {
         || LINEAR_FILE.contains(&declared)
         || LINEAR_WEBHOOK_FILE.contains(&declared)
         || CHANNELS_FILE.contains(&declared)
+        || PEOPLE_FILE.contains(&declared)
 }
 
 /// Every route the router serves, and the test here that shows tenant B cannot use it on A's
@@ -163,6 +165,28 @@ const ROUTE_TESTS: &[(&str, &str)] = &[
     ("GET /v1/channels/{id}", CHANNELS_TEST),
     ("POST /v1/channels/{id}/pairing", CHANNELS_TEST),
     ("POST /v1/channels/{id}/disconnect", CHANNELS_TEST),
+    ("GET /v1/agents/{id}/people", PEOPLE_TEST),
+    ("POST /v1/agents/{id}/people", PEOPLE_TEST),
+    ("GET /v1/agents/{id}/people/{person}", PEOPLE_TEST),
+    ("PATCH /v1/agents/{id}/people/{person}", PEOPLE_TEST),
+    ("DELETE /v1/agents/{id}/people/{person}", PEOPLE_TEST),
+    (
+        "POST /v1/agents/{id}/people/{person}/identities",
+        PEOPLE_TEST,
+    ),
+    (
+        "DELETE /v1/agents/{id}/people/{person}/identities/{channel}/{address}",
+        PEOPLE_TEST,
+    ),
+    ("GET /v1/agents/{id}/identity-requests", PEOPLE_TEST),
+    (
+        "POST /v1/agents/{id}/identity-requests/{request}/confirm",
+        PEOPLE_TEST,
+    ),
+    (
+        "POST /v1/agents/{id}/identity-requests/{request}/decline",
+        PEOPLE_TEST,
+    ),
     #[cfg(feature = "public-url")]
     (
         "POST /v1/public/linear/webhook/{tenant}",
@@ -368,6 +392,10 @@ const LINEAR_THREAD_TEST: &str =
 /// member who is not the agent's manager cannot pair or disconnect one.
 const CHANNELS_TEST: &str =
     "a_channel_account_is_the_workspaces_own_and_only_the_agents_managers_pair_it";
+/// The test that shows another workspace, another agent and a member who only sees the agent
+/// reach none of its people or identity requests.
+const PEOPLE_TEST: &str =
+    "the_people_of_an_agent_are_invisible_to_other_agents_and_other_workspaces";
 /// The test that shows a delivery signed for tenant A is refused at tenant B's address.
 #[cfg(feature = "public-url")]
 const LINEAR_WEBHOOK_TEST: &str =

@@ -720,10 +720,21 @@ async fn channels_came_over(db: &Database, ctx: &TenantCtx, report: &ImportRepor
     assert_eq!(accounts[0].provider, "whatsapp");
     assert_eq!(accounts[0].status, jian_store::ChannelStatus::NeedsPairing);
     assert_eq!(accounts[0].provider_address, None);
-    let contacts = db.channel_contacts(ctx, &accounts[0].id).await.unwrap();
-    assert_eq!(contacts.len(), 1);
-    assert_eq!(contacts[0].address, "5511900000010@s.whatsapp.net");
-    assert_eq!(contacts[0].status, jian_store::ContactStatus::Approved);
+    // The approved contact is a known person of the agent, once however many times it ran,
+    // next to the agent's creator; the pending one is nobody.
+    let people = db.people_of(ctx, &agent).await.unwrap();
+    let known: Vec<_> = people
+        .iter()
+        .filter(|p| p.role == jian_store::PersonRole::Known)
+        .collect();
+    assert_eq!(known.len(), 1, "{people:?}");
+    assert_eq!(known[0].identities.len(), 1);
+    assert_eq!(known[0].identities[0].channel, "whatsapp");
+    assert_eq!(
+        known[0].identities[0].address,
+        "5511900000010@s.whatsapp.net"
+    );
+    assert_eq!(people.len(), 2, "{people:?}");
     let detail = domain(report, Domain::Channels).detail.clone().unwrap();
     assert!(detail.contains("1 left out"), "{detail}");
     let left: Vec<&str> = report

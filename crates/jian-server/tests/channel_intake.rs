@@ -10,11 +10,11 @@ use jian_channel_api::{
 };
 use jian_core::Visibility;
 use jian_server::{
-    CHANNEL_CONTACT_REQUEST_EVENT, CHANNEL_MESSAGE_EVENT, Intake, ReplyError, receive, reply,
+    CHANNEL_MESSAGE_EVENT, CHANNEL_UNKNOWN_SENDER_EVENT, Intake, ReplyError, receive, reply,
 };
 use jian_store::{
-    AgentEvent, AgentId, ChannelAccount, ContactStatus, Database, NewAgent, TenantCtx, Viewer,
-    channel_secret_owner, secrets::Secret,
+    AgentEvent, AgentId, ChannelAccount, Database, Identity, NewAgent, PersonRole, Sender,
+    TenantCtx, Viewer, channel_secret_owner, secrets::Secret,
 };
 use jian_testkit::{Side, TestDb, TwoTenants};
 
@@ -92,7 +92,7 @@ impl Rig {
 }
 
 #[tokio::test]
-async fn an_unknown_sender_gets_nothing_and_the_agents_side_is_told_once() {
+async fn an_unknown_sender_is_a_stranger_never_a_contact_and_the_first_time_is_marked_once() {
     let rig = Rig::new().await;
     let db = &rig.test.db;
     let a = &rig.tenants.a;
@@ -105,45 +105,52 @@ async fn an_unknown_sender_gets_nothing_and_the_agents_side_is_told_once() {
     let again = receive(db, &a.ctx, &acct, &said("m2", STRANGER, "hello?"))
         .await
         .unwrap();
-    assert_eq!(first, Intake::AskedAboutStranger);
-    assert_eq!(again, Intake::Ignored);
+    assert!(
+        matches!(&first, Intake::Stranger { first: true, text, .. } if text == "hi, it is me"),
+        "{first:?}"
+    );
+    assert!(
+        matches!(&again, Intake::Stranger { first: false, .. }),
+        "{again:?}"
+    );
+    // The same message again is not a third run.
+    let replay = receive(db, &a.ctx, &acct, &said("m2", STRANGER, "hello?"))
+        .await
+        .unwrap();
+    assert_eq!(replay, Intake::Duplicate);
 
+    // Their words are in no inbox event: the one event is the marker, with no text.
     let events = rig.inbox(&a.ctx, &pear).await;
     assert_eq!(events.len(), 1);
-    assert_eq!(events[0].kind, CHANNEL_CONTACT_REQUEST_EVENT);
-    assert_eq!(events[0].payload["contact"], STRANGER);
+    assert_eq!(events[0].kind, CHANNEL_UNKNOWN_SENDER_EVENT);
     let raw = events[0].payload.to_string();
     assert!(
         !raw.contains("hi, it is me") && !raw.contains("hello?"),
         "{raw}"
     );
+    // And they did not become a person of the agent (or anything else of the workspace).
+    let people = db.people_of(&a.ctx, &pear).await.unwrap();
+    assert_eq!(people.len(), 1);
+    assert_eq!(people[0].role, PersonRole::Creator);
 }
 
 #[tokio::test]
-async fn a_declined_contact_stays_silent_and_an_approved_one_talks_to_the_agent() {
+async fn a_blocked_person_stays_silent_and_a_person_added_without_a_message_talks_to_the_agent() {
     let rig = Rig::new().await;
     let db = &rig.test.db;
     let a = &rig.tenants.a;
     let pear = agent(db, a, "pear").await;
     let acct = account(db, a, &pear).await;
-    for who in [STRANGER, FRIEND] {
-        receive(db, &a.ctx, &acct, &said("first", who, "knock"))
-            .await
-            .unwrap();
-    }
-    let by = &a.admin.account_id;
-    let approve = ContactStatus::Approved;
-    let decline = ContactStatus::Declined;
-    assert!(
-        db.decide_channel_contact(&a.ctx, &acct.id, FRIEND, approve, by)
-            .await
-            .unwrap()
-    );
-    assert!(
-        db.decide_channel_contact(&a.ctx, &acct.id, STRANGER, decline, by)
-            .await
-            .unwrap()
-    );
+    // Neither of them ever wrote: the creator added them.
+    let by = a.admin.account_id.as_str();
+    let friend = Identity::new("whatsapp", FRIEND);
+    let foe = Identity::new("whatsapp", STRANGER);
+    db.create_person(&a.ctx, &pear, "Friend", PersonRole::Known, &[friend], by)
+        .await
+        .unwrap();
+    db.create_person(&a.ctx, &pear, "Foe", PersonRole::Blocked, &[foe], by)
+        .await
+        .unwrap();
 
     let declined = receive(db, &a.ctx, &acct, &said("m2", STRANGER, "please"))
         .await
@@ -193,6 +200,125 @@ async fn the_owners_own_message_reaches_the_agent_but_never_asks_for_a_notificat
     own.from_self = true;
     assert_eq!(receive(db, &a.ctx, &acct, &own).await.unwrap(), Intake::Own);
     assert_eq!(rig.inbox(&a.ctx, &pear).await.len(), 1);
+}
+
+#[tokio::test]
+async fn the_same_person_is_recognised_on_two_channels() {
+    let rig = Rig::new().await;
+    let db = &rig.test.db;
+    let a = &rig.tenants.a;
+    let pear = agent(db, a, "pear").await;
+    let whatsapp = account(db, a, &pear).await;
+    let telegram = db
+        .create_channel_account(&a.ctx, &viewer(a), &pear, "telegram", Some("1"))
+        .await
+        .unwrap();
+    let ana = db
+        .create_person(
+            &a.ctx,
+            &pear,
+            "Ana",
+            PersonRole::Known,
+            &[
+                Identity::new("whatsapp", FRIEND),
+                Identity::new("telegram", "77"),
+            ],
+            a.admin.account_id.as_str(),
+        )
+        .await
+        .unwrap();
+
+    for (acct, from) in [(&whatsapp, FRIEND), (&telegram, "77")] {
+        let got = receive(db, &a.ctx, acct, &said("m1", from, "oi"))
+            .await
+            .unwrap();
+        assert!(
+            matches!(got, Intake::Delivered { notify: true, .. }),
+            "{got:?}"
+        );
+        let Sender::Person(who) = db.resolve_sender(&a.ctx, acct, from).await.unwrap() else {
+            panic!("{from} is a person");
+        };
+        assert_eq!(who.id, ana.id);
+    }
+}
+
+#[tokio::test]
+async fn a_new_identity_for_a_person_is_linked_only_when_the_creator_confirms() {
+    const NEW: &str = "5511900000009@s.whatsapp.net";
+    let rig = Rig::new().await;
+    let db = &rig.test.db;
+    let a = &rig.tenants.a;
+    let pear = agent(db, a, "pear").await;
+    let acct = account(db, a, &pear).await;
+    let ana = db
+        .create_person(
+            &a.ctx,
+            &pear,
+            "Ana",
+            PersonRole::Known,
+            &[Identity::new("whatsapp", FRIEND)],
+            a.admin.account_id.as_str(),
+        )
+        .await
+        .unwrap();
+    let new = Identity::new("whatsapp", NEW);
+    let asked = db
+        .request_identity_link(&a.ctx, &pear, &ana.id, &new, "run:test")
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(asked.created);
+    let code = asked.request.code.clone();
+    // Asking again finds the same request, and an identity somebody has is refused.
+    let twice = db
+        .request_identity_link(&a.ctx, &pear, &ana.id, &new, "run:test")
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(!twice.created && twice.request.code == code);
+    let held = Identity::new("whatsapp", FRIEND);
+    assert!(
+        db.request_identity_link(&a.ctx, &pear, &ana.id, &held, "run:test")
+            .await
+            .is_err()
+    );
+
+    // The identity asked for is still nobody, and sending the code from it changes nothing.
+    let confirm = format!("/confirm {code}");
+    let got = receive(db, &a.ctx, &acct, &said("n1", NEW, &confirm))
+        .await
+        .unwrap();
+    assert!(matches!(got, Intake::Stranger { .. }), "{got:?}");
+    // A known person is not the creator: their /confirm is only a message.
+    let got = receive(db, &a.ctx, &acct, &said("f1", FRIEND, &confirm))
+        .await
+        .unwrap();
+    assert!(matches!(got, Intake::Delivered { .. }), "{got:?}");
+    assert_eq!(
+        db.resolve_sender(&a.ctx, &acct, NEW).await.unwrap(),
+        Sender::Unknown
+    );
+
+    // The creator's is a decision, answered in code.
+    let got = receive(db, &a.ctx, &acct, &said("o1", OWNER, &confirm))
+        .await
+        .unwrap();
+    assert!(
+        matches!(&got, Intake::Decision { reply } if reply.starts_with("Linked")),
+        "{got:?}"
+    );
+    let Sender::Person(who) = db.resolve_sender(&a.ctx, &acct, NEW).await.unwrap() else {
+        panic!("linked");
+    };
+    assert_eq!(who.id, ana.id);
+    let got = receive(db, &a.ctx, &acct, &said("n2", NEW, "it is me"))
+        .await
+        .unwrap();
+    assert!(
+        matches!(got, Intake::Delivered { notify: true, .. }),
+        "{got:?}"
+    );
 }
 
 #[tokio::test]

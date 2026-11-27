@@ -49,6 +49,9 @@ use crate::channel_session::AccountSession;
 
 mod answer;
 mod hold;
+mod people;
+
+pub(crate) use people::creator_text;
 
 /// Makes the [`Channel`] of an account, keeping its session in the store it is given. It only
 /// builds the object; connecting is the task's.

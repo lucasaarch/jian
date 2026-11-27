@@ -1,9 +1,10 @@
-//! Chat channel accounts (`WhatsApp` and the like) and their contacts. A chat's thread is a
-//! thread of kind `channel`.
+//! Chat channel accounts (`WhatsApp` and the like). A chat's thread is a thread of kind
+//! `channel`.
 //!
 //! An account belongs to one agent, and a person sees it when they see the agent. The session's
-//! keys are not in these rows: they are in the vault under [`channel_secret_owner`]. A contact is
-//! of the account, not of the workspace, and only an `approved` one may talk to the agent.
+//! keys are not in these rows: they are in the vault under [`channel_secret_owner`]. Who writes
+//! to an account is a person of the agent, or a stranger ([`crate::people`]); the old
+//! `channel_contacts` table is no longer read or written.
 
 use sqlx::AssertSqlSafe;
 
@@ -55,35 +56,6 @@ impl ChannelStatus {
     }
 }
 
-/// What was decided about a person who wrote to the account.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum ContactStatus {
-    /// Seen, not decided. They get nothing.
-    Pending,
-    /// May talk to the agent.
-    Approved,
-    /// Refused. They get nothing, and the owner is not asked again.
-    Declined,
-}
-
-impl ContactStatus {
-    fn as_str(self) -> &'static str {
-        match self {
-            Self::Pending => "pending",
-            Self::Approved => "approved",
-            Self::Declined => "declined",
-        }
-    }
-
-    fn parse(text: &str) -> Self {
-        match text {
-            "approved" => Self::Approved,
-            "declined" => Self::Declined,
-            _ => Self::Pending,
-        }
-    }
-}
-
 /// One channel account.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ChannelAccount {
@@ -101,26 +73,6 @@ pub struct ChannelAccount {
     pub owner_address: Option<String>,
     /// Who made it.
     pub created_by: AccountId,
-}
-
-/// One person who wrote to an account.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ChannelContact {
-    /// Their id on the provider.
-    pub address: String,
-    /// The name they show, when known.
-    pub display_name: Option<String>,
-    /// What was decided.
-    pub status: ContactStatus,
-}
-
-/// A contact as seen when a message arrives.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct ContactSeen {
-    /// What is decided about them.
-    pub status: ContactStatus,
-    /// This is the first time they wrote.
-    pub first_time: bool,
 }
 
 /// An account of the old Jian, as far as it can come over: no session, only who may talk and
@@ -352,95 +304,6 @@ impl Database {
         tx.commit().await.map_err(StoreError::query(ACTION))
     }
 
-    /// Notes that `address` wrote to the account. The first time makes a `pending` contact; later
-    /// ones change nothing but a name that was missing.
-    pub async fn see_channel_contact(
-        &self,
-        ctx: &TenantCtx,
-        id: &ChannelAccountId,
-        address: &str,
-        name: Option<&str>,
-    ) -> Result<ContactSeen, StoreError> {
-        const ACTION: &str = "note a channel contact";
-        let mut tx = self.begin(ctx).await?;
-        let made: Option<String> = sqlx::query_scalar(
-            "INSERT INTO channel_contacts (account_id, address, display_name) VALUES ($1, $2, $3) \
-             ON CONFLICT DO NOTHING RETURNING address",
-        )
-        .bind(id.as_str())
-        .bind(address)
-        .bind(name)
-        .fetch_optional(&mut *tx)
-        .await
-        .map_err(StoreError::query(ACTION))?;
-        let status: String = sqlx::query_scalar(
-            "UPDATE channel_contacts SET display_name = COALESCE(display_name, $3) \
-             WHERE account_id = $1 AND address = $2 RETURNING status",
-        )
-        .bind(id.as_str())
-        .bind(address)
-        .bind(name)
-        .fetch_one(&mut *tx)
-        .await
-        .map_err(StoreError::query(ACTION))?;
-        tx.commit().await.map_err(StoreError::query(ACTION))?;
-        Ok(ContactSeen {
-            status: ContactStatus::parse(&status),
-            first_time: made.is_some(),
-        })
-    }
-
-    /// Approves or declines a contact. `false` when the account has no such contact.
-    pub async fn decide_channel_contact(
-        &self,
-        ctx: &TenantCtx,
-        id: &ChannelAccountId,
-        address: &str,
-        decision: ContactStatus,
-        by: &AccountId,
-    ) -> Result<bool, StoreError> {
-        const ACTION: &str = "decide on a channel contact";
-        let mut tx = self.begin(ctx).await?;
-        let done = sqlx::query(
-            "UPDATE channel_contacts SET status = $3, decided_by = $4, decided_at = now() \
-             WHERE account_id = $1 AND address = $2",
-        )
-        .bind(id.as_str())
-        .bind(address)
-        .bind(decision.as_str())
-        .bind(by.as_str())
-        .execute(&mut *tx)
-        .await
-        .map_err(StoreError::query(ACTION))?;
-        tx.commit().await.map_err(StoreError::query(ACTION))?;
-        Ok(done.rows_affected() > 0)
-    }
-
-    /// Everyone who wrote to the account, oldest first.
-    pub async fn channel_contacts(
-        &self,
-        ctx: &TenantCtx,
-        id: &ChannelAccountId,
-    ) -> Result<Vec<ChannelContact>, StoreError> {
-        let mut tx = self.begin(ctx).await?;
-        let rows: Vec<(String, Option<String>, String)> = sqlx::query_as(
-            "SELECT address, display_name, status FROM channel_contacts \
-             WHERE account_id = $1 ORDER BY first_seen_at, address",
-        )
-        .bind(id.as_str())
-        .fetch_all(&mut *tx)
-        .await
-        .map_err(StoreError::query("read channel contacts"))?;
-        Ok(rows
-            .into_iter()
-            .map(|(address, display_name, status)| ChannelContact {
-                address,
-                display_name,
-                status: ContactStatus::parse(&status),
-            })
-            .collect())
-    }
-
     /// The thread of a chat of this account, made on the first message. One chat is one thread
     /// for good (`threads_channel_origin`): a message that comes after a restart, or twice,
     /// finds the same conversation. The agent and the person outside are its participants.
@@ -569,13 +432,38 @@ impl Database {
             .ok_or(StoreError::Conflict(
                 "that agent already has an account on this provider",
             ))?;
+        // Each approved contact becomes a `known` person with that identity. The id comes from
+        // the account and the address, so a second run finds the same person and adds nothing.
         for (address, name) in &legacy.approved {
+            let person: String = sqlx::query_scalar("SELECT 'per_i_' || md5($1)")
+                .bind(format!("{id}:{address}"))
+                .fetch_one(&mut *tx)
+                .await
+                .map_err(StoreError::query(ACTION))?;
+            let shown = name.as_deref().map(str::trim).filter(|n| !n.is_empty());
             sqlx::query(
-                "INSERT INTO channel_contacts (account_id, address, display_name, status) \
-                 VALUES ($1, $2, $3, 'approved') ON CONFLICT DO NOTHING",
+                "INSERT INTO people (id, agent_id, name, role, created_by) \
+                 SELECT $1, $2, $3, 'known', $4 WHERE NOT EXISTS (SELECT 1 FROM person_identities \
+                 WHERE agent_id = $2 AND channel = $5 AND address = $6) ON CONFLICT DO NOTHING",
             )
-            .bind(&id)
+            .bind(&person)
+            .bind(legacy.agent.as_str())
+            .bind(shown.unwrap_or(address))
+            .bind(creator.as_str())
+            .bind(&legacy.provider)
             .bind(address)
+            .execute(&mut *tx)
+            .await
+            .map_err(StoreError::query(ACTION))?;
+            sqlx::query(
+                "INSERT INTO person_identities (agent_id, channel, address, person_id, display_name) \
+                 SELECT $1, $2, $3, $4, $5 WHERE EXISTS (SELECT 1 FROM people WHERE id = $4) \
+                 ON CONFLICT DO NOTHING",
+            )
+            .bind(legacy.agent.as_str())
+            .bind(&legacy.provider)
+            .bind(address)
+            .bind(&person)
             .bind(name)
             .execute(&mut *tx)
             .await

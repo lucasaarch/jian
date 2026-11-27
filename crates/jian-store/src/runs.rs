@@ -83,6 +83,9 @@ pub enum RunOrigin {
     /// A schedule a person made fired: authorised work, not proactivity. It has every tool in
     /// any proactivity mode and spends none of the proactive budget.
     Schedule,
+    /// Someone the agent does not know wrote to it: the run has a few tools and none of them
+    /// reaches data.
+    Stranger,
 }
 
 impl RunOrigin {
@@ -95,6 +98,7 @@ impl RunOrigin {
             Self::Subagent => "subagent",
             Self::Wake => "wake",
             Self::Schedule => "schedule",
+            Self::Stranger => "stranger",
         }
     }
 
@@ -105,6 +109,7 @@ impl RunOrigin {
             Self::Subagent,
             Self::Wake,
             Self::Schedule,
+            Self::Stranger,
         ]
         .into_iter()
         .find(|origin| origin.as_str() == text)

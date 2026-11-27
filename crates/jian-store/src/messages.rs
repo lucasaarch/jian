@@ -533,6 +533,26 @@ impl Database {
         .await
     }
 
+    /// Writes what someone outside the workspace said, in the thread of their chat. Only the
+    /// channel intake calls it: the thread's participants are not asked, because the chat is the
+    /// door. The same `client_key` twice is one message.
+    pub async fn post_external_message(
+        &self,
+        ctx: &TenantCtx,
+        thread: &ThreadId,
+        who: (&str, &str),
+        parts: MessageParts,
+        client_key: Option<String>,
+    ) -> Result<Option<Posted>, StoreError> {
+        let key = clean_key(client_key)?;
+        let author = Author::External {
+            id: who.0.to_owned(),
+            label: who.1.to_owned(),
+        };
+        self.write(ctx, &author, thread, parts.as_slice(), None, key.as_deref())
+            .await
+    }
+
     async fn write(
         &self,
         ctx: &TenantCtx,

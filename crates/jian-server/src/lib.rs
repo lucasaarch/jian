@@ -112,6 +112,8 @@ mod members;
 mod memories;
 mod objectives;
 pub mod outbound;
+mod people_routes;
+mod people_tools;
 mod plugins;
 mod project_events;
 mod project_files;
@@ -157,7 +159,7 @@ pub use auto_continue::MAX_IDLE_CONTINUATIONS;
 pub use browser_tools::{BrowserRenderer, browser_policy, browser_tools};
 pub use channel_hub::{ChannelHub, ChannelOpener, HubError};
 pub use channel_intake::{
-    CHANNEL_CONTACT_REQUEST_EVENT, CHANNEL_MESSAGE_EVENT, Intake, ReplyError, receive, reply,
+    CHANNEL_MESSAGE_EVENT, CHANNEL_UNKNOWN_SENDER_EVENT, Intake, ReplyError, receive, reply,
 };
 pub use compact_job::{Model, ModelSource, ThreadCompactor};
 pub use events::{BUFFER_DELTAS, EventBus, MemoryEventBus, Scope, Subscription};
@@ -175,6 +177,7 @@ pub use llm_access::{LlmAccess, PendingLogins};
 pub use login_link_job::{LOGIN_LINK_SEND_KIND, LoginLinkSender};
 pub use machine_exec::AgentMachines;
 pub use mail::{DeployMail, MailConfig};
+pub use people_tools::{TELL_CREATOR, people_tools, stranger_tools};
 pub use plugins::{Plugins, ServerHost, builtin_plugins};
 pub use public_url::{InvalidPublicUrl, PublicUrl};
 pub use rate::{Clock, Limit, ManualClock, MemoryRateLimiter, RateLimiter, SystemClock, Verdict};
@@ -333,6 +336,16 @@ pub const ROUTES: &[&str] = &[
     "GET /v1/agents/{id}/inbox (a member who sees the agent)",
     "GET /v1/agents/{id}/channels (a member who sees the agent)",
     "POST /v1/agents/{id}/channels (the agent's creator or an admin)",
+    "GET /v1/agents/{id}/people (the agent's creator or an admin)",
+    "POST /v1/agents/{id}/people (the agent's creator or an admin)",
+    "GET /v1/agents/{id}/people/{person} (the agent's creator or an admin)",
+    "PATCH /v1/agents/{id}/people/{person} (the agent's creator or an admin)",
+    "DELETE /v1/agents/{id}/people/{person} (the agent's creator or an admin)",
+    "POST /v1/agents/{id}/people/{person}/identities (the agent's creator or an admin)",
+    "DELETE /v1/agents/{id}/people/{person}/identities/{channel}/{address} (the agent's creator or an admin)",
+    "GET /v1/agents/{id}/identity-requests (the agent's creator or an admin)",
+    "POST /v1/agents/{id}/identity-requests/{request}/confirm (the agent's creator or an admin)",
+    "POST /v1/agents/{id}/identity-requests/{request}/decline (the agent's creator or an admin)",
     "GET /v1/channels/{id} (a member who sees the agent; the pairing code only for who manages it)",
     "POST /v1/channels/{id}/pairing (the agent's creator or an admin; 503 on an instance that does not serve the workspace)",
     "POST /v1/channels/{id}/disconnect (the agent's creator or an admin)",
@@ -607,6 +620,36 @@ pub fn router_with(state: AppState, extra: Router<AppState>) -> Router {
         .route(
             "/v1/agents/{id}/channels",
             get(channel_routes::list).post(channel_routes::create),
+        )
+        .route(
+            "/v1/agents/{id}/people",
+            get(people_routes::list).post(people_routes::create),
+        )
+        .route(
+            "/v1/agents/{id}/people/{person}",
+            get(people_routes::get)
+                .patch(people_routes::update)
+                .delete(people_routes::delete),
+        )
+        .route(
+            "/v1/agents/{id}/people/{person}/identities",
+            post(people_routes::add_identity),
+        )
+        .route(
+            "/v1/agents/{id}/people/{person}/identities/{channel}/{address}",
+            delete(people_routes::remove_identity),
+        )
+        .route(
+            "/v1/agents/{id}/identity-requests",
+            get(people_routes::requests),
+        )
+        .route(
+            "/v1/agents/{id}/identity-requests/{request}/confirm",
+            post(people_routes::confirm),
+        )
+        .route(
+            "/v1/agents/{id}/identity-requests/{request}/decline",
+            post(people_routes::decline),
         )
         .route("/v1/channels/{id}", get(channel_routes::get))
         .route("/v1/channels/{id}/pairing", post(channel_routes::pair))

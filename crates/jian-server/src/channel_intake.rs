@@ -4,13 +4,19 @@
 //!
 //! - The account itself (`from_self`: the number's own device, or the agent's own echo): nothing.
 //!   Not an event, not a notification.
-//! - The agent's owner: a message the agent reads and acts on, marked `notify: false`. They
+//!
+//! [`Database::resolve_sender`] is the one place that says who wrote:
+//!
+//! - The agent's creator: a message the agent reads and acts on, marked `notify: false`. They
 //!   wrote it; it is never news to them (the old Jian pushed the owner's own chat messages
-//!   to them, and this is what stops that).
-//! - An approved contact: the same message, `notify: true`.
-//! - Anyone else: they get nothing. The first time, the agent's inbox receives a
-//!   `channel.contact_request` that names the number and holds nothing they wrote; after that,
-//!   and for a declined one, nothing at all.
+//!   to them, and this is what stops that). `/confirm <code>` and `/deny <code>` from them are
+//!   answered here, in code, before the agent sees anything: that is how a waiting identity
+//!   link is decided, and no tool of the agent can do it.
+//! - A known person: the same message, `notify: true`.
+//! - A blocked person: nothing at all.
+//! - Nobody the agent knows: what they wrote goes in their chat's thread and the hub starts a
+//!   run with a few tools and no data (`RunOrigin::Stranger`); the creator is told once.
+//!   The person never becomes a contact of the workspace.
 //!
 //! The event is the durable queue. It is written to the agent's inbox, keyed by the message's
 //! provider id, before the channel's event is considered handled: a restart finds it where it
@@ -29,15 +35,18 @@ use jian_channel_api::{
     Channel, ChannelError, ChatId, ChatKind, InboundBody, InboundMessage, MessageId,
     OutboundContent, OutboundMessage, SentMessage,
 };
+use jian_core::MessageParts;
 use jian_store::{
-    AgentId, ChannelAccount, ContactStatus, Database, NewEvent, StoreError, TenantCtx, ThreadId,
+    AgentId, ChannelAccount, Database, NewEvent, PersonRole, Sender, StoreError, TenantCtx,
+    ThreadId,
 };
 use serde_json::{Value, json};
 
 /// The event kind of a message from a person the agent talks to.
 pub const CHANNEL_MESSAGE_EVENT: &str = "channel.message";
-/// The event kind that tells the agent's side a stranger wrote. It carries no message.
-pub const CHANNEL_CONTACT_REQUEST_EVENT: &str = "channel.contact_request";
+/// The event kind that records a stranger wrote, once per account and sender. It carries no
+/// message: it is what makes the creator be told one time.
+pub const CHANNEL_UNKNOWN_SENDER_EVENT: &str = "channel.unknown_sender";
 
 /// The most characters of a message's text an event carries. The inbox row has a ceiling.
 const MAX_TEXT_CHARS: usize = 8_000;
@@ -56,9 +65,25 @@ pub enum Intake {
     },
     /// Already written by an earlier delivery of the same message.
     Duplicate,
-    /// A stranger, new: nothing of theirs went anywhere but the contact request.
-    AskedAboutStranger,
-    /// A stranger already known (pending) or declined: dropped.
+    /// Nobody the agent knows wrote: their words are in the chat's thread and nowhere else.
+    Stranger {
+        /// The chat's thread.
+        thread: ThreadId,
+        /// The `seq` of what they wrote, which the run starts from.
+        seq: i64,
+        /// The first time this sender wrote to the account: the creator is told now.
+        first: bool,
+        /// What they wrote, as text and clipped, for the one note to the creator.
+        text: String,
+        /// The name the channel showed.
+        label: String,
+    },
+    /// The creator decided a waiting identity link: this is the answer to send back to them.
+    Decision {
+        /// What to tell the creator.
+        reply: String,
+    },
+    /// A blocked person, or something not worth a run (a reaction from a stranger): dropped.
     Ignored,
 }
 
@@ -128,21 +153,16 @@ pub async fn receive(
         return Ok(Intake::Own);
     }
     let sender = message.sender.id.as_str();
-    let owner = account.owner_address.as_deref() == Some(sender);
-    if !owner {
-        let seen = db
-            .see_channel_contact(
-                ctx,
-                &account.id,
-                sender,
-                message.sender.display_name.as_deref(),
-            )
-            .await?;
-        match seen.status {
-            ContactStatus::Approved => {}
-            ContactStatus::Declined => return Ok(Intake::Ignored),
-            ContactStatus::Pending => return ask(db, ctx, account, message, seen.first_time).await,
-        }
+    let owner = match db.resolve_sender(ctx, account, sender).await? {
+        Sender::Person(person) => match person.role {
+            PersonRole::Blocked => return Ok(Intake::Ignored),
+            PersonRole::Creator => true,
+            PersonRole::Known => false,
+        },
+        Sender::Unknown => return stranger(db, ctx, account, message).await,
+    };
+    if owner && let Some(reply) = decision(db, ctx, account, message).await? {
+        return Ok(Intake::Decision { reply });
     }
     let label = message
         .sender
@@ -191,33 +211,153 @@ pub async fn receive(
     })
 }
 
-/// A stranger wrote: record that, and tell the agent's side once.
-async fn ask(
+/// The creator's `/confirm <code>` or `/deny <code>`: decides the identity link that waits under
+/// that code and answers what happened. `None` when the message is not one of the two.
+async fn decision(
     db: &Database,
     ctx: &TenantCtx,
     account: &ChannelAccount,
     message: &InboundMessage,
-    first_time: bool,
-) -> Result<Intake, StoreError> {
-    if !first_time {
-        return Ok(Intake::Ignored);
-    }
-    let sender = message.sender.id.as_str();
-    let event = NewEvent {
-        kind: CHANNEL_CONTACT_REQUEST_EVENT.to_owned(),
-        thread: None,
-        // Their number and the name they chose, and nothing of what they wrote.
-        payload: json!({
-            "provider": account.provider,
-            "account": account.id.as_str(),
-            "contact": sender,
-            "name": message.sender.display_name,
-        }),
-        available_ms: now_ms(),
-        key: Some(format!("chc:{}:{sender}", account.id)),
+) -> Result<Option<String>, StoreError> {
+    let InboundBody::Text { text } = &message.body else {
+        return Ok(None);
     };
-    db.add_event(ctx, &account.agent, event).await?;
-    Ok(Intake::AskedAboutStranger)
+    let mut words = text.split_whitespace();
+    let confirm = match words.next().map(str::to_lowercase).as_deref() {
+        Some("/confirm") => true,
+        Some("/deny") => false,
+        _ => return Ok(None),
+    };
+    let (Some(code), None) = (words.next(), words.next()) else {
+        return Ok(Some("Send /confirm <code> or /deny <code>.".to_owned()));
+    };
+    let by = format!("{}:{}", account.provider, message.sender.id.as_str());
+    let decided = match db
+        .decide_identity_link(ctx, &account.agent, code, confirm, &by)
+        .await
+    {
+        Ok(decided) => decided,
+        // It became somebody's meanwhile: the request stays, and the creator is told why.
+        Err(StoreError::Conflict(why)) => return Ok(Some(format!("Not linked: {why}."))),
+        Err(error) => return Err(error),
+    };
+    Ok(Some(match decided {
+        Some(request) if confirm => format!(
+            "Linked {} on {} to the person.",
+            request.identity.address, request.identity.channel
+        ),
+        Some(request) => format!(
+            "Declined: {} on {} stays unknown.",
+            request.identity.address, request.identity.channel
+        ),
+        None => "No request is waiting under that code.".to_owned(),
+    }))
+}
+
+/// What a stranger wrote as text for the run, or `None` for what is not worth one (a reaction).
+fn stranger_text(body: &InboundBody) -> Option<String> {
+    match body {
+        InboundBody::Text { text } => Some(clipped(text).0),
+        InboundBody::Media { info, caption } => Some(format!(
+            "[{:?} sent{}]{}",
+            info.kind,
+            info.file_name
+                .as_deref()
+                .map(|name| format!(": {name}"))
+                .unwrap_or_default(),
+            caption
+                .as_deref()
+                .map(|c| format!(" {}", clipped(c).0))
+                .unwrap_or_default()
+        )),
+        InboundBody::Reaction { .. } | InboundBody::Other => None,
+    }
+}
+
+/// Nobody the agent knows wrote. Their words go to the chat's thread (the only place they are
+/// kept: not an inbox event, so no wake and no data tool sees them as a contact) and the hub is
+/// told to start the run that answers them.
+async fn stranger(
+    db: &Database,
+    ctx: &TenantCtx,
+    account: &ChannelAccount,
+    message: &InboundMessage,
+) -> Result<Intake, StoreError> {
+    let Some(text) = stranger_text(&message.body) else {
+        return Ok(Intake::Ignored);
+    };
+    let sender = message.sender.id.as_str();
+    let label = message
+        .sender
+        .display_name
+        .as_deref()
+        .unwrap_or(sender)
+        .to_owned();
+    let thread = db
+        .open_channel_thread(
+            ctx,
+            account,
+            message.chat.as_str(),
+            &format!("{}: {label}", account.provider),
+            (sender, &label),
+        )
+        .await?;
+    // What the model is told about this thread, once: the person is not known to it.
+    let note = MessageParts::text(
+        "Someone this agent does not know writes in this chat. Answer the minimum, tell nothing \
+         about the workspace, and use tell_creator to ask the creator who they are.",
+    )
+    .map_err(|_| StoreError::InvalidWorkspace("the note to a stranger run is empty"))?;
+    db.post_system_message(
+        ctx,
+        &thread,
+        note,
+        Some(format!("stranger-note:{}", thread.as_str())),
+    )
+    .await?;
+    let parts = MessageParts::text(&text)
+        .map_err(|_| StoreError::InvalidWorkspace("a stranger's message is empty"))?;
+    let key = format!(
+        "ch:{}:{}:{}",
+        account.id,
+        message.chat.as_str(),
+        message.id.as_str()
+    );
+    let Some(posted) = db
+        .post_external_message(ctx, &thread, (sender, &label), parts, Some(key))
+        .await?
+        .filter(|posted| posted.created)
+    else {
+        return Ok(Intake::Duplicate);
+    };
+    // Once per account and sender, whatever they write next: this is what makes the creator be
+    // told one time. It holds nothing they wrote.
+    let first = db
+        .add_event(
+            ctx,
+            &account.agent,
+            NewEvent {
+                kind: CHANNEL_UNKNOWN_SENDER_EVENT.to_owned(),
+                thread: None,
+                payload: json!({
+                    "provider": account.provider,
+                    "account": account.id.as_str(),
+                    "sender": sender,
+                    "name": message.sender.display_name,
+                }),
+                available_ms: now_ms(),
+                key: Some(format!("chu:{}:{sender}", account.id)),
+            },
+        )
+        .await?
+        .is_some();
+    Ok(Intake::Stranger {
+        thread,
+        seq: posted.message.seq,
+        first,
+        text,
+        label,
+    })
 }
 
 /// Sends the agent's reply to the chat `thread` is carried on.

@@ -34,6 +34,7 @@ mod machine_files;
 mod machines;
 mod mcp_servers;
 mod memories;
+mod people;
 mod projects;
 mod providers;
 mod runs;

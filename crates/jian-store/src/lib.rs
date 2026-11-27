@@ -144,6 +144,7 @@ mod gate;
 mod github_reviews;
 mod github_threads;
 mod grants;
+mod identity_links;
 mod imports;
 mod invites;
 mod jobs;
@@ -164,6 +165,8 @@ mod migrate;
 mod objectives;
 #[cfg(unix)]
 mod orphan;
+mod people;
+mod people_notes;
 mod platform;
 mod project_files;
 mod project_repos;
@@ -219,8 +222,7 @@ pub use artifacts::{
 pub use backup::tenant_dump_args;
 pub use blobs::{BlobError, BlobKey, BlobStore, DiskBlobs};
 pub use channels::{
-    ChannelAccount, ChannelAccountId, ChannelContact, ChannelStatus, ContactSeen, ContactStatus,
-    LegacyChannelAccount, channel_secret_owner,
+    ChannelAccount, ChannelAccountId, ChannelStatus, LegacyChannelAccount, channel_secret_owner,
 };
 pub use checkpoints::{Checkpoint, HistoryRow, MAX_HISTORY_PAGE, TailSize};
 pub use connectors::{
@@ -235,6 +237,7 @@ pub use error::StoreError;
 pub use gate::{TenantLimits, TenantTx};
 pub use github_threads::GithubThreadLink;
 pub use grants::{GRANTS, MemberGrant};
+pub use identity_links::{Asked, LinkRequest};
 pub use imports::{ImportMarker, ImportResult, ImportStatus};
 pub use invites::{
     Accepted, Invite, InviteStatus, InviteTarget, IssuedInvite, MAX_INVITE_TOKEN_LEN, SendOutcome,
@@ -268,6 +271,10 @@ pub use messages::{
 };
 pub use migrate::{MigrateOptions, MigrationReport, Migrations};
 pub use objectives::{Objective, ObjectiveState};
+pub use people::{
+    IDENTITY_CHANNELS, Identity, MAX_PERSON_NAME, Person, PersonId, PersonRole, Sender,
+};
+pub use people_notes::MAX_PERSON_NOTES;
 pub use project_files::{
     MAX_PROJECT_FILE_BYTES, MAX_PROJECT_FILE_NAME_CHARS, MAX_PROJECT_FILES, ProjectFile,
     ProjectFileId,

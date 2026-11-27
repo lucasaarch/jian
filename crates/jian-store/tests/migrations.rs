@@ -325,7 +325,7 @@ async fn the_embedded_migrations_apply_to_the_platform_and_to_each_tenant() {
         .await,
         [
             "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16",
-            "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28", "29"
+            "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28", "29", "30"
         ]
     );
     // After a restart the tenant is migrated again with nothing to do.
@@ -418,7 +418,8 @@ async fn tool_approval_is_dropped_and_a_run_that_waited_on_one_ends_failed() {
         .map(|entry| entry.unwrap().file_name().into_string().unwrap())
         .collect::<Vec<_>>();
     shipped.sort();
-    // The release before: everything up to 0016 (0017 is under test; 0018 to 0029 come after).
+    // The release before: everything up to 0016 (0017 is under test; 0018 to 0030 come after).
+    assert!(shipped.pop().unwrap().starts_with("0030_"));
     assert!(shipped.pop().unwrap().starts_with("0029_"));
     assert!(shipped.pop().unwrap().starts_with("0028_"));
     assert!(shipped.pop().unwrap().starts_with("0027_"));
@@ -524,7 +525,8 @@ async fn proactivity_defaults_to_suggest_and_an_hourly_limit_resets_except_off()
         .map(|entry| entry.unwrap().file_name().into_string().unwrap())
         .collect::<Vec<_>>();
     shipped.sort();
-    // The release before: everything up to 0018 (0019 to 0029 come after it).
+    // The release before: everything up to 0018 (0019 to 0030 come after it).
+    assert!(shipped.pop().unwrap().starts_with("0030_"));
     assert!(shipped.pop().unwrap().starts_with("0029_"));
     assert!(shipped.pop().unwrap().starts_with("0028_"));
     assert!(shipped.pop().unwrap().starts_with("0027_"));
@@ -586,6 +588,96 @@ async fn proactivity_defaults_to_suggest_and_an_hourly_limit_resets_except_off()
         )
         .await,
         ["agt_1/suggest/-/0", "agt_2/suggest/0/-", "agt_3/suggest/-/-"]
+    );
+    db.close().await.unwrap();
+    server.stop().await;
+}
+
+#[tokio::test]
+async fn what_the_owner_decided_about_a_contact_becomes_a_person_and_a_pending_one_becomes_nobody()
+{
+    let server = Server::start().await;
+    let real = Path::new(env!("CARGO_MANIFEST_DIR")).join("migrations/tenant");
+    let mut shipped = std::fs::read_dir(&real)
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name().into_string().unwrap())
+        .collect::<Vec<_>>();
+    shipped.sort();
+    // The release before: everything up to 0029 (0030 is under test).
+    let last = shipped.pop().unwrap();
+    assert!(last.starts_with("0030_"), "{last}");
+    let before = shipped
+        .iter()
+        .map(|name| {
+            (
+                name.clone(),
+                std::fs::read_to_string(real.join(name)).unwrap(),
+            )
+        })
+        .collect::<Vec<_>>();
+    let files = before
+        .iter()
+        .map(|(name, sql)| (name.as_str(), sql.as_str()))
+        .collect::<Vec<_>>();
+    let db = database(&server, "v29", &files).await;
+    db.migrate().await.unwrap();
+    let alpha = tenant(&db, "alpha").await;
+    exec(
+        &db,
+        &alpha,
+        "INSERT INTO agents (id, name, visibility, created_by) \
+         VALUES ('agt_1', 'A', 'workspace', 'acc_1')",
+    )
+    .await;
+    exec(
+        &db,
+        &alpha,
+        "INSERT INTO channel_accounts (id, agent_id, provider, owner_address, created_by) \
+         VALUES ('cha_1', 'agt_1', 'whatsapp', '999@s', 'acc_1')",
+    )
+    .await;
+    exec(
+        &db,
+        &alpha,
+        "INSERT INTO channel_contacts (account_id, address, display_name, status) VALUES \
+         ('cha_1', '111@s', 'Bia', 'approved'), ('cha_1', '222@s', NULL, 'declined'), \
+         ('cha_1', '333@s', 'Cai', 'pending')",
+    )
+    .await;
+
+    let db = db.with_migrations(Migrations::new(
+        platform_migrator().await,
+        Migrator::new(real.as_path()).await.unwrap(),
+    ));
+    assert!(db.migrate().await.unwrap().failed.is_empty());
+    assert_eq!(
+        texts(
+            &db,
+            &alpha,
+            "SELECT p.role || '/' || p.name || '/' || i.channel || ':' || i.address \
+             FROM people p JOIN person_identities i ON i.person_id = p.id ORDER BY i.channel, i.address"
+        )
+        .await,
+        [
+            "creator/Creator/jian:acc_1",
+            "known/Bia/whatsapp:111@s",
+            "blocked/222@s/whatsapp:222@s",
+            "creator/Creator/whatsapp:999@s"
+        ]
+    );
+    // The pending one is nobody, and the old table is left as it was.
+    assert_eq!(
+        texts(
+            &db,
+            &alpha,
+            "SELECT count(*)::text FROM person_identities WHERE address = '333@s'"
+        )
+        .await,
+        ["0"]
+    );
+    assert_eq!(
+        texts(&db, &alpha, "SELECT count(*)::text FROM channel_contacts").await,
+        ["3"]
     );
     db.close().await.unwrap();
     server.stop().await;
