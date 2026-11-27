@@ -3,6 +3,7 @@
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
+use std::time::Instant;
 
 use futures_util::FutureExt;
 use futures_util::future::BoxFuture;
@@ -23,6 +24,8 @@ struct Inner {
     files: HashMap<String, Vec<u8>>,
     groups: HashMap<String, Group>,
     counter: u64,
+    connects: Vec<(PairingMethod, Instant)>,
+    disconnects: Vec<Disconnect>,
 }
 
 /// A channel that does what a test tells it. Cloning shares the same state, so a test keeps one
@@ -71,6 +74,18 @@ impl FakeChannel {
         self.lock().reactions.clone()
     }
 
+    /// Every `connect` so far, oldest first, with when it was called.
+    #[must_use]
+    pub fn connections(&self) -> Vec<(PairingMethod, Instant)> {
+        self.lock().connects.clone()
+    }
+
+    /// Every `disconnect` so far, oldest first.
+    #[must_use]
+    pub fn disconnections(&self) -> Vec<Disconnect> {
+        self.lock().disconnects.clone()
+    }
+
     /// Makes the next send fail with `error`; later ones succeed again.
     pub fn fail_next_send(&self, error: ChannelError) {
         self.lock().fail_sends.push(error);
@@ -100,6 +115,7 @@ impl Channel for FakeChannel {
 
     fn connect(&self, method: PairingMethod) -> BoxFuture<'_, Result<(), ChannelError>> {
         async move {
+            self.lock().connects.push((method.clone(), Instant::now()));
             match method {
                 PairingMethod::Resume => self.push(ChannelEvent::State(ConnectionState::Connected)),
                 PairingMethod::Qr => {
@@ -186,6 +202,7 @@ impl Channel for FakeChannel {
 
     fn disconnect(&self, how: Disconnect) -> BoxFuture<'_, Result<(), ChannelError>> {
         async move {
+            self.lock().disconnects.push(how);
             let state = match how {
                 Disconnect::Keep => ConnectionState::Disconnected,
                 Disconnect::LogOut => ConnectionState::LoggedOut,

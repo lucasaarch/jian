@@ -645,6 +645,23 @@ async fn serve(
     let ticking = CancellationToken::new();
     let ticker = tokio::spawn(jian_server::run_ticker(database.clone(), ticking.clone()));
     let mut state = AppState::new(database.clone(), slots, closing.clone(), settings);
+    // Chat accounts linked in this workspace are held by the instance that serves its slot; the
+    // timer is how one that has just taken a slot picks them up. No provider is registered yet.
+    let channels = state.channels.clone();
+    let reconciling = tokio::spawn({
+        let (channels, ticking) = (channels.clone(), ticking.clone());
+        async move {
+            loop {
+                if let Err(error) = channels.reconcile().await {
+                    tracing::warn!(%error, "starting the chat channels failed");
+                }
+                tokio::select! {
+                    () = tokio::time::sleep(Duration::from_secs(10)) => {}
+                    () = ticking.cancelled() => break,
+                }
+            }
+        }
+    });
     // The runs' deltas and the routes' must meet on one bus, and the models on one set of
     // breakers.
     state.events = events;
@@ -699,6 +716,9 @@ async fn serve(
     };
     ticking.cancel();
     let _ = ticker.await;
+    let _ = reconciling.await;
+    // Sessions are kept: the instance that takes the slots resumes them.
+    channels.shutdown().await;
     // No new job is taken (the slots are no longer served); the ones running get until the
     // deadline, and what is left is stopped and handed back to the queue below.
     let stopped = runner.shutdown(jobs_until).await;

@@ -51,6 +51,7 @@ const GITHUB_WEBHOOK_FILE: &str = include_str!("github_webhook.rs");
 const GITHUB_ITEMS_FILE: &str = include_str!("github_items.rs");
 const LINEAR_FILE: &str = include_str!("linear.rs");
 const LINEAR_WEBHOOK_FILE: &str = include_str!("linear_webhook.rs");
+const CHANNELS_FILE: &str = include_str!("channels.rs");
 
 async fn start() -> (Gateway, TwoTenants) {
     super::accounts::start(open_settings()).await
@@ -82,6 +83,7 @@ fn is_a_test_here(name: &str) -> bool {
         || GITHUB_ITEMS_FILE.contains(&declared)
         || LINEAR_FILE.contains(&declared)
         || LINEAR_WEBHOOK_FILE.contains(&declared)
+        || CHANNELS_FILE.contains(&declared)
 }
 
 /// Every route the router serves, and the test here that shows tenant B cannot use it on A's
@@ -156,6 +158,11 @@ const ROUTE_TESTS: &[(&str, &str)] = &[
     ),
     ("POST /v1/linear/threads", LINEAR_THREAD_TEST),
     ("GET /v1/linear/threads", LINEAR_THREAD_TEST),
+    ("POST /v1/agents/{id}/channels", CHANNELS_TEST),
+    ("GET /v1/agents/{id}/channels", CHANNELS_TEST),
+    ("GET /v1/channels/{id}", CHANNELS_TEST),
+    ("POST /v1/channels/{id}/pairing", CHANNELS_TEST),
+    ("POST /v1/channels/{id}/disconnect", CHANNELS_TEST),
     #[cfg(feature = "public-url")]
     (
         "POST /v1/public/linear/webhook/{tenant}",
@@ -357,6 +364,10 @@ const LINEAR_ACCOUNT_TEST: &str =
 /// The test that shows tenant B cannot start or find threads of tenant A's Linear account.
 const LINEAR_THREAD_TEST: &str =
     "a_thread_started_from_an_issue_is_linked_both_ways_and_is_the_workspaces_own";
+/// The test that shows tenant B finds none of tenant A's agents' chat accounts, and that a
+/// member who is not the agent's manager cannot pair or disconnect one.
+const CHANNELS_TEST: &str =
+    "a_channel_account_is_the_workspaces_own_and_only_the_agents_managers_pair_it";
 /// The test that shows a delivery signed for tenant A is refused at tenant B's address.
 #[cfg(feature = "public-url")]
 const LINEAR_WEBHOOK_TEST: &str =

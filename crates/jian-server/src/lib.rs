@@ -73,7 +73,9 @@ mod artifacts;
 mod auth;
 mod auto_continue;
 mod browser_tools;
+mod channel_hub;
 mod channel_intake;
+mod channel_routes;
 mod client_ws;
 mod codex_login;
 mod compact_job;
@@ -152,6 +154,7 @@ pub use artifact_export::{ArtifactRenderer, RenderFormat, Renderer};
 pub use auth::{AuthRejection, Principal};
 pub use auto_continue::MAX_IDLE_CONTINUATIONS;
 pub use browser_tools::{BrowserRenderer, browser_policy, browser_tools};
+pub use channel_hub::{ChannelHub, ChannelOpener, HubError};
 pub use channel_intake::{
     CHANNEL_CONTACT_REQUEST_EVENT, CHANNEL_MESSAGE_EVENT, Intake, ReplyError, receive, reply,
 };
@@ -327,6 +330,11 @@ pub const ROUTES: &[&str] = &[
     "PATCH /v1/agents/{id}/schedules/{scheduleId} (a member who sees the agent)",
     "DELETE /v1/agents/{id}/schedules/{scheduleId} (a member who sees the agent)",
     "GET /v1/agents/{id}/inbox (a member who sees the agent)",
+    "GET /v1/agents/{id}/channels (a member who sees the agent)",
+    "POST /v1/agents/{id}/channels (the agent's creator or an admin)",
+    "GET /v1/channels/{id} (a member who sees the agent; the pairing code only for who manages it)",
+    "POST /v1/channels/{id}/pairing (the agent's creator or an admin; 503 on an instance that does not serve the workspace)",
+    "POST /v1/channels/{id}/disconnect (the agent's creator or an admin)",
     "GET /v1/usage (an admin)",
     "GET /v1/grants (an admin)",
     "POST /v1/grants (an admin)",
@@ -482,6 +490,8 @@ pub struct AppState {
     pub renderer: Option<Renderer>,
     /// The plugins of this build, which a route uses to try an account before it keeps it.
     pub plugins: Plugins,
+    /// The chat accounts this instance holds a connection for.
+    pub channels: ChannelHub,
 }
 
 impl AppState {
@@ -494,6 +504,12 @@ impl AppState {
         settings: Settings,
     ) -> Self {
         Self {
+            channels: ChannelHub::new(
+                db.clone(),
+                slots.clone(),
+                shutdown.clone(),
+                jian_channel_api::Backoff::DEFAULT,
+            ),
             db,
             slots,
             hub: MachineHub::new(),
@@ -587,6 +603,16 @@ pub fn router_with(state: AppState, extra: Router<AppState>) -> Router {
                 .delete(schedules::delete),
         )
         .route("/v1/agents/{id}/inbox", get(schedules::inbox))
+        .route(
+            "/v1/agents/{id}/channels",
+            get(channel_routes::list).post(channel_routes::create),
+        )
+        .route("/v1/channels/{id}", get(channel_routes::get))
+        .route("/v1/channels/{id}/pairing", post(channel_routes::pair))
+        .route(
+            "/v1/channels/{id}/disconnect",
+            post(channel_routes::disconnect),
+        )
         .route("/v1/agents/{id}/events", post(agent_events::post))
         .route(
             "/v1/agents/{id}/proactivity",

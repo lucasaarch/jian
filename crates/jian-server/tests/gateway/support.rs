@@ -134,6 +134,12 @@ impl Gateway {
             catalog: Arc::new(jian_skills::Catalog::core()),
             renderer: None,
             plugins: jian_server::Plugins::new(jian_server::builtin_plugins()),
+            channels: jian_server::ChannelHub::new(
+                db.clone(),
+                keeper.ownership(),
+                stop.clone(),
+                jian_channel_api::Backoff::DEFAULT,
+            ),
         };
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
