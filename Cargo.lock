@@ -1563,6 +1563,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "jian-plugin-api"
+version = "0.1.0"
+dependencies = [
+ "futures-util",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
+ "zeroize",
+]
+
+[[package]]
+name = "jian-plugin-echo"
+version = "0.1.0"
+dependencies = [
+ "futures-util",
+ "jian-plugin-api",
+ "serde_json",
+]
+
+[[package]]
 name = "jian-protocol"
 version = "0.1.0"
 dependencies = [

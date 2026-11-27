@@ -83,3 +83,7 @@ jobs:
       # nextest does not run doctests, and starts the shared test Postgres (.config/nextest.toml).
       - run: cargo nextest run --workspace --locked
       - run: cargo test --doc --workspace --locked
+      # A plugin that exists only in the self-hosted edition must not compile in the Cloud one; the
+      # fixture crate proves it (its doctest only runs in this build).
+      - run: cargo clippy -p jian-plugin-echo --no-default-features --features cloud --all-targets --locked -- -D warnings
+      - run: cargo test -p jian-plugin-echo --no-default-features --features cloud --locked

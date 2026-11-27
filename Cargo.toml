@@ -2,7 +2,9 @@
 # replace the Node gateway. The Node apps and packages stay untouched; pnpm never reads this file.
 [workspace]
 resolver = "3"
-members = ["packages/remote-core/native", "crates/*", "bins/*"]
+# `crates/*` would also match the folder that holds the plugin crates, which is not a crate, and
+# Cargo fails on a match with no manifest: every crate there is named `jian-*`.
+members = ["packages/remote-core/native", "crates/jian-*", "crates/plugins/*", "bins/*"]
 
 [workspace.package]
 version = "0.1.0"
@@ -33,13 +35,15 @@ jian-exec = { path = "crates/jian-exec" }
 jian-import = { path = "crates/jian-import" }
 jian-llm = { path = "crates/jian-llm" }
 jian-mail = { path = "crates/jian-mail" }
+jian-plugin-api = { path = "crates/plugins/jian-plugin-api" }
 jian-protocol = { path = "crates/jian-protocol" }
 jian-remote = { path = "crates/jian-remote" }
 jian-runtime = { path = "crates/jian-runtime" }
 jian-server = { path = "crates/jian-server" }
 jian-skills = { path = "crates/jian-skills" }
 jian-store = { path = "crates/jian-store" }
-# Test fixtures only: a crate lists it under [dev-dependencies].
+# Test fixtures only: a crate lists them under [dev-dependencies].
+jian-plugin-echo = { path = "crates/plugins/jian-plugin-echo", default-features = false }
 jian-testkit = { path = "crates/jian-testkit" }
 # Calendar and time zone arithmetic for cron schedules (DST-aware). The tz database is bundled,
 # so the next run never depends on the host's zoneinfo; no system or IO feature is on.

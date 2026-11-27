@@ -1,0 +1,24 @@
+[package]
+name = "jian-plugin-echo"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+# A fixture for tests, not a connector: no binary links it, and a crate lists it under
+# `[dev-dependencies]` only.
+publish = false
+
+[features]
+# The default build is the self-hosted one, as `bins/jian`'s is. `cloud` is the build without
+# what only a self-hosted install may do: `cargo check -p jian-plugin-echo --no-default-features
+# --features cloud` must pass, and must not compile `LocalEcho`.
+default = ["self-hosted"]
+self-hosted = []
+cloud = []
+
+[dependencies]
+futures-util.workspace = true
+jian-plugin-api.workspace = true
+serde_json.workspace = true
+
+[lints]
+workspace = true

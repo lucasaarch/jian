@@ -15,7 +15,7 @@ COMPOSE_DEV := docker compose -f compose.dev.yaml
 
 .DEFAULT_GOAL := help
 
-.PHONY: help install setup up pull down logs ps dev db-up db-stop db-reset changelog check-rust rust-check rust-dev rust-dev-reset protocol-gen protocol-check \
+.PHONY: help install setup up pull down logs ps dev db-up db-stop db-reset changelog check-rust rust-check rust-editions rust-dev rust-dev-reset protocol-gen protocol-check \
         check test test-integration lint format build image image-push \
         release rollback test-display image-test-display image-test-inspection image-test-network \
         preview-up preview-down preview-status preview-token
@@ -92,6 +92,11 @@ rust-check: ## The Rust workspace: format, clippy, tests and docs, as the rules 
 	cargo nextest run --workspace --locked
 	cargo test --doc --workspace --locked
 	RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --locked
+	$(MAKE) rust-editions
+
+rust-editions: ## The Cloud edition of the plugin fixture: its self-hosted-only plugin must not compile there
+	cargo clippy -p jian-plugin-echo --no-default-features --features cloud --all-targets --locked -- -D warnings
+	cargo test -p jian-plugin-echo --no-default-features --features cloud --locked
 
 # The Rust gateway on its own embedded Postgres, in .jian-dev/ (git-ignored). A DATABASE_URL in the
 # environment, or `make rust-dev DATABASE_URL=...`, points it at an external one instead.
