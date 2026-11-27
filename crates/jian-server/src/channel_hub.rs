@@ -170,6 +170,21 @@ impl ChannelHub {
         live.channel.receive_push(secret, body).await
     }
 
+    /// Delivers a webhook already authenticated by the public ingress and queued for this
+    /// tenant's slot. Only the durable provider-webhook handler calls this path.
+    pub(crate) async fn push_verified(
+        &self,
+        tenant: &TenantId,
+        account: &ChannelAccountId,
+        body: &[u8],
+    ) -> Result<(), ChannelError> {
+        let live = locked(&self.inner.running)
+            .get(&(tenant.clone(), account.clone()))
+            .cloned()
+            .ok_or(ChannelError::NotConnected)?;
+        live.channel.receive_verified_push(body).await
+    }
+
     /// Says how an account of `kind` is connected, replacing what was said before.
     pub fn register(&self, kind: ChannelKind, opener: ChannelOpener) {
         self.inner
@@ -227,10 +242,12 @@ impl ChannelHub {
         }
         let channel = self.opener(&account.provider)?(account, self.session(ctx, account));
         #[cfg(feature = "public-url")]
-        if let Some(url) = locked(&self.inner.public_url)
-            .as_ref()
-            .and_then(|base| base.channel_webhook(ctx.id().as_str(), account.id.as_str()))
-        {
+        if let Some(url) = locked(&self.inner.public_url).as_ref().and_then(|base| {
+            match account.provider.as_str() {
+                "slack" => Some(base.slack_events()),
+                _ => base.channel_webhook(ctx.id().as_str(), account.id.as_str()),
+            }
+        }) {
             channel.use_push(url);
         }
         let live = Arc::new(Live {

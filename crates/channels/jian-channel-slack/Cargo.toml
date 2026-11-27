@@ -1,0 +1,28 @@
+[package]
+name = "jian-channel-slack"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+base64.workspace = true
+futures-util.workspace = true
+jian-channel-api.workspace = true
+reqwest.workspace = true
+ring.workspace = true
+rustls.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+tokio = { workspace = true, features = ["sync", "time"] }
+tokio-tungstenite.workspace = true
+tokio-util = { workspace = true, features = ["rt"] }
+url.workspace = true
+zeroize.workspace = true
+
+[dev-dependencies]
+axum.workspace = true
+tokio.workspace = true
+
+[lints]
+workspace = true

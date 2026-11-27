@@ -37,6 +37,10 @@ jian-channel-api = { path = "crates/channels/jian-channel-api" }
 jian-channel-whatsapp = { path = "crates/channels/jian-channel-whatsapp" }
 # Telegram over the Bot API, on the workspace's one reqwest; its token lives in the vault.
 jian-channel-telegram = { path = "crates/channels/jian-channel-telegram" }
+# Discord over Twilight's Gateway; the bot token lives in the account's vault session.
+jian-channel-discord = { path = "crates/channels/jian-channel-discord" }
+# Slack Events API in Cloud and Socket Mode for self-hosted; workspace tokens stay in the vault.
+jian-channel-slack = { path = "crates/channels/jian-channel-slack" }
 jian-computer-use = { path = "crates/jian-computer-use" }
 jian-core = { path = "crates/jian-core" }
 jian-exec = { path = "crates/jian-exec" }
@@ -83,7 +87,7 @@ rustix = { version = "1", default-features = false, features = ["std"] }
 # `rustls-no-provider` is reqwest's rustls without a bundled provider (its `rustls` feature pulls
 # aws-lc); each place that builds a Client installs ring first. 0.13 is the version the embedded
 # Postgres and resend-rs already use, so one reqwest is compiled.
-reqwest = { version = "0.13.5", default-features = false, features = ["rustls-no-provider", "http2", "json"] }
+reqwest = { version = "0.13.5", default-features = false, features = ["rustls-no-provider", "http2", "json", "form", "multipart", "stream"] }
 # No default features: its default is native-tls (OpenSSL), and its `rustls-tls` is aws-lc.
 resend-rs = { version = "0.38", default-features = false }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
@@ -99,6 +103,9 @@ tokio-tungstenite = { version = "0.29", default-features = false, features = ["c
 tokio-util = { version = "0.7.15", default-features = false }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", default-features = false, features = ["ansi", "env-filter", "fmt"] }
+# The Discord Gateway; keep the TLS roots and provider aligned with the rest of the workspace.
+twilight-gateway = { version = "0.18", default-features = false, features = ["rustls-webpki-roots"] }
+twilight-model = { version = "0.18", default-features = false }
 # TypeScript types for the wire protocol, generated into packages/protocol (`make protocol-gen`).
 # Default features only: `serde-compat` is what makes it read the serde attributes.
 ts-rs = "12.0.1"

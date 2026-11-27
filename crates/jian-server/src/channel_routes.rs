@@ -78,7 +78,7 @@ fn state_view(
 
 /// The account the caller sees, whether they manage its agent, and the tenant. A 404 for an
 /// account of another workspace or of an agent they do not see.
-async fn seen(
+pub(crate) async fn seen(
     app: &AppState,
     principal: &Principal,
     id: &str,
@@ -95,7 +95,7 @@ async fn seen(
     Ok((ctx, account, manages))
 }
 
-fn hub_refusal(error: HubError) -> Refusal {
+pub(crate) fn hub_refusal(error: HubError) -> Refusal {
     match error {
         HubError::NotServed => refuse(
             StatusCode::SERVICE_UNAVAILABLE,
@@ -143,21 +143,28 @@ pub(crate) async fn create(
         .as_deref()
         .map(str::trim)
         .filter(|owner| !owner.is_empty());
-    // Only Telegram has a token to give; a token is one word, never echoed back.
+    // Bot tokens are one word and never echoed back; pairing is provider-specific.
     let token = body
         .token
         .as_deref()
         .map(str::trim)
         .filter(|t| !t.is_empty());
     if let Some(token) = token
-        && (kind != ChannelKind::Telegram
-            || token.len() > 200
+        && (!matches!(kind, ChannelKind::Telegram | ChannelKind::Discord)
+            || token.len() > 512
             || token.chars().any(char::is_whitespace))
     {
         return Err(refuse(
             StatusCode::BAD_REQUEST,
             "invalid_input",
-            "only a Telegram account takes a token, and it is the bot token from @BotFather",
+            "only Telegram and Discord accounts take a bot token",
+        ));
+    }
+    if kind == ChannelKind::Discord && token.is_none() {
+        return Err(refuse(
+            StatusCode::BAD_REQUEST,
+            "invalid_input",
+            "a Discord account needs its bot token",
         ));
     }
     let account = app

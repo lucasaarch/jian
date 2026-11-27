@@ -85,6 +85,18 @@ impl PublicUrl {
         self.id_link("v1/public/channels/x", account).map(|_| url)
     }
 
+    /// Where Slack delivers Events API callbacks for the configured app.
+    #[must_use]
+    pub fn slack_events(&self) -> String {
+        format!("{}/v1/public/slack/events", self.0)
+    }
+
+    /// Where Slack returns a workspace installation after OAuth authorization.
+    #[must_use]
+    pub fn slack_oauth_callback(&self) -> String {
+        format!("{}/v1/slack/oauth/callback", self.0)
+    }
+
     /// Where Linear delivers a workspace's webhooks, with the workspace in the path for the same
     /// reasons as [`github_webhook`](Self::github_webhook).
     #[must_use]

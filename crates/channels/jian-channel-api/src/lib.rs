@@ -146,4 +146,11 @@ pub trait Channel: Send + Sync {
     ) -> BoxFuture<'_, Result<(), ChannelError>> {
         Box::pin(async { Err(ChannelError::Unsupported("take pushed deliveries")) })
     }
+
+    /// Takes a provider delivery whose signature was verified at a trusted HTTP ingress before
+    /// it was queued for the tenant's slot owner. Implementations should parse and deliver it as
+    /// they do [`receive_push`](Self::receive_push), but must not accept this path from HTTP.
+    fn receive_verified_push(&self, _body: &[u8]) -> BoxFuture<'_, Result<(), ChannelError>> {
+        Box::pin(async { Err(ChannelError::Unsupported("take verified queued deliveries")) })
+    }
 }

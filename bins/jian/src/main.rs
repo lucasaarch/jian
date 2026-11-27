@@ -16,6 +16,7 @@ mod import_cli;
 mod mail_flags;
 mod owner_token;
 mod shutdown;
+mod slack_flags;
 mod users_cli;
 
 use std::future::IntoFuture as _;
@@ -32,7 +33,8 @@ use jian_server::{
     AGENT_WAKE_KIND, AccountModels, AgentMachines, AgentRunner, AgentWaker, AppState, ChannelHub,
     EventBus, JobOptions, JobRegistry, JobRequeue, JobRunner, LlmAccess, MachineHub,
     MemoryEventBus, ModelSource, PublicUrl, RUN_KIND, SCHEDULE_FIRE_KIND, SCHEDULE_RUN_KIND,
-    ScheduleFirer, ScheduleRunner, Settings, SlotKeeper, THREAD_COMPACT_KIND, ThreadCompactor,
+    SLACK_EVENT_KIND, ScheduleFirer, ScheduleRunner, Settings, SlackEventHandler, SlotKeeper,
+    THREAD_COMPACT_KIND, ThreadCompactor,
 };
 // The e-mails carry a link people open, so only a build with `public-url` sends them.
 #[cfg(feature = "public-url")]
@@ -173,6 +175,9 @@ struct Cli {
 
     #[command(flatten)]
     github: github_flags::GithubFlags,
+
+    #[command(flatten)]
+    slack: slack_flags::SlackFlags,
 
     #[command(flatten)]
     browser: browser_flags::BrowserFlags,
@@ -337,6 +342,7 @@ async fn run() -> anyhow::Result<()> {
         gateway_version: Some(env!("CARGO_PKG_VERSION").to_owned()),
         auth: auth.clone(),
         public_url: cli.public_url.clone(),
+        slack: cli.slack.config(cli.public_url.as_ref())?,
         mail: cli.mail.config()?,
         workspace_name: cli.mail.workspace_name.clone(),
         local_machine: cli.local_machine,
@@ -518,7 +524,13 @@ fn job_registry(
     pages: Option<Arc<jian_browser::Sessions>>,
     chat: Option<&ChannelHub>,
 ) -> JobRegistry {
-    let registry = debug_jobs::registry();
+    let mut registry = debug_jobs::registry();
+    if let Some(chat) = chat {
+        registry = registry.register(
+            SLACK_EVENT_KIND,
+            Arc::new(SlackEventHandler::new(chat.clone())),
+        );
+    }
     #[cfg(not(feature = "public-url"))]
     let _ = settings;
     #[cfg(feature = "public-url")]
@@ -654,6 +666,18 @@ async fn serve(
             jian_channel_telegram::open(store, jian_channel_telegram::TelegramConfig::default())
         }),
     );
+    chat.register(
+        ChannelKind::Discord,
+        Arc::new(|_, store| {
+            jian_channel_discord::open(store, jian_channel_discord::DiscordConfig::default())
+        }),
+    );
+    if let Some(slack_config) = settings.slack.clone() {
+        chat.register(
+            ChannelKind::Slack,
+            Arc::new(move |_, store| jian_channel_slack::open(store, slack_config.clone())),
+        );
+    }
     // With a public address Telegram can push to the gateway; without one the channel polls.
     #[cfg(feature = "public-url")]
     if let Some(url) = &settings.public_url {

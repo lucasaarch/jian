@@ -144,8 +144,8 @@ fn unique_or(action: &'static str) -> impl FnOnce(sqlx::Error) -> StoreError {
 }
 
 impl Database {
-    /// Makes an account for an agent the creator sees. One agent has one account per provider (a
-    /// second is a conflict). It starts as `needs_pairing`.
+    /// Makes an account for an agent the creator sees. One agent has one account per provider,
+    /// except Slack, which has one account per workspace installation. It starts as `needs_pairing`.
     pub async fn create_channel_account(
         &self,
         ctx: &TenantCtx,
@@ -228,6 +228,26 @@ impl Database {
         Ok(rows.into_iter().map(Row::account).collect())
     }
 
+    /// The Slack installations of one workspace, within this tenant.
+    pub async fn slack_accounts_in_workspace(
+        &self,
+        ctx: &TenantCtx,
+        address: &str,
+    ) -> Result<Vec<ChannelAccount>, StoreError> {
+        let mut tx = self.begin(ctx).await?;
+        let rows: Vec<Row> = sqlx::query_as(AssertSqlSafe(format!(
+            "SELECT {COLUMNS} FROM channel_accounts \
+             WHERE provider = 'slack' AND provider_address = $1 ORDER BY seq"
+        )))
+        .bind(address)
+        .fetch_all(&mut *tx)
+        .await
+        .map_err(StoreError::query(
+            "find channel accounts in a provider workspace",
+        ))?;
+        Ok(rows.into_iter().map(Row::account).collect())
+    }
+
     /// The accounts a gateway that serves this tenant must keep connected: the ones that were
     /// linked and not disconnected on purpose, and the ones given a bot token that no connection
     /// has used yet (made with a token, or imported with one). A new owner of the tenant's slot
@@ -288,7 +308,7 @@ impl Database {
         .bind(address)
         .fetch_optional(&mut *tx)
         .await
-        .map_err(StoreError::query(ACTION))?;
+        .map_err(unique_or(ACTION))?;
         tx.commit().await.map_err(StoreError::query(ACTION))?;
         Ok(bound.is_some())
     }

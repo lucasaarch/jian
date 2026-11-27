@@ -131,6 +131,7 @@ mod schedule_run_job;
 mod schedules;
 mod sign_in;
 mod skills;
+mod slack;
 mod slots;
 mod subagents;
 mod summary;
@@ -186,6 +187,7 @@ pub use rate::{Clock, Limit, ManualClock, MemoryRateLimiter, RateLimiter, System
 pub use run_job::{AgentRunner, RUN_KIND};
 pub use schedule_job::{SCHEDULE_FIRE_KIND, ScheduleFirer, run_ticker, tick};
 pub use schedule_run_job::{SCHEDULE_RUN_KIND, ScheduleRunner, dispatch_tick};
+pub use slack::{SLACK_EVENT_KIND, SlackEventHandler};
 pub use slots::{DrainReport, NoRunQueue, RunRequeue, SlotKeeper, SlotOwnership};
 pub use wake_job::{AGENT_WAKE_KIND, AgentWaker, NowMs, SETTLE_MS, round_tick, tick as wake_tick};
 
@@ -275,6 +277,8 @@ pub const ROUTES: &[&str] = &[
     "POST /v1/public/linear/webhook/{tenant} (no token; Linear's signature; 401 for any other)",
     #[cfg(feature = "public-url")]
     "POST /v1/public/channels/{tenant}/{account}/webhook (no token; the provider's secret header; 401 for any other, 404 for an account not held here)",
+    #[cfg(feature = "public-url")]
+    "POST /v1/public/slack/events (no token; Slack request signature; queued to workspace slot owner)",
     "POST /v1/mcp-servers (a member)",
     "POST /v1/mcp-servers/{id}/login (its creator or an admin)",
     "POST /v1/mcp-servers/{id}/login/finish (its creator or an admin)",
@@ -352,6 +356,8 @@ pub const ROUTES: &[&str] = &[
     "POST /v1/agents/{id}/identity-requests/{request}/decline (the agent's creator or an admin)",
     "GET /v1/channels/{id} (a member who sees the agent; the pairing code only for who manages it)",
     "POST /v1/channels/{id}/pairing (the agent's creator or an admin; 503 on an instance that does not serve the workspace)",
+    "POST /v1/channels/{id}/slack/install (the agent's creator or an admin; begins Slack workspace OAuth)",
+    "GET /v1/slack/oauth/callback (Slack OAuth; one-time state)",
     "POST /v1/channels/{id}/disconnect (the agent's creator or an admin)",
     "GET /v1/usage (an admin)",
     "GET /v1/grants (an admin)",
@@ -413,6 +419,8 @@ pub struct Settings {
     /// Where the panel is on the internet: what a link in an e-mail points at. Without it a
     /// link cannot be made, so an invitation can only be handed over as a token.
     pub public_url: Option<PublicUrl>,
+    /// The configured Slack app, when this gateway accepts OAuth installations or Events API calls.
+    pub slack: Option<jian_channel_slack::SlackConfig>,
     /// Where e-mail comes from: the deploy's own Resend account, or each workspace's.
     pub mail: MailConfig,
     /// Where a skill import reads GitHub files from. Tests and a mirror give another one.
@@ -470,6 +478,7 @@ impl Default for Settings {
                 per_second: 1.0 / 60.0,
             },
             public_url: None,
+            slack: None,
             mail: MailConfig::default(),
             skills_github_base: jian_skills::DEFAULT_GITHUB_BASE.to_owned(),
             workspace_name: "Jian".to_owned(),
@@ -657,6 +666,8 @@ pub fn router_with(state: AppState, extra: Router<AppState>) -> Router {
         )
         .route("/v1/channels/{id}", get(channel_routes::get))
         .route("/v1/channels/{id}/pairing", post(channel_routes::pair))
+        .route("/v1/channels/{id}/slack/install", post(slack::install))
+        .route("/v1/slack/oauth/callback", get(slack::oauth_callback))
         .route(
             "/v1/channels/{id}/disconnect",
             post(channel_routes::disconnect),
@@ -872,6 +883,11 @@ pub fn router_with(state: AppState, extra: Router<AppState>) -> Router {
                     post(channel_push::receive),
                 )
                 .layer(DefaultBodyLimit::max(channel_push::MAX_PUSH_BODY)),
+        )
+        .merge(
+            Router::new()
+                .route("/v1/public/slack/events", post(slack::events))
+                .layer(DefaultBodyLimit::max(slack::MAX_SLACK_BODY)),
         );
     #[cfg(not(feature = "public-url"))]
     let public = Router::new();

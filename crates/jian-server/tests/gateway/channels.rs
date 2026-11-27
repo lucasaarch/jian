@@ -88,10 +88,118 @@ async fn a_channel_account_is_the_workspaces_own_and_only_the_agents_managers_pa
             .0,
         201
     );
+    let no_discord_token = json!({ "provider": "discord" });
+    assert_eq!(
+        call(&gateway, "POST", &accounts, admin, Some(no_discord_token))
+            .await
+            .0,
+        400
+    );
+    let discord = json!({ "provider": "discord", "token": "synthetic.discord.token" });
+    let (status, discord_account) = call(&gateway, "POST", &accounts, admin, Some(discord)).await;
+    assert_eq!(status, 201, "{discord_account}");
+    let discord_id = discord_account["id"].as_str().unwrap();
+    let stored_token = gateway
+        .db
+        .channel_session(
+            &tenants.a.ctx,
+            &jian_store::ChannelAccountId::new(discord_id),
+            "token",
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        stored_token.as_deref(),
+        Some(b"synthetic.discord.token".as_slice())
+    );
+    assert!(
+        gateway
+            .db
+            .channel_session(
+                &tenants.b.ctx,
+                &jian_store::ChannelAccountId::new(discord_id),
+                "token"
+            )
+            .await
+            .unwrap()
+            .is_none()
+    );
+
+    // Slack uses one account per workspace installation, not one account per provider.
+    let slack = json!({ "provider": "slack" });
+    let (status, slack_first) = call(&gateway, "POST", &accounts, admin, Some(slack.clone())).await;
+    assert_eq!(status, 201, "{slack_first}");
+    let (status, slack_second) = call(&gateway, "POST", &accounts, admin, Some(slack)).await;
+    assert_eq!(status, 201, "{slack_second}");
+    let slack_first = jian_store::ChannelAccountId::new(slack_first["id"].as_str().unwrap());
+    let slack_second = jian_store::ChannelAccountId::new(slack_second["id"].as_str().unwrap());
+    assert!(
+        gateway
+            .db
+            .bind_channel_address(&tenants.a.ctx, &slack_first, "T-SYNTHETIC-ONE")
+            .await
+            .unwrap()
+    );
+    assert!(
+        gateway
+            .db
+            .bind_channel_address(&tenants.a.ctx, &slack_second, "T-SYNTHETIC-TWO")
+            .await
+            .unwrap()
+    );
+    let (status, slack_duplicate) = call(
+        &gateway,
+        "POST",
+        &accounts,
+        admin,
+        Some(json!({ "provider": "slack" })),
+    )
+    .await;
+    assert_eq!(status, 201, "{slack_duplicate}");
+    let slack_duplicate =
+        jian_store::ChannelAccountId::new(slack_duplicate["id"].as_str().unwrap());
+    assert!(matches!(
+        gateway
+            .db
+            .bind_channel_address(&tenants.a.ctx, &slack_duplicate, "T-SYNTHETIC-ONE")
+            .await,
+        Err(jian_store::StoreError::Conflict(_))
+    ));
+    gateway
+        .db
+        .put_channel_session(&tenants.a.ctx, &slack_first, "token", b"xoxb.synthetic.one")
+        .await
+        .unwrap();
+    assert_eq!(
+        gateway
+            .db
+            .channel_session(&tenants.a.ctx, &slack_first, "token")
+            .await
+            .unwrap()
+            .as_deref(),
+        Some(b"xoxb.synthetic.one".as_slice())
+    );
+    assert!(
+        gateway
+            .db
+            .channel_session(&tenants.b.ctx, &slack_first, "token")
+            .await
+            .unwrap()
+            .is_none()
+    );
+    assert_eq!(
+        gateway
+            .db
+            .slack_accounts_in_workspace(&tenants.a.ctx, "T-SYNTHETIC-ONE")
+            .await
+            .unwrap()
+            .len(),
+        1
+    );
 
     let (status, listed) = call(&gateway, "GET", &accounts, member, None).await;
     assert_eq!(status, 200, "{listed}");
-    assert_eq!(listed["accounts"].as_array().unwrap().len(), 2);
+    assert_eq!(listed["accounts"].as_array().unwrap().len(), 6);
 
     // The account is the workspace's: the other one sees nothing, in any route.
     let pairing = format!("/v1/channels/{id}/pairing");

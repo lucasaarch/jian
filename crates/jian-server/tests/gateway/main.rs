@@ -43,6 +43,8 @@ mod schedules;
 #[cfg(feature = "public-url")]
 mod sign_in;
 mod skills;
+#[cfg(feature = "public-url")]
+mod slack;
 mod slots;
 mod support;
 mod threads;

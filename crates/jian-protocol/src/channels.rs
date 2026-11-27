@@ -22,7 +22,7 @@ pub struct CreateChannelAccountRequest {
     /// are orders to the agent and are never news to them.
     #[serde(default)]
     pub owner_address: Option<String>,
-    /// A Telegram bot's token. It goes to the vault and is never returned: no response,
+    /// A Telegram or Discord bot token. It goes to the vault and is never returned: no response,
     /// event or log carries it. Refused for a provider that has no token.
     #[serde(default)]
     pub token: Option<String>,
