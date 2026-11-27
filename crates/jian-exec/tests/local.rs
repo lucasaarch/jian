@@ -27,6 +27,10 @@ const SLEEP: &str = if cfg!(windows) {
 } else {
     "sleep 20"
 };
+/// How long a command that should end at once may take, in milliseconds. A cold PowerShell on a
+/// busy Windows runner took over 10 s twice (CI, 27 Nov); this is a ceiling, not the expected time.
+const ROOMY_MS: u64 = 60_000;
+
 const BIG: &str = if cfg!(windows) {
     "Write-Output ('x' * 100000)"
 } else {
@@ -37,10 +41,10 @@ const BIG: &str = if cfg!(windows) {
 async fn a_shell_command_runs_and_its_exit_code_comes_back() {
     let root = tempfile::tempdir().unwrap();
     let machine = open(&root, "a", "bot").await;
-    let done = machine.shell("echo hello", 10_000).await.unwrap();
+    let done = machine.shell("echo hello", ROOMY_MS).await.unwrap();
     assert_eq!(done.exit_code, Some(0));
     assert!(done.output.contains("hello"));
-    let failed = machine.shell("exit 3", 10_000).await.unwrap();
+    let failed = machine.shell("exit 3", ROOMY_MS).await.unwrap();
     assert_eq!(failed.exit_code, Some(3));
 }
 
@@ -58,7 +62,7 @@ async fn a_command_past_its_time_is_stopped() {
 async fn big_output_is_cut_and_says_so() {
     let root = tempfile::tempdir().unwrap();
     let machine = open(&root, "a", "bot").await;
-    let done = machine.shell(BIG, 20_000).await.unwrap();
+    let done = machine.shell(BIG, ROOMY_MS).await.unwrap();
     assert!(done.output.len() <= MAX_TOOL_RESULT_BYTES);
     assert!(done.output.contains("output cut"), "{}", done.output);
 }
@@ -109,7 +113,7 @@ async fn the_shell_starts_in_the_agents_folder_and_a_link_does_not_lead_out() {
     let root = tempfile::tempdir().unwrap();
     let machine = open(&root, "a", "bot").await;
     machine.write_file("here.txt", "x").await.unwrap();
-    let listed = machine.shell("ls", 10_000).await.unwrap();
+    let listed = machine.shell("ls", ROOMY_MS).await.unwrap();
     assert!(listed.output.contains("here.txt"));
 
     let outside = root.path().join("secret.txt");
@@ -122,7 +126,7 @@ async fn the_shell_starts_in_the_agents_folder_and_a_link_does_not_lead_out() {
                 root.path().display(),
                 root.path().display()
             ),
-            10_000,
+            ROOMY_MS,
         )
         .await
         .unwrap();
