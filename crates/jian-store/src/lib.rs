@@ -131,6 +131,7 @@ mod artifact_sharing;
 mod artifacts;
 mod backup;
 mod blobs;
+mod channel_session;
 mod channels;
 mod checkpoints;
 mod connectors;

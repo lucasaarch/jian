@@ -76,6 +76,7 @@ mod tests {
             &(Arc::new(MemoryEventBus::new()) as Arc<dyn EventBus>),
             &(Arc::new(jian_exec::NoMachine) as Arc<dyn jian_exec::Executor>),
             None,
+            None,
         )
         .kinds()
         {

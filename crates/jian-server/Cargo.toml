@@ -66,12 +66,14 @@ zip.workspace = true
 
 [dev-dependencies]
 jian-channel-api = { workspace = true, features = ["fake"] }
+jian-channel-whatsapp.workspace = true
 jian-plugin-echo.workspace = true
 jian-remote.workspace = true
 jian-testkit.workspace = true
 tempfile.workspace = true
 tokio = { workspace = true, features = ["io-util", "process"] }
 tokio-tungstenite.workspace = true
+whatsapp-rust.workspace = true
 
 [lints]
 workspace = true

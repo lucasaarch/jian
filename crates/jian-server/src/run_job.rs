@@ -17,6 +17,9 @@
 //!
 //! A run that ends `done` while its thread has an open objective queues the next one
 //! ([`crate::auto_continue`]); one that ends `failed` or `stopped` does not.
+//!
+//! A run that ends `done` in the thread of a chat channel sends what it said to that chat
+//! ([`crate::ChannelHub::deliver_answer`]), once: the run is terminal after it.
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -44,6 +47,7 @@ use serde_json::json;
 use crate::artifact_events::{announce_created_with, announce_reshared, announce_version};
 use crate::auto_continue::{after_run, still_wanted};
 use crate::browser_tools::browser_tools;
+use crate::channel_hub::ChannelHub;
 use crate::events::EventBus;
 use crate::guard::catching;
 use crate::objectives::objective_view;
@@ -70,6 +74,9 @@ pub struct AgentRunner {
     plugins: Plugins,
     /// The pages the runs hold, when this gateway has a browser: only then do runs get its tools.
     browser: Option<Arc<Sessions>>,
+    /// The chat connections this instance holds, when it holds any: where a run's answer goes
+    /// in a channel thread.
+    channels: Option<ChannelHub>,
 }
 
 impl AgentRunner {
@@ -89,7 +96,15 @@ impl AgentRunner {
             config: RunConfig::default(),
             plugins: Plugins::new(PluginRegistry::new()),
             browser: None,
+            channels: None,
         }
+    }
+
+    /// The same sending the answer of a run in a chat thread back through `channels`.
+    #[must_use]
+    pub fn with_channels(mut self, channels: ChannelHub) -> Self {
+        self.channels = Some(channels);
+        self
     }
 
     /// The same with the plugins of this build: a run gets the tools of the connector accounts
@@ -471,6 +486,9 @@ impl AgentRunner {
             report_back(db, self.events.as_ref(), tenant, run).await;
         }
         if matches!(finish, Finish::Done) {
+            if let Some(channels) = &self.channels {
+                channels.deliver_answer(tenant, run).await;
+            }
             after_run(db, self.events.as_ref(), tenant, run).await;
         }
         if let Finish::Failed(why) = &finish {

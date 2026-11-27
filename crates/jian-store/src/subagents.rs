@@ -475,14 +475,40 @@ impl Database {
         thread: &ThreadId,
         agent: &AgentId,
     ) -> Result<Option<String>, StoreError> {
+        self.answer_with_key(ctx, thread, agent, "").await
+    }
+
+    /// The last thing run `run` itself said in `thread`: like [`Self::final_answer`], but an
+    /// older answer of the agent never stands in for a run that said nothing. `None` then.
+    pub async fn run_answer(
+        &self,
+        ctx: &TenantCtx,
+        thread: &ThreadId,
+        agent: &AgentId,
+        run: &str,
+    ) -> Result<Option<String>, StoreError> {
+        // The runtime writes each of a run's messages under `run:<id>:<step>:<half>`.
+        self.answer_with_key(ctx, thread, agent, &format!("run:{run}:"))
+            .await
+    }
+
+    async fn answer_with_key(
+        &self,
+        ctx: &TenantCtx,
+        thread: &ThreadId,
+        agent: &AgentId,
+        key_prefix: &str,
+    ) -> Result<Option<String>, StoreError> {
         let mut tx = self.begin(ctx).await?;
         let rows: Vec<String> = sqlx::query_scalar(
             "SELECT parts::text FROM messages \
              WHERE thread_id = $1 AND author_agent = $2 AND deleted_at IS NULL \
+             AND ($3 = '' OR starts_with(client_key, $3)) \
              ORDER BY seq DESC LIMIT 20",
         )
         .bind(thread.as_str())
         .bind(agent.as_str())
+        .bind(key_prefix)
         .fetch_all(&mut *tx)
         .await
         .map_err(StoreError::query("read an agent's last answer"))?;

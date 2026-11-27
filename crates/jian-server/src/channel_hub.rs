@@ -23,7 +23,9 @@
 //! # What is not here
 //!
 //! A provider itself. [`ChannelHub::register`] takes, per provider, a function that makes the
-//! [`Channel`] of an account; a build with none for a provider answers [`HubError::NoProvider`].
+//! [`Channel`] of an account, given the account's [`SessionStore`] (its keys, sealed in the
+//! database and visible to that account alone); a build with none for a provider answers
+//! [`HubError::NoProvider`].
 //! A pairing code is kept in memory for whoever asks for the account's state, and nowhere else:
 //! not in the database, not in a log line, not in a `{:?}`.
 
@@ -32,7 +34,7 @@ use std::sync::{Arc, Mutex, PoisonError, RwLock};
 
 use jian_channel_api::{
     Backoff, Channel, ChannelError, ChannelKind, ConnectionState, Disconnect, PairingMethod,
-    PairingPrompt, SentMessage,
+    PairingPrompt, SentMessage, SessionStore,
 };
 use jian_store::{
     AgentId, ChannelAccount, ChannelAccountId, ChannelStatus, Database, StoreError, TenantCtx,
@@ -43,11 +45,15 @@ use tokio_util::sync::CancellationToken;
 
 use crate::SlotOwnership;
 use crate::channel_intake::{ReplyError, reply};
+use crate::channel_session::AccountSession;
 
+mod answer;
 mod hold;
 
-/// Makes the [`Channel`] of an account. It only builds the object; connecting is the task's.
-pub type ChannelOpener = Arc<dyn Fn(&ChannelAccount) -> Arc<dyn Channel> + Send + Sync>;
+/// Makes the [`Channel`] of an account, keeping its session in the store it is given. It only
+/// builds the object; connecting is the task's.
+pub type ChannelOpener =
+    Arc<dyn Fn(&ChannelAccount, Arc<dyn SessionStore>) -> Arc<dyn Channel> + Send + Sync>;
 
 /// Why the hub could not do what it was asked.
 #[derive(Debug, thiserror::Error)]
@@ -178,7 +184,7 @@ impl ChannelHub {
         if !self.inner.slots.owns(ctx.id()) {
             return Err(HubError::NotServed);
         }
-        let channel = self.opener(&account.provider)?(account);
+        let channel = self.opener(&account.provider)?(account, self.session(ctx, account));
         let live = Arc::new(Live {
             channel,
             cancel: self.inner.closing.child_token(),
@@ -203,6 +209,14 @@ impl ChannelHub {
         ));
         *locked(&live.task) = Some(task);
         Ok(())
+    }
+
+    fn session(&self, ctx: &TenantCtx, account: &ChannelAccount) -> Arc<dyn SessionStore> {
+        Arc::new(AccountSession::new(
+            self.inner.db.clone(),
+            ctx.clone(),
+            account.id.clone(),
+        ))
     }
 
     /// Where the account's connection is, and the code to show while it pairs. An account this
@@ -253,7 +267,10 @@ impl ChannelHub {
             && let Ok(opener) = self.opener(&account.provider)
         {
             // Nothing holds it: a session left in the vault is still ended.
-            if let Err(error) = opener(account).disconnect(how).await {
+            if let Err(error) = opener(account, self.session(ctx, account))
+                .disconnect(how)
+                .await
+            {
                 tracing::warn!(account = %account.id, %error, "ending a channel session failed");
             }
         }
@@ -265,6 +282,12 @@ impl ChannelHub {
                     .await?;
             }
             Disconnect::LogOut => {
+                // The channel wipes its own session on the way out; this makes sure of it for
+                // one that was not held, or that failed to.
+                self.inner
+                    .db
+                    .clear_channel_session(ctx, &account.id)
+                    .await?;
                 self.inner
                     .db
                     .clear_channel_address(ctx, &account.id)

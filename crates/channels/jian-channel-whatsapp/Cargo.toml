@@ -1,0 +1,21 @@
+[package]
+name = "jian-channel-whatsapp"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+futures-util.workspace = true
+jian-channel-api.workspace = true
+log.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio = { workspace = true, features = ["sync"] }
+tracing.workspace = true
+whatsapp-rust.workspace = true
+
+[dev-dependencies]
+tokio.workspace = true
+
+[lints]
+workspace = true

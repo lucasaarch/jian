@@ -10,11 +10,14 @@ use std::time::Duration;
 use jian_channel_api::fake::FakeChannel;
 use jian_channel_api::{
     Backoff, Channel, ChannelEvent, ChannelKind, ChatId, ChatKind, ConnectionState, Disconnect,
-    InboundBody, InboundMessage, MessageId, PairingMethod, PairingPrompt, Participant,
-    ParticipantId,
+    InboundBody, InboundMessage, MessageId, OutboundContent, PairingMethod, PairingPrompt,
+    Participant, ParticipantId, SessionStore,
 };
-use jian_server::{CHANNEL_MESSAGE_EVENT, ChannelHub, Settings};
-use jian_store::{AgentId, ChannelAccount, ChannelStatus, SlotOptions, TenantCtx, Viewer};
+use jian_core::{MessagePart, MessageParts};
+use jian_server::{CHANNEL_MESSAGE_EVENT, ChannelHub, ReplyError, Settings};
+use jian_store::{
+    AgentId, ChannelAccount, ChannelStatus, RunOrigin, SlotOptions, TenantCtx, Viewer,
+};
 use jian_testkit::TwoTenants;
 use tokio::time::Instant;
 use tokio_util::sync::CancellationToken;
@@ -167,9 +170,32 @@ fn hub(gateway: &Gateway, backoff: Backoff, fake: &FakeChannel) -> ChannelHub {
     let fake = fake.clone();
     hub.register(
         ChannelKind::Whatsapp,
-        Arc::new(move |_| Arc::new(fake.clone()) as Arc<dyn Channel>),
+        Arc::new(move |_, _| Arc::new(fake.clone()) as Arc<dyn Channel>),
     );
     hub
+}
+
+/// Where an opener leaves the session store it was handed.
+type Kept = Arc<Mutex<Option<Arc<dyn SessionStore>>>>;
+
+/// A hub whose opener keeps the session store it is handed, as a provider would.
+fn hub_keeping_store(gateway: &Gateway, fake: &FakeChannel) -> (ChannelHub, Kept) {
+    let hub = ChannelHub::new(
+        gateway.db.clone(),
+        gateway.slots(),
+        CancellationToken::new(),
+        quick(),
+    );
+    let kept = Kept::default();
+    let (fake, into) = (fake.clone(), kept.clone());
+    hub.register(
+        ChannelKind::Whatsapp,
+        Arc::new(move |_, store| {
+            *into.lock().unwrap() = Some(store);
+            Arc::new(fake.clone()) as Arc<dyn Channel>
+        }),
+    );
+    (hub, kept)
 }
 
 fn quick() -> Backoff {
@@ -363,6 +389,60 @@ async fn disconnecting_with_forget_ends_the_session_and_frees_the_number_but_kee
 }
 
 #[tokio::test]
+async fn the_store_a_channel_gets_is_its_accounts_own_and_logging_out_empties_it() {
+    let gateway = Gateway::start(open_settings()).await;
+    let tenants = TwoTenants::seed(&gateway.db).await;
+    let rig = Rig::new(&gateway, &tenants).await;
+    let fake = FakeChannel::new(ChannelKind::Whatsapp);
+    let (hub, kept) = hub_keeping_store(&gateway, &fake);
+    let stored = async |key: &str| {
+        gateway
+            .db
+            .channel_session(&rig.ctx, &rig.account.id, key)
+            .await
+            .unwrap()
+    };
+
+    hub.connect(&rig.ctx, &rig.account, PairingMethod::Resume)
+        .unwrap();
+    let store = kept
+        .lock()
+        .unwrap()
+        .clone()
+        .expect("the opener got a store");
+    store.put("identity", b"secret-bytes").await.unwrap();
+    store.put("session/a", b"1").await.unwrap();
+    assert_eq!(
+        stored("identity").await.as_deref(),
+        Some(&b"secret-bytes"[..])
+    );
+    assert_eq!(store.keys("session/").await.unwrap(), ["session/a"]);
+    // It is that account's and that tenant's: the other tenant has none of it.
+    let other = &tenants.b.ctx;
+    assert!(
+        gateway
+            .db
+            .channel_session(other, &rig.account.id, "identity")
+            .await
+            .unwrap()
+            .is_none()
+    );
+
+    // Keeping the session when the connection stops, so it can be resumed.
+    hub.disconnect(&rig.ctx, &rig.account, Disconnect::Keep)
+        .await
+        .unwrap();
+    assert!(stored("identity").await.is_some());
+    // Logging out empties it, even though the channel itself did nothing about it.
+    hub.disconnect(&rig.ctx, &rig.account, Disconnect::LogOut)
+        .await
+        .unwrap();
+    assert!(stored("identity").await.is_none());
+    assert!(store.keys("").await.unwrap().is_empty());
+    gateway.stop().await;
+}
+
+#[tokio::test]
 async fn a_pairing_code_is_in_no_debug_no_log_and_a_different_phone_is_refused() {
     let sink = logs();
     let gateway = Gateway::start(open_settings()).await;
@@ -435,5 +515,127 @@ async fn a_pairing_code_is_in_no_debug_no_log_and_a_different_phone_is_refused()
             "a log line says {secret}: {printed}"
         );
     }
+    gateway.stop().await;
+}
+
+/// A thread of `rig`'s agent that came in on `chat`, with a run of the agent that has said `text`.
+async fn answered(
+    gateway: &Gateway,
+    rig: &Rig,
+    chat: &str,
+    text: &str,
+) -> (jian_store::ThreadId, jian_store::Run) {
+    let db = &gateway.db;
+    let thread = db
+        .open_channel_thread(
+            &rig.ctx,
+            &rig.account,
+            chat,
+            "whatsapp: ana",
+            ("ana", "Ana"),
+        )
+        .await
+        .unwrap();
+    let (run, _) = db
+        .start_run(&rig.ctx, &thread, &rig.agent, None, 0, RunOrigin::Message)
+        .await
+        .unwrap();
+    let parts = MessageParts::new(vec![MessagePart::Text(text.to_owned())]).unwrap();
+    db.post_agent_message(
+        &rig.ctx,
+        &thread,
+        &rig.agent,
+        parts,
+        Some(format!("run:{}:1:a", run.id)),
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    (thread, run)
+}
+
+#[tokio::test]
+async fn what_an_agent_answers_in_a_chat_thread_leaves_once_through_its_own_channel() {
+    let gateway = Gateway::start(open_settings()).await;
+    let tenants = TwoTenants::seed(&gateway.db).await;
+    let rig = Rig::new(&gateway, &tenants).await;
+    let fake = FakeChannel::new(ChannelKind::Whatsapp);
+    let hub = hub(&gateway, quick(), &fake);
+    assert_eq!(hub.reconcile().await.unwrap(), 1);
+    eventually("the connection", async || fake.connections().len() == 1).await;
+
+    let (thread, run) = answered(&gateway, &rig, NUMBER, "on my way").await;
+    hub.deliver_answer(&rig.ctx, &run).await;
+    let sent = fake.sent();
+    assert_eq!(sent.len(), 1);
+    assert_eq!(sent[0].chat.as_str(), NUMBER);
+    assert!(matches!(&sent[0].content, OutboundContent::Text(t) if t == "on my way"));
+
+    // A wake's words are a suggestion for the owner, never for a contact.
+    let mut wake = run.clone();
+    wake.origin = RunOrigin::Wake;
+    hub.deliver_answer(&rig.ctx, &wake).await;
+    // Nor does another agent's run, or the same agent's thread asked for by another agent.
+    let other = AgentId::new(named_agent(&gateway, &tenants.a.admin_session, "plum").await);
+    let mut stranger = run.clone();
+    stranger.agent = other.clone();
+    hub.deliver_answer(&rig.ctx, &stranger).await;
+    assert!(matches!(
+        hub.reply(&rig.ctx, &other, &thread, "hi").await,
+        Err(ReplyError::NotThisAgents)
+    ));
+    assert_eq!(fake.sent().len(), 1);
+
+    hub.shutdown().await;
+    gateway.stop().await;
+}
+
+#[tokio::test]
+async fn the_whatsapp_backend_keeps_its_session_in_the_database_across_a_restart_and_forgets_it() {
+    use jian_channel_whatsapp::SessionBackend;
+    use whatsapp_rust::wacore::store::traits::{DeviceStore as _, SignalStore as _};
+
+    let gateway = Gateway::start(open_settings()).await;
+    let tenants = TwoTenants::seed(&gateway.db).await;
+    let rig = Rig::new(&gateway, &tenants).await;
+    let fake = FakeChannel::new(ChannelKind::Whatsapp);
+    let (hub, kept) = hub_keeping_store(&gateway, &fake);
+    hub.connect(&rig.ctx, &rig.account, PairingMethod::Resume)
+        .unwrap();
+    let store = kept
+        .lock()
+        .unwrap()
+        .clone()
+        .expect("the opener got a store");
+
+    let first = SessionBackend::new(store.clone());
+    first.create().await.unwrap();
+    first
+        .put_session("a@s.whatsapp.net", b"ratchet")
+        .await
+        .unwrap();
+    // A restart builds a new backend over the same account's store.
+    let second = SessionBackend::new(store.clone());
+    assert!(second.exists().await.unwrap());
+    assert_eq!(
+        second
+            .get_session("a@s.whatsapp.net")
+            .await
+            .unwrap()
+            .as_deref(),
+        Some(&b"ratchet"[..])
+    );
+    // The other tenant has no such account, so its rows hold nothing of it.
+    let rows = gateway
+        .db
+        .channel_session_keys(&tenants.b.ctx, &rig.account.id, "")
+        .await
+        .unwrap();
+    assert!(rows.is_empty());
+
+    hub.disconnect(&rig.ctx, &rig.account, Disconnect::LogOut)
+        .await
+        .unwrap();
+    assert!(!second.exists().await.unwrap());
     gateway.stop().await;
 }

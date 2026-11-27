@@ -157,7 +157,7 @@ async fn a_channel_account_is_the_workspaces_own_and_only_the_agents_managers_pa
     let opener = fake.clone();
     gateway.state.channels.register(
         ChannelKind::Whatsapp,
-        Arc::new(move |_| Arc::new(opener.clone()) as Arc<dyn Channel>),
+        Arc::new(move |_, _| Arc::new(opener.clone()) as Arc<dyn Channel>),
     );
     let phone = json!({ "method": "code", "phone": "12" });
     let (status, refused) = call(&gateway, "POST", &pairing, admin, Some(phone)).await;

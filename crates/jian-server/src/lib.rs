@@ -76,6 +76,7 @@ mod browser_tools;
 mod channel_hub;
 mod channel_intake;
 mod channel_routes;
+mod channel_session;
 mod client_ws;
 mod codex_login;
 mod compact_job;

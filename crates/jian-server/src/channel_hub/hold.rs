@@ -63,6 +63,14 @@ async fn pause(live: &Live, lost: Lost<'_>, wait: Duration) -> Option<Exit> {
     }
 }
 
+/// The provider ended the session (or it was refused): its keys are worth nothing now and must
+/// not stay in the database.
+async fn forget(inner: &Inner, ctx: &TenantCtx, id: &ChannelAccountId) {
+    if let Err(error) = inner.db.clear_channel_session(ctx, id).await {
+        tracing::warn!(account = %id, %error, "forgetting a channel's session failed");
+    }
+}
+
 async fn mark(inner: &Inner, ctx: &TenantCtx, id: &ChannelAccountId, status: ChannelStatus) {
     if let Err(error) = inner.db.set_channel_status(ctx, id, status).await {
         tracing::warn!(account = %id, %error, "recording a channel's status failed");
@@ -104,6 +112,7 @@ pub(super) async fn hold(
         match live.channel.connect(method.clone()).await {
             Ok(()) => method = PairingMethod::Resume,
             Err(ChannelError::LoggedOut) => {
+                forget(&inner, &ctx, &id).await;
                 mark(&inner, &ctx, &id, ChannelStatus::LoggedOut).await;
                 break Exit::Finished;
             }
@@ -213,6 +222,7 @@ async fn handle(
         }
         ChannelEvent::State(ConnectionState::LoggedOut) => {
             *locked(&live.prompt) = None;
+            forget(inner, ctx, &account.id).await;
             mark(inner, ctx, &account.id, ChannelStatus::LoggedOut).await;
             Step::Done
         }
@@ -267,6 +277,7 @@ async fn paired(
                 tracing::warn!(account = %account.id, %error, "ending the refused session failed");
             }
             *locked(&live.prompt) = None;
+            forget(inner, ctx, &account.id).await;
             mark(inner, ctx, &account.id, ChannelStatus::LoggedOut).await;
             Step::Done
         }

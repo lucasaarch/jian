@@ -26,12 +26,13 @@ use std::time::{Duration, Instant};
 
 use anyhow::Context as _;
 use clap::{ArgAction, Parser, Subcommand};
+use jian_channel_api::{Backoff, ChannelKind};
 use jian_exec::Executor;
 use jian_server::{
-    AGENT_WAKE_KIND, AccountModels, AgentMachines, AgentRunner, AgentWaker, AppState, EventBus,
-    JobOptions, JobRegistry, JobRequeue, JobRunner, LlmAccess, MachineHub, MemoryEventBus,
-    ModelSource, PublicUrl, RUN_KIND, SCHEDULE_FIRE_KIND, SCHEDULE_RUN_KIND, ScheduleFirer,
-    ScheduleRunner, Settings, SlotKeeper, THREAD_COMPACT_KIND, ThreadCompactor,
+    AGENT_WAKE_KIND, AccountModels, AgentMachines, AgentRunner, AgentWaker, AppState, ChannelHub,
+    EventBus, JobOptions, JobRegistry, JobRequeue, JobRunner, LlmAccess, MachineHub,
+    MemoryEventBus, ModelSource, PublicUrl, RUN_KIND, SCHEDULE_FIRE_KIND, SCHEDULE_RUN_KIND,
+    ScheduleFirer, ScheduleRunner, Settings, SlotKeeper, THREAD_COMPACT_KIND, ThreadCompactor,
 };
 // The e-mails carry a link people open, so only a build with `public-url` sends them.
 #[cfg(feature = "public-url")]
@@ -319,6 +320,11 @@ async fn run() -> anyhow::Result<()> {
                 .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
         )
         .init();
+    // The WhatsApp library logs to `log`, which nothing bridges; this is the one way it is seen,
+    // with keys and numbers replaced.
+    if let Err(error) = jian_channel_whatsapp::install_log_redaction() {
+        tracing::warn!(%error, "the WhatsApp log redaction was not installed");
+    }
     let mut cli = Cli::parse();
     let addr = cli.addr.clone();
     let keys = cli.master_keys()?;
@@ -510,6 +516,7 @@ fn job_registry(
     events: &Arc<dyn EventBus>,
     executor: &Arc<dyn Executor>,
     pages: Option<Arc<jian_browser::Sessions>>,
+    chat: Option<&ChannelHub>,
 ) -> JobRegistry {
     let registry = debug_jobs::registry();
     #[cfg(not(feature = "public-url"))]
@@ -535,6 +542,9 @@ fn job_registry(
         );
     let mut runner = AgentRunner::new(models.clone(), executor.clone(), events.clone())
         .with_plugins(jian_server::builtin_plugins());
+    if let Some(chat) = chat {
+        runner = runner.with_channels(chat.clone());
+    }
     if let Some(pages) = pages {
         runner = runner.with_browser(pages);
     }
@@ -625,6 +635,19 @@ async fn serve(
     if browsers.is_none() {
         tracing::info!("no browser program found; agents have no browser and PDF/PNG are off");
     }
+    // The runs and the routes meet on one hub: a run answers a chat through the connection the
+    // routes paired.
+    let closing = CancellationToken::new();
+    let chat = ChannelHub::new(
+        database.clone(),
+        slots.clone(),
+        closing.clone(),
+        Backoff::DEFAULT,
+    );
+    chat.register(
+        ChannelKind::Whatsapp,
+        Arc::new(|_, store| jian_channel_whatsapp::open(store)),
+    );
     let runner = JobRunner::start(
         database.clone(),
         keeper.instance().clone(),
@@ -635,18 +658,19 @@ async fn serve(
             &events,
             &executor,
             browsers.as_ref().map(browser_flags::Browsers::sessions),
+            Some(&chat),
         ),
         JobOptions::default(),
     )
     .await;
-    let closing = CancellationToken::new();
     // Time-keeping for schedules; it holds nothing a restart loses, and is joined below because it
     // holds the database, which must be closable after the drain.
     let ticking = CancellationToken::new();
     let ticker = tokio::spawn(jian_server::run_ticker(database.clone(), ticking.clone()));
     let mut state = AppState::new(database.clone(), slots, closing.clone(), settings);
+    state.channels = chat;
     // Chat accounts linked in this workspace are held by the instance that serves its slot; the
-    // timer is how one that has just taken a slot picks them up. No provider is registered yet.
+    // timer is how one that has just taken a slot picks them up.
     let channels = state.channels.clone();
     let reconciling = tokio::spawn({
         let (channels, ticking) = (channels.clone(), ticking.clone());

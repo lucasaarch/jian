@@ -33,6 +33,8 @@ jian-auth = { path = "crates/jian-auth" }
 jian-browser = { path = "crates/jian-browser" }
 # The `fake` feature (a test double) is turned on only by tests.
 jian-channel-api = { path = "crates/channels/jian-channel-api" }
+# `WhatsApp` over the library's protocol; its session lives in the gateway's database.
+jian-channel-whatsapp = { path = "crates/channels/jian-channel-whatsapp" }
 jian-computer-use = { path = "crates/jian-computer-use" }
 jian-core = { path = "crates/jian-core" }
 jian-exec = { path = "crates/jian-exec" }
@@ -67,6 +69,8 @@ jpeg-encoder = "0.7.1"
 # native-tls, so there is no OpenSSL to link.
 postgresql_embedded = { version = "0.22", default-features = false, features = ["bundled", "tokio", "tls-rustls-ring"] }
 regex = "1.11"
+# The facade the `WhatsApp` library logs to; only the provider's redacting logger uses it.
+log = "0.4"
 # RS256 for a GitHub App's JWT and HMAC for its webhooks. The provider rustls already uses, so no
 # second crypto library (and no aws-lc) comes in.
 ring = { version = "0.17", default-features = false, features = ["alloc"] }
@@ -98,6 +102,9 @@ tracing-subscriber = { version = "0.3", default-features = false, features = ["a
 ts-rs = "12.0.1"
 url = "2.5"
 webpki-roots = "1.0"
+# The `WhatsApp` protocol. No default features: they add `SQLite` storage (a file) and a signal
+# handler; the bundled WebSocket and HTTP clients are rustls and ureq, with no OpenSSL.
+whatsapp-rust = { version = "0.7", default-features = false, features = ["tokio-runtime", "tokio-transport", "ureq-client"] }
 # Wipes keys and secrets from memory when they drop.
 zeroize = "1"
 # The container of Office files (xlsx, docx and pptx are zips of XML). Deflate through flate2's
