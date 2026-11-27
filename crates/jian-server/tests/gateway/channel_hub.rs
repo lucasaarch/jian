@@ -27,7 +27,7 @@ use super::channels::named_agent;
 use super::support::Gateway;
 
 const OWNER: &str = "5511900000001@s.whatsapp.net";
-const NUMBER: &str = "5511900000099@s.whatsapp.net";
+pub(super) const NUMBER: &str = "5511900000099@s.whatsapp.net";
 const OTHER_NUMBER: &str = "5511900000098@s.whatsapp.net";
 const WAIT: Duration = Duration::from_secs(20);
 
@@ -81,7 +81,7 @@ impl tracing::Subscriber for Capture {
     fn exit(&self, _: &tracing::span::Id) {}
 }
 
-async fn eventually(what: &str, mut done: impl AsyncFnMut() -> bool) {
+pub(super) async fn eventually(what: &str, mut done: impl AsyncFnMut() -> bool) {
     let started = Instant::now();
     while !done().await {
         assert!(started.elapsed() < WAIT, "timed out waiting for {what}");
@@ -109,14 +109,14 @@ fn said(id: &str, text: &str) -> ChannelEvent {
 }
 
 /// A linked account of a new agent of the first tenant, with the fake behind its provider.
-struct Rig {
-    ctx: TenantCtx,
-    agent: AgentId,
-    account: ChannelAccount,
+pub(super) struct Rig {
+    pub(super) ctx: TenantCtx,
+    pub(super) agent: AgentId,
+    pub(super) account: ChannelAccount,
 }
 
 impl Rig {
-    async fn new(gateway: &Gateway, tenants: &TwoTenants) -> Self {
+    pub(super) async fn new(gateway: &Gateway, tenants: &TwoTenants) -> Self {
         let a = &tenants.a;
         let agent = AgentId::new(named_agent(gateway, &a.admin_session, "pear").await);
         let viewer = Viewer {
@@ -160,7 +160,7 @@ impl Rig {
     }
 }
 
-fn hub(gateway: &Gateway, backoff: Backoff, fake: &FakeChannel) -> ChannelHub {
+pub(super) fn hub(gateway: &Gateway, backoff: Backoff, fake: &FakeChannel) -> ChannelHub {
     let hub = ChannelHub::new(
         gateway.db.clone(),
         gateway.slots(),
@@ -198,7 +198,7 @@ fn hub_keeping_store(gateway: &Gateway, fake: &FakeChannel) -> (ChannelHub, Kept
     (hub, kept)
 }
 
-fn quick() -> Backoff {
+pub(super) fn quick() -> Backoff {
     Backoff::new(Duration::from_millis(20), Duration::from_millis(80))
 }
 

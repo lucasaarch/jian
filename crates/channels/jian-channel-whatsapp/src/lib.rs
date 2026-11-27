@@ -13,8 +13,14 @@
 //!
 //! # Not covered here
 //!
-//! A real `WhatsApp` server is never reached by this crate's tests: the conversions and the
-//! storage are tested, and the connection itself is checked by hand with a phone.
+//! A real `WhatsApp` server is never reached by this crate's tests, and none is faked. The
+//! library lets a test give it a transport, but a connection then needs a server that speaks the
+//! Noise handshake, accepts the login, and encrypts messages with the device's own Signal keys;
+//! and the library checks the server's certificate chain unless its `danger-skip-cert-chain-verify`
+//! feature is on, which no build of this workspace may enable (cargo would turn it on for
+//! every crate built in the same command). So the conversions, the storage, what the channel
+//! makes of the library's events (made by hand) and the log redaction are tested; sending and
+//! the real connection are checked by hand with a phone.
 
 mod backend;
 mod channel;

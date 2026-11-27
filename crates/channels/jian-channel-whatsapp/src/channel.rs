@@ -296,3 +296,172 @@ impl Channel for WhatsappChannel {
         Box::pin(self.stop(how))
     }
 }
+
+/// What the channel does with the library's events, with the events made by hand. The library
+/// is not run: a connection needs a server that speaks Noise and Signal, which no test here
+/// stands up (see the crate's docs).
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeMap;
+
+    use super::*;
+    use whatsapp_rust::wacore::net::DisconnectReason;
+    use whatsapp_rust::wacore::types::events::{
+        BatchOrigin, Connected, Disconnected, InboundMessage as Received, MessageBatch,
+    };
+    use whatsapp_rust::wacore::types::message::{MessageInfo, MessageSource};
+    use whatsapp_rust::waproto::whatsapp as wa;
+
+    #[derive(Default)]
+    struct Nothing(Mutex<BTreeMap<String, Vec<u8>>>);
+
+    impl SessionStore for Nothing {
+        fn get(&self, key: &str) -> BoxFuture<'_, Result<Option<Vec<u8>>, ChannelError>> {
+            let found = self.0.lock().ok().and_then(|map| map.get(key).cloned());
+            Box::pin(async move { Ok(found) })
+        }
+        fn put(&self, key: &str, value: &[u8]) -> BoxFuture<'_, Result<(), ChannelError>> {
+            if let Ok(mut map) = self.0.lock() {
+                map.insert(key.to_owned(), value.to_vec());
+            }
+            Box::pin(async { Ok(()) })
+        }
+        fn delete(&self, _: &str) -> BoxFuture<'_, Result<(), ChannelError>> {
+            Box::pin(async { Ok(()) })
+        }
+        fn keys(&self, _: &str) -> BoxFuture<'_, Result<Vec<String>, ChannelError>> {
+            Box::pin(async { Ok(Vec::new()) })
+        }
+    }
+
+    fn channel() -> WhatsappChannel {
+        WhatsappChannel::new(Arc::new(Nothing::default()))
+    }
+
+    fn heard(channel: &WhatsappChannel, event: &Event) -> Vec<ChannelEvent> {
+        let mut events = channel.shared.events.subscribe();
+        channel.shared.handle(event);
+        std::iter::from_fn(|| events.try_recv().ok()).collect()
+    }
+
+    fn received(source: MessageSource, text: &str) -> Event {
+        let info = MessageInfo {
+            source,
+            id: "M1".into(),
+            push_name: "Ana".to_owned(),
+            ..Default::default()
+        };
+        let message = wa::Message {
+            conversation: Some(text.to_owned()),
+            ..Default::default()
+        };
+        let one = Received::builder()
+            .message(Arc::new(message))
+            .info(Arc::new(info))
+            .build();
+        Event::Messages(
+            MessageBatch::builder()
+                .messages(Arc::from(vec![one]))
+                .origin(BatchOrigin::Live)
+                .build(),
+        )
+    }
+
+    fn only_message(mut events: Vec<ChannelEvent>) -> jian_channel_api::InboundMessage {
+        assert_eq!(events.len(), 1, "{events:?}");
+        match events.remove(0) {
+            ChannelEvent::Message(message) => message,
+            other => panic!("not a message: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn a_received_message_names_its_sender_and_is_not_from_self() {
+        let ana = Jid::pn("5511900000002");
+        let event = received(
+            MessageSource {
+                chat: ana.clone(),
+                sender: ana,
+                ..Default::default()
+            },
+            "hi",
+        );
+        let message = only_message(heard(&channel(), &event));
+        assert_eq!(message.sender.id.as_str(), "5511900000002");
+        assert_eq!(message.chat.as_str(), "5511900000002@s.whatsapp.net");
+        assert_eq!(message.sender.display_name.as_deref(), Some("Ana"));
+        assert!(!message.from_self);
+        assert!(
+            matches!(&message.body, jian_channel_api::InboundBody::Text { text } if text == "hi")
+        );
+    }
+
+    #[test]
+    fn what_the_phone_sent_is_from_self_and_an_anonymous_sender_is_known_by_its_number() {
+        let (me, ana) = (Jid::pn("5511900000001"), Jid::pn("5511900000002"));
+        let from_phone = received(
+            MessageSource {
+                chat: ana.clone(),
+                sender: me,
+                is_from_me: true,
+                ..Default::default()
+            },
+            "sent from the phone",
+        );
+        assert!(only_message(heard(&channel(), &from_phone)).from_self);
+
+        // A sender the library only knows by an anonymous id is still the person whose number it
+        // also reports, so the owner and the approved contacts match.
+        let by_lid = received(
+            MessageSource {
+                chat: Jid::lid("900000000002"),
+                sender: Jid::lid("900000000002"),
+                sender_alt: Some(ana),
+                ..Default::default()
+            },
+            "hi",
+        );
+        let message = only_message(heard(&channel(), &by_lid));
+        assert_eq!(message.sender.id.as_str(), "5511900000002");
+        assert!(!message.from_self);
+    }
+
+    #[test]
+    fn a_lost_connection_is_a_state_and_the_channel_does_not_connect_again_by_itself() {
+        let channel = channel();
+        let connected = Event::Connected(Connected::builder().build());
+        let lost = Event::Disconnected(
+            Disconnected::builder()
+                .reason(DisconnectReason::StreamEnded)
+                .build(),
+        );
+        assert_eq!(
+            heard(&channel, &connected),
+            vec![ChannelEvent::State(ConnectionState::Connected)]
+        );
+        assert_eq!(channel.state(), ConnectionState::Connected);
+
+        assert_eq!(
+            heard(&channel, &lost),
+            vec![ChannelEvent::State(ConnectionState::Disconnected)]
+        );
+        assert_eq!(channel.state(), ConnectionState::Disconnected);
+        // Reconnecting is the hub's (with its backoff): nothing here started a connection, and
+        // a send now says so instead of trying.
+        assert!(channel.bot.try_lock().is_ok_and(|bot| bot.is_none()));
+        assert!(matches!(channel.client(), Err(ChannelError::NotConnected)));
+    }
+
+    #[tokio::test]
+    async fn nothing_is_sent_while_not_connected() {
+        let channel = channel();
+        let sent = channel
+            .send(OutboundMessage {
+                chat: ChatId::new("5511900000002"),
+                content: jian_channel_api::OutboundContent::Text("hi".to_owned()),
+                reply_to: None,
+            })
+            .await;
+        assert!(matches!(sent, Err(ChannelError::NotConnected)), "{sent:?}");
+    }
+}

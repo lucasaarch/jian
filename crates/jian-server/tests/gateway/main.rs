@@ -12,6 +12,7 @@ mod artifact_export;
 #[cfg(feature = "public-url")]
 mod artifact_sharing;
 mod artifacts;
+mod channel_answer;
 mod channel_hub;
 mod channels;
 mod codex;

@@ -101,6 +101,9 @@ pub fn install() -> Result<(), log::SetLoggerError> {
 
 #[cfg(test)]
 mod tests {
+    use std::fmt::{self, Write as _};
+    use std::sync::{Arc, Mutex};
+
     use super::*;
 
     const KEY: &str = "q83KeyMaterialAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA0=";
@@ -132,5 +135,59 @@ mod tests {
     fn only_warnings_and_errors_pass() {
         assert!(passes(Level::Error) && passes(Level::Warn));
         assert!(!passes(Level::Info) && !passes(Level::Debug) && !passes(Level::Trace));
+    }
+
+    /// What `tracing` printed on this thread.
+    struct Capture(Arc<Mutex<String>>);
+
+    struct Fields<'a>(&'a mut String);
+
+    impl tracing::field::Visit for Fields<'_> {
+        fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn fmt::Debug) {
+            let _ = write!(self.0, "{}={value:?} ", field.name());
+        }
+    }
+
+    impl tracing::Subscriber for Capture {
+        fn enabled(&self, _: &tracing::Metadata<'_>) -> bool {
+            true
+        }
+        fn new_span(&self, _: &tracing::span::Attributes<'_>) -> tracing::span::Id {
+            tracing::span::Id::from_u64(1)
+        }
+        fn record(&self, _: &tracing::span::Id, _: &tracing::span::Record<'_>) {}
+        fn record_follows_from(&self, _: &tracing::span::Id, _: &tracing::span::Id) {}
+        fn event(&self, event: &tracing::Event<'_>) {
+            if let Ok(mut all) = self.0.lock() {
+                event.record(&mut Fields(&mut all));
+                all.push('\n');
+            }
+        }
+        fn enter(&self, _: &tracing::span::Id) {}
+        fn exit(&self, _: &tracing::span::Id) {}
+    }
+
+    /// The real `log` facade, as the library calls it, through the installed logger and into
+    /// `tracing`: what a person would read in the process's output.
+    #[test]
+    fn what_the_library_logs_reaches_the_output_without_keys_or_numbers() {
+        install().expect("no other test in this crate installs a logger");
+        let printed = Arc::new(Mutex::new(String::new()));
+        tracing::subscriber::with_default(Capture(printed.clone()), || {
+            log::warn!(
+                target: "whatsapp_rust::client",
+                "no session for 5511987650001@s.whatsapp.net, key {KEY}"
+            );
+            log::error!(target: "whatsapp_rust::client", "raw [1, 200, 3, 4, 5, 6, 7, 8, 9]");
+            // Lower levels are where the library prints state, and they never get this far.
+            log::info!(target: "whatsapp_rust::client", "info {KEY}");
+            log::debug!(target: "whatsapp_rust::client", "debug {KEY}");
+        });
+        let printed = printed.lock().unwrap().clone();
+        assert!(printed.contains("no session for"), "{printed}");
+        assert!(printed.contains("raw"), "{printed}");
+        for secret in [KEY, "5511987650001", "200, 3", "info", "debug"] {
+            assert!(!printed.contains(secret), "{secret} got through: {printed}");
+        }
     }
 }
