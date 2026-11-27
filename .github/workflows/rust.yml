@@ -85,6 +85,16 @@ jobs:
         if: runner.os == 'Linux'
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - uses: taiki-e/install-action@nextest
+      # jian-browser's tests run the real engines. Obscura is a pinned release, checked against the
+      # hash of its binary; Chrome is already on the Linux runner (found on PATH). A test whose
+      # engine is missing says so and passes, so a runner without one cannot fail the build.
+      - name: Obscura, for the browser tests
+        if: runner.os == 'Linux'
+        run: |
+          mkdir -p "$RUNNER_TEMP/obscura" && cd "$RUNNER_TEMP/obscura"
+          curl -fsSL https://github.com/h4ckf0r0day/obscura/releases/download/v0.2.7/obscura-x86_64-linux.tar.gz | tar xz
+          echo "547f9d8a60048983f0e45c310f160d1239575af062af28e4f6755e361f8abcbf  obscura" | sha256sum -c -
+          echo "JIAN_TEST_OBSCURA=$PWD/obscura" >> "$GITHUB_ENV"
       # nextest does not run doctests, and starts the shared test Postgres (.config/nextest.toml).
       - name: tests, self-hosted
         if: runner.os == 'Linux'
