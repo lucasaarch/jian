@@ -46,8 +46,9 @@ fn rows(which: Domain) -> u32 {
         // picture are left out).
         Domain::Messages | Domain::Artifacts => 5,
         // Two sessions with a person (the one between two agents is left); two skills, the ones
-        // with a name the core accepts ("Bad Name" is left out).
-        Domain::Threads | Domain::Skills => 2,
+        // with a name the core accepts ("Bad Name" is left out); the WhatsApp and the Telegram
+        // channel (the email one is left out).
+        Domain::Threads | Domain::Skills | Domain::Channels => 2,
         _ => 1,
     }
 }
@@ -716,10 +717,12 @@ async fn connectors_came_over(db: &Database, ctx: &TenantCtx, owner: &jian_store
 async fn channels_came_over(db: &Database, ctx: &TenantCtx, report: &ImportReport) {
     let agent = db.agent_of_legacy(ctx, PROFILE).await.unwrap().unwrap();
     let accounts = db.channel_accounts_of(ctx, &agent).await.unwrap();
-    assert_eq!(accounts.len(), 1);
-    assert_eq!(accounts[0].provider, "whatsapp");
-    assert_eq!(accounts[0].status, jian_store::ChannelStatus::NeedsPairing);
-    assert_eq!(accounts[0].provider_address, None);
+    let providers: Vec<&str> = accounts.iter().map(|a| a.provider.as_str()).collect();
+    assert_eq!(providers, ["whatsapp", "telegram"]);
+    for account in &accounts {
+        assert_eq!(account.status, jian_store::ChannelStatus::NeedsPairing);
+        assert_eq!(account.provider_address, None);
+    }
     // The approved contact is a known person of the agent, once however many times it ran,
     // next to the agent's creator; the pending one is nobody.
     let people = db.people_of(ctx, &agent).await.unwrap();

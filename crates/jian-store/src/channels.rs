@@ -9,6 +9,7 @@
 use sqlx::AssertSqlSafe;
 
 use crate::agents::{AgentId, Viewer};
+use crate::secrets::{Secret, seal_envelope};
 use crate::tokens::{AccountId, random_id, subject_id};
 use crate::{Database, StoreError, TenantCtx, ThreadId};
 
@@ -75,9 +76,9 @@ pub struct ChannelAccount {
     pub created_by: AccountId,
 }
 
-/// An account of the old Jian, as far as it can come over: no session, only who may talk and
-/// which conversation each chat was.
-#[derive(Clone, Debug)]
+/// An account of the old Jian, as far as it can come over: no session but a Telegram bot's
+/// token, and who may talk and which conversation each chat was.
+#[derive(Debug)]
 pub struct LegacyChannelAccount {
     /// The old account's id.
     pub legacy_id: String,
@@ -89,6 +90,10 @@ pub struct LegacyChannelAccount {
     pub owner_address: Option<String>,
     /// People who were approved: address and name.
     pub approved: Vec<(String, Option<String>)>,
+    /// A Telegram bot's token, opened from the old vault. It is put in the new account's session
+    /// only when the account is made by this call, so a later run never brings back a token the
+    /// person has since replaced or wiped.
+    pub token: Option<Secret>,
 }
 
 /// The vault owner of one key of an account's session.
@@ -224,8 +229,9 @@ impl Database {
     }
 
     /// The accounts a gateway that serves this tenant must keep connected: the ones that were
-    /// linked and not disconnected on purpose. A new owner of the tenant's slot reads this to
-    /// pick the connections up.
+    /// linked and not disconnected on purpose, and the ones given a bot token that no connection
+    /// has used yet (made with a token, or imported with one). A new owner of the tenant's slot
+    /// reads this to pick the connections up.
     pub async fn channel_accounts_to_connect(
         &self,
         ctx: &TenantCtx,
@@ -233,7 +239,10 @@ impl Database {
         let mut tx = self.begin(ctx).await?;
         let rows: Vec<Row> = sqlx::query_as(AssertSqlSafe(format!(
             "SELECT {COLUMNS} FROM channel_accounts \
-             WHERE status = 'connected' AND provider_address IS NOT NULL ORDER BY seq"
+             WHERE (status = 'connected' AND provider_address IS NOT NULL) \
+                OR (status = 'needs_pairing' AND EXISTS (SELECT 1 FROM channel_session s \
+                    WHERE s.account_id = channel_accounts.id AND s.key = 'token')) \
+             ORDER BY seq"
         )))
         .fetch_all(&mut *tx)
         .await
@@ -402,7 +411,9 @@ impl Database {
     /// Brings one account of the old Jian: the account (`needs_pairing`, since its session
     /// cannot be carried over) and its approved contacts. The chats come with the old threads
     /// (`legacy_threads`), which already write each as a channel thread. A second run writes
-    /// nothing new. Answers whether the account was made now.
+    /// nothing new. A token goes in with the account, in the same transaction, so a crash never
+    /// leaves an account made without it that a second run would not fix. Answers whether the
+    /// account was made now.
     pub async fn import_channel_account(
         &self,
         ctx: &TenantCtx,
@@ -432,6 +443,24 @@ impl Database {
             .ok_or(StoreError::Conflict(
                 "that agent already has an account on this provider",
             ))?;
+        if let (Some(_), Some(token)) = (&made, &legacy.token) {
+            let dek = self.data_key(ctx.id()).await?;
+            let owner = channel_secret_owner(&ChannelAccountId::new(&id), "token");
+            let envelope = seal_envelope(
+                dek.expose(),
+                ctx.id().as_str(),
+                &owner,
+                token.expose().as_bytes(),
+            )?;
+            sqlx::query(
+                "INSERT INTO channel_session (account_id, key, envelope) VALUES ($1, 'token', $2)",
+            )
+            .bind(&id)
+            .bind(&envelope)
+            .execute(&mut *tx)
+            .await
+            .map_err(StoreError::query(ACTION))?;
+        }
         // Each approved contact becomes a `known` person with that identity. The id comes from
         // the account and the address, so a second run finds the same person and adds nothing.
         for (address, name) in &legacy.approved {

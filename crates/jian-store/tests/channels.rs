@@ -106,6 +106,7 @@ async fn the_old_jians_account_comes_over_once_and_asks_to_be_paired_again() {
         provider: "whatsapp".to_owned(),
         owner_address: Some("999@s".to_owned()),
         approved: vec![("444@s".to_owned(), Some("Bia".to_owned()))],
+        token: None,
     };
     let by = &side.admin.account_id;
     assert!(

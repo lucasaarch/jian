@@ -6,10 +6,17 @@
 //! cannot be carried over, so a person pairs it again from the agent's page. The owner's address
 //! is left empty: nothing in the old `channels` says whose number `address` is.
 //!
+//! The exception is a Telegram bot's token. The `secrets` domain (which runs first, and needs the
+//! old master key) leaves it in the vault as `profile:<profile>:channel:<id>`; it is put in the
+//! new account's session as `token`, and the hub connects an account that has one on its own.
+//! Only when the account is made now: a run later never returns a token that was replaced or
+//! wiped since. Without the key, or without the token, the account waits to be given one.
+//!
 //! What stays behind: `channel_auth` (the session), pending and blocked contacts, group
 //! approvals, and the channels of kinds the core has no connection for (`whatsapp-business`,
 //! `email`, `api`) or that were revoked. The chats come with the threads, in their own domain.
 
+use jian_store::secrets::Secret;
 use jian_store::{Database, ImportResult, LegacyChannelAccount, TenantCtx};
 
 use crate::ImportError;
@@ -63,6 +70,11 @@ pub(crate) async fn import(
             provider,
             owner_address: None,
             approved: channel.approved,
+            token: if channel.kind == "telegram" {
+                bot_token(db, ctx, &channel.profile_id, &id).await
+            } else {
+                None
+            },
         };
         match db.import_channel_account(ctx, &owner, &legacy).await {
             Ok(true) => tally.imported(),
@@ -74,6 +86,24 @@ pub(crate) async fn import(
         }
     }
     Ok(tally.finish(Some(
-        "the sessions were not carried over: pair each account again",
+        "the sessions were not carried over: pair each account again (a Telegram bot's token \
+         comes over when the secrets do)",
     )))
+}
+
+/// The bot token the `secrets` domain left for the old channel, when it is one the Bot API can
+/// take (the shape `POST /v1/agents/{id}/channels` also asks of it). Anything else leaves the
+/// account to be given a token, with nothing said of the text.
+async fn bot_token(db: &Database, ctx: &TenantCtx, profile: &str, channel: &str) -> Option<Secret> {
+    let owner = format!("profile:{profile}:channel:{channel}");
+    let found = match db.vault().read(ctx, &owner).await {
+        Ok(found) => found?,
+        Err(error) => {
+            tracing::warn!(%owner, %error, "the token of an old channel could not be read");
+            return None;
+        }
+    };
+    let token = found.expose().trim();
+    let fits = !token.is_empty() && token.len() <= 200 && !token.chars().any(char::is_whitespace);
+    fits.then(|| Secret::new(token))
 }
