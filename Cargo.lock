@@ -1731,6 +1731,7 @@ dependencies = [
  "jian-auth",
  "jian-browser",
  "jian-channel-api",
+ "jian-channel-telegram",
  "jian-channel-whatsapp",
  "jian-exec",
  "jian-import",
@@ -1791,6 +1792,23 @@ dependencies = [
  "serde",
  "thiserror",
  "tokio",
+]
+
+[[package]]
+name = "jian-channel-telegram"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "futures-util",
+ "getrandom 0.3.4",
+ "jian-channel-api",
+ "reqwest",
+ "ring",
+ "rustls",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]

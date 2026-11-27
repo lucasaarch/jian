@@ -27,6 +27,9 @@ pub enum ChannelError {
         /// The ceiling that was crossed.
         limit: usize,
     },
+    /// A pushed delivery did not carry the secret the channel gave the provider.
+    #[error("the delivery is not signed with the channel's secret")]
+    Unauthorized,
     /// The channel does not do this (a provider without reactions).
     #[error("this channel cannot {0}")]
     Unsupported(&'static str),

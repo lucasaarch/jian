@@ -35,6 +35,8 @@ jian-browser = { path = "crates/jian-browser" }
 jian-channel-api = { path = "crates/channels/jian-channel-api" }
 # `WhatsApp` over the library's protocol; its session lives in the gateway's database.
 jian-channel-whatsapp = { path = "crates/channels/jian-channel-whatsapp" }
+# Telegram over the Bot API, on the workspace's one reqwest; its token lives in the vault.
+jian-channel-telegram = { path = "crates/channels/jian-channel-telegram" }
 jian-computer-use = { path = "crates/jian-computer-use" }
 jian-core = { path = "crates/jian-core" }
 jian-exec = { path = "crates/jian-exec" }

@@ -129,4 +129,21 @@ pub trait Channel: Send + Sync {
 
     /// Closes the connection. The event stream ends after the state change that says so.
     fn disconnect(&self, how: Disconnect) -> BoxFuture<'_, Result<(), ChannelError>>;
+
+    /// Asks the provider to deliver what it receives to `url` instead of the channel fetching
+    /// it. Called before [`connect`](Self::connect), and only by a gateway that can be reached
+    /// from outside; a channel never told this polls. The default does nothing, for a provider
+    /// that holds a connection of its own.
+    fn use_push(&self, _url: String) {}
+
+    /// Takes one delivery the provider pushed to the address given to
+    /// [`use_push`](Self::use_push). `secret` is the shared secret the request carried, if any;
+    /// a wrong or missing one is [`ChannelError::Unauthorized`] and nothing enters.
+    fn receive_push(
+        &self,
+        _secret: Option<&str>,
+        _body: &[u8],
+    ) -> BoxFuture<'_, Result<(), ChannelError>> {
+        Box::pin(async { Err(ChannelError::Unsupported("take pushed deliveries")) })
+    }
 }
