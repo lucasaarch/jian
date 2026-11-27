@@ -42,6 +42,15 @@ test-group = "own-pg"
 filter = "package(jian-auth) & test(/costs_what/)"
 threads-required = "num-test-threads"
 
+# Tests that start a real browser. Four Chromiums starting at once beside the rest of the suite
+# missed the 15 s launch deadline on the Linux runner (CI, 27 Nov), so they start one at a time.
+[test-groups.browser]
+max-threads = 1
+
+[[profile.default.overrides]]
+filter = "package(jian-browser) & binary(engines)"
+test-group = "browser"
+
 [profile.default]
 # One process per test, each with a pool and sometimes a whole gateway: a CPU per test is what
 # 16 GB holds. A test that fails is a failure, not a flake.
