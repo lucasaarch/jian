@@ -131,6 +131,7 @@ mod artifact_sharing;
 mod artifacts;
 mod backup;
 mod blobs;
+mod channels;
 mod checkpoints;
 mod connectors;
 mod credentials;
@@ -216,6 +217,10 @@ pub use artifacts::{
 };
 pub use backup::tenant_dump_args;
 pub use blobs::{BlobError, BlobKey, BlobStore, DiskBlobs};
+pub use channels::{
+    ChannelAccount, ChannelAccountId, ChannelContact, ChannelStatus, ContactSeen, ContactStatus,
+    LegacyChannelAccount, channel_secret_owner,
+};
 pub use checkpoints::{Checkpoint, HistoryRow, MAX_HISTORY_PAGE, TailSize};
 pub use connectors::{
     ConnectorAccount, ConnectorAccountId, ConnectorAccountPatch, ConnectorScope, LegacyConnector,

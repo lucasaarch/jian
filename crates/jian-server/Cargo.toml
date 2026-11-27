@@ -42,6 +42,7 @@ jian-llm.workspace = true
 jian-mail.workspace = true
 jian-plugin-api.workspace = true
 jian-plugin-github.workspace = true
+jian-channel-api.workspace = true
 jian-plugin-linear.workspace = true
 jian-plugin-mcp.workspace = true
 jian-protocol.workspace = true
@@ -64,6 +65,7 @@ url.workspace = true
 zip.workspace = true
 
 [dev-dependencies]
+jian-channel-api = { workspace = true, features = ["fake"] }
 jian-plugin-echo.workspace = true
 jian-remote.workspace = true
 jian-testkit.workspace = true

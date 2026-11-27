@@ -1748,6 +1748,7 @@ dependencies = [
  "futures-util",
  "jian-auth",
  "jian-browser",
+ "jian-channel-api",
  "jian-core",
  "jian-exec",
  "jian-llm",

@@ -73,6 +73,7 @@ mod artifacts;
 mod auth;
 mod auto_continue;
 mod browser_tools;
+mod channel_intake;
 mod client_ws;
 mod codex_login;
 mod compact_job;
@@ -151,6 +152,9 @@ pub use artifact_export::{ArtifactRenderer, RenderFormat, Renderer};
 pub use auth::{AuthRejection, Principal};
 pub use auto_continue::MAX_IDLE_CONTINUATIONS;
 pub use browser_tools::{BrowserRenderer, browser_policy, browser_tools};
+pub use channel_intake::{
+    CHANNEL_CONTACT_REQUEST_EVENT, CHANNEL_MESSAGE_EVENT, Intake, ReplyError, receive, reply,
+};
 pub use compact_job::{Model, ModelSource, ThreadCompactor};
 pub use events::{BUFFER_DELTAS, EventBus, MemoryEventBus, Scope, Subscription};
 #[cfg(feature = "public-url")]
