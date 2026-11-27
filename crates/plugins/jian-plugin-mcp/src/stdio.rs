@@ -1,5 +1,5 @@
 //! The command (stdio) transport: a program the gateway runs, speaking JSON-RPC over its pipes,
-//! one message a line. Only with the `local-process` capability: in the Cloud edition this module
+//! one message a line. Only with the `mcp-stdio` capability: in the Cloud edition this module
 //! is not compiled, so no account can make the gateway run a program.
 //!
 //! One process per account, started by the first call that needs it and stopped when it has been

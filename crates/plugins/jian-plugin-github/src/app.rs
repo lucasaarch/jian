@@ -1,7 +1,7 @@
 //! The GitHub App itself: registering it from a manifest, reading it back from GitHub, and giving
 //! it a webhook.
 //!
-//! Only with `public-url`: a manifest names the address GitHub will call, which a gateway that
+//! Only with `github-app`: a manifest names the address GitHub will call, which a gateway that
 //! cannot be reached from outside does not have. Without it an installation is made from pasted
 //! values and there is no webhook.
 //!

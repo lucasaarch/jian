@@ -85,9 +85,11 @@ impl ServerConfig {
         let parsed: Self = serde_json::from_value(config.clone())
             .map_err(|_| McpError::Config("the account's settings are not an MCP server's"))?;
         match parsed.transport {
+            Transport::Http if !cfg!(feature = "mcp-http") => Err(McpError::HttpUnavailable),
             Transport::Http if parsed.url.as_deref().is_none_or(str::is_empty) => {
                 Err(McpError::Config("an HTTP server needs an address"))
             }
+            Transport::Stdio if !cfg!(feature = "mcp-stdio") => Err(McpError::StdioUnavailable),
             Transport::Stdio if parsed.command.as_deref().is_none_or(str::is_empty) => {
                 Err(McpError::Config("a command server needs a command"))
             }

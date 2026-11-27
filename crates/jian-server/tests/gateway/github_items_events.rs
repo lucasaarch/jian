@@ -12,7 +12,7 @@ use super::github_items::named_agent;
 use super::github_webhook::{
     SECRET_A, deliver, kinds, pull_request, registry, settings, until_inbox,
 };
-use super::invites::stop;
+use super::support::stop;
 use jian_plugin_github::webhook::sign;
 
 #[tokio::test]

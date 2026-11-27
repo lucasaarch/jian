@@ -1,7 +1,11 @@
 //! Slack's public Events API accepts only signed raw request bodies.
 
+#[cfg(feature = "slack-events-api")]
 use std::net::SocketAddr;
 use std::sync::Arc;
+#[cfg(feature = "slack-events-api")]
+use std::time::Duration;
+#[cfg(feature = "slack-events-api")]
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use axum::Json;
@@ -9,16 +13,24 @@ use axum::Router;
 use axum::routing::post;
 use jian_channel_api::ChannelKind;
 use jian_channel_slack::SlackConfig;
+#[cfg(feature = "slack-events-api")]
+use jian_server::SLACK_EVENT_KIND;
 use jian_server::{PublicUrl, Settings};
+#[cfg(feature = "slack-events-api")]
+use jian_store::ChannelAccountId;
 use serde_json::json;
 
 use super::accounts::{open_settings, start};
+#[cfg(feature = "slack-events-api")]
+use super::channels::call;
 use super::channels::named_agent;
+#[cfg(feature = "slack-events-api")]
 use super::support::Gateway;
 
 const SIGNING_SECRET: &str = "synthetic-slack-signing-secret";
 
 #[tokio::test]
+#[cfg(feature = "slack-events-api")]
 async fn events_verify_raw_body_before_challenge_or_acknowledgement() {
     let gateway = Gateway::start(Settings {
         slack: Some(SlackConfig::new(
@@ -56,6 +68,81 @@ async fn events_verify_raw_body_before_challenge_or_acknowledgement() {
 
     let response = post_signed(&client, gateway.addr, SIGNING_SECRET, &event, None).await;
     assert_eq!(response.status(), reqwest::StatusCode::ACCEPTED);
+}
+
+#[tokio::test]
+#[cfg(feature = "slack-events-api")]
+async fn slack_events_are_queued_only_for_the_matching_workspace() {
+    let settings = Settings {
+        slack: Some(SlackConfig::new(
+            None,
+            None,
+            SIGNING_SECRET.into(),
+            None,
+            None,
+        )),
+        ..open_settings()
+    };
+    let (gateway, tenants) = start(settings).await;
+    let account_a = workspace_account(&gateway, &tenants.a, "Slack A", "T12345").await;
+    let _account_b = workspace_account(&gateway, &tenants.b, "Slack B", "T67890").await;
+    let client = reqwest::Client::new();
+    let event = json!({
+        "type": "event_callback",
+        "team_id": "T12345",
+        "event_id": "Ev-isolation",
+        "event": {"type": "message", "channel": "C12345", "user": "U12345", "text": "hello", "ts": "1700000000.1"}
+    })
+    .to_string();
+
+    let response = post_signed(&client, gateway.addr, SIGNING_SECRET, &event, None).await;
+    assert_eq!(response.status(), reqwest::StatusCode::ACCEPTED);
+
+    let held = gateway.slots().held();
+    let jobs = gateway
+        .db
+        .claim_jobs(
+            gateway.instance(),
+            &held,
+            &[SLACK_EVENT_KIND.to_owned()],
+            10,
+            Duration::from_secs(30),
+        )
+        .await
+        .unwrap();
+    assert_eq!(jobs.len(), 1, "{jobs:?}");
+    assert_eq!(jobs[0].tenant, tenants.a.id);
+    assert_eq!(jobs[0].payload["accountId"], account_a.as_str());
+    gateway.stop().await;
+}
+
+#[cfg(feature = "slack-events-api")]
+async fn workspace_account(
+    gateway: &Gateway,
+    tenant: &jian_testkit::Side,
+    name: &str,
+    team_id: &str,
+) -> ChannelAccountId {
+    let admin = tenant.admin_session.as_str();
+    let agent = named_agent(gateway, admin, name).await;
+    let (status, made) = call(
+        gateway,
+        "POST",
+        &format!("/v1/agents/{agent}/channels"),
+        admin,
+        Some(json!({"provider": "slack"})),
+    )
+    .await;
+    assert_eq!(status, 201, "{made}");
+    let account = ChannelAccountId::new(made["id"].as_str().unwrap());
+    assert!(
+        gateway
+            .db
+            .bind_channel_address(&tenant.ctx, &account, team_id)
+            .await
+            .unwrap()
+    );
+    account
 }
 
 #[tokio::test]
@@ -176,6 +263,7 @@ async fn auth_test() -> Json<serde_json::Value> {
     Json(json!({"ok": true, "user_id": "U12345", "team_id": "T12345"}))
 }
 
+#[cfg(feature = "slack-events-api")]
 async fn post_signed(
     client: &reqwest::Client,
     address: SocketAddr,
@@ -203,6 +291,7 @@ async fn post_signed(
         .unwrap()
 }
 
+#[cfg(feature = "slack-events-api")]
 fn signature(secret: &str, timestamp: &str, body: &[u8]) -> String {
     let mut signed = format!("v0:{timestamp}:").into_bytes();
     signed.extend_from_slice(body);

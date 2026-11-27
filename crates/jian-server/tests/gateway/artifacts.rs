@@ -163,8 +163,8 @@ async fn an_artifact_is_its_owners_alone_until_they_share_it() {
     .await;
     assert_eq!(gone.0, 403, "{}", gone.1);
     // Only who owns it changes who opens it: someone who only sees it gets a 403.
-    // (`external` is refused outright, as a 400, in a build without `public-url`.)
-    let reshare = if cfg!(feature = "public-url") {
+    // (`external` is refused outright, as a 400, in a build without `public-artifacts`.)
+    let reshare = if cfg!(feature = "public-artifacts") {
         "external"
     } else {
         "members"

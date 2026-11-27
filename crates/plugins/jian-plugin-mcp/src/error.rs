@@ -10,6 +10,9 @@ pub enum McpError {
     /// The account's settings are wrong.
     #[error("this MCP account is not set up right: {0}")]
     Config(&'static str),
+    /// An HTTP server, in a build without the `mcp-http` capability.
+    #[error("HTTP MCP servers are not enabled in this build")]
+    HttpUnavailable,
     /// The network, the host's refusal or the vault failed before an answer came.
     #[error("could not reach the MCP server: {0}")]
     Transport(String),
@@ -44,8 +47,8 @@ pub enum McpError {
     /// shown.
     #[error("the MCP session ended")]
     SessionGone,
-    /// A command server, in a build without the `local-process` capability.
-    #[error("command (stdio) MCP servers need a local process, which this edition does not have")]
+    /// A command server, in a build without the `mcp-stdio` capability.
+    #[error("command (stdio) MCP servers are not enabled in this build")]
     StdioUnavailable,
     /// A command server that did not start, stopped, or did not answer.
     #[error("the MCP command {0}")]

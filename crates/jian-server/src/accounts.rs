@@ -18,10 +18,12 @@
 use axum::Json;
 use axum::extract::State;
 use axum::http::StatusCode;
-use jian_auth::{AcceptInvite, LoginOutcome, LoginRequest as Credentials, Session};
-use jian_protocol::auth::{
-    AcceptInviteRequest, ChangePasswordRequest, LoginRequest, LoginResponse,
-};
+#[cfg(feature = "multi-user")]
+use jian_auth::AcceptInvite;
+use jian_auth::{LoginOutcome, LoginRequest as Credentials, Session};
+#[cfg(feature = "multi-user")]
+use jian_protocol::auth::AcceptInviteRequest;
+use jian_protocol::auth::{ChangePasswordRequest, LoginRequest, LoginResponse};
 use jian_store::{AccountId, TenantId, TokenKind};
 
 use crate::AppState;
@@ -152,6 +154,7 @@ pub(crate) async fn change_password(
 
 /// `POST /v1/auth/invite/accept`: no token yet, so it is counted by address like a login. A
 /// guess at an existing account's password through here is counted too.
+#[cfg(feature = "multi-user")]
 pub(crate) async fn accept_invite(
     State(app): State<AppState>,
     Address(from): Address,

@@ -1,6 +1,6 @@
 //! What a webhook is worth and what it tells an agent: the signature, the notice with none of a
 //! stranger's words in it, the review brief, and the manifest.
-#![cfg(feature = "public-url")]
+#![cfg(feature = "github-app")]
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use jian_plugin_github::app::{app_name, conversion_url, manifest, parse_conversion};

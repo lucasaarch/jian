@@ -1,42 +1,68 @@
-//! What the capabilities `public-url` leaves out of the gateway: asserted in each build, so the
-//! local edition (no public URL) is shown to have none of it and the others to have all of it.
-//! The other capabilities are shown where they act: `local-process` in `mcp_servers.rs` and
-//! `plugin_tools.rs`, `multi-tenant` in `outbound.rs`.
+//! Each edition's routes reflect the capabilities it includes, rather than a single public-URL
+//! switch. `local-process` and `multi-tenant` are shown in their owning tests.
 
 use jian_server::ROUTES;
-#[cfg(not(feature = "public-url"))]
+#[cfg(any(
+    not(feature = "public-artifacts"),
+    all(feature = "multi-user", not(feature = "email-invitations"))
+))]
 use serde_json::Value;
 use serde_json::json;
 
 use super::accounts::{open_settings, start};
-#[cfg(not(feature = "public-url"))]
+#[cfg(not(feature = "public-artifacts"))]
 use super::support::http_request;
 use super::support::{http_get, http_post};
 
-/// Routes that make a link people open from outside, in the list a gateway keeps of what it serves.
-const LINK_ROUTES: [&str; 5] = [
-    "/v1/auth/magic-link",
-    "/v1/invites/{id}/resend",
-    "/v1/artifacts/{id}/password",
-    "/v1/artifacts/{id}/link",
-    "/v1/public/artifacts/",
+const CAPABILITY_ROUTES: &[(&str, bool)] = &[
+    ("/v1/auth/magic-link", cfg!(feature = "email-login")),
+    (
+        "/v1/invites/{id}/resend",
+        cfg!(feature = "email-invitations"),
+    ),
+    (
+        "/v1/artifacts/{id}/password",
+        cfg!(feature = "public-artifacts"),
+    ),
+    (
+        "/v1/artifacts/{id}/link",
+        cfg!(feature = "public-artifacts"),
+    ),
+    ("/v1/public/artifacts/", cfg!(feature = "public-artifacts")),
+    ("/v1/auth/github/start", cfg!(feature = "github-login")),
+    ("/v1/github/apps/manifest", cfg!(feature = "github-app")),
+    (
+        "/v1/public/linear/webhook/",
+        cfg!(feature = "linear-webhooks"),
+    ),
+    ("/v1/agents/{id}/channels", cfg!(feature = "channels")),
+    ("/v1/public/channels/", cfg!(feature = "channel-webhooks")),
+    (
+        "/v1/public/slack/events",
+        cfg!(feature = "slack-events-api"),
+    ),
+    ("/v1/members", cfg!(feature = "multi-user")),
+    ("/v1/mcp-servers/{id}/login", cfg!(feature = "mcp-http")),
 ];
 
 #[tokio::test]
-async fn a_build_without_public_url_serves_no_link_that_people_open() {
-    let public = cfg!(feature = "public-url");
-    for part in LINK_ROUTES {
+async fn routes_are_present_only_with_their_capabilities() {
+    for (part, enabled) in CAPABILITY_ROUTES {
         assert_eq!(
             ROUTES.iter().any(|route| route.contains(part)),
-            public,
+            *enabled,
             "{part}"
         );
     }
     let (gateway, _tenants) = start(open_settings()).await;
-    // A public link that is not there answers with a JSON body; a route the router lacks has none.
+    // A public artifact route exists only with its capability.
     let (status, body) = http_get(gateway.addr, "/v1/public/artifacts/nothing", None).await;
     assert_eq!(status, 404, "{body}");
-    assert_eq!(body.contains("not_found"), public, "{body}");
+    assert_eq!(
+        body.contains("not_found"),
+        cfg!(feature = "public-artifacts"),
+        "{body}"
+    );
     let (status, body) = http_post(
         gateway.addr,
         "/v1/auth/magic-link",
@@ -48,9 +74,9 @@ async fn a_build_without_public_url_serves_no_link_that_people_open() {
     gateway.stop().await;
 }
 
-#[cfg(not(feature = "public-url"))]
+#[cfg(not(feature = "public-artifacts"))]
 #[tokio::test]
-async fn without_public_url_an_artifact_cannot_be_shared_by_an_external_link() {
+async fn without_public_artifacts_an_artifact_cannot_be_shared_by_an_external_link() {
     let (gateway, tenants) = start(open_settings()).await;
     let session = tenants.a.admin_session.as_str();
     let (status, body) = http_post(
@@ -80,9 +106,9 @@ async fn without_public_url_an_artifact_cannot_be_shared_by_an_external_link() {
     gateway.stop().await;
 }
 
-#[cfg(not(feature = "public-url"))]
+#[cfg(all(feature = "multi-user", not(feature = "email-invitations")))]
 #[tokio::test]
-async fn without_public_url_an_invitation_is_a_token_to_copy_and_never_an_e_mail() {
+async fn without_email_invitations_an_invitation_is_a_token_to_copy() {
     let (gateway, tenants) = start(open_settings()).await;
     let session = tenants.a.admin_session.as_str();
     let invite = async |send: Value| {

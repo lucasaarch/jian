@@ -18,9 +18,8 @@
 //!
 //! # Editions
 //!
-//! HTTP exists in every build. The command (stdio) transport runs a program on the gateway's
-//! machine and is compiled only with the `local-process` capability; an account that asks for it
-//! in a build without it (the Cloud) has no tools and says why.
+//! Streamable HTTP and command (stdio) are independent transports. HTTP is compiled only with
+//! `mcp-http`; stdio runs a program on the gateway's machine and is compiled only with `mcp-stdio`.
 //!
 //! This crate does not know the tenant: the host gives a context bound to one account of one
 //! tenant, and the state kept here (sessions, catalogs) is keyed by the account's id.
@@ -29,11 +28,12 @@ pub mod account;
 pub mod catalog;
 pub mod config;
 pub mod error;
+#[cfg(feature = "mcp-http")]
 pub mod http;
 pub mod names;
 pub mod oauth;
 pub mod rpc;
-#[cfg(feature = "local-process")]
+#[cfg(feature = "mcp-stdio")]
 pub mod stdio;
 
 use std::collections::HashMap;
@@ -41,14 +41,21 @@ use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{Duration, Instant};
 
 use futures_util::future::BoxFuture;
+#[cfg(any(feature = "mcp-http", feature = "mcp-stdio"))]
+use jian_plugin_api::PluginError;
 use jian_plugin_api::{
-    AccountContext, AccountId, AccountRef, Permission, Plugin, PluginError, ToolDef, ToolError,
+    AccountContext, AccountId, AccountRef, Permission, Plugin, ToolDef, ToolError,
 };
 use serde_json::Value;
 
 use crate::catalog::Catalog;
-use crate::config::{Auth, Credentials, ServerConfig, Transport};
+#[cfg(feature = "mcp-http")]
+use crate::config::Auth;
+use crate::config::ServerConfig;
+#[cfg(any(feature = "mcp-http", feature = "mcp-stdio"))]
+use crate::config::{Credentials, Transport};
 use crate::error::McpError;
+#[cfg(feature = "mcp-http")]
 use crate::http::{Http, Session};
 use crate::rpc::Rpc;
 
@@ -67,22 +74,24 @@ pub const RETRY_AFTER: Duration = Duration::from_secs(30);
 
 /// What the plugin keeps of one account between calls.
 struct AccountState {
+    #[cfg(feature = "mcp-http")]
     session: Mutex<Option<Session>>,
     catalog: Mutex<Option<Catalog>>,
     failure: Mutex<Option<(Instant, String)>>,
     /// The account's command process, when it has started one.
-    #[cfg(feature = "local-process")]
+    #[cfg(feature = "mcp-stdio")]
     slot: Arc<stdio::Slot>,
 }
 
 impl AccountState {
-    #[cfg_attr(not(feature = "local-process"), allow(unused_variables))]
+    #[cfg_attr(not(feature = "mcp-stdio"), allow(unused_variables))]
     fn new(idle: Duration) -> Self {
         Self {
+            #[cfg(feature = "mcp-http")]
             session: Mutex::default(),
             catalog: Mutex::default(),
             failure: Mutex::default(),
-            #[cfg(feature = "local-process")]
+            #[cfg(feature = "mcp-stdio")]
             slot: Arc::new(stdio::Slot::new(idle)),
         }
     }
@@ -121,9 +130,9 @@ impl Default for McpPlugin {
     fn default() -> Self {
         Self {
             accounts: Mutex::default(),
-            #[cfg(feature = "local-process")]
+            #[cfg(feature = "mcp-stdio")]
             idle: stdio::IDLE,
-            #[cfg(not(feature = "local-process"))]
+            #[cfg(not(feature = "mcp-stdio"))]
             idle: Duration::ZERO,
         }
     }
@@ -138,15 +147,17 @@ pub fn plugins() -> Vec<Arc<dyn Plugin>> {
 /// What one operation needs of an account, read once.
 struct Prepared {
     config: ServerConfig,
+    #[cfg(any(feature = "mcp-http", feature = "mcp-stdio"))]
     credentials: Credentials,
     state: Arc<AccountState>,
+    #[cfg(feature = "mcp-http")]
     bearer: Option<String>,
 }
 
 impl McpPlugin {
     /// A plugin whose command servers stop after `idle` unused, for a test that cannot wait
     /// [`stdio::IDLE`].
-    #[cfg(feature = "local-process")]
+    #[cfg(feature = "mcp-stdio")]
     #[must_use]
     pub fn with_idle(idle: Duration) -> Self {
         Self {
@@ -163,14 +174,22 @@ impl McpPlugin {
             .clone()
     }
 
+    #[cfg_attr(
+        not(any(feature = "mcp-http", feature = "mcp-stdio")),
+        allow(clippy::unused_async, clippy::unused_async_trait_impl)
+    )]
     async fn prepared<'a>(&self, ctx: &'a AccountContext<'a>) -> Result<Prepared, McpError> {
         let config = ServerConfig::parse(&ctx.account().config)?;
+        #[cfg(any(feature = "mcp-http", feature = "mcp-stdio"))]
+        #[allow(unused_mut)]
         let mut credentials = match ctx.secret().await {
             Ok(secret) => Credentials::read(&secret),
             Err(PluginError::NoSecret) => Credentials::default(),
             Err(error) => return Err(error.into()),
         };
+        #[cfg(feature = "mcp-http")]
         // Signed in with OAuth: the token, renewed first when it has lapsed.
+        #[cfg(feature = "mcp-http")]
         let bearer = if config.auth == Auth::Oauth {
             Some(oauth::bearer(ctx, &mut credentials).await?)
         } else {
@@ -178,8 +197,10 @@ impl McpPlugin {
         };
         Ok(Prepared {
             config,
+            #[cfg(any(feature = "mcp-http", feature = "mcp-stdio"))]
             credentials,
             state: self.state(&ctx.account().id),
+            #[cfg(feature = "mcp-http")]
             bearer,
         })
     }
@@ -215,29 +236,45 @@ impl McpPlugin {
 
 /// The transport an operation runs over.
 enum Link<'a> {
+    #[cfg(feature = "mcp-http")]
     Http(Http<'a>),
-    #[cfg(feature = "local-process")]
+    #[cfg(feature = "mcp-stdio")]
     Stdio(stdio::Command<'a>),
+    #[cfg(not(any(feature = "mcp-http", feature = "mcp-stdio")))]
+    Disabled(std::marker::PhantomData<&'a ()>),
 }
 
 impl Rpc for Link<'_> {
+    #[cfg_attr(
+        not(any(feature = "mcp-http", feature = "mcp-stdio")),
+        allow(unused_variables)
+    )]
     fn request<'a>(
         &'a self,
         method: &'a str,
         params: Value,
     ) -> BoxFuture<'a, Result<Value, McpError>> {
         match self {
+            #[cfg(feature = "mcp-http")]
             Self::Http(http) => http.request(method, params),
-            #[cfg(feature = "local-process")]
+            #[cfg(feature = "mcp-stdio")]
             Self::Stdio(command) => command.request(method, params),
+            #[cfg(not(any(feature = "mcp-http", feature = "mcp-stdio")))]
+            Self::Disabled(_) => Box::pin(async { Err(McpError::HttpUnavailable) }),
         }
     }
 }
 
-// Only a build without `local-process` can refuse; the others always have a transport.
-#[cfg_attr(feature = "local-process", allow(clippy::unnecessary_wraps))]
+// Only a build with both transports cannot refuse one of them.
+#[cfg_attr(
+    all(feature = "mcp-http", feature = "mcp-stdio"),
+    allow(clippy::unnecessary_wraps)
+)]
+#[cfg_attr(not(feature = "mcp-http"), allow(unused_variables))]
+#[cfg(any(feature = "mcp-http", feature = "mcp-stdio"))]
 fn link<'a>(ctx: &'a AccountContext<'a>, prepared: &'a Prepared) -> Result<Link<'a>, McpError> {
     match prepared.config.transport {
+        #[cfg(feature = "mcp-http")]
         Transport::Http => Ok(Link::Http(Http {
             ctx,
             url: prepared.config.url.as_deref().unwrap_or_default(),
@@ -245,15 +282,23 @@ fn link<'a>(ctx: &'a AccountContext<'a>, prepared: &'a Prepared) -> Result<Link<
             bearer: prepared.bearer.clone(),
             session: &prepared.state.session,
         })),
-        #[cfg(feature = "local-process")]
+        #[cfg(not(feature = "mcp-http"))]
+        Transport::Http => Err(McpError::HttpUnavailable),
+        #[cfg(feature = "mcp-stdio")]
         Transport::Stdio => Ok(Link::Stdio(stdio::Command {
             slot: &prepared.state.slot,
             config: &prepared.config,
             credentials: &prepared.credentials,
         })),
-        #[cfg(not(feature = "local-process"))]
+        #[cfg(not(feature = "mcp-stdio"))]
         Transport::Stdio => Err(McpError::StdioUnavailable),
     }
+}
+
+#[cfg(not(any(feature = "mcp-http", feature = "mcp-stdio")))]
+#[allow(clippy::unnecessary_wraps)]
+fn link<'a>(_: &'a AccountContext<'a>, _: &'a Prepared) -> Result<Link<'a>, McpError> {
+    Ok(Link::Disabled(std::marker::PhantomData))
 }
 
 impl Plugin for McpPlugin {
@@ -271,11 +316,15 @@ impl Plugin for McpPlugin {
     }
 
     fn permissions(&self) -> &'static [Permission] {
-        &[
+        #[cfg(feature = "mcp-http")]
+        let permissions = &[
             Permission::Secret,
             Permission::SecretWrite,
             Permission::Http,
-        ]
+        ];
+        #[cfg(not(feature = "mcp-http"))]
+        let permissions = &[Permission::Secret, Permission::SecretWrite];
+        permissions
     }
 
     fn tools(&self, account: &AccountRef) -> Vec<ToolDef> {

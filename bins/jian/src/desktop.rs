@@ -7,7 +7,9 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use anyhow::Context as _;
-use jian_channel_api::{Backoff, ChannelKind};
+use jian_channel_api::Backoff;
+#[cfg(feature = "channels")]
+use jian_channel_api::ChannelKind;
 use jian_exec::Executor;
 use jian_server::{
     AGENT_WAKE_KIND, AccountModels, AgentMachines, AgentRunner, AgentWaker, AppState, ChannelHub,
@@ -23,12 +25,18 @@ use jian_store::{
 use tokio::sync::oneshot;
 use tokio_util::sync::CancellationToken;
 
-#[cfg(feature = "public-url")]
-use jian_server::{
-    GITHUB_WEBHOOK_KIND, GithubWebhookHandler, INVITE_SEND_KIND, InviteSender, LINEAR_WEBHOOK_KIND,
-    LOGIN_LINK_SEND_KIND, LinearWebhookHandler, LoginLinkSender, Plugins, SLACK_EVENT_KIND,
-    SlackEventHandler,
-};
+#[cfg(any(feature = "github-app", feature = "linear-webhooks"))]
+use jian_server::Plugins;
+#[cfg(feature = "github-app")]
+use jian_server::{GITHUB_WEBHOOK_KIND, GithubWebhookHandler};
+#[cfg(feature = "email-invitations")]
+use jian_server::{INVITE_SEND_KIND, InviteSender};
+#[cfg(feature = "linear-webhooks")]
+use jian_server::{LINEAR_WEBHOOK_KIND, LinearWebhookHandler};
+#[cfg(feature = "email-login")]
+use jian_server::{LOGIN_LINK_SEND_KIND, LoginLinkSender};
+#[cfg(feature = "slack-events-api")]
+use jian_server::{SLACK_EVENT_KIND, SlackEventHandler};
 
 /// How long requests and jobs may drain after the host asks the gateway to stop.
 const DRAIN_DEADLINE: Duration = Duration::from_secs(8);
@@ -47,6 +55,7 @@ pub fn init_observability() {
                 .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
         )
         .init();
+    #[cfg(feature = "channels")]
     if let Err(error) = jian_channel_whatsapp::install_log_redaction() {
         tracing::warn!(%error, "the WhatsApp log redaction was not installed");
     }
@@ -167,7 +176,7 @@ pub fn job_registry(
     chat: Option<&ChannelHub>,
 ) -> JobRegistry {
     let registry = crate::debug_jobs::registry();
-    #[cfg(feature = "public-url")]
+    #[cfg(feature = "slack-events-api")]
     let registry = if let Some(chat) = chat {
         registry.register(
             SLACK_EVENT_KIND,
@@ -176,27 +185,31 @@ pub fn job_registry(
     } else {
         registry
     };
-    #[cfg(not(feature = "public-url"))]
+    #[cfg(not(feature = "slack-events-api"))]
+    let _ = chat;
+    #[cfg(feature = "email-invitations")]
+    let registry = registry.register(INVITE_SEND_KIND, Arc::new(InviteSender::new(settings)));
+    #[cfg(feature = "email-login")]
+    let registry = registry.register(
+        LOGIN_LINK_SEND_KIND,
+        Arc::new(LoginLinkSender::new(settings)),
+    );
+    #[cfg(feature = "github-app")]
+    let registry = registry.register(
+        GITHUB_WEBHOOK_KIND,
+        Arc::new(GithubWebhookHandler::new(Plugins::new(
+            jian_server::builtin_plugins(),
+        ))),
+    );
+    #[cfg(feature = "linear-webhooks")]
+    let registry = registry.register(
+        LINEAR_WEBHOOK_KIND,
+        Arc::new(LinearWebhookHandler::new(Plugins::new(
+            jian_server::builtin_plugins(),
+        ))),
+    );
+    #[cfg(not(any(feature = "email-invitations", feature = "email-login")))]
     let _ = settings;
-    #[cfg(feature = "public-url")]
-    let registry = registry
-        .register(INVITE_SEND_KIND, Arc::new(InviteSender::new(settings)))
-        .register(
-            LOGIN_LINK_SEND_KIND,
-            Arc::new(LoginLinkSender::new(settings)),
-        )
-        .register(
-            GITHUB_WEBHOOK_KIND,
-            Arc::new(GithubWebhookHandler::new(Plugins::new(
-                jian_server::builtin_plugins(),
-            ))),
-        )
-        .register(
-            LINEAR_WEBHOOK_KIND,
-            Arc::new(LinearWebhookHandler::new(Plugins::new(
-                jian_server::builtin_plugins(),
-            ))),
-        );
     let mut runner = AgentRunner::new(models.clone(), executor.clone(), events.clone())
         .with_plugins(jian_server::builtin_plugins());
     if let Some(chat) = chat {
@@ -299,29 +312,32 @@ where
         closing.clone(),
         Backoff::DEFAULT,
     );
-    chat.register(
-        ChannelKind::Whatsapp,
-        Arc::new(|_, store| jian_channel_whatsapp::open(store)),
-    );
-    chat.register(
-        ChannelKind::Telegram,
-        Arc::new(|_, store| {
-            jian_channel_telegram::open(store, jian_channel_telegram::TelegramConfig::default())
-        }),
-    );
-    chat.register(
-        ChannelKind::Discord,
-        Arc::new(|_, store| {
-            jian_channel_discord::open(store, jian_channel_discord::DiscordConfig::default())
-        }),
-    );
-    if let Some(slack_config) = settings.slack.clone() {
+    #[cfg(feature = "channels")]
+    {
         chat.register(
-            ChannelKind::Slack,
-            Arc::new(move |_, store| jian_channel_slack::open(store, slack_config.clone())),
+            ChannelKind::Whatsapp,
+            Arc::new(|_, store| jian_channel_whatsapp::open(store)),
         );
+        chat.register(
+            ChannelKind::Telegram,
+            Arc::new(|_, store| {
+                jian_channel_telegram::open(store, jian_channel_telegram::TelegramConfig::default())
+            }),
+        );
+        chat.register(
+            ChannelKind::Discord,
+            Arc::new(|_, store| {
+                jian_channel_discord::open(store, jian_channel_discord::DiscordConfig::default())
+            }),
+        );
+        if let Some(slack_config) = settings.slack.clone() {
+            chat.register(
+                ChannelKind::Slack,
+                Arc::new(move |_, store| jian_channel_slack::open(store, slack_config.clone())),
+            );
+        }
     }
-    #[cfg(feature = "public-url")]
+    #[cfg(feature = "channel-webhooks")]
     if let Some(url) = &settings.public_url {
         chat.push_through(url.clone());
     }
@@ -347,6 +363,7 @@ where
     let mut state = AppState::new(database.clone(), slots, closing.clone(), settings);
     state.channels = chat;
     let channels = state.channels.clone();
+    #[cfg(feature = "channels")]
     let reconciling = tokio::spawn({
         let (channels, ticking) = (channels.clone(), ticking.clone());
         async move {
@@ -361,6 +378,8 @@ where
             }
         }
     });
+    #[cfg(not(feature = "channels"))]
+    let reconciling = tokio::spawn(async {});
     state.events = events;
     state.hub = hub;
     state.llm = llm;

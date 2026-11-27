@@ -1,8 +1,12 @@
 //! Rows of the store as the protocol shows them, and the delta that says a machine changed.
 
-use jian_protocol::auth::{InviteSendStatus, InviteSummary, MemberRole, MemberSummary};
+#[cfg(feature = "multi-user")]
+use jian_protocol::auth::{InviteSendStatus, InviteSummary};
+use jian_protocol::auth::{MemberRole, MemberSummary};
 use jian_protocol::client::{DeltaPayload, DeviceSummary, MachineStatus, MachineSummary, Topic};
-use jian_store::{Device, Invite, Machine, MachineId, Member, Role, SendStatus, TenantId};
+use jian_store::{Device, Machine, MachineId, Member, Role, TenantId};
+#[cfg(feature = "multi-user")]
+use jian_store::{Invite, SendStatus};
 
 use crate::AppState;
 
@@ -66,6 +70,7 @@ pub(crate) fn role_summary(role: Role) -> MemberRole {
 }
 
 /// The role a client asked for.
+#[cfg(feature = "multi-user")]
 pub(crate) fn role_of(role: MemberRole) -> Role {
     match role {
         MemberRole::Admin => Role::Admin,
@@ -88,6 +93,7 @@ pub(crate) fn member_summary(member: &Member) -> MemberSummary {
 }
 
 /// A pending invitation as an admin lists it: no token, which was shown once.
+#[cfg(feature = "multi-user")]
 pub(crate) fn invite_summary(invite: &Invite) -> InviteSummary {
     InviteSummary {
         id: invite.id.clone(),

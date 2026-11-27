@@ -6,17 +6,57 @@ license.workspace = true
 
 [features]
 # What this build is: an edition, which is only a sum of capabilities (see `jian-server`'s
-# features). The self-hosted one is the default. The desktop app is
-# `--no-default-features --features local` (no public URL, so nothing that needs one compiles)
-# and the Cloud `--no-default-features --features cloud` (no local process). Turning two on is
-# their union, never a conflict.
+# features). The desktop app is `--no-default-features --features local`; the Cloud is
+# `--no-default-features --features cloud`.
 default = ["self-hosted"]
-local = ["jian-server/local"]
-self-hosted = ["jian-server/self-hosted", "public-url"]
-cloud = ["jian-server/cloud", "public-url"]
-# The one capability this binary tests itself (to register the e-mail jobs, which need a link
-# people can open); the editions that have it turn it on beside `jian-server`'s.
-public-url = ["jian-server/public-url"]
+local = ["jian-server/local", "mcp-http", "mcp-stdio"]
+self-hosted = [
+    "jian-server/self-hosted",
+    "mcp-http",
+    "mcp-stdio",
+    "channels",
+    "multi-user",
+    "public-artifacts",
+    "email-login",
+    "email-invitations",
+    "github-login",
+    "github-app",
+    "linear-webhooks",
+    "channel-webhooks",
+    "slack-events-api",
+]
+cloud = [
+    "jian-server/cloud",
+    "mcp-http",
+    "channels",
+    "multi-user",
+    "public-artifacts",
+    "email-login",
+    "email-invitations",
+    "github-login",
+    "github-app",
+    "linear-webhooks",
+    "channel-webhooks",
+    "slack-events-api",
+]
+email-login = ["jian-server/email-login"]
+email-invitations = ["jian-server/email-invitations", "multi-user"]
+multi-user = ["jian-server/multi-user"]
+public-artifacts = ["jian-server/public-artifacts"]
+github-login = ["jian-server/github-login"]
+github-app = ["jian-server/github-app"]
+linear-webhooks = ["jian-server/linear-webhooks"]
+channel-webhooks = ["jian-server/channel-webhooks"]
+slack-events-api = ["jian-server/slack-events-api"]
+channels = [
+    "jian-server/channels",
+    "dep:jian-channel-discord",
+    "dep:jian-channel-slack",
+    "dep:jian-channel-telegram",
+    "dep:jian-channel-whatsapp",
+]
+mcp-http = ["jian-server/mcp-http"]
+mcp-stdio = ["jian-server/mcp-stdio"]
 
 [dependencies]
 axum.workspace = true
@@ -28,10 +68,10 @@ jian-auth.workspace = true
 jian-browser.workspace = true
 jian-exec.workspace = true
 jian-channel-api.workspace = true
-jian-channel-discord.workspace = true
-jian-channel-slack.workspace = true
-jian-channel-telegram.workspace = true
-jian-channel-whatsapp.workspace = true
+jian-channel-discord = { workspace = true, optional = true }
+jian-channel-slack = { workspace = true, optional = true }
+jian-channel-telegram = { workspace = true, optional = true }
+jian-channel-whatsapp = { workspace = true, optional = true }
 jian-import.workspace = true
 jian-mail.workspace = true
 jian-server.workspace = true

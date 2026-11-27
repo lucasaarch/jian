@@ -100,8 +100,8 @@ pub(crate) struct Inner {
     pub(crate) running: Mutex<HashMap<Key, Arc<Live>>>,
     pub(crate) stranger_limits: Mutex<StrangerLimits>,
     /// Where a provider that can push is told to push. Only a build that can be reached from
-    /// outside (`public-url`) has one; any other, or a gateway with no address, polls.
-    #[cfg(feature = "public-url")]
+    /// outside (`channel-webhooks`) has one; any other, or a gateway with no address, polls.
+    #[cfg(feature = "channel-webhooks")]
     public_url: Mutex<Option<crate::PublicUrl>>,
 }
 
@@ -135,7 +135,7 @@ impl ChannelHub {
                 openers: RwLock::default(),
                 running: Mutex::default(),
                 stranger_limits: Mutex::default(),
-                #[cfg(feature = "public-url")]
+                #[cfg(feature = "channel-webhooks")]
                 public_url: Mutex::new(None),
             }),
         }
@@ -143,7 +143,7 @@ impl ChannelHub {
 
     /// Tells the hub the gateway's public address, so a provider that can push is asked to
     /// deliver there instead of being polled. Accounts connected after this call.
-    #[cfg(feature = "public-url")]
+    #[cfg(feature = "channel-webhooks")]
     pub fn push_through(&self, url: crate::PublicUrl) {
         *locked(&self.inner.public_url) = Some(url);
     }
@@ -172,7 +172,7 @@ impl ChannelHub {
 
     /// Delivers a webhook already authenticated by the public ingress and queued for this
     /// tenant's slot. Only the durable provider-webhook handler calls this path.
-    #[cfg(feature = "public-url")]
+    #[cfg(feature = "slack-events-api")]
     pub(crate) async fn push_verified(
         &self,
         tenant: &TenantId,
@@ -242,7 +242,7 @@ impl ChannelHub {
             return Err(HubError::NotServed);
         }
         let channel = self.opener(&account.provider)?(account, self.session(ctx, account));
-        #[cfg(feature = "public-url")]
+        #[cfg(feature = "channel-webhooks")]
         if let Some(url) = locked(&self.inner.public_url).as_ref().and_then(|base| {
             match account.provider.as_str() {
                 "slack" => Some(base.slack_events()),

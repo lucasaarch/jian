@@ -5,15 +5,15 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 mod accounts;
-// What needs a link people can open is tested only in a build that has it (`editions` shows the
-// build without it has none of it).
-#[cfg(feature = "public-url")]
+// Features that expose public links are exercised in builds that include their specific capability.
+#[cfg(feature = "public-artifacts")]
 mod artifact_export;
-#[cfg(feature = "public-url")]
+#[cfg(feature = "public-artifacts")]
 mod artifact_sharing;
 mod artifacts;
 mod channel_answer;
 mod channel_hub;
+#[cfg(feature = "channel-webhooks")]
 mod channel_push;
 mod channels;
 mod codex;
@@ -21,18 +21,19 @@ mod connectors;
 mod editions;
 mod github;
 mod github_items;
-#[cfg(all(feature = "public-url", not(feature = "multi-tenant")))]
+#[cfg(all(feature = "github-app", not(feature = "multi-tenant")))]
 mod github_items_events;
-#[cfg(all(feature = "public-url", not(feature = "multi-tenant")))]
+#[cfg(all(feature = "github-app", not(feature = "multi-tenant")))]
 mod github_webhook;
-#[cfg(feature = "public-url")]
+#[cfg(feature = "email-invitations")]
 mod invites;
 mod isolation;
 mod linear;
-#[cfg(all(feature = "public-url", not(feature = "multi-tenant")))]
+#[cfg(all(feature = "linear-webhooks", not(feature = "multi-tenant")))]
 mod linear_webhook;
 mod machine_files;
 mod machines;
+#[cfg(any(feature = "mcp-http", feature = "mcp-stdio"))]
 mod mcp_servers;
 mod memories;
 mod people;
@@ -40,10 +41,14 @@ mod projects;
 mod providers;
 mod runs;
 mod schedules;
-#[cfg(feature = "public-url")]
+#[cfg(all(
+    feature = "github-login",
+    feature = "email-login",
+    feature = "email-invitations"
+))]
 mod sign_in;
 mod skills;
-#[cfg(feature = "public-url")]
+#[cfg(feature = "channels")]
 mod slack;
 mod slots;
 mod support;

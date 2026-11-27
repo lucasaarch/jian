@@ -23,7 +23,7 @@ use jian_core::{MessagePart, MessageParts, ProviderKind, ThreadKind, Visibility}
 use jian_exec::LocalExecutor;
 use jian_llm::{EventStream, LlmError, Provider, Request as LlmRequest};
 use jian_server::{
-    AgentRunner, JobContext, JobHandler, MemoryEventBus, Model, ModelSource, RUN_KIND,
+    AgentRunner, JobContext, JobHandler, MemoryEventBus, Model, ModelSource, Plugins, RUN_KIND,
     builtin_plugins,
 };
 use jian_store::secrets::Secret;
@@ -361,7 +361,9 @@ async fn git_runs_with_the_token_on_the_one_command_and_refuses_the_wrong_reposi
         Arc::new(LocalExecutor::new(&work)),
         Arc::new(MemoryEventBus::new()),
     )
-    .with_plugins(builtin_plugins());
+    // This fixture deliberately runs its fake GitHub on loopback; Cloud's public-only egress is
+    // covered separately in `outbound.rs`.
+    .with_plugin_set(Plugins::in_edition(builtin_plugins(), true));
     let job = test
         .db
         .enqueue_job(&side.ctx, NewJob::new(RUN_KIND, json!({ "runId": run.id })))

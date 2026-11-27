@@ -22,8 +22,7 @@ use super::accounts::{open_settings, start};
 use super::github::{
     DESCRIPTION, FIRST_HEAD, KEY, TITLE, agent, call, inbox, installation, serve_with,
 };
-use super::invites::stop;
-use super::support::Gateway;
+use super::support::{Gateway, stop};
 
 pub(super) const SECRET_A: &str = "whsec-synthetic";
 const SECRET_B: &str = "whsec-of-the-other-workspace";

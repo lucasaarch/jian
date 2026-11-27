@@ -7,7 +7,7 @@
 
 use std::net::SocketAddr;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use jian_plugin_linear::webhook::sign;
 use jian_server::{
@@ -19,15 +19,21 @@ use tokio::net::TcpStream;
 
 use super::accounts::start;
 use super::github::{agent, call, inbox};
-use super::github_webhook::until_inbox;
-use super::invites::stop;
 use super::linear::{
     DESCRIPTION, ISSUE, ORG, OTHER_ISSUE, TITLE, WEBHOOK_SECRET, public_settings, serve, signed_in,
     signed_in_with,
 };
-use super::support::Gateway;
+use super::support::{Gateway, stop};
 
 const SECRET_B: &str = "lin_whsec_of_the_other_workspace";
+
+async fn until_inbox(gateway: &Gateway, side: &jian_testkit::Side, agent: &str, count: usize) {
+    let until = Instant::now() + Duration::from_secs(15);
+    while inbox(gateway, side, agent).await.len() < count {
+        assert!(Instant::now() < until, "the events never came");
+        tokio::time::sleep(Duration::from_millis(40)).await;
+    }
+}
 
 fn registry() -> JobRegistry {
     JobRegistry::new().register(

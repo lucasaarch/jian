@@ -325,7 +325,8 @@ async fn the_embedded_migrations_apply_to_the_platform_and_to_each_tenant() {
         .await,
         [
             "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16",
-            "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28", "29", "30"
+            "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28", "29", "30",
+            "31"
         ]
     );
     // After a restart the tenant is migrated again with nothing to do.
@@ -418,7 +419,8 @@ async fn tool_approval_is_dropped_and_a_run_that_waited_on_one_ends_failed() {
         .map(|entry| entry.unwrap().file_name().into_string().unwrap())
         .collect::<Vec<_>>();
     shipped.sort();
-    // The release before: everything up to 0016 (0017 is under test; 0018 to 0030 come after).
+    // The release before: everything up to 0016 (0017 is under test; 0018 to 0031 come after).
+    assert!(shipped.pop().unwrap().starts_with("0031_"));
     assert!(shipped.pop().unwrap().starts_with("0030_"));
     assert!(shipped.pop().unwrap().starts_with("0029_"));
     assert!(shipped.pop().unwrap().starts_with("0028_"));
@@ -525,7 +527,8 @@ async fn proactivity_defaults_to_suggest_and_an_hourly_limit_resets_except_off()
         .map(|entry| entry.unwrap().file_name().into_string().unwrap())
         .collect::<Vec<_>>();
     shipped.sort();
-    // The release before: everything up to 0018 (0019 to 0030 come after it).
+    // The release before: everything up to 0018 (0019 to 0031 come after it).
+    assert!(shipped.pop().unwrap().starts_with("0031_"));
     assert!(shipped.pop().unwrap().starts_with("0030_"));
     assert!(shipped.pop().unwrap().starts_with("0029_"));
     assert!(shipped.pop().unwrap().starts_with("0028_"));
@@ -603,7 +606,9 @@ async fn what_the_owner_decided_about_a_contact_becomes_a_person_and_a_pending_o
         .map(|entry| entry.unwrap().file_name().into_string().unwrap())
         .collect::<Vec<_>>();
     shipped.sort();
-    // The release before: everything up to 0029 (0030 is under test).
+    // The release before: everything up to 0029 (0030 is under test; 0031 came later).
+    let later = shipped.pop().unwrap();
+    assert!(later.starts_with("0031_"), "{later}");
     let last = shipped.pop().unwrap();
     assert!(last.starts_with("0030_"), "{last}");
     let before = shipped

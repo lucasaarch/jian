@@ -22,7 +22,7 @@
 //!
 //! # Editions
 //!
-//! Without `public-url` the plugin has no webhook; everything else works, and the sign-in's
+//! Without `webhooks` the plugin has no webhook; everything else works, and the sign-in's
 //! callback can be a loopback address. With it Linear can call back: `webhook` believes a
 //! delivery only if its signature is right and its timestamp is recent, and turns it into what an
 //! agent is told.
@@ -35,7 +35,7 @@ pub mod ids;
 pub mod oauth;
 pub mod reference;
 pub mod tools;
-#[cfg(feature = "public-url")]
+#[cfg(feature = "webhooks")]
 pub mod webhook;
 
 use futures_util::future::BoxFuture;

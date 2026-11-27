@@ -8,7 +8,7 @@
 use std::collections::VecDeque;
 use std::net::SocketAddr;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use futures_util::{SinkExt, StreamExt};
 use jian_protocol::client::{
@@ -24,7 +24,8 @@ use jian_remote::state::StateFile;
 use jian_remote::transport::WsTransport;
 use jian_remote::worker::{Exit, Timings, Worker, WorkerConfig};
 use jian_server::{
-    AppState, ManualClock, MemoryEventBus, MemoryRateLimiter, NoRunQueue, Settings, SlotKeeper,
+    AppState, JobRunner, ManualClock, MemoryEventBus, MemoryRateLimiter, NoRunQueue, Settings,
+    SlotKeeper,
 };
 use jian_store::{Database, DatabaseSource, DatabaseUrl, SlotOptions, TenantCtx, TenantId};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -192,6 +193,11 @@ impl Gateway {
         self.state.slots.clone()
     }
 
+    /// The instance whose leases the gateway holds, for tests that claim its queued jobs.
+    pub fn instance(&self) -> &jian_store::InstanceId {
+        self.keeper.as_ref().unwrap().instance()
+    }
+
     /// The first half of a SIGTERM drain: stops serving, so every socket is told to reconnect.
     pub async fn begin_drain(&mut self) {
         self.keeper.as_mut().unwrap().begin_drain().await;
@@ -249,6 +255,13 @@ impl Gateway {
             home.remove().await;
         }
     }
+}
+
+pub async fn stop(gateway: Gateway, runner: JobRunner) {
+    runner
+        .shutdown(Instant::now() + Duration::from_secs(5))
+        .await;
+    gateway.stop().await;
 }
 
 /// Opens a WebSocket at `path`, with the token as a bearer when there is one. A refusal before

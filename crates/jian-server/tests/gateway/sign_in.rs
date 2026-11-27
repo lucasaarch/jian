@@ -30,8 +30,8 @@ use sha2::{Digest as _, Sha256};
 use tokio::net::TcpListener;
 
 use super::accounts::{open_settings, start};
-use super::invites::{Outbox, stop};
-use super::support::{Gateway, http_get, http_post, http_request};
+use super::invites::Outbox;
+use super::support::{Gateway, http_get, http_post, http_request, stop};
 
 const CLIENT_ID: &str = "client-1";
 const CLIENT_SECRET: &str = "test-secret-value";

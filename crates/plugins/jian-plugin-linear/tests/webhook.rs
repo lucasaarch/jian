@@ -1,6 +1,6 @@
 //! Believing a Linear delivery: the signature, the timestamp window, and what an agent is told.
 
-#![cfg(feature = "public-url")]
+#![cfg(feature = "webhooks")]
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use jian_plugin_linear::webhook::{TIMESTAMP_WINDOW_MS, fresh, translate, verify};

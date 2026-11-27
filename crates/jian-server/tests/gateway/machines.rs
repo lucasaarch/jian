@@ -86,22 +86,26 @@ async fn an_agents_machine_is_chosen_by_its_manager_and_is_out_of_reach_of_anoth
     let admin = tenants.a.admin_session.as_str();
     let peer = tenants.a.peer_session.as_str();
 
-    // No choice yet: the default, and the deploy says the gateway's machine is allowed.
+    // No choice yet: report whether this build permits the gateway's own machine.
     let (status, view) = call(&gateway, "GET", &path, peer, None).await;
     assert_eq!(status, 200, "{view}");
     assert_eq!(view["target"], Value::Null);
-    assert_eq!(view["gatewayAllowed"], true);
+    assert_eq!(view["gatewayAllowed"], cfg!(feature = "local-process"));
 
-    // Only a manager chooses.
+    // Only a manager chooses, and a build without local-process refuses the gateway target.
     let gateway_choice = json!({ "target": "gateway" });
     let (status, _) = call(&gateway, "PUT", &path, peer, Some(gateway_choice.clone())).await;
     assert_eq!(status, 403);
     let (status, view) = call(&gateway, "PUT", &path, admin, Some(gateway_choice)).await;
-    assert_eq!(
-        (status, &view["target"]),
-        (200, &json!("gateway")),
-        "{view}"
-    );
+    if cfg!(feature = "local-process") {
+        assert_eq!(
+            (status, &view["target"]),
+            (200, &json!("gateway")),
+            "{view}"
+        );
+    } else {
+        assert_eq!(status, 400, "{view}");
+    }
 
     // A machine of the workspace, and nothing in another shape or another workspace's.
     let own = json!({ "target": "machine", "machineId": tenants.a.machine.id });
@@ -235,13 +239,22 @@ async fn the_gateways_own_machine_runs_only_where_the_deploy_allows_it() {
         &gateway.state.settings,
         work.path(),
     );
-    let machine = allowed.open(&scope(a, &agent)).await.unwrap();
-    machine.write_file("here.txt", "x").await.unwrap();
-    assert_eq!(machine.read_file("here.txt").await.unwrap(), "x");
-    let listed = machine.shell("echo ok", 20_000).await.unwrap();
-    assert_eq!(listed.exit_code, Some(0));
     let folder = work.path().join(a.id.as_str()).join(agent.as_str());
-    assert!(folder.join("here.txt").exists());
+    if cfg!(feature = "local-process") {
+        let machine = allowed.open(&scope(a, &agent)).await.unwrap();
+        machine.write_file("here.txt", "x").await.unwrap();
+        assert_eq!(machine.read_file("here.txt").await.unwrap(), "x");
+        let listed = machine.shell("echo ok", 20_000).await.unwrap();
+        assert_eq!(listed.exit_code, Some(0));
+        assert!(folder.join("here.txt").exists());
+    } else {
+        assert!(
+            open_error(&allowed, &scope(a, &agent))
+                .await
+                .contains("no machine")
+        );
+        assert_eq!(std::fs::read_dir(work.path()).unwrap().count(), 0);
+    }
 
     // Forbidden (the Cloud): the default is no machine, and a stored "gateway" choice runs
     // nothing there: no folder is even made.

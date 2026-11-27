@@ -228,6 +228,7 @@ impl Plugins {
     /// # Errors
     ///
     /// A sentence for a person, with no secret in it.
+    #[cfg(feature = "mcp-http")]
     pub async fn login_start(
         &self,
         db: &Database,
@@ -251,6 +252,7 @@ impl Plugins {
     /// # Errors
     ///
     /// A sentence for a person, with no secret in it.
+    #[cfg(feature = "mcp-http")]
     pub async fn login_finish(
         &self,
         db: &Database,
@@ -342,7 +344,7 @@ impl Plugins {
     /// # Errors
     ///
     /// A sentence for a person, with no secret in it.
-    #[cfg(feature = "public-url")]
+    #[cfg(feature = "github-app")]
     pub async fn github_app(
         &self,
         db: &Database,
@@ -367,7 +369,7 @@ impl Plugins {
     /// # Errors
     ///
     /// A sentence for a person, with no secret in it.
-    #[cfg(feature = "public-url")]
+    #[cfg(feature = "github-app")]
     pub async fn github_set_webhook(
         &self,
         db: &Database,
@@ -397,7 +399,7 @@ impl Plugins {
     /// # Errors
     ///
     /// A sentence for a person, with no secret in it.
-    #[cfg(feature = "public-url")]
+    #[cfg(feature = "github-app")]
     pub async fn github_installation_login(
         &self,
         db: &Database,
@@ -437,6 +439,7 @@ impl Plugins {
         }
     }
 
+    #[cfg(feature = "mcp-http")]
     fn mcp_host<'a>(
         &'a self,
         db: &'a Database,

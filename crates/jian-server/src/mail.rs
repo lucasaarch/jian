@@ -13,13 +13,13 @@
 
 use std::sync::Arc;
 
-#[cfg(feature = "public-url")]
+#[cfg(any(feature = "email-login", feature = "email-invitations"))]
 use jian_mail::ResendMailer;
 use jian_mail::{DEFAULT_BASE_URL, Mailbox, Mailer};
 use jian_store::secrets::Secret;
 use jian_store::{Database, StoreError, TenantCtx};
 
-#[cfg(feature = "public-url")]
+#[cfg(any(feature = "email-login", feature = "email-invitations"))]
 use crate::Settings;
 
 /// The vault entry of a tenant's Resend API key.
@@ -58,8 +58,8 @@ impl Default for MailConfig {
 }
 
 /// A mailer and the sender to put on its messages. Only what e-mails a link needs it, so only a
-/// build with `public-url` has it.
-#[cfg(feature = "public-url")]
+/// build with an e-mail link capability has it.
+#[cfg(any(feature = "email-login", feature = "email-invitations"))]
 pub(crate) struct Sending {
     pub(crate) mailer: Arc<dyn Mailer>,
     pub(crate) from: Mailbox,
@@ -115,7 +115,7 @@ pub(crate) async fn discard_tenant_mail(db: &Database, ctx: &TenantCtx) -> Resul
 
 /// The mailer for this tenant, or `None` when nothing can send. A key the tenant stored that
 /// cannot be a header is also `None`: it would only ever be refused.
-#[cfg(feature = "public-url")]
+#[cfg(any(feature = "email-login", feature = "email-invitations"))]
 pub(crate) async fn resolve(
     settings: &Settings,
     db: &Database,

@@ -16,26 +16,28 @@
 //! unauthenticated route has to find a tenant from a query string.
 
 use axum::Json;
-use axum::extract::{Path, State};
+#[cfg(feature = "mcp-http")]
+use axum::extract::Path;
+use axum::extract::State;
 use axum::http::StatusCode;
 use jian_plugin_mcp::MCP_ID;
 use jian_plugin_mcp::account::{NewServer, build};
 use jian_plugin_mcp::config::Transport;
 use jian_protocol::connectors::{ConnectorAccountView, ConnectorScopeView};
-use jian_protocol::mcp::{
-    CreateMcpServerRequest, FinishMcpLoginRequest, McpLoginStart, McpTransportView,
-    StartMcpLoginRequest,
-};
+use jian_protocol::mcp::{CreateMcpServerRequest, McpTransportView};
+#[cfg(feature = "mcp-http")]
+use jian_protocol::mcp::{FinishMcpLoginRequest, McpLoginStart, StartMcpLoginRequest};
 use jian_store::secrets::Secret;
-use jian_store::{
-    AgentId, ConnectorAccount, ConnectorAccountId, ConnectorScope, NewConnectorAccount, TenantCtx,
-    can_manage_connector,
-};
+use jian_store::{AgentId, ConnectorScope, NewConnectorAccount};
+#[cfg(feature = "mcp-http")]
+use jian_store::{ConnectorAccount, ConnectorAccountId, TenantCtx, can_manage_connector};
 
 use crate::AppState;
 use crate::auth::Principal;
 use crate::connector_accounts::view;
-use crate::http::{Refusal, forbidden, not_found, refuse, tenant_ctx};
+use crate::http::{Refusal, refuse, tenant_ctx};
+#[cfg(feature = "mcp-http")]
+use crate::http::{forbidden, not_found};
 use crate::workspace::{failure, viewer};
 
 fn bad(code: &str, why: &str) -> Refusal {
@@ -108,6 +110,7 @@ pub(crate) async fn create(
 
 /// The MCP server `id`, for a member who may manage it (its creator or an admin). One they do
 /// not see, or that is not an MCP server, is a 404.
+#[cfg(feature = "mcp-http")]
 async fn managed(
     app: &AppState,
     principal: &Principal,
@@ -130,6 +133,7 @@ async fn managed(
 
 /// `POST /v1/mcp-servers/{id}/login`: starts signing in to an OAuth server and returns the
 /// address to open.
+#[cfg(feature = "mcp-http")]
 pub(crate) async fn login_start(
     State(app): State<AppState>,
     principal: Principal,
@@ -147,6 +151,7 @@ pub(crate) async fn login_start(
 
 /// `POST /v1/mcp-servers/{id}/login/finish`: trades the code the authorization server sent back
 /// for tokens, then tries the server with them.
+#[cfg(feature = "mcp-http")]
 pub(crate) async fn login_finish(
     State(app): State<AppState>,
     principal: Principal,

@@ -5,46 +5,46 @@
 //! matching account so the slot owner can hand it to that account's channel.
 
 use axum::Json;
-#[cfg(feature = "public-url")]
+#[cfg(feature = "slack-events-api")]
 use axum::body::Bytes;
 use axum::extract::{Path, Query, State};
-#[cfg(feature = "public-url")]
+#[cfg(feature = "slack-events-api")]
 use axum::http::HeaderMap;
 use axum::http::StatusCode;
-#[cfg(feature = "public-url")]
+#[cfg(feature = "slack-events-api")]
 use axum::response::{IntoResponse, Response};
 use base64::Engine as _;
-#[cfg(feature = "public-url")]
+#[cfg(feature = "slack-events-api")]
 use futures_util::future::BoxFuture;
-#[cfg(feature = "public-url")]
+#[cfg(feature = "slack-events-api")]
 use jian_channel_api::ChannelError;
 use jian_channel_api::PairingMethod;
 use jian_store::ChannelAccountId;
 use jian_store::TenantId;
-#[cfg(feature = "public-url")]
+#[cfg(feature = "slack-events-api")]
 use jian_store::{ChannelStatus, NewJob};
 use serde::{Deserialize, Serialize};
-#[cfg(feature = "public-url")]
+#[cfg(feature = "slack-events-api")]
 use serde_json::{Value, json};
 
 use crate::AppState;
 use crate::auth::Principal;
 use crate::channel_hub::HubError;
-#[cfg(feature = "public-url")]
+#[cfg(feature = "slack-events-api")]
 use crate::http::internal;
 use crate::http::{Refusal, forbidden, not_found, refuse};
 use crate::workspace::failure;
-#[cfg(feature = "public-url")]
+#[cfg(feature = "slack-events-api")]
 use crate::{ChannelHub, JobContext, JobError, JobHandler};
 
 /// A durable event queued for the tenant's slot owner.
-#[cfg(feature = "public-url")]
+#[cfg(feature = "slack-events-api")]
 pub const SLACK_EVENT_KIND: &str = "slack.event";
 
 const OAUTH_STATE_KEY: &str = "slack_oauth_state";
-#[cfg(feature = "public-url")]
+#[cfg(feature = "slack-events-api")]
 const MAX_EVENT_BYTES: usize = 60 * 1024;
-#[cfg(feature = "public-url")]
+#[cfg(feature = "slack-events-api")]
 pub(crate) const MAX_SLACK_BODY: usize = 1024 * 1024;
 
 #[derive(Serialize)]
@@ -271,7 +271,7 @@ pub(crate) async fn oauth_callback(
 }
 
 /// `POST /v1/public/slack/events`: checks the Slack signature and queues per-account deliveries.
-#[cfg(feature = "public-url")]
+#[cfg(feature = "slack-events-api")]
 pub(crate) async fn events(
     State(app): State<AppState>,
     headers: HeaderMap,
@@ -371,13 +371,13 @@ pub(crate) async fn events(
 }
 
 /// Handles queued signed events on the slot owner; provider parsing remains in its channel crate.
-#[cfg(feature = "public-url")]
+#[cfg(feature = "slack-events-api")]
 #[derive(Clone)]
 pub struct SlackEventHandler {
     channels: ChannelHub,
 }
 
-#[cfg(feature = "public-url")]
+#[cfg(feature = "slack-events-api")]
 impl SlackEventHandler {
     /// A handler dispatching accepted Events API deliveries to their workspace channels.
     #[must_use]
@@ -426,14 +426,14 @@ impl SlackEventHandler {
     }
 }
 
-#[cfg(feature = "public-url")]
+#[cfg(feature = "slack-events-api")]
 impl JobHandler for SlackEventHandler {
     fn handle(&self, context: JobContext) -> BoxFuture<'_, Result<(), JobError>> {
         Box::pin(self.run(context))
     }
 }
 
-#[cfg(feature = "public-url")]
+#[cfg(feature = "slack-events-api")]
 fn unauthorized() -> Refusal {
     refuse(
         StatusCode::UNAUTHORIZED,
@@ -442,7 +442,7 @@ fn unauthorized() -> Refusal {
     )
 }
 
-#[cfg(feature = "public-url")]
+#[cfg(feature = "slack-events-api")]
 fn valid_team_id(value: &str) -> bool {
     !value.is_empty()
         && value.len() <= 32
@@ -450,7 +450,7 @@ fn valid_team_id(value: &str) -> bool {
         && matches!(value.as_bytes().first().copied(), Some(b'T' | b'E'))
 }
 
-#[cfg(feature = "public-url")]
+#[cfg(feature = "slack-events-api")]
 fn valid_event_id(value: &str) -> bool {
     !value.is_empty()
         && value.len() <= 128
@@ -471,13 +471,13 @@ fn same_state(expected: &str, provided: &str) -> bool {
     .is_ok()
 }
 
-#[cfg(feature = "public-url")]
+#[cfg(feature = "slack-events-api")]
 #[derive(Serialize)]
 struct Challenge {
     challenge: String,
 }
 
-#[cfg(feature = "public-url")]
+#[cfg(feature = "slack-events-api")]
 fn challenge_response(challenge: &str) -> Challenge {
     Challenge {
         challenge: challenge.to_owned(),

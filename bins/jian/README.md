@@ -78,6 +78,29 @@ line added it, or because an invitation was accepted. A session opens one worksp
 self-hosted install has one workspace; the Cloud has many, and an account may be in several.
 Agents, conversations and memories are not a member's yet.
 
+## Cargo capabilities
+
+`jian` profiles compose capabilities; `public-url` is configuration, not a Cargo feature. The
+local profile includes `mcp-http` and `mcp-stdio`, but not channels, extra users, public artifact
+links, e-mail sign-in, GitHub sign-in/App, or webhook ingress. Server profiles add these
+capabilities explicitly:
+
+| Profile | Capabilities |
+| --- | --- |
+| `local` | `mcp-http`, `mcp-stdio`, `local-process` |
+| `self-hosted` | `local` plus `channels`, `multi-user`, `public-artifacts`, `email-login`, `email-invitations`, `github-login`, `github-app`, `linear-webhooks`, `channel-webhooks`, `slack-events-api` |
+| `cloud` | Server capabilities except `mcp-stdio` and `local-process`; adds `multi-tenant` |
+
+`channels` controls channel providers and their authenticated routes; `channel-webhooks` and
+`slack-events-api` independently add inbound HTTP delivery. `mcp-http` is outbound MCP
+Streamable HTTP, while `mcp-stdio` runs a command on the gateway machine. The `--public-url`
+setting supplies a canonical external address to whichever enabled capability needs links or
+callbacks; it does not enable those capabilities.
+
+The user and e-mail routes below require `multi-user`, `email-login`, or `email-invitations` as
+appropriate, and are absent from the local profile. This reference describes the self-hosted
+profile unless a route or flag is identified as capability-gated.
+
 The first admin comes from the command line, because there is nobody to ask yet. The password is
 read from standard input so it is not in the process list or the shell history, and with the
 embedded Postgres the gateway must be stopped first (the command starts that database itself),

@@ -1,5 +1,5 @@
 //! Downloads of an artifact's latest version: `GET /v1/artifacts/{id}/export?format=` for a
-//! member, and, with `public-url`, `GET /v1/public/artifacts/{token}/export?format=` for whoever
+//! member, and, with `public-artifacts`, `GET /v1/public/artifacts/{token}/export?format=` for whoever
 //! its link opens.
 //!
 //! Who may download is who may read, and nothing else: the member route has the rules of
@@ -35,10 +35,10 @@ use serde::Deserialize;
 
 use crate::AppState;
 use crate::artifact_office::{docx, pptx, xlsx};
-#[cfg(feature = "public-url")]
+#[cfg(feature = "public-artifacts")]
 use crate::artifact_public::readable;
 use crate::auth::Principal;
-#[cfg(feature = "public-url")]
+#[cfg(feature = "public-artifacts")]
 use crate::auth::{Address, AuthRejection};
 use crate::http::{Refusal, not_found, refuse, tenant_ctx};
 use crate::workspace::{failure, viewer};
@@ -297,7 +297,7 @@ pub(crate) async fn export(
 }
 
 /// `GET /v1/public/artifacts/{token}/export?format=`: for whoever the link opens.
-#[cfg(feature = "public-url")]
+#[cfg(feature = "public-artifacts")]
 pub(crate) async fn export_public(
     State(app): State<AppState>,
     Address(from): Address,

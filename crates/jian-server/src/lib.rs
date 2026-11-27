@@ -64,9 +64,9 @@ mod artifact_events;
 mod artifact_export;
 mod artifact_folders;
 mod artifact_office;
-#[cfg(feature = "public-url")]
+#[cfg(feature = "public-artifacts")]
 mod artifact_pass;
-#[cfg(feature = "public-url")]
+#[cfg(feature = "public-artifacts")]
 mod artifact_public;
 mod artifact_share;
 mod artifacts;
@@ -75,8 +75,9 @@ mod auto_continue;
 mod browser_tools;
 mod channel_hub;
 mod channel_intake;
-#[cfg(feature = "public-url")]
+#[cfg(feature = "channel-webhooks")]
 mod channel_push;
+#[cfg(feature = "channels")]
 mod channel_routes;
 mod channel_session;
 mod client_ws;
@@ -85,31 +86,36 @@ mod compact_job;
 mod connector_accounts;
 mod events;
 mod github;
-#[cfg(feature = "public-url")]
+#[cfg(feature = "github-app")]
 mod github_app;
 mod github_git;
 mod github_items;
 mod github_review;
-#[cfg(feature = "public-url")]
+#[cfg(feature = "github-app")]
 mod github_webhook;
 mod guard;
 mod http;
 mod hub;
-#[cfg(feature = "public-url")]
+#[cfg(feature = "email-invitations")]
 mod invite_job;
+#[cfg(feature = "multi-user")]
 mod invites;
 mod item_threads;
 mod jobs;
 mod linear;
-#[cfg(feature = "public-url")]
+#[cfg(feature = "linear-webhooks")]
 mod linear_webhook;
 mod llm_access;
-#[cfg(feature = "public-url")]
+#[cfg(feature = "email-login")]
 mod login_link_job;
 mod machine_exec;
+#[cfg(any(feature = "email-login", feature = "email-invitations"))]
 mod mail;
+#[cfg(any(feature = "email-login", feature = "email-invitations"))]
 mod mail_settings;
+#[cfg(any(feature = "mcp-http", feature = "mcp-stdio"))]
 mod mcp_servers;
+#[cfg(feature = "multi-user")]
 mod members;
 mod memories;
 mod objectives;
@@ -129,8 +135,10 @@ mod runs;
 mod schedule_job;
 mod schedule_run_job;
 mod schedules;
+#[cfg(any(feature = "email-login", feature = "github-login"))]
 mod sign_in;
 mod skills;
+#[cfg(feature = "channels")]
 mod slack;
 mod slots;
 mod subagents;
@@ -166,19 +174,20 @@ pub use channel_intake::{
 };
 pub use compact_job::{Model, ModelSource, ThreadCompactor};
 pub use events::{BUFFER_DELTAS, EventBus, MemoryEventBus, Scope, Subscription};
-#[cfg(feature = "public-url")]
+#[cfg(feature = "github-app")]
 pub use github_webhook::{GITHUB_WEBHOOK_KIND, GithubWebhookHandler};
 pub use hub::{DispatchError, HubCommand, MachineHub};
-#[cfg(feature = "public-url")]
+#[cfg(feature = "email-invitations")]
 pub use invite_job::{INVITE_SEND_KIND, InviteSender};
 pub use jian_runtime::THREAD_COMPACT_KIND;
 pub use jobs::{JobContext, JobError, JobHandler, JobOptions, JobRegistry, JobRequeue, JobRunner};
-#[cfg(feature = "public-url")]
+#[cfg(feature = "linear-webhooks")]
 pub use linear_webhook::{LINEAR_WEBHOOK_KIND, LinearWebhookHandler};
 pub use llm_access::{LlmAccess, PendingLogins};
-#[cfg(feature = "public-url")]
+#[cfg(feature = "email-login")]
 pub use login_link_job::{LOGIN_LINK_SEND_KIND, LoginLinkSender};
 pub use machine_exec::AgentMachines;
+#[cfg(any(feature = "email-login", feature = "email-invitations"))]
 pub use mail::{DeployMail, MailConfig};
 pub use people_tools::{TELL_CREATOR, people_tools, stranger_tools};
 pub use plugins::{Plugins, ServerHost, builtin_plugins};
@@ -187,7 +196,7 @@ pub use rate::{Clock, Limit, ManualClock, MemoryRateLimiter, RateLimiter, System
 pub use run_job::{AgentRunner, RUN_KIND};
 pub use schedule_job::{SCHEDULE_FIRE_KIND, ScheduleFirer, run_ticker, tick};
 pub use schedule_run_job::{SCHEDULE_RUN_KIND, ScheduleRunner, dispatch_tick};
-#[cfg(feature = "public-url")]
+#[cfg(feature = "slack-events-api")]
 pub use slack::{SLACK_EVENT_KIND, SlackEventHandler};
 pub use slots::{DrainReport, NoRunQueue, RunRequeue, SlotKeeper, SlotOwnership};
 pub use wake_job::{AGENT_WAKE_KIND, AgentWaker, NowMs, SETTLE_MS, round_tick, tick as wake_tick};
@@ -200,29 +209,47 @@ pub const ROUTES: &[&str] = &[
     "POST /v1/auth/login (no token; the password sign-in must be on)",
     "POST /v1/auth/logout (a session)",
     "POST /v1/auth/password (a session)",
+    #[cfg(feature = "multi-user")]
     "POST /v1/auth/invite/accept (no token; the password sign-in must be on)",
+    #[cfg(feature = "github-login")]
     "POST /v1/auth/github/start (no token; GitHub sign-in must be on)",
+    #[cfg(feature = "github-login")]
     "POST /v1/auth/github/callback (no token; GitHub sign-in must be on)",
+    #[cfg(feature = "github-login")]
     "GET /v1/auth/github (a session; GitHub sign-in must be on)",
+    #[cfg(feature = "github-login")]
     "DELETE /v1/auth/github (a session; GitHub sign-in must be on)",
+    #[cfg(feature = "github-login")]
     "POST /v1/auth/github/link (a session; GitHub sign-in must be on)",
+    #[cfg(feature = "github-login")]
     "POST /v1/auth/github/link/complete (a session; GitHub sign-in must be on)",
-    #[cfg(feature = "public-url")]
+    #[cfg(feature = "email-login")]
     "POST /v1/auth/magic-link (no token; the e-mailed link must be on)",
-    #[cfg(feature = "public-url")]
+    #[cfg(feature = "email-login")]
     "POST /v1/auth/magic-link/redeem (no token; the e-mailed link must be on)",
+    #[cfg(feature = "multi-user")]
     "GET /v1/members (an admin)",
+    #[cfg(feature = "multi-user")]
     "POST /v1/members (an admin)",
+    #[cfg(feature = "multi-user")]
     "POST /v1/members/{account_id}/disable (an admin)",
+    #[cfg(feature = "multi-user")]
     "POST /v1/members/{account_id}/reset-password (an admin)",
+    #[cfg(feature = "multi-user")]
     "GET /v1/invites (an admin)",
+    #[cfg(feature = "multi-user")]
     "POST /v1/invites (an admin)",
+    #[cfg(feature = "multi-user")]
     "POST /v1/invites/{id}/revoke (an admin)",
+    #[cfg(feature = "multi-user")]
     "POST /v1/invites/{id}/link (an admin)",
-    #[cfg(feature = "public-url")]
+    #[cfg(feature = "email-invitations")]
     "POST /v1/invites/{id}/resend (an admin)",
+    #[cfg(any(feature = "email-login", feature = "email-invitations"))]
     "GET /v1/settings/mail (an admin)",
+    #[cfg(any(feature = "email-login", feature = "email-invitations"))]
     "PUT /v1/settings/mail (an admin)",
+    #[cfg(any(feature = "email-login", feature = "email-invitations"))]
     "DELETE /v1/settings/mail (an admin)",
     "GET /v1/providers (an admin)",
     "POST /v1/providers (an admin)",
@@ -257,31 +284,34 @@ pub const ROUTES: &[&str] = &[
     "PUT /v1/github/installations/{id}/review-agent (its creator or an admin; an agent they see)",
     "POST /v1/github/threads (a member who sees the installation and the agent)",
     "GET /v1/github/threads (a member who sees the installation; only threads they are in)",
-    #[cfg(feature = "public-url")]
+    #[cfg(feature = "github-app")]
     "POST /v1/github/apps/manifest (a member)",
-    #[cfg(feature = "public-url")]
+    #[cfg(feature = "github-app")]
     "POST /v1/github/apps (a member)",
-    #[cfg(feature = "public-url")]
+    #[cfg(feature = "github-app")]
     "GET /v1/github/apps/{id} (a member who sees it)",
-    #[cfg(feature = "public-url")]
+    #[cfg(feature = "github-app")]
     "POST /v1/github/apps/{id}/webhook (its creator or an admin)",
-    #[cfg(feature = "public-url")]
+    #[cfg(feature = "github-app")]
     "POST /v1/github/apps/{id}/installations (a member who sees the App)",
-    #[cfg(feature = "public-url")]
+    #[cfg(feature = "github-app")]
     "POST /v1/public/github/webhook/{tenant} (no token; GitHub's signature; 401 for any other)",
     "POST /v1/linear/accounts (a member)",
     "POST /v1/linear/accounts/{id}/login (its creator or an admin)",
     "POST /v1/linear/accounts/{id}/login/finish (its creator or an admin)",
     "POST /v1/linear/threads (a member who sees the account and the agent)",
     "GET /v1/linear/threads (a member who sees the account; only threads they are in)",
-    #[cfg(feature = "public-url")]
+    #[cfg(feature = "linear-webhooks")]
     "POST /v1/public/linear/webhook/{tenant} (no token; Linear's signature; 401 for any other)",
-    #[cfg(feature = "public-url")]
+    #[cfg(feature = "channel-webhooks")]
     "POST /v1/public/channels/{tenant}/{account}/webhook (no token; the provider's secret header; 401 for any other, 404 for an account not held here)",
-    #[cfg(feature = "public-url")]
+    #[cfg(feature = "slack-events-api")]
     "POST /v1/public/slack/events (no token; Slack request signature; queued to workspace slot owner)",
+    #[cfg(any(feature = "mcp-http", feature = "mcp-stdio"))]
     "POST /v1/mcp-servers (a member)",
+    #[cfg(feature = "mcp-http")]
     "POST /v1/mcp-servers/{id}/login (its creator or an admin)",
+    #[cfg(feature = "mcp-http")]
     "POST /v1/mcp-servers/{id}/login/finish (its creator or an admin)",
     "GET /v1/connector-accounts (a member: the ones they see)",
     "GET /v1/connector-accounts/{id} (a member who sees it)",
@@ -322,16 +352,16 @@ pub const ROUTES: &[&str] = &[
     "POST /v1/artifacts/{id}/duplicate (a member who sees it)",
     "GET /v1/artifacts/{id}/share (a member who sees it: how it is shared, and its link)",
     "PUT /v1/artifacts/{id}/visibility (its owner, not an admin; external needs a server)",
-    #[cfg(feature = "public-url")]
+    #[cfg(feature = "public-artifacts")]
     "PUT /v1/artifacts/{id}/password (its owner; only for external; null removes it)",
-    #[cfg(feature = "public-url")]
+    #[cfg(feature = "public-artifacts")]
     "POST /v1/artifacts/{id}/link (its owner: a new link, the old one stops)",
     "GET /v1/artifacts/{id}/export (a member who sees it; ?format=: its kind's files; pdf and png need a renderer)",
-    #[cfg(feature = "public-url")]
+    #[cfg(feature = "public-artifacts")]
     "GET /v1/public/artifacts/{token} (the link: a signed-in member who sees it, or anyone for external, with its pass when it has a password)",
-    #[cfg(feature = "public-url")]
+    #[cfg(feature = "public-artifacts")]
     "POST /v1/public/artifacts/{token}/unlock (no token; the link's password; 10 tries a minute)",
-    #[cfg(feature = "public-url")]
+    #[cfg(feature = "public-artifacts")]
     "GET /v1/public/artifacts/{token}/export (the link, opened as for a read; ?format=)",
     "GET /v1/artifact-folders (a member)",
     "POST /v1/artifact-folders (a member)",
@@ -343,7 +373,9 @@ pub const ROUTES: &[&str] = &[
     "PATCH /v1/agents/{id}/schedules/{scheduleId} (a member who sees the agent)",
     "DELETE /v1/agents/{id}/schedules/{scheduleId} (a member who sees the agent)",
     "GET /v1/agents/{id}/inbox (a member who sees the agent)",
+    #[cfg(feature = "channels")]
     "GET /v1/agents/{id}/channels (a member who sees the agent)",
+    #[cfg(feature = "channels")]
     "POST /v1/agents/{id}/channels (the agent's creator or an admin)",
     "GET /v1/agents/{id}/people (the agent's creator or an admin)",
     "POST /v1/agents/{id}/people (the agent's creator or an admin)",
@@ -355,10 +387,15 @@ pub const ROUTES: &[&str] = &[
     "GET /v1/agents/{id}/identity-requests (the agent's creator or an admin)",
     "POST /v1/agents/{id}/identity-requests/{request}/confirm (the agent's creator or an admin)",
     "POST /v1/agents/{id}/identity-requests/{request}/decline (the agent's creator or an admin)",
+    #[cfg(feature = "channels")]
     "GET /v1/channels/{id} (a member who sees the agent; the pairing code only for who manages it)",
+    #[cfg(feature = "channels")]
     "POST /v1/channels/{id}/pairing (the agent's creator or an admin; 503 on an instance that does not serve the workspace)",
+    #[cfg(feature = "channels")]
     "POST /v1/channels/{id}/slack/install (the agent's creator or an admin; begins Slack workspace OAuth)",
+    #[cfg(feature = "channels")]
     "GET /v1/slack/oauth/callback (Slack OAuth; one-time state)",
+    #[cfg(feature = "channels")]
     "POST /v1/channels/{id}/disconnect (the agent's creator or an admin)",
     "GET /v1/usage (an admin)",
     "GET /v1/grants (an admin)",
@@ -420,14 +457,17 @@ pub struct Settings {
     /// Where the panel is on the internet: what a link in an e-mail points at. Without it a
     /// link cannot be made, so an invitation can only be handed over as a token.
     pub public_url: Option<PublicUrl>,
-    /// The configured Slack app, when this gateway accepts OAuth installations or Events API calls.
+    /// The configured Slack app, when this build includes channel integrations.
+    #[cfg(feature = "channels")]
     pub slack: Option<jian_channel_slack::SlackConfig>,
     /// Where e-mail comes from: the deploy's own Resend account, or each workspace's.
+    #[cfg(any(feature = "email-login", feature = "email-invitations"))]
     pub mail: MailConfig,
     /// Where a skill import reads GitHub files from. Tests and a mirror give another one.
     pub skills_github_base: String,
     /// How the e-mail names the workspace. Workspaces have no name of their own yet, so one
     /// name is said for all of them.
+    #[cfg(any(feature = "email-login", feature = "email-invitations"))]
     pub workspace_name: String,
     /// Whether an agent's runs may use the gateway's own machine. A choice at start-up, on top
     /// of the `local-process` capability (see [`Settings::gateway_machine`]), which a build
@@ -479,9 +519,12 @@ impl Default for Settings {
                 per_second: 1.0 / 60.0,
             },
             public_url: None,
+            #[cfg(feature = "channels")]
             slack: None,
+            #[cfg(any(feature = "email-login", feature = "email-invitations"))]
             mail: MailConfig::default(),
             skills_github_base: jian_skills::DEFAULT_GITHUB_BASE.to_owned(),
+            #[cfg(any(feature = "email-login", feature = "email-invitations"))]
             workspace_name: "Jian".to_owned(),
             local_machine: true,
             public_unlock: Limit {
@@ -568,33 +611,6 @@ pub fn router_with(state: AppState, extra: Router<AppState>) -> Router {
         .route("/v1/auth/login", post(accounts::login))
         .route("/v1/auth/logout", post(accounts::logout))
         .route("/v1/auth/password", post(accounts::change_password))
-        .route("/v1/auth/invite/accept", post(accounts::accept_invite))
-        .route("/v1/auth/github/start", post(sign_in::github_start))
-        .route("/v1/auth/github/callback", post(sign_in::github_callback))
-        .route(
-            "/v1/auth/github",
-            get(sign_in::github_status).delete(sign_in::github_unlink),
-        )
-        .route("/v1/auth/github/link", post(sign_in::github_link_start))
-        .route(
-            "/v1/auth/github/link/complete",
-            post(sign_in::github_link_complete),
-        )
-        .route("/v1/members", get(members::list).post(members::add))
-        .route("/v1/members/{account_id}/disable", post(members::disable))
-        .route(
-            "/v1/members/{account_id}/reset-password",
-            post(members::reset_password),
-        )
-        .route("/v1/invites", get(invites::list).post(invites::create))
-        .route("/v1/invites/{id}/revoke", post(invites::revoke))
-        .route("/v1/invites/{id}/link", post(invites::link))
-        .route(
-            "/v1/settings/mail",
-            get(mail_settings::get)
-                .put(mail_settings::put)
-                .delete(mail_settings::delete),
-        )
         .route(
             "/v1/providers",
             get(providers::list).post(providers::create),
@@ -632,10 +648,6 @@ pub fn router_with(state: AppState, extra: Router<AppState>) -> Router {
         )
         .route("/v1/agents/{id}/inbox", get(schedules::inbox))
         .route(
-            "/v1/agents/{id}/channels",
-            get(channel_routes::list).post(channel_routes::create),
-        )
-        .route(
             "/v1/agents/{id}/people",
             get(people_routes::list).post(people_routes::create),
         )
@@ -665,14 +677,6 @@ pub fn router_with(state: AppState, extra: Router<AppState>) -> Router {
             "/v1/agents/{id}/identity-requests/{request}/decline",
             post(people_routes::decline),
         )
-        .route("/v1/channels/{id}", get(channel_routes::get))
-        .route("/v1/channels/{id}/pairing", post(channel_routes::pair))
-        .route("/v1/channels/{id}/slack/install", post(slack::install))
-        .route("/v1/slack/oauth/callback", get(slack::oauth_callback))
-        .route(
-            "/v1/channels/{id}/disconnect",
-            post(channel_routes::disconnect),
-        )
         .route("/v1/agents/{id}/events", post(agent_events::post))
         .route(
             "/v1/agents/{id}/proactivity",
@@ -701,12 +705,6 @@ pub fn router_with(state: AppState, extra: Router<AppState>) -> Router {
         .route(
             "/v1/linear/threads",
             post(linear::create_thread).get(linear::list_threads),
-        )
-        .route("/v1/mcp-servers", post(mcp_servers::create))
-        .route("/v1/mcp-servers/{id}/login", post(mcp_servers::login_start))
-        .route(
-            "/v1/mcp-servers/{id}/login/finish",
-            post(mcp_servers::login_finish),
         )
         .route("/v1/connector-accounts", get(connector_accounts::list))
         .route(
@@ -791,6 +789,63 @@ pub fn router_with(state: AppState, extra: Router<AppState>) -> Router {
             delete(threads::remove),
         )
         .layer(DefaultBodyLimit::max(MAX_ACCOUNT_BODY));
+    #[cfg(feature = "github-login")]
+    let accounts = accounts
+        .route("/v1/auth/github/start", post(sign_in::github_start))
+        .route("/v1/auth/github/callback", post(sign_in::github_callback))
+        .route(
+            "/v1/auth/github",
+            get(sign_in::github_status).delete(sign_in::github_unlink),
+        )
+        .route("/v1/auth/github/link", post(sign_in::github_link_start))
+        .route(
+            "/v1/auth/github/link/complete",
+            post(sign_in::github_link_complete),
+        );
+    #[cfg(feature = "multi-user")]
+    let accounts = accounts
+        .route("/v1/auth/invite/accept", post(accounts::accept_invite))
+        .route("/v1/members", get(members::list).post(members::add))
+        .route("/v1/members/{account_id}/disable", post(members::disable))
+        .route(
+            "/v1/members/{account_id}/reset-password",
+            post(members::reset_password),
+        )
+        .route("/v1/invites", get(invites::list).post(invites::create))
+        .route("/v1/invites/{id}/revoke", post(invites::revoke))
+        .route("/v1/invites/{id}/link", post(invites::link));
+    #[cfg(feature = "channels")]
+    let accounts = accounts
+        .route(
+            "/v1/agents/{id}/channels",
+            get(channel_routes::list).post(channel_routes::create),
+        )
+        .route("/v1/channels/{id}", get(channel_routes::get))
+        .route("/v1/channels/{id}/pairing", post(channel_routes::pair))
+        .route("/v1/channels/{id}/slack/install", post(slack::install))
+        .route("/v1/slack/oauth/callback", get(slack::oauth_callback))
+        .route(
+            "/v1/channels/{id}/disconnect",
+            post(channel_routes::disconnect),
+        );
+    #[cfg(feature = "mcp-http")]
+    let accounts = accounts
+        .route("/v1/mcp-servers/{id}/login", post(mcp_servers::login_start))
+        .route(
+            "/v1/mcp-servers/{id}/login/finish",
+            post(mcp_servers::login_finish),
+        );
+    #[cfg(feature = "mcp-http")]
+    let accounts = accounts.route("/v1/mcp-servers", post(mcp_servers::create));
+    #[cfg(all(feature = "mcp-stdio", not(feature = "mcp-http")))]
+    let accounts = accounts.route("/v1/mcp-servers", post(mcp_servers::create));
+    #[cfg(any(feature = "email-login", feature = "email-invitations"))]
+    let accounts = accounts.route(
+        "/v1/settings/mail",
+        get(mail_settings::get)
+            .put(mail_settings::put)
+            .delete(mail_settings::delete),
+    );
     // A message may carry up to 64 KiB of text, which JSON escaping can double.
     let messages = Router::new()
         .route(
@@ -826,19 +881,31 @@ pub fn router_with(state: AppState, extra: Router<AppState>) -> Router {
         .route("/v1/artifacts/{id}/share", get(artifact_share::get))
         .route("/v1/artifacts/{id}/export", get(artifact_export::export))
         .layer(DefaultBodyLimit::max(MAX_ARTIFACT_BODY));
-    // Everything that needs the gateway to be reachable from outside: a link in an e-mail (sign
-    // in, invitation), and the external link of an artifact, whose reader has no token and whose
-    // only body is a password. Without `public-url` none of it is compiled.
-    #[cfg(feature = "public-url")]
-    let public = Router::new()
+    let public: Router<AppState> = Router::new();
+    #[cfg(feature = "email-login")]
+    let public = public
         .route("/v1/auth/magic-link", post(sign_in::magic_link_request))
         .route(
             "/v1/auth/magic-link/redeem",
             post(sign_in::magic_link_redeem),
-        )
-        .route("/v1/invites/{id}/resend", post(invites::resend))
+        );
+    #[cfg(feature = "email-invitations")]
+    let public = public.route("/v1/invites/{id}/resend", post(invites::resend));
+    #[cfg(feature = "public-artifacts")]
+    let public = public
         .route("/v1/artifacts/{id}/password", put(artifact_share::password))
         .route("/v1/artifacts/{id}/link", post(artifact_share::rotate))
+        .route("/v1/public/artifacts/{token}", get(artifact_public::get))
+        .route(
+            "/v1/public/artifacts/{token}/unlock",
+            post(artifact_public::unlock),
+        )
+        .route(
+            "/v1/public/artifacts/{token}/export",
+            get(artifact_export::export_public),
+        );
+    #[cfg(feature = "github-app")]
+    let public = public
         .route("/v1/github/apps/manifest", post(github_app::manifest_form))
         .route("/v1/github/apps", post(github_app::create))
         .route("/v1/github/apps/{id}", get(github_app::get))
@@ -850,17 +917,6 @@ pub fn router_with(state: AppState, extra: Router<AppState>) -> Router {
             "/v1/github/apps/{id}/installations",
             post(github_app::install),
         )
-        .route("/v1/public/artifacts/{token}", get(artifact_public::get))
-        .route(
-            "/v1/public/artifacts/{token}/unlock",
-            post(artifact_public::unlock),
-        )
-        .route(
-            "/v1/public/artifacts/{token}/export",
-            get(artifact_export::export_public),
-        )
-        .layer(DefaultBodyLimit::max(MAX_ACCOUNT_BODY))
-        // GitHub's own deliveries are bigger than anything a person posts.
         .merge(
             Router::new()
                 .route(
@@ -868,30 +924,31 @@ pub fn router_with(state: AppState, extra: Router<AppState>) -> Router {
                     post(github_webhook::receive),
                 )
                 .layer(DefaultBodyLimit::max(github_webhook::MAX_WEBHOOK_BODY)),
-        )
-        .merge(
-            Router::new()
-                .route(
-                    "/v1/public/linear/webhook/{tenant}",
-                    post(linear_webhook::receive),
-                )
-                .layer(DefaultBodyLimit::max(linear_webhook::MAX_WEBHOOK_BODY)),
-        )
-        .merge(
-            Router::new()
-                .route(
-                    "/v1/public/channels/{tenant}/{account}/webhook",
-                    post(channel_push::receive),
-                )
-                .layer(DefaultBodyLimit::max(channel_push::MAX_PUSH_BODY)),
-        )
-        .merge(
-            Router::new()
-                .route("/v1/public/slack/events", post(slack::events))
-                .layer(DefaultBodyLimit::max(slack::MAX_SLACK_BODY)),
         );
-    #[cfg(not(feature = "public-url"))]
-    let public = Router::new();
+    #[cfg(feature = "linear-webhooks")]
+    let public = public.merge(
+        Router::new()
+            .route(
+                "/v1/public/linear/webhook/{tenant}",
+                post(linear_webhook::receive),
+            )
+            .layer(DefaultBodyLimit::max(linear_webhook::MAX_WEBHOOK_BODY)),
+    );
+    #[cfg(feature = "channel-webhooks")]
+    let public = public.merge(
+        Router::new()
+            .route(
+                "/v1/public/channels/{tenant}/{account}/webhook",
+                post(channel_push::receive),
+            )
+            .layer(DefaultBodyLimit::max(channel_push::MAX_PUSH_BODY)),
+    );
+    #[cfg(feature = "slack-events-api")]
+    let public = public.merge(
+        Router::new()
+            .route("/v1/public/slack/events", post(slack::events))
+            .layer(DefaultBodyLimit::max(slack::MAX_SLACK_BODY)),
+    );
     // A file is held in memory up to its limit, and the body is read by the handler, which
     // answers a clear 413 (the layer would answer plain text).
     let files = Router::new()

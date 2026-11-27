@@ -22,7 +22,7 @@
 //!
 //! # Editions
 //!
-//! Without `public-url` the plugin has no webhook and is set up from pasted values (App id,
+//! Without `github-app` the plugin has no webhook and is set up from pasted values (App id,
 //! key, installation id). With it GitHub can call back: `webhook` believes a delivery only if
 //! its signature is right and turns it into what an agent is told, and `app` registers the App
 //! from a manifest and sets its webhook. A review (`review`) is asked of an agent the same way
@@ -30,7 +30,7 @@
 
 pub mod account;
 pub mod api;
-#[cfg(feature = "public-url")]
+#[cfg(feature = "github-app")]
 pub mod app;
 pub mod config;
 pub mod error;
@@ -41,7 +41,7 @@ pub mod jwt;
 pub mod pulls;
 pub mod review;
 pub mod token;
-#[cfg(feature = "public-url")]
+#[cfg(feature = "github-app")]
 pub mod webhook;
 
 use futures_util::future::BoxFuture;

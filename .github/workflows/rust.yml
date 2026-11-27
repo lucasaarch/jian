@@ -88,8 +88,8 @@ jobs:
           toolchain: 1.98.0
           components: clippy
       - uses: Swatinem/rust-cache@v2
-      # An edition is a sum of capabilities (`local-process`, `public-url`, `multi-tenant`), and the
-      # code tests those. macOS and Windows run only the gateway of the desktop app, the local
+      # An edition is a sum of specific capabilities (`channels`, `mcp-stdio`, `multi-user`, etc.),
+      # and the code tests those. macOS and Windows run only the gateway of the desktop app, the local
       # edition; the Cloud is Linux only, so it is checked only there. Linux checks all three.
       - name: clippy, self-hosted (the default build)
         if: runner.os == 'Linux'

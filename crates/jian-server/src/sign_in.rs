@@ -11,35 +11,43 @@
 //! Spending the link is counted by address alone: its token is not guessable.
 //!
 //! The link is an address people open, so the two `magic-link` routes are compiled only with
-//! `public-url`; without it (the desktop app) they are not there at all.
+//! `email-login`; without it (the desktop app) they are not there at all.
 
+#[cfg(any(feature = "github-login", feature = "email-login"))]
+use crate::accounts::login_response;
+#[cfg(feature = "github-login")]
+use crate::accounts::only_a_session;
 use axum::Json;
 use axum::extract::State;
 use axum::http::StatusCode;
+#[cfg(any(feature = "github-login", feature = "email-login"))]
 use jian_auth::LoginOutcome;
+use jian_protocol::auth::LoginResponse;
+#[cfg(feature = "github-login")]
 use jian_protocol::auth::{
     AuthorizeUrlResponse, GithubAccount, GithubCallbackRequest, GithubStartRequest, GithubStatus,
-    LoginResponse,
 };
-#[cfg(feature = "public-url")]
+#[cfg(feature = "email-login")]
 use jian_protocol::auth::{MagicLinkAccepted, MagicLinkRedeemRequest, MagicLinkRequest};
-#[cfg(feature = "public-url")]
+#[cfg(feature = "email-login")]
 use jian_store::NewJob;
 use jian_store::TenantId;
 
 use crate::AppState;
-#[cfg(feature = "public-url")]
+#[cfg(feature = "email-login")]
 use crate::accounts::email_key;
-use crate::accounts::{login_response, only_a_session};
-use crate::auth::{Address, Principal};
+use crate::auth::Address;
+#[cfg(feature = "github-login")]
+use crate::auth::Principal;
 use crate::http::{Refusal, auth_failure, internal, method_off, refuse, throttle};
-#[cfg(feature = "public-url")]
+#[cfg(feature = "email-login")]
 use crate::login_link_job::LOGIN_LINK_SEND_KIND;
 
 /// The longest address taken at all: more than any real one.
-#[cfg(feature = "public-url")]
+#[cfg(feature = "email-login")]
 const MAX_EMAIL_CHARS: usize = 254;
 
+#[cfg(feature = "github-login")]
 fn require_github(app: &AppState) -> Result<(), Refusal> {
     if app.settings.auth.github_enabled() {
         Ok(())
@@ -58,6 +66,7 @@ fn parse_tenant(text: Option<&str>) -> Result<Option<TenantId>, Refusal> {
     })
 }
 
+#[cfg(any(feature = "github-login", feature = "email-login"))]
 fn session_or_step(outcome: LoginOutcome) -> Result<Json<LoginResponse>, Refusal> {
     match outcome {
         LoginOutcome::Session(session) => Ok(login_response(session)),
@@ -71,6 +80,7 @@ fn session_or_step(outcome: LoginOutcome) -> Result<Json<LoginResponse>, Refusal
 }
 
 /// `POST /v1/auth/github/start`: where to send the person to sign in at GitHub.
+#[cfg(feature = "github-login")]
 pub(crate) async fn github_start(
     State(app): State<AppState>,
     Address(from): Address,
@@ -93,6 +103,7 @@ pub(crate) async fn github_start(
 }
 
 /// `POST /v1/auth/github/callback`: the code and state GitHub's redirect brought back.
+#[cfg(feature = "github-login")]
 pub(crate) async fn github_callback(
     State(app): State<AppState>,
     Address(from): Address,
@@ -117,6 +128,7 @@ pub(crate) async fn github_callback(
 }
 
 /// `GET /v1/auth/github`: the GitHub linked to the signed-in account.
+#[cfg(feature = "github-login")]
 pub(crate) async fn github_status(
     State(app): State<AppState>,
     principal: Principal,
@@ -137,6 +149,7 @@ pub(crate) async fn github_status(
 }
 
 /// `POST /v1/auth/github/link`: where to send a signed-in member to add GitHub.
+#[cfg(feature = "github-login")]
 pub(crate) async fn github_link_start(
     State(app): State<AppState>,
     principal: Principal,
@@ -152,6 +165,7 @@ pub(crate) async fn github_link_start(
 }
 
 /// `POST /v1/auth/github/link/complete`: the code and state of the round trip this member began.
+#[cfg(feature = "github-login")]
 pub(crate) async fn github_link_complete(
     State(app): State<AppState>,
     principal: Principal,
@@ -173,6 +187,7 @@ pub(crate) async fn github_link_complete(
 }
 
 /// `DELETE /v1/auth/github`: removes the link, unless it is the last way in.
+#[cfg(feature = "github-login")]
 pub(crate) async fn github_unlink(
     State(app): State<AppState>,
     principal: Principal,
@@ -188,7 +203,7 @@ pub(crate) async fn github_unlink(
 }
 
 /// The workspace a link request is for: the one it names, or the gateway's only one.
-#[cfg(feature = "public-url")]
+#[cfg(feature = "email-login")]
 async fn link_tenant(app: &AppState, named: Option<&str>) -> Result<TenantId, Refusal> {
     if let Some(tenant) = parse_tenant(named)? {
         return Ok(tenant);
@@ -201,7 +216,7 @@ async fn link_tenant(app: &AppState, named: Option<&str>) -> Result<TenantId, Re
 }
 
 /// `POST /v1/auth/magic-link`: asks for a sign-in link. Always `202`, member or not.
-#[cfg(feature = "public-url")]
+#[cfg(feature = "email-login")]
 pub(crate) async fn magic_link_request(
     State(app): State<AppState>,
     Address(from): Address,
@@ -266,7 +281,7 @@ pub(crate) async fn magic_link_request(
 }
 
 /// `POST /v1/auth/magic-link/redeem`: the token of the link; answers a session.
-#[cfg(feature = "public-url")]
+#[cfg(feature = "email-login")]
 pub(crate) async fn magic_link_redeem(
     State(app): State<AppState>,
     Address(from): Address,

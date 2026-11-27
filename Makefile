@@ -95,8 +95,8 @@ rust-check: ## The Rust workspace: format, clippy, tests and docs, as the rules 
 	$(MAKE) rust-editions
 	$(MAKE) rust-local
 
-# The default build is the self-hosted edition. An edition is a sum of capabilities (`local-process`,
-# `public-url`, `multi-tenant`) and the code tests those, so each build below proves what is left out.
+# The default build is self-hosted. Editions compose capabilities such as `channels`,
+# `public-artifacts`, and `multi-tenant`; each build below proves what its profile leaves out.
 rust-editions: ## The Cloud edition (Linux only): no local process, and a private address is refused
 	cargo clippy -p jian-server --no-default-features --features cloud --all-targets --locked -- -D warnings
 	cargo nextest run -p jian-server --no-default-features --features cloud --locked -E 'binary(plugin_tools) | binary(mcp_tools) | binary(outbound) | (binary(gateway) & test(/mcp_servers|editions/))'
@@ -106,7 +106,7 @@ rust-editions: ## The Cloud edition (Linux only): no local process, and a privat
 	cargo clippy -p jian-plugin-echo --no-default-features --all-targets --locked -- -D warnings
 	cargo test -p jian-plugin-echo --no-default-features --locked
 
-rust-local: ## The local edition (the desktop app, also what macOS and Windows run): no public URL
+rust-local: ## The local edition (the desktop app): no channels, extra users, or public ingress
 	cargo clippy --workspace --all-targets --locked --no-default-features --features jian/local -- -D warnings
 	cargo nextest run --workspace --locked --no-default-features --features jian/local
 

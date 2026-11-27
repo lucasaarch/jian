@@ -5,30 +5,54 @@ edition.workspace = true
 license.workspace = true
 
 [features]
-# The code tests a CAPABILITY, never an edition: `cfg(feature = "local-process")`, never
-# `cfg(feature = "cloud")`. Capabilities only add, so turning on two editions at once is the sum of
-# both and never a conflict. An edition is just a name for a sum, and `bins/jian` offers the same
-# three.
-#
-# `local-process`: the gateway's machine is the owner's, so a plugin may run a program on it (MCP
-#   over stdio, the test fixture's LocalEcho). Passed down to the plugin crates.
-# `public-url`: the gateway can be reached from outside (a link in an e-mail or in a share, a
-#   webhook). Without it the code that needs that does not compile; the desktop app has no URL.
-# `multi-tenant`: what only the Cloud has, many tenants on one machine: an outbound request may
-#   not reach a private network.
-local-process = ["jian-plugin-echo/local-process", "jian-plugin-mcp/local-process"]
-public-url = [
-    "jian-plugin-api/public-url",
-    "jian-plugin-github/public-url",
-    "jian-plugin-linear/public-url",
-]
+# Editions are sums of capabilities. Code tests a capability, never an edition; capabilities only
+# add, so enabling two editions produces their union rather than a conflict.
+local-process = ["jian-plugin-echo/local-process"]
+mcp-http = ["jian-plugin-mcp/mcp-http"]
+mcp-stdio = ["local-process", "jian-plugin-mcp/mcp-stdio"]
+channels = ["dep:jian-channel-slack"]
+public-artifacts = []
+email-login = []
+github-login = []
+multi-user = []
+email-invitations = ["multi-user"]
+github-app = ["jian-plugin-api/webhook-routes", "jian-plugin-github/github-app"]
+linear-webhooks = ["jian-plugin-api/webhook-routes", "jian-plugin-linear/webhooks"]
+channel-webhooks = ["channels"]
+slack-events-api = ["channels"]
 multi-tenant = []
-# The editions: the desktop app, a self-hosted gateway and the Cloud. The default is the
-# self-hosted one, as `bins/jian`'s is.
+# Editions: the desktop app, a self-hosted gateway and the Cloud. The local build intentionally
+# has no channels, extra users, public artifact links, or public webhook ingress.
 default = ["self-hosted"]
-local = ["local-process"]
-self-hosted = ["local-process", "public-url"]
-cloud = ["public-url", "multi-tenant"]
+local = ["mcp-http", "mcp-stdio"]
+self-hosted = [
+    "mcp-http",
+    "mcp-stdio",
+    "channels",
+    "public-artifacts",
+    "email-login",
+    "github-login",
+    "multi-user",
+    "email-invitations",
+    "github-app",
+    "linear-webhooks",
+    "channel-webhooks",
+    "slack-events-api",
+]
+cloud = [
+    "mcp-http",
+    "channels",
+    "public-artifacts",
+    "email-login",
+    "github-login",
+    "multi-user",
+    "email-invitations",
+    "github-app",
+    "linear-webhooks",
+    "channel-webhooks",
+    "slack-events-api",
+    "multi-tenant",
+]
 
 [dependencies]
 axum = { workspace = true, features = ["ws"] }
@@ -44,7 +68,7 @@ jian-mail.workspace = true
 jian-plugin-api.workspace = true
 jian-plugin-github.workspace = true
 jian-channel-api.workspace = true
-jian-channel-slack.workspace = true
+jian-channel-slack = { workspace = true, optional = true }
 jian-plugin-linear.workspace = true
 jian-plugin-mcp.workspace = true
 jian-protocol.workspace = true

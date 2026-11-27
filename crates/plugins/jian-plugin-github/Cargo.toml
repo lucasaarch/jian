@@ -5,10 +5,8 @@ edition.workspace = true
 license.workspace = true
 
 [features]
-# `public-url`: GitHub can reach the gateway, so the plugin answers its webhooks. Without it the
-# plugin has no webhook and works from what people paste (app id, key, installation). A
-# capability, never an edition.
-public-url = ["jian-plugin-api/public-url"]
+# GitHub App setup and delivery verification require externally reachable webhook routes.
+github-app = ["jian-plugin-api/webhook-routes"]
 
 [dependencies]
 base64.workspace = true

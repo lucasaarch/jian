@@ -2,17 +2,23 @@
 //! only who manages the agent pairs or disconnects it, and the pairing code is shown to that
 //! person alone and never leaks into an error.
 
+#[cfg(feature = "channels")]
 use std::sync::Arc;
 use std::time::Duration;
 
+#[cfg(feature = "channels")]
 use jian_channel_api::fake::FakeChannel;
+#[cfg(feature = "channels")]
 use jian_channel_api::{Channel, ChannelKind};
 use serde_json::{Value, json};
 
+#[cfg(feature = "channels")]
 use super::accounts::{open_settings, start};
 use super::support::{Gateway, http_request};
 
+#[cfg(feature = "channels")]
 const CODE: &str = "FAKE-CODE";
+#[cfg(feature = "channels")]
 const QR: &str = "fake-qr";
 
 /// One request as `token`, and the status and JSON body it got. The clock moves on so the
@@ -39,11 +45,13 @@ pub(super) async fn named_agent(gateway: &Gateway, token: &str, name: &str) -> S
     made["id"].as_str().unwrap().to_owned()
 }
 
+#[cfg(feature = "channels")]
 async fn state_of(gateway: &Gateway, token: &str, id: &str) -> (u16, Value) {
     call(gateway, "GET", &format!("/v1/channels/{id}"), token, None).await
 }
 
 #[tokio::test]
+#[cfg(feature = "channels")]
 async fn a_channel_account_is_the_workspaces_own_and_only_the_agents_managers_pair_it() {
     let (gateway, tenants) = start(open_settings()).await;
     let admin = tenants.a.admin_session.as_str();

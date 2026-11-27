@@ -1,6 +1,6 @@
 //! A provider's push to `/v1/public/channels/{tenant}/{account}/webhook`: it enters with the
 //! channel's secret and nowhere else. Needs a build that can be reached from outside.
-#![cfg(feature = "public-url")]
+#![cfg(feature = "channel-webhooks")]
 
 use std::sync::{Arc, Mutex};
 

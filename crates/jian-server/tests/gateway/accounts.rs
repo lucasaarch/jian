@@ -9,17 +9,20 @@
 use std::time::Duration;
 
 use jian_auth::{AddMember, Auth, AuthPolicy, PasswordParams};
-use jian_protocol::auth::{
-    AddMemberResponse, ErrorBody, InviteCreated, InvitesPage, LoginResponse, Me, MemberRole,
-    MembersPage,
-};
+use jian_protocol::auth::MemberRole;
+#[cfg(feature = "multi-user")]
+use jian_protocol::auth::{AddMemberResponse, InviteCreated, InvitesPage, MembersPage};
+use jian_protocol::auth::{ErrorBody, LoginResponse, Me};
+#[cfg(feature = "multi-user")]
 use jian_protocol::client::CLOSE_TOKEN_REVOKED;
 use jian_server::{Limit, Settings};
 use jian_store::Role;
 use jian_testkit::{PASSWORD, Side, TwoTenants};
 use serde_json::{Value, json};
 
-use super::support::{Client, Gateway, closed_with, dial, http_get, http_post};
+#[cfg(feature = "multi-user")]
+use super::support::{Client, closed_with, dial};
+use super::support::{Gateway, http_get, http_post};
 
 /// A limit nobody reaches by accident.
 const WIDE: Limit = Limit {
@@ -230,6 +233,7 @@ async fn guessing_spread_over_many_addresses_is_locked_out_by_email() {
 }
 
 #[tokio::test]
+#[cfg(feature = "multi-user")]
 async fn a_provisional_password_must_be_replaced_before_anything_else() {
     let (gateway, tenants) = start(open_settings()).await;
     let admin = &tenants.a.admin_session;
@@ -297,6 +301,7 @@ async fn a_provisional_password_must_be_replaced_before_anything_else() {
 }
 
 #[tokio::test]
+#[cfg(feature = "multi-user")]
 async fn an_invitation_gives_one_person_one_account_once() {
     let (gateway, tenants) = start(open_settings()).await;
     let admin = &tenants.a.admin_session;
@@ -373,6 +378,7 @@ async fn an_invitation_gives_one_person_one_account_once() {
 }
 
 #[tokio::test]
+#[cfg(feature = "multi-user")]
 async fn an_invitation_for_an_existing_account_needs_its_password_and_keeps_it() {
     let (gateway, tenants) = start(open_settings()).await;
     let (a, b) = (&tenants.a, &tenants.b);
@@ -462,6 +468,7 @@ async fn sessions_end_on_logout_and_on_a_password_change_in_every_workspace() {
 }
 
 #[tokio::test]
+#[cfg(feature = "multi-user")]
 async fn disabling_a_member_ends_their_sessions_in_that_workspace_only() {
     let settings = Settings {
         recheck_interval: Duration::from_millis(100),
@@ -517,6 +524,7 @@ async fn disabling_a_member_ends_their_sessions_in_that_workspace_only() {
 }
 
 #[tokio::test]
+#[cfg(feature = "multi-user")]
 async fn an_admin_reset_ends_the_sessions_and_asks_for_a_new_password() {
     let (gateway, tenants) = start(open_settings()).await;
     let side = &tenants.a;
@@ -537,6 +545,7 @@ async fn an_admin_reset_ends_the_sessions_and_asks_for_a_new_password() {
 }
 
 #[tokio::test]
+#[cfg(feature = "multi-user")]
 async fn an_admin_cannot_reset_the_password_of_an_account_in_other_workspaces() {
     let (gateway, tenants) = start(open_settings()).await;
     let (a, b) = (&tenants.a, &tenants.b);
@@ -561,6 +570,7 @@ async fn an_admin_cannot_reset_the_password_of_an_account_in_other_workspaces() 
 }
 
 #[tokio::test]
+#[cfg(feature = "multi-user")]
 async fn only_an_admin_or_the_owner_manages_members_and_invitations() {
     let (gateway, tenants) = start(open_settings()).await;
     let side = &tenants.a;
@@ -660,6 +670,7 @@ async fn there_is_no_way_to_sign_oneself_up() {
 }
 
 #[tokio::test]
+#[cfg(feature = "multi-user")]
 async fn a_gateway_without_password_sign_in_has_no_login() {
     let settings = Settings {
         auth: Auth::new(AuthPolicy::cloud(), PasswordParams::insecure_for_tests()),

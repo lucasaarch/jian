@@ -6,11 +6,15 @@
 // What a server prints at start-up is this binary's interface to whoever runs it.
 #![allow(clippy::print_stdout)]
 
+#[cfg(feature = "github-login")]
 mod github_flags;
 mod import_cli;
+#[cfg(any(feature = "email-login", feature = "email-invitations"))]
 mod mail_flags;
 mod shutdown;
+#[cfg(feature = "channels")]
 mod slack_flags;
+#[cfg(feature = "multi-user")]
 mod users_cli;
 
 use std::path::PathBuf;
@@ -22,6 +26,8 @@ use jian::browser_flags;
 use jian::debug_jobs;
 use jian::desktop;
 use jian::owner_token;
+#[cfg(any(not(feature = "github-login"), not(feature = "email-login")))]
+use jian_auth::CredentialKind;
 use jian_auth::{Auth, AuthPolicy, PasswordParams};
 use jian_server::{PublicUrl, Settings};
 use jian_store::embedded::EmbeddedConfig;
@@ -30,6 +36,7 @@ use jian_store::{Database, DatabaseSource, DatabaseUrl, DiskBlobs, NewJob, Tenan
 
 use crate::import_cli::{ImportArgs, ImportFlags};
 use crate::shutdown::Shutdown;
+#[cfg(feature = "multi-user")]
 use crate::users_cli::UsersAction;
 
 /// Where the gateway listens when nothing says otherwise: loopback only, so an unconfigured
@@ -101,8 +108,8 @@ struct Cli {
     api_token: Option<String>,
 
     /// How people sign in: a comma-separated list of `password`, `github`, `email_link`,
-    /// `passkey`, `totp`. `password`, `github` (needs the `--github-*` flags and `--public-url`)
-    /// and `email_link` (needs `--public-url` and e-mail) are implemented. Leaving `password`
+    /// `passkey`, `totp`. `github` needs the GitHub Login capability, its flags and `--public-url`;
+    /// `email_link` needs the Email Login capability, `--public-url` and e-mail. Leaving `password`
     /// out turns password sign-in off; a method that is off is a 404. GitHub and the link only
     /// let in people who are already members.
     #[arg(
@@ -126,9 +133,8 @@ struct Cli {
     )]
     local_machine: bool,
 
-    /// Where the panel is on the internet, such as `https://jian.example.com`: what the link in
-    /// an invitation points at. Without it an invitation is only a token, and sending one by
-    /// e-mail is refused.
+    /// The external base address, such as `https://jian.example.com`, consumed by enabled
+    /// capabilities that create links or accept callbacks. It does not enable those capabilities.
     #[arg(long, env = "JIAN_PUBLIC_URL", value_name = "URL", value_parser = PublicUrl::parse, global = true)]
     public_url: Option<PublicUrl>,
 
@@ -136,12 +142,15 @@ struct Cli {
     import: ImportFlags,
 
     #[command(flatten)]
+    #[cfg(any(feature = "email-login", feature = "email-invitations"))]
     mail: mail_flags::MailFlags,
 
     #[command(flatten)]
+    #[cfg(feature = "github-login")]
     github: github_flags::GithubFlags,
 
     #[command(flatten)]
+    #[cfg(feature = "channels")]
     slack: slack_flags::SlackFlags,
 
     #[command(flatten)]
@@ -160,6 +169,7 @@ enum Command {
     },
     /// The people who can sign in. With the embedded Postgres, stop the gateway first: this
     /// starts that database itself.
+    #[cfg(feature = "multi-user")]
     Users {
         #[command(subcommand)]
         action: UsersAction,
@@ -259,16 +269,30 @@ async fn run() -> anyhow::Result<()> {
     let addr = cli.addr.clone();
     let keys = cli.master_keys()?;
     let command = cli.command.take();
-    let mut auth = Auth::new(cli.auth_methods.clone(), PasswordParams::default());
-    if let Some(app) = cli.github.app(cli.public_url.as_ref())? {
-        auth = auth.with_github(app);
+    #[cfg(not(feature = "github-login"))]
+    if cli.auth_methods.allows(CredentialKind::Github) {
+        anyhow::bail!("GitHub sign-in is not enabled in this build");
     }
+    #[cfg(not(feature = "email-login"))]
+    if cli.auth_methods.allows(CredentialKind::EmailLink) {
+        anyhow::bail!("email link sign-in is not enabled in this build");
+    }
+    let auth = Auth::new(cli.auth_methods.clone(), PasswordParams::default());
+    #[cfg(feature = "github-login")]
+    let auth = if let Some(app) = cli.github.app(cli.public_url.as_ref())? {
+        auth.with_github(app)
+    } else {
+        auth
+    };
     let settings = Settings {
         gateway_version: Some(env!("CARGO_PKG_VERSION").to_owned()),
         auth: auth.clone(),
         public_url: cli.public_url.clone(),
+        #[cfg(feature = "channels")]
         slack: cli.slack.config(cli.public_url.as_ref())?,
+        #[cfg(any(feature = "email-login", feature = "email-invitations"))]
         mail: cli.mail.config()?,
+        #[cfg(any(feature = "email-login", feature = "email-invitations"))]
         workspace_name: cli.mail.workspace_name.clone(),
         local_machine: cli.local_machine,
         ..Settings::default()
@@ -303,6 +327,7 @@ async fn run() -> anyhow::Result<()> {
         Some(Command::Keys {
             action: KeysAction::Rotate,
         }) => rotate(&database).await,
+        #[cfg(feature = "multi-user")]
         Some(Command::Users { action }) => {
             users_cli::run(&database, &auth, cli.public_url.as_ref(), action).await
         }
@@ -497,6 +522,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "multi-user")]
     fn users_add_is_a_subcommand() {
         let cli = Cli::try_parse_from([
             "jian",

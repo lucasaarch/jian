@@ -6,7 +6,7 @@ use serde_json::Value;
 use crate::account::AccountRef;
 use crate::error::ToolError;
 use crate::host::AccountContext;
-#[cfg(feature = "public-url")]
+#[cfg(feature = "webhook-routes")]
 use crate::route::{RouteDef, WebhookRequest};
 use crate::tool::ToolDef;
 
@@ -43,8 +43,8 @@ pub trait Plugin: Send + Sync {
     fn permissions(&self) -> &'static [Permission];
 
     /// The routes and webhooks it answers. Only declared here: the server mounts them. Only with
-    /// `public-url`.
-    #[cfg(feature = "public-url")]
+    /// `webhook-routes`.
+    #[cfg(feature = "webhook-routes")]
     fn routes(&self) -> &'static [RouteDef] {
         &[]
     }
@@ -73,8 +73,8 @@ pub trait Plugin: Send + Sync {
 
     /// A request to one of its [`routes`](Self::routes), already verified as the route says. It
     /// turns what the service said into events for the agents (through
-    /// [`AccountContext::emit`]). The default answers nothing. Only with `public-url`.
-    #[cfg(feature = "public-url")]
+    /// [`AccountContext::emit`]). The default answers nothing. Only with `webhook-routes`.
+    #[cfg(feature = "webhook-routes")]
     fn handle<'a>(
         &'a self,
         _ctx: &'a AccountContext<'a>,

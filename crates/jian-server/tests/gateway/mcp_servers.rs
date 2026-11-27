@@ -327,11 +327,13 @@ async fn the_cloud_edition_refuses_a_command_server_and_a_private_address() {
     let command = json!({ "name": "local", "transport": "stdio", "command": "mcp-server-fs" });
     let got = call(&gateway, "POST", "/v1/mcp-servers", token, Some(command)).await;
     assert_eq!(got.0, 400);
+    let refusal = if cfg!(feature = "mcp-stdio") {
+        "no local process"
+    } else {
+        "not enabled in this build"
+    };
     assert!(
-        got.1["message"]
-            .as_str()
-            .unwrap()
-            .contains("no local process"),
+        got.1["message"].as_str().unwrap().contains(refusal),
         "{}",
         got.1
     );

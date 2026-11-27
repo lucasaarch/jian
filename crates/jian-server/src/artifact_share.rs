@@ -2,7 +2,7 @@
 //! external link, and a new link.
 //!
 //! The external link needs the gateway to be reachable from outside, so it is compiled only with
-//! `public-url`: the password and new-link routes, the link in the share view and the
+//! `public-artifacts`: the password and new-link routes, the link in the share view and the
 //! `external` visibility are not there without it (the desktop app has no address to give).
 //!
 //! Anyone who sees an artifact may read how it is shared and copy its link. Changing any of it is
@@ -13,10 +13,10 @@
 use axum::Json;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
-#[cfg(feature = "public-url")]
+#[cfg(feature = "public-artifacts")]
 use jian_protocol::artifacts::SetArtifactPasswordRequest;
 use jian_protocol::artifacts::{ArtifactShareView, ShareArtifactRequest};
-#[cfg(feature = "public-url")]
+#[cfg(feature = "public-artifacts")]
 use jian_store::hash_artifact_password;
 use jian_store::{AccountId, Artifact, ArtifactActor, ArtifactId, ArtifactVisibility};
 
@@ -27,7 +27,7 @@ use crate::http::{Refusal, not_found, refuse, tenant_ctx};
 use crate::workspace::{failure, viewer};
 
 /// Where a link is opened on this gateway.
-#[cfg(feature = "public-url")]
+#[cfg(feature = "public-artifacts")]
 pub(crate) fn link_path(token: &str) -> String {
     format!("/v1/public/artifacts/{token}")
 }
@@ -45,10 +45,10 @@ async fn share_view(
         .await
         .map_err(|e| failure(&e))?
         .ok_or_else(|| not_found("artifact"))?;
-    #[cfg(feature = "public-url")]
+    #[cfg(feature = "public-artifacts")]
     let url = share.token.as_ref().map(|token| link_path(token.expose()));
     // No address to give: the field is there for the panel's types, and never has a link.
-    #[cfg(not(feature = "public-url"))]
+    #[cfg(not(feature = "public-artifacts"))]
     let url = None;
     Ok(Json(ArtifactShareView {
         artifact: artifact_view(artifact),
@@ -95,7 +95,7 @@ pub(crate) async fn visibility(
             "visibility is owner, members, workspace or external",
         ));
     };
-    #[cfg(not(feature = "public-url"))]
+    #[cfg(not(feature = "public-artifacts"))]
     {
         if level == ArtifactVisibility::External {
             return Err(refuse(
@@ -124,7 +124,7 @@ pub(crate) async fn visibility(
 
 /// `PUT /v1/artifacts/{id}/password`: sets, changes or (with `null`) removes the password of an
 /// external link. It ends every pass already given.
-#[cfg(feature = "public-url")]
+#[cfg(feature = "public-artifacts")]
 pub(crate) async fn password(
     State(app): State<AppState>,
     principal: Principal,
@@ -153,7 +153,7 @@ pub(crate) async fn password(
 }
 
 /// `POST /v1/artifacts/{id}/link`: a new link; the old one is a 404 from now on.
-#[cfg(feature = "public-url")]
+#[cfg(feature = "public-artifacts")]
 pub(crate) async fn rotate(
     State(app): State<AppState>,
     principal: Principal,

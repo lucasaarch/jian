@@ -8,6 +8,7 @@
 use std::time::Duration;
 
 use futures_util::SinkExt;
+#[cfg(feature = "multi-user")]
 use jian_protocol::auth::{InviteCreated, MembersPage};
 use jian_protocol::client::{
     ClientRequest, ClientResponse, DeltaPayload, ErrorCode, Resume, Topic,
@@ -53,6 +54,7 @@ const LINEAR_FILE: &str = include_str!("linear.rs");
 const LINEAR_WEBHOOK_FILE: &str = include_str!("linear_webhook.rs");
 const CHANNELS_FILE: &str = include_str!("channels.rs");
 const CHANNEL_PUSH_FILE: &str = include_str!("channel_push.rs");
+const SLACK_FILE: &str = include_str!("slack.rs");
 const PEOPLE_FILE: &str = include_str!("people.rs");
 
 async fn start() -> (Gateway, TwoTenants) {
@@ -87,6 +89,7 @@ fn is_a_test_here(name: &str) -> bool {
         || LINEAR_WEBHOOK_FILE.contains(&declared)
         || CHANNELS_FILE.contains(&declared)
         || CHANNEL_PUSH_FILE.contains(&declared)
+        || SLACK_FILE.contains(&declared)
         || PEOPLE_FILE.contains(&declared)
 }
 
@@ -95,34 +98,63 @@ fn is_a_test_here(name: &str) -> bool {
 const ROUTE_TESTS: &[(&str, &str)] = &[
     ("GET /health", "health_says_nothing_about_any_tenant"),
     ("GET /v1/me", "a_token_names_only_its_own_tenant_over_http"),
-    ("POST /v1/auth/login", USERS_TEST),
-    ("POST /v1/auth/logout", USERS_TEST),
-    ("POST /v1/auth/password", USERS_TEST),
+    ("POST /v1/auth/login", "password_sessions_are_tenant_scoped"),
+    (
+        "POST /v1/auth/logout",
+        "password_sessions_are_tenant_scoped",
+    ),
+    (
+        "POST /v1/auth/password",
+        "password_sessions_are_tenant_scoped",
+    ),
+    #[cfg(feature = "multi-user")]
     ("POST /v1/auth/invite/accept", USERS_TEST),
+    #[cfg(feature = "github-login")]
     ("POST /v1/auth/github/start", GITHUB_TEST),
+    #[cfg(feature = "github-login")]
     ("POST /v1/auth/github/callback", GITHUB_TEST),
+    #[cfg(feature = "github-login")]
     ("GET /v1/auth/github", GITHUB_TEST),
+    #[cfg(feature = "github-login")]
     ("DELETE /v1/auth/github", GITHUB_TEST),
+    #[cfg(feature = "github-login")]
     ("POST /v1/auth/github/link", GITHUB_TEST),
+    #[cfg(feature = "github-login")]
     ("POST /v1/auth/github/link/complete", GITHUB_TEST),
-    // What needs a link people can open is not in a build without `public-url` (ROUTES neither).
-    #[cfg(feature = "public-url")]
+    #[cfg(feature = "email-login")]
     ("POST /v1/auth/magic-link", MAGIC_LINK_TEST),
-    #[cfg(feature = "public-url")]
+    #[cfg(feature = "email-login")]
     ("POST /v1/auth/magic-link/redeem", MAGIC_LINK_TEST),
+    #[cfg(feature = "multi-user")]
     ("GET /v1/members", USERS_TEST),
+    #[cfg(feature = "multi-user")]
     ("POST /v1/members", USERS_TEST),
+    #[cfg(feature = "multi-user")]
     ("POST /v1/members/{account_id}/disable", USERS_TEST),
+    #[cfg(feature = "multi-user")]
     ("POST /v1/members/{account_id}/reset-password", USERS_TEST),
+    #[cfg(feature = "multi-user")]
     ("GET /v1/invites", USERS_TEST),
+    #[cfg(feature = "multi-user")]
     ("POST /v1/invites", USERS_TEST),
+    #[cfg(feature = "multi-user")]
     ("POST /v1/invites/{id}/revoke", USERS_TEST),
-    ("POST /v1/invites/{id}/link", INVITES_TEST),
-    #[cfg(feature = "public-url")]
+    #[cfg(feature = "multi-user")]
+    ("POST /v1/invites/{id}/link", USERS_TEST),
+    #[cfg(feature = "email-invitations")]
     ("POST /v1/invites/{id}/resend", INVITES_TEST),
+    #[cfg(feature = "email-invitations")]
     ("GET /v1/settings/mail", INVITES_TEST),
+    #[cfg(feature = "email-invitations")]
     ("PUT /v1/settings/mail", INVITES_TEST),
+    #[cfg(feature = "email-invitations")]
     ("DELETE /v1/settings/mail", INVITES_TEST),
+    #[cfg(all(feature = "email-login", not(feature = "email-invitations")))]
+    ("GET /v1/settings/mail", MAGIC_LINK_TEST),
+    #[cfg(all(feature = "email-login", not(feature = "email-invitations")))]
+    ("PUT /v1/settings/mail", MAGIC_LINK_TEST),
+    #[cfg(all(feature = "email-login", not(feature = "email-invitations")))]
+    ("DELETE /v1/settings/mail", MAGIC_LINK_TEST),
     ("GET /v1/providers", PROVIDERS_TEST),
     ("POST /v1/providers", PROVIDERS_TEST),
     ("POST /v1/providers/{id}/activate", PROVIDERS_TEST),
@@ -162,10 +194,19 @@ const ROUTE_TESTS: &[(&str, &str)] = &[
     ),
     ("POST /v1/linear/threads", LINEAR_THREAD_TEST),
     ("GET /v1/linear/threads", LINEAR_THREAD_TEST),
+    #[cfg(feature = "channels")]
     ("POST /v1/agents/{id}/channels", CHANNELS_TEST),
+    #[cfg(feature = "channels")]
     ("GET /v1/agents/{id}/channels", CHANNELS_TEST),
+    #[cfg(feature = "channels")]
     ("GET /v1/channels/{id}", CHANNELS_TEST),
+    #[cfg(feature = "channels")]
     ("POST /v1/channels/{id}/pairing", CHANNELS_TEST),
+    #[cfg(feature = "channels")]
+    ("POST /v1/channels/{id}/slack/install", SLACK_INSTALL_TEST),
+    #[cfg(feature = "channels")]
+    ("GET /v1/slack/oauth/callback", SLACK_INSTALL_TEST),
+    #[cfg(feature = "channels")]
     ("POST /v1/channels/{id}/disconnect", CHANNELS_TEST),
     ("GET /v1/agents/{id}/people", PEOPLE_TEST),
     ("POST /v1/agents/{id}/people", PEOPLE_TEST),
@@ -189,33 +230,38 @@ const ROUTE_TESTS: &[(&str, &str)] = &[
         "POST /v1/agents/{id}/identity-requests/{request}/decline",
         PEOPLE_TEST,
     ),
-    #[cfg(feature = "public-url")]
+    #[cfg(feature = "linear-webhooks")]
     (
         "POST /v1/public/linear/webhook/{tenant}",
         LINEAR_WEBHOOK_TEST,
     ),
-    #[cfg(feature = "public-url")]
+    #[cfg(feature = "channel-webhooks")]
     (
         "POST /v1/public/channels/{tenant}/{account}/webhook",
         CHANNEL_PUSH_TEST,
     ),
-    #[cfg(feature = "public-url")]
+    #[cfg(feature = "slack-events-api")]
+    ("POST /v1/public/slack/events", SLACK_EVENT_TEST),
+    #[cfg(feature = "github-app")]
     ("POST /v1/github/apps/manifest", GITHUB_APP_TEST),
-    #[cfg(feature = "public-url")]
+    #[cfg(feature = "github-app")]
     ("POST /v1/github/apps", GITHUB_APP_TEST),
-    #[cfg(feature = "public-url")]
+    #[cfg(feature = "github-app")]
     ("GET /v1/github/apps/{id}", GITHUB_APP_TEST),
-    #[cfg(feature = "public-url")]
+    #[cfg(feature = "github-app")]
     ("POST /v1/github/apps/{id}/webhook", GITHUB_APP_TEST),
-    #[cfg(feature = "public-url")]
+    #[cfg(feature = "github-app")]
     ("POST /v1/github/apps/{id}/installations", GITHUB_APP_TEST),
-    #[cfg(feature = "public-url")]
+    #[cfg(feature = "github-app")]
     (
         "POST /v1/public/github/webhook/{tenant}",
         GITHUB_WEBHOOK_TEST,
     ),
+    #[cfg(any(feature = "mcp-http", feature = "mcp-stdio"))]
     ("POST /v1/mcp-servers", MCP_CREATE_TEST),
+    #[cfg(feature = "mcp-http")]
     ("POST /v1/mcp-servers/{id}/login", MCP_LOGIN_TEST),
+    #[cfg(feature = "mcp-http")]
     ("POST /v1/mcp-servers/{id}/login/finish", MCP_LOGIN_TEST),
     ("GET /v1/skills", SKILLS_TEST),
     ("POST /v1/skills", SKILLS_TEST),
@@ -252,16 +298,16 @@ const ROUTE_TESTS: &[(&str, &str)] = &[
     ("POST /v1/artifacts/{id}/duplicate", ARTIFACTS_TEST),
     ("GET /v1/artifacts/{id}/share", SHARING_TEST),
     ("PUT /v1/artifacts/{id}/visibility", SHARING_TEST),
-    #[cfg(feature = "public-url")]
+    #[cfg(feature = "public-artifacts")]
     ("PUT /v1/artifacts/{id}/password", SHARING_TEST),
-    #[cfg(feature = "public-url")]
+    #[cfg(feature = "public-artifacts")]
     ("POST /v1/artifacts/{id}/link", SHARING_TEST),
     ("GET /v1/artifacts/{id}/export", EXPORT_TEST),
-    #[cfg(feature = "public-url")]
+    #[cfg(feature = "public-artifacts")]
     ("GET /v1/public/artifacts/{token}", SHARING_TEST),
-    #[cfg(feature = "public-url")]
+    #[cfg(feature = "public-artifacts")]
     ("GET /v1/public/artifacts/{token}/export", EXPORT_TEST),
-    #[cfg(feature = "public-url")]
+    #[cfg(feature = "public-artifacts")]
     ("POST /v1/public/artifacts/{token}/unlock", SHARING_TEST),
     ("GET /v1/artifact-folders", ARTIFACTS_TEST),
     ("POST /v1/artifact-folders", ARTIFACTS_TEST),
@@ -349,6 +395,7 @@ const ROUTE_TESTS: &[(&str, &str)] = &[
 
 /// The test that shows tenant B reaches no mail account and cannot replace or resend the token of
 /// tenant A's invitation, and that A's job sends with A's own account.
+#[cfg(feature = "email-invitations")]
 const INVITES_TEST: &str =
     "an_invitation_is_sent_with_its_own_workspaces_mail_account_and_nobody_elses";
 
@@ -398,30 +445,40 @@ const LINEAR_THREAD_TEST: &str =
 /// The test that shows tenant B finds none of tenant A's agents' chat accounts, and that a
 /// member who is not the agent's manager cannot pair or disconnect one.
 /// The test that shows a push needs the channel's secret and never crosses to another workspace.
-#[cfg(feature = "public-url")]
+#[cfg(feature = "channel-webhooks")]
 const CHANNEL_PUSH_TEST: &str =
     "a_push_enters_only_with_the_channels_secret_and_only_in_its_own_workspace";
+#[cfg(feature = "channels")]
 const CHANNELS_TEST: &str =
     "a_channel_account_is_the_workspaces_own_and_only_the_agents_managers_pair_it";
+/// The test that shows Slack OAuth installs a workspace account and token only in its tenant.
+#[cfg(feature = "channels")]
+const SLACK_INSTALL_TEST: &str =
+    "oauth_installs_a_workspace_and_keeps_its_token_in_its_tenant_session";
+/// The test that shows an Events API delivery is queued only for the tenant with that workspace.
+#[cfg(feature = "slack-events-api")]
+const SLACK_EVENT_TEST: &str = "slack_events_are_queued_only_for_the_matching_workspace";
 /// The test that shows another workspace, another agent and a member who only sees the agent
 /// reach none of its people or identity requests.
 const PEOPLE_TEST: &str =
     "the_people_of_an_agent_are_invisible_to_other_agents_and_other_workspaces";
 /// The test that shows a delivery signed for tenant A is refused at tenant B's address.
-#[cfg(feature = "public-url")]
+#[cfg(feature = "linear-webhooks")]
 const LINEAR_WEBHOOK_TEST: &str =
     "a_delivery_only_reaches_the_workspace_and_account_whose_secret_signed_it_while_it_is_recent";
 /// The test that shows tenant B finds no App of tenant A's, in any of its routes.
-#[cfg(feature = "public-url")]
+#[cfg(feature = "github-app")]
 const GITHUB_APP_TEST: &str =
     "a_github_app_is_registered_read_and_given_a_webhook_only_inside_its_workspace";
 /// The test that shows a delivery signed for tenant A is refused at tenant B's address.
-#[cfg(feature = "public-url")]
+#[cfg(feature = "github-app")]
 const GITHUB_WEBHOOK_TEST: &str =
     "a_delivery_only_reaches_the_workspace_and_installation_whose_secret_signed_it";
 /// The test that shows a server tenant A adds is not listed for tenant B.
+#[cfg(any(feature = "mcp-http", feature = "mcp-stdio"))]
 const MCP_CREATE_TEST: &str = "a_server_that_answers_is_kept_renamed_and_never_shows_its_headers";
 /// The test that shows tenant B gets a 404 when it tries to sign in to tenant A's server.
+#[cfg(feature = "mcp-http")]
 const MCP_LOGIN_TEST: &str =
     "an_oauth_server_is_kept_unsigned_then_signed_in_with_the_state_it_was_given";
 
@@ -452,14 +509,16 @@ const PROVIDERS_TEST: &str = "provider_accounts_of_the_other_tenant_are_out_of_r
 const CODEX_TEST: &str = "a_chatgpt_sign_in_belongs_to_the_workspace_that_started_it";
 
 /// The test that shows tenant B reaches no member, session or invitation of tenant A.
+#[cfg(feature = "multi-user")]
 const USERS_TEST: &str = "users_and_sessions_of_the_other_tenant_are_out_of_reach";
 
 /// The test that shows a GitHub sign-in opens no workspace its account is not a member of, and a
 /// state belongs to the account that began it.
+#[cfg(feature = "github-login")]
 const GITHUB_TEST: &str = "github_never_lets_in_a_stranger_or_another_workspace";
 
 /// The test that shows a sign-in link opens only the workspace and member it was made for.
-#[cfg(feature = "public-url")]
+#[cfg(feature = "email-login")]
 const MAGIC_LINK_TEST: &str = "a_magic_link_opens_only_the_workspace_and_member_it_was_made_for";
 
 /// Which test here covers a client request. No wildcard arm: a new `ClientRequest` does not
@@ -931,6 +990,7 @@ async fn a_worker_of_one_tenant_neither_gets_nor_answers_the_others_tasks() {
     gateway.stop().await;
 }
 
+#[cfg(feature = "multi-user")]
 #[tokio::test]
 async fn users_and_sessions_of_the_other_tenant_are_out_of_reach() {
     let (gateway, tenants) = start().await;
@@ -1033,26 +1093,90 @@ async fn users_and_sessions_of_the_other_tenant_are_out_of_reach() {
         assert!(!body.contains(victim.id.as_str()), "{body}");
     }
 
-    // Signing in can name a workspace; one the account is not in is a wrong password, not an
-    // open door.
-    let (a, b) = (&tenants.a, &tenants.b);
-    let credentials = |password: &str, tenant: Option<&str>| serde_json::json!({ "email": a.admin.email, "password": password, "tenant": tenant });
+    gateway.stop().await;
+}
+
+#[tokio::test]
+#[cfg(not(feature = "multi-user"))]
+async fn users_and_sessions_of_the_other_tenant_are_out_of_reach() {
+    let (gateway, tenants) = start().await;
+    for (actor, victim) in tenants.crossings() {
+        for (tenant, session) in [
+            (&actor, actor.admin_session.as_str()),
+            (&victim, victim.admin_session.as_str()),
+        ] {
+            let (status, body) = http_get(gateway.addr, "/v1/me", Some(session)).await;
+            assert_eq!(status, 200, "{body}");
+            assert!(
+                body.contains(&format!(r#""tenant":"{}""#, tenant.id)),
+                "{body}"
+            );
+        }
+        for path in ["/v1/members", "/v1/invites"] {
+            let (status, body) = http_get(gateway.addr, path, Some(&actor.admin_session)).await;
+            assert_eq!(status, 404, "{path}: {body}");
+        }
+    }
+    gateway.stop().await;
+}
+
+#[tokio::test]
+async fn password_sessions_are_tenant_scoped() {
+    let (gateway, tenants) = start().await;
+    let (actor, victim) = (&tenants.a, &tenants.b);
+    let credentials = |password: &str, tenant: Option<&str>| serde_json::json!({ "email": actor.admin.email, "password": password, "tenant": tenant });
     let wrong = http_post(
-        addr,
+        gateway.addr,
         "/v1/auth/login",
         None,
         &credentials("not the password at all", None),
     )
     .await;
     let aimed = http_post(
-        addr,
+        gateway.addr,
         "/v1/auth/login",
         None,
-        &credentials(jian_testkit::PASSWORD, Some(b.id.as_str())),
+        &credentials(jian_testkit::PASSWORD, Some(victim.id.as_str())),
     )
     .await;
     assert_eq!(wrong.0, 401, "{}", wrong.1);
     assert_eq!(wrong, aimed);
+
+    let changed = http_post(
+        gateway.addr,
+        "/v1/auth/password",
+        Some(&actor.member_session),
+        &serde_json::json!({ "current": jian_testkit::PASSWORD, "new": "new password long enough" }),
+    )
+    .await;
+    assert_eq!(changed.0, 204, "{}", changed.1);
+    assert_eq!(
+        http_get(gateway.addr, "/v1/me", Some(&victim.member_session))
+            .await
+            .0,
+        200
+    );
+
+    let logged_out = http_post(
+        gateway.addr,
+        "/v1/auth/logout",
+        Some(&actor.admin_session),
+        &serde_json::json!({}),
+    )
+    .await;
+    assert_eq!(logged_out.0, 204, "{}", logged_out.1);
+    assert_eq!(
+        http_get(gateway.addr, "/v1/me", Some(&actor.admin_session))
+            .await
+            .0,
+        401
+    );
+    assert_eq!(
+        http_get(gateway.addr, "/v1/me", Some(&victim.admin_session))
+            .await
+            .0,
+        200
+    );
     gateway.stop().await;
 }
 

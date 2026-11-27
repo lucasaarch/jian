@@ -54,12 +54,14 @@ fn token(name: &str, what: &str) -> Result<(), String> {
 /// # Errors
 ///
 /// A sentence for the person when the address, a header, the command or a variable is not
-/// usable, or when the transport does not exist in this edition (a command server in the Cloud
-/// edition).
+/// usable, or when the account asks for a transport this build does not include.
 pub fn build(server: &NewServer) -> Result<(Value, Option<Secret>), String> {
     let mut credentials = Credentials::default();
     let config = match server.transport {
         Transport::Http => {
+            if !cfg!(feature = "mcp-http") {
+                return Err("HTTP MCP servers are not enabled in this build".to_owned());
+            }
             let text = server.url.as_deref().unwrap_or_default().trim();
             let url = url::Url::parse(text)
                 .map_err(|_| "the server address is not a valid URL".to_owned())?;
@@ -103,8 +105,8 @@ pub fn build(server: &NewServer) -> Result<(Value, Option<Secret>), String> {
             if server.oauth {
                 return Err("OAuth is for HTTP servers".to_owned());
             }
-            if !cfg!(feature = "local-process") {
-                return Err("a command server runs a program on the gateway's machine, which this edition does not allow (no local process); use an HTTP server".to_owned());
+            if !cfg!(feature = "mcp-stdio") {
+                return Err("command (stdio) MCP servers are not enabled in this build".to_owned());
             }
             let command = server.command.as_deref().unwrap_or_default().trim();
             if command.is_empty() {

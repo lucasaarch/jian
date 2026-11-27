@@ -5,9 +5,8 @@ edition.workspace = true
 license.workspace = true
 
 [features]
-# `public-url`: Linear can reach the gateway, so the plugin answers its webhooks. Without it the
-# plugin has no webhook and everything else works. A capability, never an edition.
-public-url = ["jian-plugin-api/public-url"]
+# Linear delivery verification requires an externally reachable webhook route.
+webhooks = ["jian-plugin-api/webhook-routes"]
 
 [dependencies]
 base64.workspace = true

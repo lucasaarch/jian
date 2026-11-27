@@ -1,4 +1,4 @@
-//! Registering a GitHub App from a manifest: `/v1/github/apps*`. Compiled only with `public-url`,
+//! Registering a GitHub App from a manifest: `/v1/github/apps*`. Compiled only with `github-app`,
 //! because the manifest names the address GitHub will call back, which a gateway nobody can reach
 //! does not have.
 //!

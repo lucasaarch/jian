@@ -3,22 +3,44 @@ name = "jian-plugin-mcp"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+autotests = false
 
 [features]
-# Only the capability this crate hides code behind, never an edition. `local-process` is the
-# stdio transport: a command an account names runs on the gateway's machine, which is the
-# owner's in the local and self-hosted editions and ours in the Cloud, so the Cloud build has
-# none. `cargo check -p jian-plugin-mcp --no-default-features` must pass and must not compile
-# `stdio`. Capabilities only add, so two editions turned on together never conflict.
-default = ["local-process"]
-local-process = ["dep:tokio", "dep:rustix"]
+# The two transports can be selected independently.
+default = ["mcp-http", "mcp-stdio"]
+mcp-http = []
+mcp-stdio = ["dep:tokio", "dep:rustix"]
 
 # A stand-in MCP command for the stdio tests: speaks the protocol over its pipes, and can crash.
 [[bin]]
 name = "fake_stdio_server"
 path = "tests/support/fake_stdio_server.rs"
 test = false
-required-features = ["local-process"]
+required-features = ["mcp-stdio"]
+
+[[test]]
+name = "cloud"
+path = "tests/cloud.rs"
+required-features = ["mcp-http"]
+
+[[test]]
+name = "http"
+path = "tests/http.rs"
+required-features = ["mcp-http"]
+
+[[test]]
+name = "oauth"
+path = "tests/oauth.rs"
+required-features = ["mcp-http"]
+
+[[test]]
+name = "stdio"
+path = "tests/stdio.rs"
+required-features = ["mcp-stdio"]
+
+[[test]]
+name = "without_http"
+path = "tests/without_http.rs"
 
 [dependencies]
 base64.workspace = true

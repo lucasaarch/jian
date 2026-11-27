@@ -17,18 +17,18 @@
 //!
 //! # Capabilities
 //!
-//! What a plugin may need from the build is a Cargo capability, never an edition. A plugin that
-//! runs a local process (an MCP server over stdio) sits behind `local-process` in its own crate.
+//! What a plugin may need from the build is a Cargo capability, never an edition. An MCP server
+//! over stdio sits behind `mcp-stdio` in its own crate.
 //! The routes and webhooks a plugin declares (`RouteDef`, `WebhookRequest`, `Plugin::routes`,
-//! `Plugin::handle`) exist only with `public-url`: a gateway nobody can reach from outside, the
-//! desktop app, has no address for a service to call, so none of it compiles there.
+//! `Plugin::handle`) exist only with `webhook-routes`; products compose that capability only into
+//! editions that provide externally reachable ingress.
 
 mod account;
 mod error;
 mod host;
 mod plugin;
 mod registry;
-#[cfg(feature = "public-url")]
+#[cfg(feature = "webhook-routes")]
 mod route;
 mod secret;
 mod tool;
@@ -38,7 +38,7 @@ pub use error::{HostError, PluginError, ToolError};
 pub use host::{AccountContext, AgentEvent, HttpRequest, HttpResponse, PluginHost, SecretChange};
 pub use plugin::{Permission, Plugin};
 pub use registry::{MAX_TOOL_NAME_CHARS, PluginRegistry, ResolvedTool};
-#[cfg(feature = "public-url")]
+#[cfg(feature = "webhook-routes")]
 pub use route::{Encoding, HttpMethod, RouteDef, Verification, WebhookRequest};
 pub use secret::Secret;
 pub use tool::ToolDef;
