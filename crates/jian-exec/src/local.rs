@@ -8,6 +8,7 @@
 //! of a path are two steps, so a link swapped in between could still win; the shell has no such
 //! confinement either, which is why the Cloud never turns this executor on.
 
+use std::collections::BTreeMap;
 use std::fmt::Write as _;
 use std::path::{Component, Path, PathBuf};
 use std::process::Stdio;
@@ -214,15 +215,17 @@ impl Machine for LocalMachine {
         })
     }
 
-    fn shell<'a>(
+    fn shell_with_env<'a>(
         &'a self,
         command: &'a str,
+        env: &'a BTreeMap<String, String>,
         timeout_ms: u64,
     ) -> BoxFuture<'a, Result<ShellOutput, ExecError>> {
         Box::pin(async move {
             let mut shell = shell_command(command);
             shell.current_dir(&self.dir).stdin(Stdio::null());
             child_env(&mut shell);
+            shell.envs(env);
             let mut printed = Capture::default();
             // Dropping this future drops the run, which stops the command's whole tree.
             let outcome = run_bounded(
@@ -238,8 +241,13 @@ impl Machine for LocalMachine {
             if outcome.timed_out {
                 return Err(ExecError::TimedOut);
             }
+            // A command that echoes what it was lent must not hand it to the model.
+            let mut output = printed.text();
+            for value in env.values().filter(|value| value.len() >= 4) {
+                output = output.replace(value.as_str(), "[redacted]");
+            }
             Ok(ShellOutput {
-                output: printed.text(),
+                output,
                 exit_code: outcome.code,
             })
         })

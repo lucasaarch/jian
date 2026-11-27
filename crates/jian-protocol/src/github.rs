@@ -148,3 +148,88 @@ pub struct CreateGithubAppInstallationRequest {
     #[serde(default)]
     pub review_agent: Option<String>,
 }
+
+/// `PUT /v1/github/installations/{id}/review-agent`: who reviews the pull requests of an
+/// installation from now on. `null` stops reviews on their own.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+#[serde(rename_all = "camelCase")]
+pub struct SetGithubReviewAgentRequest {
+    /// An agent the person sees, or `null`.
+    pub agent_id: Option<String>,
+}
+
+/// `POST /v1/github/installations/{id}/mcp`: adds GitHub's official MCP server for an
+/// installation. It calls GitHub with the installation's token, which is never copied into it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateGithubMcpRequest {
+    /// What it is called; the installation's name and "MCP" when left out.
+    #[serde(default)]
+    pub name: Option<String>,
+    /// Another address than GitHub's own (an Enterprise server's).
+    #[serde(default)]
+    pub url: Option<String>,
+}
+
+/// What a thread of a GitHub item is about.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+#[serde(rename_all = "lowercase")]
+pub enum GithubItemKind {
+    /// An issue.
+    Issue,
+    /// A pull request.
+    Pull,
+}
+
+/// `POST /v1/github/threads`: starts a thread with an agent about an issue or a pull request.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateGithubThreadRequest {
+    /// The installation the item is read through.
+    pub account_id: String,
+    /// `owner/name`.
+    pub repo: String,
+    /// The item's number.
+    #[ts(type = "number")]
+    pub number: u64,
+    /// An issue or a pull request.
+    pub kind: GithubItemKind,
+    /// The agent the thread is with.
+    pub agent_id: String,
+    /// What the person asks of the agent, in their own words.
+    #[serde(default)]
+    pub note: Option<String>,
+}
+
+/// A thread and the GitHub item it is about.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+#[serde(rename_all = "camelCase")]
+pub struct GithubThreadView {
+    /// The thread.
+    pub thread_id: String,
+    /// The installation.
+    pub account_id: String,
+    /// The agent it is with.
+    pub agent_id: String,
+    /// `owner/name`, lower case.
+    pub repo: String,
+    /// An issue or a pull request.
+    pub kind: GithubItemKind,
+    /// The item's number.
+    #[ts(type = "number")]
+    pub number: u64,
+}
+
+/// What `GET /v1/github/threads` answers: the threads of one item the person sees.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+#[serde(rename_all = "camelCase")]
+pub struct GithubThreadsView {
+    /// Oldest first.
+    pub threads: Vec<GithubThreadView>,
+}

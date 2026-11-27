@@ -48,6 +48,7 @@ const USAGE_FILE: &str = include_str!("usage.rs");
 const MCP_FILE: &str = include_str!("mcp_servers.rs");
 const GITHUB_FILE: &str = include_str!("github.rs");
 const GITHUB_WEBHOOK_FILE: &str = include_str!("github_webhook.rs");
+const GITHUB_ITEMS_FILE: &str = include_str!("github_items.rs");
 
 async fn start() -> (Gateway, TwoTenants) {
     super::accounts::start(open_settings()).await
@@ -76,6 +77,7 @@ fn is_a_test_here(name: &str) -> bool {
         || MCP_FILE.contains(&declared)
         || GITHUB_FILE.contains(&declared)
         || GITHUB_WEBHOOK_FILE.contains(&declared)
+        || GITHUB_ITEMS_FILE.contains(&declared)
 }
 
 /// Every route the router serves, and the test here that shows tenant B cannot use it on A's
@@ -135,6 +137,13 @@ const ROUTE_TESTS: &[(&str, &str)] = &[
     ("DELETE /v1/connector-accounts/{id}", CONNECTORS_TEST),
     ("POST /v1/github/installations", GITHUB_CREATE_TEST),
     ("POST /v1/github/reviews", GITHUB_REVIEW_TEST),
+    ("POST /v1/github/installations/{id}/mcp", GITHUB_MCP_TEST),
+    (
+        "PUT /v1/github/installations/{id}/review-agent",
+        GITHUB_REVIEW_AGENT_TEST,
+    ),
+    ("POST /v1/github/threads", GITHUB_THREAD_TEST),
+    ("GET /v1/github/threads", GITHUB_THREAD_TEST),
     #[cfg(feature = "public-url")]
     ("POST /v1/github/apps/manifest", GITHUB_APP_TEST),
     #[cfg(feature = "public-url")]
@@ -317,6 +326,14 @@ const GITHUB_CREATE_TEST: &str =
 /// The test that shows tenant B cannot ask for a review with tenant A's installation or agent.
 const GITHUB_REVIEW_TEST: &str =
     "a_review_is_asked_once_per_head_commit_and_never_with_the_words_of_the_pull_request";
+/// The test that shows tenant B cannot add GitHub's MCP server for tenant A's installation.
+const GITHUB_MCP_TEST: &str =
+    "the_github_mcp_server_borrows_the_installations_current_token_and_never_keeps_it";
+/// The test that shows tenant B cannot change who reviews for tenant A's installation.
+const GITHUB_REVIEW_AGENT_TEST: &str = "the_review_agent_is_changed_only_inside_its_workspace";
+/// The test that shows tenant B cannot start or find threads of tenant A's installation.
+const GITHUB_THREAD_TEST: &str =
+    "a_thread_started_from_an_item_is_linked_both_ways_and_is_the_workspaces_own";
 /// The test that shows tenant B finds no App of tenant A's, in any of its routes.
 #[cfg(feature = "public-url")]
 const GITHUB_APP_TEST: &str =

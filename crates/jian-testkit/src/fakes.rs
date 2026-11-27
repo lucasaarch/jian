@@ -292,9 +292,10 @@ impl Machine for FakeMachine {
         })
     }
 
-    fn shell<'a>(
+    fn shell_with_env<'a>(
         &'a self,
         command: &'a str,
+        _env: &'a std::collections::BTreeMap<String, String>,
         _timeout_ms: u64,
     ) -> BoxFuture<'a, Result<ShellOutput, ExecError>> {
         Box::pin(async move {

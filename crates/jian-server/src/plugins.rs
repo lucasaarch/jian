@@ -103,7 +103,8 @@ impl Plugins {
         let scoped: Vec<ScopedAccount> = accounts.iter().map(scoped).collect();
         let me = AgentId::new(agent.as_str());
         self.prepare(db, ctx, &me, &scoped).await;
-        self.registry
+        let mut tools: Vec<Arc<dyn Tool>> = self
+            .registry
             .resolve(&me, &scoped)
             .into_iter()
             .map(|tool| {
@@ -120,7 +121,29 @@ impl Plugins {
                     tool,
                 }) as Arc<dyn Tool>
             })
-            .collect()
+            .collect();
+        // Git is not a tool of the plugin: it runs on the run's machine, which a plugin's tool
+        // never reaches. One tool serves every installation the agent reaches.
+        let installations: Vec<AccountRef> = scoped
+            .iter()
+            .filter(|s| {
+                s.scope.reaches(&me)
+                    && s.account.plugin == jian_plugin_github::GITHUB_ID
+                    && s.account.kind == jian_plugin_github::KIND_INSTALLATION
+            })
+            .map(|s| s.account.clone())
+            .collect();
+        if !installations.is_empty()
+            && let Some(plugin) = self.registry.get(jian_plugin_github::GITHUB_ID)
+        {
+            tools.push(Arc::new(crate::github_git::GitTool::new(
+                Arc::clone(plugin),
+                installations,
+                self.http.clone(),
+                self.allow_internal,
+            )));
+        }
+        tools
     }
 
     /// Lets each plugin get ready for the accounts `agent` reaches, all at once.
@@ -263,7 +286,22 @@ impl Plugins {
         only: Option<&jian_store::AgentId>,
         event: AgentEvent,
     ) -> Result<usize, HostError> {
-        deliver(db, ctx, &account.plugin, &account.id, only, event).await
+        deliver(db, ctx, &account.plugin, &account.id, (only, None), event).await
+    }
+
+    /// Writes `event` for `agent` in `thread`, as [`Self::emit`] does for an inbox: the agent
+    /// wakes in that thread. Answers how many agents it was written for (none when `agent` does
+    /// not reach the account).
+    pub async fn emit_in_thread(
+        &self,
+        db: &Database,
+        ctx: &TenantCtx,
+        account: &ConnectorAccount,
+        (agent, thread): (&jian_store::AgentId, &jian_store::ThreadId),
+        event: AgentEvent,
+    ) -> Result<usize, HostError> {
+        let target = (Some(agent), Some(thread));
+        deliver(db, ctx, &account.plugin, &account.id, target, event).await
     }
 
     /// The head commit of an open pull request, read through a GitHub installation: what a
@@ -504,12 +542,12 @@ impl Tool for PluginTool {
 /// What a plugin may ask of the gateway during one call. Bound to one account: asking for
 /// another's secret, or to write an event for another's agents, is refused.
 pub struct ServerHost<'a> {
-    db: &'a Database,
-    ctx: &'a TenantCtx,
-    plugin: &'a str,
-    account: &'a AccountId,
-    http: &'a reqwest::Client,
-    allow_internal: bool,
+    pub(crate) db: &'a Database,
+    pub(crate) ctx: &'a TenantCtx,
+    pub(crate) plugin: &'a str,
+    pub(crate) account: &'a AccountId,
+    pub(crate) http: &'a reqwest::Client,
+    pub(crate) allow_internal: bool,
 }
 
 fn failed(error: impl std::fmt::Display) -> HostError {
@@ -517,6 +555,49 @@ fn failed(error: impl std::fmt::Display) -> HostError {
 }
 
 impl ServerHost<'_> {
+    /// The GitHub token an MCP server of the official GitHub server is called with, when the
+    /// account says (`borrowFrom`) which installation it borrows it from. It is asked for at each
+    /// use, so a renewed token is the one sent, and it is never stored in the MCP account.
+    async fn borrowed_token(&self, id: &ConnectorAccountId) -> Result<Option<String>, HostError> {
+        let own = self
+            .db
+            .plugin_connector_accounts(self.ctx, jian_plugin_mcp::MCP_ID)
+            .await
+            .map_err(failed)?;
+        let Some(from) = own
+            .iter()
+            .find(|a| &a.id == id)
+            .and_then(|a| a.config["borrowFrom"].as_str().map(str::to_owned))
+        else {
+            return Ok(None);
+        };
+        let installations = self
+            .db
+            .plugin_connector_accounts(self.ctx, jian_plugin_github::GITHUB_ID)
+            .await
+            .map_err(failed)?;
+        let installation = installations
+            .iter()
+            .find(|a| a.id.as_str() == from && a.kind == jian_plugin_github::KIND_INSTALLATION)
+            .ok_or_else(|| failed("the GitHub installation this server borrows from is gone"))?;
+        let reference = scoped(installation).account;
+        let config =
+            jian_plugin_github::config::Config::parse(&reference.config).map_err(failed)?;
+        let host = ServerHost {
+            db: self.db,
+            ctx: self.ctx,
+            plugin: jian_plugin_github::GITHUB_ID,
+            account: &reference.id,
+            http: self.http,
+            allow_internal: self.allow_internal,
+        };
+        let context = AccountContext::new(&host, &reference, jian_plugin_github::permissions());
+        let token = jian_plugin_github::token::bearer(&context, &config, None)
+            .await
+            .map_err(failed)?;
+        Ok(Some(token.expose().to_owned()))
+    }
+
     fn own(&self, account: &AccountId) -> Result<ConnectorAccountId, HostError> {
         if account == self.account {
             Ok(ConnectorAccountId::new(account.as_str()))
@@ -540,6 +621,18 @@ impl PluginHost for ServerHost<'_> {
                 .connector_account_secret(self.ctx, &id)
                 .await
                 .map_err(|_| failed("the vault could not be read"))?;
+            if self.plugin == jian_plugin_mcp::MCP_ID
+                && let Some(token) = self.borrowed_token(&id).await?
+            {
+                // The vault holds the other headers; the token is added to what the plugin
+                // reads, and goes nowhere else.
+                let mut document: Value = secret
+                    .as_ref()
+                    .and_then(|s| serde_json::from_str(s.expose()).ok())
+                    .unwrap_or_else(|| serde_json::json!({}));
+                document["headers"]["Authorization"] = Value::String(format!("Bearer {token}"));
+                return Ok(Some(Secret::new(document.to_string())));
+            }
             Ok(secret.map(|s| Secret::new(s.expose())))
         })
     }
@@ -581,7 +674,7 @@ impl PluginHost for ServerHost<'_> {
     ) -> BoxFuture<'a, Result<(), HostError>> {
         Box::pin(async move {
             let id = self.own(account)?;
-            deliver(self.db, self.ctx, self.plugin, &id, None, event)
+            deliver(self.db, self.ctx, self.plugin, &id, (None, None), event)
                 .await
                 .map(drop)
         })
@@ -595,7 +688,7 @@ async fn deliver(
     ctx: &TenantCtx,
     plugin: &str,
     account: &ConnectorAccountId,
-    only: Option<&jian_store::AgentId>,
+    (only, thread): (Option<&jian_store::AgentId>, Option<&jian_store::ThreadId>),
     event: AgentEvent,
 ) -> Result<usize, HostError> {
     let agents = db
@@ -613,7 +706,7 @@ async fn deliver(
             agent,
             NewEvent {
                 kind: kind.clone(),
-                thread: None,
+                thread: thread.cloned(),
                 payload: event.payload.clone(),
                 available_ms: system_now_ms(),
                 key: event.key.clone(),

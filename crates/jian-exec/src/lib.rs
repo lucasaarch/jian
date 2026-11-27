@@ -12,6 +12,8 @@
 
 mod local;
 
+use std::collections::BTreeMap;
+
 use futures_util::future::BoxFuture;
 use jian_protocol::machine::{FilesAnswer, FilesDone, FilesOp};
 
@@ -63,6 +65,21 @@ pub trait Machine: Send + Sync {
     fn shell<'a>(
         &'a self,
         command: &'a str,
+        timeout_ms: u64,
+    ) -> BoxFuture<'a, Result<ShellOutput, ExecError>> {
+        // A borrowed map must outlive the call, so the empty one is a static.
+        static NO_ENV: BTreeMap<String, String> = BTreeMap::new();
+        self.shell_with_env(command, &NO_ENV, timeout_ms)
+    }
+
+    /// The same, with `env` set for this command alone. It is how a credential reaches a command
+    /// without being in its text: an argument sits on the machine's process list, an environment
+    /// variable does not. The machine masks the values in what it sends back; a caller still
+    /// never prints them.
+    fn shell_with_env<'a>(
+        &'a self,
+        command: &'a str,
+        env: &'a BTreeMap<String, String>,
         timeout_ms: u64,
     ) -> BoxFuture<'a, Result<ShellOutput, ExecError>>;
 

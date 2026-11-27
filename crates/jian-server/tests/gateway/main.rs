@@ -16,6 +16,9 @@ mod codex;
 mod connectors;
 mod editions;
 mod github;
+mod github_items;
+#[cfg(all(feature = "public-url", not(feature = "multi-tenant")))]
+mod github_items_events;
 #[cfg(all(feature = "public-url", not(feature = "multi-tenant")))]
 mod github_webhook;
 #[cfg(feature = "public-url")]

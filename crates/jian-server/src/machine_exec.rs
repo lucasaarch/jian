@@ -245,16 +245,18 @@ impl Machine for HubMachine {
         Box::pin(self.answer(op))
     }
 
-    fn shell<'a>(
+    fn shell_with_env<'a>(
         &'a self,
         command: &'a str,
+        env: &'a BTreeMap<String, String>,
         timeout_ms: u64,
     ) -> BoxFuture<'a, Result<ShellOutput, ExecError>> {
         Box::pin(async move {
+            // The worker sets `env` for this command alone and masks its values in the answer.
             let spec = TaskSpec::Shell(ShellTask {
                 command: command.to_owned(),
                 cwd: None,
-                env: BTreeMap::default(),
+                env: env.clone(),
             });
             let result = self.run(spec, Duration::from_millis(timeout_ms)).await?;
             if result.timed_out {

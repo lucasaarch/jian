@@ -25,17 +25,17 @@ use super::github::{
 use super::invites::stop;
 use super::support::Gateway;
 
-const SECRET_A: &str = "whsec-synthetic";
+pub(super) const SECRET_A: &str = "whsec-synthetic";
 const SECRET_B: &str = "whsec-of-the-other-workspace";
 
-fn settings() -> Settings {
+pub(super) fn settings() -> Settings {
     Settings {
         public_url: Some(PublicUrl::parse("https://jian.example.test").unwrap()),
         ..open_settings()
     }
 }
 
-fn registry() -> JobRegistry {
+pub(super) fn registry() -> JobRegistry {
     JobRegistry::new().register(
         GITHUB_WEBHOOK_KIND,
         Arc::new(GithubWebhookHandler::new(Plugins::new(builtin_plugins()))),
@@ -43,7 +43,7 @@ fn registry() -> JobRegistry {
 }
 
 /// What GitHub sends when pull request 7 of `acme/web` is opened (or pushed to) at `sha`.
-fn pull_request(action: &str, sha: &str, draft: bool) -> String {
+pub(super) fn pull_request(action: &str, sha: &str, draft: bool) -> String {
     json!({
         "action": action, "installation": { "id": 678 },
         "repository": { "full_name": "acme/web" }, "sender": { "login": "mona" },
@@ -57,7 +57,7 @@ fn pull_request(action: &str, sha: &str, draft: bool) -> String {
 }
 
 /// One delivery, as GitHub makes it: its signature is the header's, when there is one.
-async fn deliver(
+pub(super) async fn deliver(
     addr: SocketAddr,
     tenant: &str,
     event: &str,
@@ -80,7 +80,12 @@ async fn deliver(
 }
 
 /// Waits until the inbox holds `count` events: the job that writes them runs on its own.
-async fn until_inbox(gateway: &Gateway, side: &jian_testkit::Side, agent: &str, count: usize) {
+pub(super) async fn until_inbox(
+    gateway: &Gateway,
+    side: &jian_testkit::Side,
+    agent: &str,
+    count: usize,
+) {
     let until = Instant::now() + Duration::from_secs(15);
     while inbox(gateway, side, agent).await.len() < count {
         assert!(Instant::now() < until, "the events never came");
@@ -88,7 +93,7 @@ async fn until_inbox(gateway: &Gateway, side: &jian_testkit::Side, agent: &str, 
     }
 }
 
-fn kinds(events: &[jian_store::AgentEvent]) -> Vec<&str> {
+pub(super) fn kinds(events: &[jian_store::AgentEvent]) -> Vec<&str> {
     events
         .iter()
         .map(|e| e.kind.rsplit("plugin.github.").next().unwrap())

@@ -140,6 +140,7 @@ pub mod embedded;
 mod error;
 mod gate;
 mod github_reviews;
+mod github_threads;
 mod grants;
 mod imports;
 mod invites;
@@ -225,6 +226,7 @@ pub use database::{Database, DatabaseHealth, DatabaseSource, DatabaseUrl};
 pub use devices::Device;
 pub use error::StoreError;
 pub use gate::{TenantLimits, TenantTx};
+pub use github_threads::GithubThreadLink;
 pub use grants::{GRANTS, MemberGrant};
 pub use imports::{ImportMarker, ImportResult, ImportStatus};
 pub use invites::{

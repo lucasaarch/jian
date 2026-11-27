@@ -193,15 +193,47 @@ impl GithubWebhookHandler {
         let Some(account) = accounts.into_iter().find(|a| a.id.as_str() == account) else {
             return Ok(());
         };
-        let event = AgentEvent {
-            kind: kind.to_owned(),
-            payload: payload["notice"].clone(),
-            key: Some(format!("gh:{delivery}")),
+        let notice = &payload["notice"];
+        // A thread started from this issue or pull request is where its news goes. When none
+        // is linked, or none of their agents still reaches the account, it is told to every
+        // agent that does, as before.
+        let item = match kind.split_once('.').map(|(item, _)| item) {
+            Some("pull_request") => Some("pull"),
+            Some("issue") => Some("issue"),
+            _ => None,
         };
-        self.plugins
-            .emit(&db, &tenant, &account, None, event)
-            .await
-            .map_err(|e| retry(&e))?;
+        let mut told = 0;
+        if let (Some(item), Some(repo), Some(number)) =
+            (item, notice["repo"].as_str(), notice["number"].as_u64())
+        {
+            let linked = db
+                .github_threads_of(&tenant, &account.id, repo, item, number)
+                .await
+                .map_err(|e| retry(&e))?;
+            for link in linked {
+                let event = AgentEvent {
+                    kind: kind.to_owned(),
+                    payload: notice.clone(),
+                    key: Some(format!("gh:{delivery}:{}", link.thread)),
+                };
+                told += self
+                    .plugins
+                    .emit_in_thread(&db, &tenant, &account, (&link.agent, &link.thread), event)
+                    .await
+                    .map_err(|e| retry(&e))?;
+            }
+        }
+        if told == 0 {
+            let event = AgentEvent {
+                kind: kind.to_owned(),
+                payload: notice.clone(),
+                key: Some(format!("gh:{delivery}")),
+            };
+            self.plugins
+                .emit(&db, &tenant, &account, None, event)
+                .await
+                .map_err(|e| retry(&e))?;
+        }
         self.review(&db, &tenant, &account, &payload["review"])
             .await
             .map_err(JobError::retry)

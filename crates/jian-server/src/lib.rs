@@ -81,6 +81,8 @@ mod events;
 mod github;
 #[cfg(feature = "public-url")]
 mod github_app;
+mod github_git;
+mod github_items;
 mod github_review;
 #[cfg(feature = "public-url")]
 mod github_webhook;
@@ -229,6 +231,10 @@ pub const ROUTES: &[&str] = &[
     "DELETE /v1/agents/{id}/memories/{key}/links/{other} (a member who sees the agent)",
     "POST /v1/github/installations (a member)",
     "POST /v1/github/reviews (a member who sees the installation and the agent)",
+    "POST /v1/github/installations/{id}/mcp (a member who sees the installation)",
+    "PUT /v1/github/installations/{id}/review-agent (its creator or an admin; an agent they see)",
+    "POST /v1/github/threads (a member who sees the installation and the agent)",
+    "GET /v1/github/threads (a member who sees the installation; only threads they are in)",
     #[cfg(feature = "public-url")]
     "POST /v1/github/apps/manifest (a member)",
     #[cfg(feature = "public-url")]
@@ -571,6 +577,18 @@ pub fn router_with(state: AppState, extra: Router<AppState>) -> Router {
         )
         .route("/v1/github/installations", post(github::create))
         .route("/v1/github/reviews", post(github_review::create))
+        .route(
+            "/v1/github/installations/{id}/mcp",
+            post(github_items::create_mcp),
+        )
+        .route(
+            "/v1/github/installations/{id}/review-agent",
+            put(github_items::set_review_agent),
+        )
+        .route(
+            "/v1/github/threads",
+            post(github_items::create_thread).get(github_items::list_threads),
+        )
         .route("/v1/mcp-servers", post(mcp_servers::create))
         .route("/v1/mcp-servers/{id}/login", post(mcp_servers::login_start))
         .route(

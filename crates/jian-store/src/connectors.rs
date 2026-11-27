@@ -463,6 +463,44 @@ impl Database {
         self.connector_account(ctx, viewer, id).await
     }
 
+    /// Replaces an account's settings (never its secret). `None` when the viewer cannot see it;
+    /// [`StoreError::Denied`] when they can but are neither its creator nor an admin. It is for
+    /// a plugin's own route to change one setting it owns, with the rest of the object kept.
+    pub async fn set_connector_config(
+        &self,
+        ctx: &TenantCtx,
+        viewer: &Viewer,
+        id: &ConnectorAccountId,
+        config: &Value,
+    ) -> Result<Option<ConnectorAccount>, StoreError> {
+        const ACTION: &str = "change a connector account's settings";
+        let Some(account) = self.connector_account(ctx, viewer, id).await? else {
+            return Ok(None);
+        };
+        if !can_manage_connector(&account, viewer) {
+            return Err(StoreError::Denied(
+                "only the person who made an account, or an admin, may change it",
+            ));
+        }
+        if !config.is_object() {
+            return Err(StoreError::InvalidWorkspace(
+                "an account's config is a JSON object",
+            ));
+        }
+        let mut tx = self.begin(ctx).await?;
+        sqlx::query(
+            "UPDATE connector_accounts SET config = $2::text::jsonb, updated_at = now() \
+             WHERE id = $1",
+        )
+        .bind(id.as_str())
+        .bind(config.to_string())
+        .execute(&mut *tx)
+        .await
+        .map_err(StoreError::query(ACTION))?;
+        tx.commit().await.map_err(StoreError::query(ACTION))?;
+        self.connector_account(ctx, viewer, id).await
+    }
+
     /// Deletes an account and its secret. `false` when the viewer cannot see it;
     /// [`StoreError::Denied`] when they can but may not change it.
     pub async fn delete_connector_account(
