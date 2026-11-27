@@ -648,6 +648,17 @@ async fn serve(
         ChannelKind::Whatsapp,
         Arc::new(|_, store| jian_channel_whatsapp::open(store)),
     );
+    chat.register(
+        ChannelKind::Telegram,
+        Arc::new(|_, store| {
+            jian_channel_telegram::open(store, jian_channel_telegram::TelegramConfig::default())
+        }),
+    );
+    // With a public address Telegram can push to the gateway; without one the channel polls.
+    #[cfg(feature = "public-url")]
+    if let Some(url) = &settings.public_url {
+        chat.push_through(url.clone());
+    }
     let runner = JobRunner::start(
         database.clone(),
         keeper.instance().clone(),

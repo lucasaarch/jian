@@ -75,6 +75,8 @@ mod auto_continue;
 mod browser_tools;
 mod channel_hub;
 mod channel_intake;
+#[cfg(feature = "public-url")]
+mod channel_push;
 mod channel_routes;
 mod channel_session;
 mod client_ws;
@@ -271,6 +273,8 @@ pub const ROUTES: &[&str] = &[
     "GET /v1/linear/threads (a member who sees the account; only threads they are in)",
     #[cfg(feature = "public-url")]
     "POST /v1/public/linear/webhook/{tenant} (no token; Linear's signature; 401 for any other)",
+    #[cfg(feature = "public-url")]
+    "POST /v1/public/channels/{tenant}/{account}/webhook (no token; the provider's secret header; 401 for any other, 404 for an account not held here)",
     "POST /v1/mcp-servers (a member)",
     "POST /v1/mcp-servers/{id}/login (its creator or an admin)",
     "POST /v1/mcp-servers/{id}/login/finish (its creator or an admin)",
@@ -860,6 +864,14 @@ pub fn router_with(state: AppState, extra: Router<AppState>) -> Router {
                     post(linear_webhook::receive),
                 )
                 .layer(DefaultBodyLimit::max(linear_webhook::MAX_WEBHOOK_BODY)),
+        )
+        .merge(
+            Router::new()
+                .route(
+                    "/v1/public/channels/{tenant}/{account}/webhook",
+                    post(channel_push::receive),
+                )
+                .layer(DefaultBodyLimit::max(channel_push::MAX_PUSH_BODY)),
         );
     #[cfg(not(feature = "public-url"))]
     let public = Router::new();

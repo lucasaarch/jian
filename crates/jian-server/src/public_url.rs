@@ -75,6 +75,16 @@ impl PublicUrl {
         self.id_link("v1/public/github/webhook", tenant)
     }
 
+    /// Where a chat provider pushes what one account receives: the workspace and the account are
+    /// in the path, so a delivery can only reach the account it names, in the workspace it
+    /// names. `None` for an id that is not URL-safe.
+    #[must_use]
+    pub fn channel_webhook(&self, tenant: &str, account: &str) -> Option<String> {
+        let base = self.id_link("v1/public/channels", tenant)?;
+        let url = format!("{base}/{account}/webhook");
+        self.id_link("v1/public/channels/x", account).map(|_| url)
+    }
+
     /// Where Linear delivers a workspace's webhooks, with the workspace in the path for the same
     /// reasons as [`github_webhook`](Self::github_webhook).
     #[must_use]

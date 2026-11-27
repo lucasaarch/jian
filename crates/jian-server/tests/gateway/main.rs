@@ -14,6 +14,7 @@ mod artifact_sharing;
 mod artifacts;
 mod channel_answer;
 mod channel_hub;
+mod channel_push;
 mod channels;
 mod codex;
 mod connectors;

@@ -143,11 +143,39 @@ pub(crate) async fn create(
         .as_deref()
         .map(str::trim)
         .filter(|owner| !owner.is_empty());
+    // Only Telegram has a token to give; a token is one word, never echoed back.
+    let token = body
+        .token
+        .as_deref()
+        .map(str::trim)
+        .filter(|t| !t.is_empty());
+    if let Some(token) = token
+        && (kind != ChannelKind::Telegram
+            || token.len() > 200
+            || token.chars().any(char::is_whitespace))
+    {
+        return Err(refuse(
+            StatusCode::BAD_REQUEST,
+            "invalid_input",
+            "only a Telegram account takes a token, and it is the bot token from @BotFather",
+        ));
+    }
     let account = app
         .db
         .create_channel_account(&ctx, &viewer, &agent, kind.as_str(), owner)
         .await
         .map_err(|e| failure(&e))?;
+    if let Some(token) = token {
+        // Sealed in the vault like a session key; the channel reads it from there. A bad token
+        // shows as `logged_out` once the connection is tried.
+        app.db
+            .put_channel_session(&ctx, &account.id, "token", token.as_bytes())
+            .await
+            .map_err(|e| failure(&e))?;
+        if let Err(error) = app.channels.connect(&ctx, &account, PairingMethod::Resume) {
+            tracing::warn!(account = %account.id, %error, "connecting a new channel account failed");
+        }
+    }
     Ok((StatusCode::CREATED, Json(view(&account))))
 }
 

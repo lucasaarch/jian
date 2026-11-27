@@ -52,6 +52,7 @@ const GITHUB_ITEMS_FILE: &str = include_str!("github_items.rs");
 const LINEAR_FILE: &str = include_str!("linear.rs");
 const LINEAR_WEBHOOK_FILE: &str = include_str!("linear_webhook.rs");
 const CHANNELS_FILE: &str = include_str!("channels.rs");
+const CHANNEL_PUSH_FILE: &str = include_str!("channel_push.rs");
 const PEOPLE_FILE: &str = include_str!("people.rs");
 
 async fn start() -> (Gateway, TwoTenants) {
@@ -85,6 +86,7 @@ fn is_a_test_here(name: &str) -> bool {
         || LINEAR_FILE.contains(&declared)
         || LINEAR_WEBHOOK_FILE.contains(&declared)
         || CHANNELS_FILE.contains(&declared)
+        || CHANNEL_PUSH_FILE.contains(&declared)
         || PEOPLE_FILE.contains(&declared)
 }
 
@@ -191,6 +193,11 @@ const ROUTE_TESTS: &[(&str, &str)] = &[
     (
         "POST /v1/public/linear/webhook/{tenant}",
         LINEAR_WEBHOOK_TEST,
+    ),
+    #[cfg(feature = "public-url")]
+    (
+        "POST /v1/public/channels/{tenant}/{account}/webhook",
+        CHANNEL_PUSH_TEST,
     ),
     #[cfg(feature = "public-url")]
     ("POST /v1/github/apps/manifest", GITHUB_APP_TEST),
@@ -390,6 +397,10 @@ const LINEAR_THREAD_TEST: &str =
     "a_thread_started_from_an_issue_is_linked_both_ways_and_is_the_workspaces_own";
 /// The test that shows tenant B finds none of tenant A's agents' chat accounts, and that a
 /// member who is not the agent's manager cannot pair or disconnect one.
+/// The test that shows a push needs the channel's secret and never crosses to another workspace.
+#[cfg(feature = "public-url")]
+const CHANNEL_PUSH_TEST: &str =
+    "a_push_enters_only_with_the_channels_secret_and_only_in_its_own_workspace";
 const CHANNELS_TEST: &str =
     "a_channel_account_is_the_workspaces_own_and_only_the_agents_managers_pair_it";
 /// The test that shows another workspace, another agent and a member who only sees the agent

@@ -99,6 +99,10 @@ pub(crate) struct Inner {
     openers: RwLock<HashMap<ChannelKind, ChannelOpener>>,
     pub(crate) running: Mutex<HashMap<Key, Arc<Live>>>,
     pub(crate) stranger_limits: Mutex<StrangerLimits>,
+    /// Where a provider that can push is told to push. Only a build that can be reached from
+    /// outside (`public-url`) has one; any other, or a gateway with no address, polls.
+    #[cfg(feature = "public-url")]
+    public_url: Mutex<Option<crate::PublicUrl>>,
 }
 
 /// The accounts this instance keeps connected. Cloning shares them.
@@ -131,8 +135,39 @@ impl ChannelHub {
                 openers: RwLock::default(),
                 running: Mutex::default(),
                 stranger_limits: Mutex::default(),
+                #[cfg(feature = "public-url")]
+                public_url: Mutex::new(None),
             }),
         }
+    }
+
+    /// Tells the hub the gateway's public address, so a provider that can push is asked to
+    /// deliver there instead of being polled. Accounts connected after this call.
+    #[cfg(feature = "public-url")]
+    pub fn push_through(&self, url: crate::PublicUrl) {
+        *locked(&self.inner.public_url) = Some(url);
+    }
+
+    /// Hands the channel of an account the delivery its provider pushed. It enters like anything
+    /// the channel fetches itself; a wrong secret enters nothing.
+    ///
+    /// # Errors
+    ///
+    /// [`ChannelError::NotConnected`] when this instance does not hold the account in that
+    /// workspace, which is also what another workspace's account looks like;
+    /// [`ChannelError::Unauthorized`] for a secret that is not the channel's.
+    pub async fn push(
+        &self,
+        tenant: &TenantId,
+        account: &ChannelAccountId,
+        secret: Option<&str>,
+        body: &[u8],
+    ) -> Result<(), ChannelError> {
+        let live = locked(&self.inner.running)
+            .get(&(tenant.clone(), account.clone()))
+            .cloned()
+            .ok_or(ChannelError::NotConnected)?;
+        live.channel.receive_push(secret, body).await
     }
 
     /// Says how an account of `kind` is connected, replacing what was said before.
@@ -191,6 +226,13 @@ impl ChannelHub {
             return Err(HubError::NotServed);
         }
         let channel = self.opener(&account.provider)?(account, self.session(ctx, account));
+        #[cfg(feature = "public-url")]
+        if let Some(url) = locked(&self.inner.public_url)
+            .as_ref()
+            .and_then(|base| base.channel_webhook(ctx.id().as_str(), account.id.as_str()))
+        {
+            channel.use_push(url);
+        }
         let live = Arc::new(Live {
             channel,
             cancel: self.inner.closing.child_token(),

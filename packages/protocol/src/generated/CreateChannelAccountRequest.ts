@@ -13,4 +13,9 @@ provider: string,
  * The agent's owner as the provider names them (for `WhatsApp`, their JID). Their messages
  * are orders to the agent and are never news to them.
  */
-ownerAddress: string | null, };
+ownerAddress: string | null, 
+/**
+ * A Telegram bot's token. It goes to the vault and is never returned: no response,
+ * event or log carries it. Refused for a provider that has no token.
+ */
+token: string | null, };
