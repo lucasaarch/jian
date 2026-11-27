@@ -54,22 +54,22 @@ pub struct Plugins {
     allow_internal: bool,
 }
 
-/// The plugins of this build. Real ones are added here, each behind the feature of the edition
-/// it exists in: `#[cfg(feature = "self-hosted")]` for one that may only run where the operator
-/// owns the machine. MCP is in both; its command transport is the part only self-hosted has,
-/// decided inside the crate by the same feature.
+/// The plugins of this build. Real ones are added here, each behind the capability it needs:
+/// `#[cfg(feature = "local-process")]` for one that may only run where the gateway's machine is
+/// the owner's. MCP is in every build; its command transport is the part that needs
+/// `local-process`, decided inside the crate by the same feature.
 #[must_use]
 pub fn builtin_plugins() -> PluginRegistry {
     PluginRegistry::new().with_all(jian_plugin_mcp::plugins())
 }
 
 impl Plugins {
-    /// A set of plugins for this build's edition: a self-hosted one may send to private
-    /// addresses (an MCP server on the same machine), a Cloud one may not (see
+    /// A set of plugins for this build: one without `multi-tenant` may send to private
+    /// addresses (an MCP server on the same machine), one with it may not (see
     /// [`crate::outbound`]).
     #[must_use]
     pub fn new(registry: PluginRegistry) -> Self {
-        Self::in_edition(registry, cfg!(feature = "self-hosted"))
+        Self::in_edition(registry, !cfg!(feature = "multi-tenant"))
     }
 
     /// The same, with the choice of reaching private addresses made by the caller, so one build

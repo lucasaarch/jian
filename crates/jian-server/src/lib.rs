@@ -64,7 +64,9 @@ mod artifact_events;
 mod artifact_export;
 mod artifact_folders;
 mod artifact_office;
+#[cfg(feature = "public-url")]
 mod artifact_pass;
+#[cfg(feature = "public-url")]
 mod artifact_public;
 mod artifact_share;
 mod artifacts;
@@ -78,10 +80,12 @@ mod events;
 mod guard;
 mod http;
 mod hub;
+#[cfg(feature = "public-url")]
 mod invite_job;
 mod invites;
 mod jobs;
 mod llm_access;
+#[cfg(feature = "public-url")]
 mod login_link_job;
 mod machine_exec;
 mod mail;
@@ -136,10 +140,12 @@ pub use auto_continue::MAX_IDLE_CONTINUATIONS;
 pub use compact_job::{Model, ModelSource, ThreadCompactor};
 pub use events::{BUFFER_DELTAS, EventBus, MemoryEventBus, Scope, Subscription};
 pub use hub::{DispatchError, HubCommand, MachineHub};
+#[cfg(feature = "public-url")]
 pub use invite_job::{INVITE_SEND_KIND, InviteSender};
 pub use jian_runtime::THREAD_COMPACT_KIND;
 pub use jobs::{JobContext, JobError, JobHandler, JobOptions, JobRegistry, JobRequeue, JobRunner};
 pub use llm_access::{LlmAccess, PendingLogins};
+#[cfg(feature = "public-url")]
 pub use login_link_job::{LOGIN_LINK_SEND_KIND, LoginLinkSender};
 pub use machine_exec::AgentMachines;
 pub use mail::{DeployMail, MailConfig};
@@ -167,7 +173,9 @@ pub const ROUTES: &[&str] = &[
     "DELETE /v1/auth/github (a session; GitHub sign-in must be on)",
     "POST /v1/auth/github/link (a session; GitHub sign-in must be on)",
     "POST /v1/auth/github/link/complete (a session; GitHub sign-in must be on)",
+    #[cfg(feature = "public-url")]
     "POST /v1/auth/magic-link (no token; the e-mailed link must be on)",
+    #[cfg(feature = "public-url")]
     "POST /v1/auth/magic-link/redeem (no token; the e-mailed link must be on)",
     "GET /v1/members (an admin)",
     "POST /v1/members (an admin)",
@@ -177,6 +185,7 @@ pub const ROUTES: &[&str] = &[
     "POST /v1/invites (an admin)",
     "POST /v1/invites/{id}/revoke (an admin)",
     "POST /v1/invites/{id}/link (an admin)",
+    #[cfg(feature = "public-url")]
     "POST /v1/invites/{id}/resend (an admin)",
     "GET /v1/settings/mail (an admin)",
     "PUT /v1/settings/mail (an admin)",
@@ -250,11 +259,16 @@ pub const ROUTES: &[&str] = &[
     "POST /v1/artifacts/{id}/duplicate (a member who sees it)",
     "GET /v1/artifacts/{id}/share (a member who sees it: how it is shared, and its link)",
     "PUT /v1/artifacts/{id}/visibility (its owner, not an admin; external needs a server)",
+    #[cfg(feature = "public-url")]
     "PUT /v1/artifacts/{id}/password (its owner; only for external; null removes it)",
+    #[cfg(feature = "public-url")]
     "POST /v1/artifacts/{id}/link (its owner: a new link, the old one stops)",
     "GET /v1/artifacts/{id}/export (a member who sees it; ?format=: its kind's files; pdf and png need a renderer)",
+    #[cfg(feature = "public-url")]
     "GET /v1/public/artifacts/{token} (the link: a signed-in member who sees it, or anyone for external, with its pass when it has a password)",
+    #[cfg(feature = "public-url")]
     "POST /v1/public/artifacts/{token}/unlock (no token; the link's password; 10 tries a minute)",
+    #[cfg(feature = "public-url")]
     "GET /v1/public/artifacts/{token}/export (the link, opened as for a read; ?format=)",
     "GET /v1/artifact-folders (a member)",
     "POST /v1/artifact-folders (a member)",
@@ -333,13 +347,25 @@ pub struct Settings {
     /// How the e-mail names the workspace. Workspaces have no name of their own yet, so one
     /// name is said for all of them.
     pub workspace_name: String,
-    /// Whether an agent's runs may use the gateway's own machine. On for a self-hosted or
-    /// desktop install, where that machine is the owner's; the Cloud turns it off, because
-    /// there it would be the operator's machine shared by every tenant.
+    /// Whether an agent's runs may use the gateway's own machine. A choice at start-up, on top
+    /// of the `local-process` capability (see [`Settings::gateway_machine`]), which a build
+    /// without it (the Cloud) never has: there it would be the operator's machine shared by
+    /// every tenant.
     pub local_machine: bool,
     /// How many password tries one reader may make on one public link: every try counts, right
     /// or wrong. Kept in this process, so each replica gives its own allowance.
     pub public_unlock: Limit,
+}
+
+impl Settings {
+    /// Whether runs may use the gateway's own machine: the start-up choice, in a build that has
+    /// `local-process`. The capability decides in the build, so no flag can turn it on in the
+    /// Cloud. (`LocalExecutor` itself stays compiled: it is a library type other crates and tests
+    /// use; only the gateway's use of it is gated.)
+    #[must_use]
+    pub fn gateway_machine(&self) -> bool {
+        self.local_machine && cfg!(feature = "local-process")
+    }
 }
 
 impl Default for Settings {
@@ -463,11 +489,6 @@ pub fn router_with(state: AppState, extra: Router<AppState>) -> Router {
             "/v1/auth/github/link/complete",
             post(sign_in::github_link_complete),
         )
-        .route("/v1/auth/magic-link", post(sign_in::magic_link_request))
-        .route(
-            "/v1/auth/magic-link/redeem",
-            post(sign_in::magic_link_redeem),
-        )
         .route("/v1/members", get(members::list).post(members::add))
         .route("/v1/members/{account_id}/disable", post(members::disable))
         .route(
@@ -477,7 +498,6 @@ pub fn router_with(state: AppState, extra: Router<AppState>) -> Router {
         .route("/v1/invites", get(invites::list).post(invites::create))
         .route("/v1/invites/{id}/revoke", post(invites::revoke))
         .route("/v1/invites/{id}/link", post(invites::link))
-        .route("/v1/invites/{id}/resend", post(invites::resend))
         .route(
             "/v1/settings/mail",
             get(mail_settings::get)
@@ -646,13 +666,22 @@ pub fn router_with(state: AppState, extra: Router<AppState>) -> Router {
             "/v1/artifacts/{id}/visibility",
             put(artifact_share::visibility),
         )
-        .route("/v1/artifacts/{id}/password", put(artifact_share::password))
         .route("/v1/artifacts/{id}/share", get(artifact_share::get))
-        .route("/v1/artifacts/{id}/link", post(artifact_share::rotate))
         .route("/v1/artifacts/{id}/export", get(artifact_export::export))
         .layer(DefaultBodyLimit::max(MAX_ARTIFACT_BODY));
-    // What a reader of a public link may do has no token, and its only body is a password.
+    // Everything that needs the gateway to be reachable from outside: a link in an e-mail (sign
+    // in, invitation), and the external link of an artifact, whose reader has no token and whose
+    // only body is a password. Without `public-url` none of it is compiled.
+    #[cfg(feature = "public-url")]
     let public = Router::new()
+        .route("/v1/auth/magic-link", post(sign_in::magic_link_request))
+        .route(
+            "/v1/auth/magic-link/redeem",
+            post(sign_in::magic_link_redeem),
+        )
+        .route("/v1/invites/{id}/resend", post(invites::resend))
+        .route("/v1/artifacts/{id}/password", put(artifact_share::password))
+        .route("/v1/artifacts/{id}/link", post(artifact_share::rotate))
         .route("/v1/public/artifacts/{token}", get(artifact_public::get))
         .route(
             "/v1/public/artifacts/{token}/unlock",
@@ -663,6 +692,8 @@ pub fn router_with(state: AppState, extra: Router<AppState>) -> Router {
             get(artifact_export::export_public),
         )
         .layer(DefaultBodyLimit::max(MAX_ACCOUNT_BODY));
+    #[cfg(not(feature = "public-url"))]
+    let public = Router::new();
     // A file is held in memory up to its limit, and the body is read by the handler, which
     // answers a clear 413 (the layer would answer plain text).
     let files = Router::new()

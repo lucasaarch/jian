@@ -2,7 +2,7 @@
 //! stopped when idle and when its owner goes, restarts after a crash with a readable error, gets
 //! the account's variables and not the gateway's, and never leaks a credential from its stderr.
 
-#![cfg(feature = "self-hosted")]
+#![cfg(feature = "local-process")]
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 mod support;

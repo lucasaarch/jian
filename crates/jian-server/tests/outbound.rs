@@ -1,5 +1,5 @@
-//! Where a plugin's request may go: the Cloud edition reaches public addresses only, after DNS
-//! and across redirects; the self-hosted edition reaches anything.
+//! Where a plugin's request may go: a build with `multi-tenant` (the Cloud) reaches public
+//! addresses only, after DNS and across redirects; one without it reaches anything.
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 

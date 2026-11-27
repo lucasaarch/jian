@@ -78,25 +78,36 @@ jobs:
           toolchain: 1.98.0
           components: clippy
       - uses: Swatinem/rust-cache@v2
-      - run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      # An edition is a sum of capabilities (`local-process`, `public-url`, `multi-tenant`), and the
+      # code tests those. macOS and Windows run only the gateway of the desktop app, the local
+      # edition; the Cloud is Linux only, so it is checked only there. Linux checks all three.
+      - name: clippy, self-hosted (the default build)
+        if: runner.os == 'Linux'
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - uses: taiki-e/install-action@nextest
       # nextest does not run doctests, and starts the shared test Postgres (.config/nextest.toml).
-      - run: cargo nextest run --workspace --locked
-      - run: cargo test --doc --workspace --locked
-      # The Cloud edition runs only on Linux, so it is checked only there; macOS and Windows run the
-      # self-hosted gateway alone. A plugin that exists only in the self-hosted edition must not
-      # compile in the Cloud one; the fixture crate proves it (its doctest only runs in this build).
+      - name: tests, self-hosted
+        if: runner.os == 'Linux'
+        run: cargo nextest run --workspace --locked
+      - name: doctests, self-hosted
+        if: runner.os == 'Linux'
+        run: cargo test --doc --workspace --locked
+      # Local: no public URL, so what needs one is not compiled; its tests prove it.
+      - name: clippy, local
+        run: cargo clippy --workspace --all-targets --locked --no-default-features --features jian/local -- -D warnings
+      - name: tests, local
+        run: cargo nextest run --workspace --locked --no-default-features --features jian/local
+      # Cloud: no local process (so no stdio plugin; the fixture crate proves it with a doctest that
+      # only runs without the capability) and no private network for a plugin.
       - if: runner.os == 'Linux'
-        run: cargo clippy -p jian-plugin-echo --no-default-features --features cloud --all-targets --locked -- -D warnings
+        run: cargo clippy -p jian-plugin-echo --no-default-features --all-targets --locked -- -D warnings
       - if: runner.os == 'Linux'
-        run: cargo test -p jian-plugin-echo --no-default-features --features cloud --locked
-      # The gateway in the same edition: its test shows the self-hosted-only plugin gives no tool.
+        run: cargo test -p jian-plugin-echo --no-default-features --locked
       - if: runner.os == 'Linux'
         run: cargo clippy -p jian-server --no-default-features --features cloud --all-targets --locked -- -D warnings
       - if: runner.os == 'Linux'
-        run: cargo nextest run -p jian-server --no-default-features --features cloud --locked -E 'binary(plugin_tools) | binary(mcp_tools) | binary(outbound) | (binary(gateway) & test(/mcp_servers/))'
-      # The MCP plugin in the Cloud edition: no command (stdio) transport is compiled.
+        run: cargo nextest run -p jian-server --no-default-features --features cloud --locked -E 'binary(plugin_tools) | binary(mcp_tools) | binary(outbound) | (binary(gateway) & test(/mcp_servers|editions/))'
       - if: runner.os == 'Linux'
-        run: cargo clippy -p jian-plugin-mcp --no-default-features --features cloud --all-targets --locked -- -D warnings
+        run: cargo clippy -p jian-plugin-mcp --no-default-features --all-targets --locked -- -D warnings
       - if: runner.os == 'Linux'
-        run: cargo nextest run -p jian-plugin-mcp --no-default-features --features cloud --locked
+        run: cargo nextest run -p jian-plugin-mcp --no-default-features --locked

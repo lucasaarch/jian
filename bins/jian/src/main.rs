@@ -28,11 +28,13 @@ use clap::{ArgAction, Parser, Subcommand};
 use jian_exec::Executor;
 use jian_server::{
     AGENT_WAKE_KIND, AccountModels, AgentMachines, AgentRunner, AgentWaker, AppState, EventBus,
-    INVITE_SEND_KIND, InviteSender, JobOptions, JobRegistry, JobRequeue, JobRunner,
-    LOGIN_LINK_SEND_KIND, LlmAccess, LoginLinkSender, MachineHub, MemoryEventBus, ModelSource,
-    PublicUrl, RUN_KIND, SCHEDULE_FIRE_KIND, SCHEDULE_RUN_KIND, ScheduleFirer, ScheduleRunner,
-    Settings, SlotKeeper, THREAD_COMPACT_KIND, ThreadCompactor,
+    JobOptions, JobRegistry, JobRequeue, JobRunner, LlmAccess, MachineHub, MemoryEventBus,
+    ModelSource, PublicUrl, RUN_KIND, SCHEDULE_FIRE_KIND, SCHEDULE_RUN_KIND, ScheduleFirer,
+    ScheduleRunner, Settings, SlotKeeper, THREAD_COMPACT_KIND, ThreadCompactor,
 };
+// The e-mails carry a link people open, so only a build with `public-url` sends them.
+#[cfg(feature = "public-url")]
+use jian_server::{INVITE_SEND_KIND, InviteSender, LOGIN_LINK_SEND_KIND, LoginLinkSender};
 use jian_store::embedded::EmbeddedConfig;
 use jian_store::secrets::{LocalKeyring, MasterKeys as _};
 use jian_store::{
@@ -500,12 +502,17 @@ fn job_registry(
     events: &Arc<dyn EventBus>,
     executor: &Arc<dyn Executor>,
 ) -> JobRegistry {
-    debug_jobs::registry()
+    let registry = debug_jobs::registry();
+    #[cfg(not(feature = "public-url"))]
+    let _ = settings;
+    #[cfg(feature = "public-url")]
+    let registry = registry
         .register(INVITE_SEND_KIND, Arc::new(InviteSender::new(settings)))
         .register(
             LOGIN_LINK_SEND_KIND,
             Arc::new(LoginLinkSender::new(settings)),
-        )
+        );
+    registry
         .register(SCHEDULE_FIRE_KIND, Arc::new(ScheduleFirer))
         .register(
             SCHEDULE_RUN_KIND,

@@ -89,7 +89,10 @@ const ROUTE_TESTS: &[(&str, &str)] = &[
     ("DELETE /v1/auth/github", GITHUB_TEST),
     ("POST /v1/auth/github/link", GITHUB_TEST),
     ("POST /v1/auth/github/link/complete", GITHUB_TEST),
+    // What needs a link people can open is not in a build without `public-url` (ROUTES neither).
+    #[cfg(feature = "public-url")]
     ("POST /v1/auth/magic-link", MAGIC_LINK_TEST),
+    #[cfg(feature = "public-url")]
     ("POST /v1/auth/magic-link/redeem", MAGIC_LINK_TEST),
     ("GET /v1/members", USERS_TEST),
     ("POST /v1/members", USERS_TEST),
@@ -99,6 +102,7 @@ const ROUTE_TESTS: &[(&str, &str)] = &[
     ("POST /v1/invites", USERS_TEST),
     ("POST /v1/invites/{id}/revoke", USERS_TEST),
     ("POST /v1/invites/{id}/link", INVITES_TEST),
+    #[cfg(feature = "public-url")]
     ("POST /v1/invites/{id}/resend", INVITES_TEST),
     ("GET /v1/settings/mail", INVITES_TEST),
     ("PUT /v1/settings/mail", INVITES_TEST),
@@ -163,11 +167,16 @@ const ROUTE_TESTS: &[(&str, &str)] = &[
     ("POST /v1/artifacts/{id}/duplicate", ARTIFACTS_TEST),
     ("GET /v1/artifacts/{id}/share", SHARING_TEST),
     ("PUT /v1/artifacts/{id}/visibility", SHARING_TEST),
+    #[cfg(feature = "public-url")]
     ("PUT /v1/artifacts/{id}/password", SHARING_TEST),
+    #[cfg(feature = "public-url")]
     ("POST /v1/artifacts/{id}/link", SHARING_TEST),
     ("GET /v1/artifacts/{id}/export", EXPORT_TEST),
+    #[cfg(feature = "public-url")]
     ("GET /v1/public/artifacts/{token}", SHARING_TEST),
+    #[cfg(feature = "public-url")]
     ("GET /v1/public/artifacts/{token}/export", EXPORT_TEST),
+    #[cfg(feature = "public-url")]
     ("POST /v1/public/artifacts/{token}/unlock", SHARING_TEST),
     ("GET /v1/artifact-folders", ARTIFACTS_TEST),
     ("POST /v1/artifact-folders", ARTIFACTS_TEST),
@@ -320,6 +329,7 @@ const USERS_TEST: &str = "users_and_sessions_of_the_other_tenant_are_out_of_reac
 const GITHUB_TEST: &str = "github_never_lets_in_a_stranger_or_another_workspace";
 
 /// The test that shows a sign-in link opens only the workspace and member it was made for.
+#[cfg(feature = "public-url")]
 const MAGIC_LINK_TEST: &str = "a_magic_link_opens_only_the_workspace_and_member_it_was_made_for";
 
 /// Which test here covers a client request. No wildcard arm: a new `ClientRequest` does not

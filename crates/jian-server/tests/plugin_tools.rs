@@ -438,11 +438,11 @@ async fn another_tenants_accounts_give_nothing() {
     test.stop().await;
 }
 
-/// The edition is a build choice: the plugin that exists only in a self-hosted build gives its
-/// tools there and is not compiled in a `cloud` one. Run both ways:
+/// A capability is a build choice: the plugin that needs `local-process` gives its tools in a
+/// build with it and is not compiled in one without (the Cloud). Run both ways:
 /// `cargo nextest run -p jian-server --no-default-features --features cloud -E 'binary(plugin_tools)'`.
 #[tokio::test]
-async fn a_cloud_build_has_no_self_hosted_only_plugin() {
+async fn a_build_without_local_process_has_no_local_process_plugin() {
     let test = TestDb::start(env!("CARGO_TARGET_TMPDIR")).await;
     let side = TwoTenants::seed(&test.db).await.a;
     let a = bot(&test, &side).await;
@@ -456,7 +456,7 @@ async fn a_cloud_build_has_no_self_hosted_only_plugin() {
     )
     .await;
     let tools = tools_of(&test, &side, &a, RunOrigin::Message).await;
-    if cfg!(feature = "self-hosted") {
+    if cfg!(feature = "local-process") {
         assert_eq!(tools, ["echolocal__box__say"]);
     } else {
         // The account is stored, but no plugin of this build runs it.

@@ -14,8 +14,9 @@
 //!   request on to a private one;
 //! - the client uses no proxy, which would resolve names where this code cannot see.
 //!
-//! The self-hosted edition allows everything: an MCP server on the same machine or the same LAN
-//! is the common case there, and the operator owns the network.
+//! A build without the `multi-tenant` capability (local, self-hosted) allows everything: an MCP
+//! server on the same machine or the same LAN is the common case there, and the operator owns
+//! the network.
 
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::sync::Arc;

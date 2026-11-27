@@ -4,6 +4,12 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 
+[features]
+# `public-url`: the gateway can be reached from outside, so a service can call a route a plugin
+# declares (a webhook). Without it the declaration does not compile. It is a capability and not
+# an edition, and it has no default: `jian-server` turns it on for the editions that have a URL.
+public-url = []
+
 [dependencies]
 futures-util.workspace = true
 serde_json.workspace = true

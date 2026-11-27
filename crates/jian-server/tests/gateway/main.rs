@@ -5,11 +5,17 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 mod accounts;
+// What needs a link people can open is tested only in a build that has it (`editions` shows the
+// build without it has none of it).
+#[cfg(feature = "public-url")]
 mod artifact_export;
+#[cfg(feature = "public-url")]
 mod artifact_sharing;
 mod artifacts;
 mod codex;
 mod connectors;
+mod editions;
+#[cfg(feature = "public-url")]
 mod invites;
 mod isolation;
 mod machine_files;
@@ -20,6 +26,7 @@ mod projects;
 mod providers;
 mod runs;
 mod schedules;
+#[cfg(feature = "public-url")]
 mod sign_in;
 mod skills;
 mod slots;

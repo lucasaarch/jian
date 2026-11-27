@@ -5,12 +5,18 @@ edition.workspace = true
 license.workspace = true
 
 [features]
-# What this build is. The self-hosted one is the default; a Cloud build is
-# `--no-default-features --features cloud`, and leaves out every plugin that may only run where
-# the operator owns the machine.
+# What this build is: an edition, which is only a sum of capabilities (see `jian-server`'s
+# features). The self-hosted one is the default. The desktop app is
+# `--no-default-features --features local` (no public URL, so nothing that needs one compiles)
+# and the Cloud `--no-default-features --features cloud` (no local process). Turning two on is
+# their union, never a conflict.
 default = ["self-hosted"]
-self-hosted = ["jian-server/self-hosted"]
-cloud = ["jian-server/cloud"]
+local = ["jian-server/local"]
+self-hosted = ["jian-server/self-hosted", "public-url"]
+cloud = ["jian-server/cloud", "public-url"]
+# The one capability this binary tests itself (to register the e-mail jobs, which need a link
+# people can open); the editions that have it turn it on beside `jian-server`'s.
+public-url = ["jian-server/public-url"]
 
 [dependencies]
 axum.workspace = true

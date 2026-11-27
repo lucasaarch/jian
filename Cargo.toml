@@ -36,7 +36,8 @@ jian-import = { path = "crates/jian-import" }
 jian-llm = { path = "crates/jian-llm" }
 jian-mail = { path = "crates/jian-mail" }
 jian-plugin-api = { path = "crates/plugins/jian-plugin-api" }
-# No default features: `jian-server`'s edition feature turns `self-hosted` on or leaves it off.
+# No default features: `jian-server`'s `local-process` capability turns the stdio transport on or
+# leaves it off.
 jian-plugin-mcp = { path = "crates/plugins/jian-plugin-mcp", default-features = false }
 jian-protocol = { path = "crates/jian-protocol" }
 jian-remote = { path = "crates/jian-remote" }

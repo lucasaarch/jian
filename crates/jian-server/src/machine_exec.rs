@@ -45,7 +45,7 @@ impl AgentMachines {
     }
 
     /// The executor a deploy's settings call for: agents may run on this machine, in folders
-    /// under `work_dir`, only when [`Settings::local_machine`] is on.
+    /// under `work_dir`, only when [`Settings::gateway_machine`] is on.
     #[must_use]
     pub fn from_settings(
         db: Arc<Database>,
@@ -53,7 +53,9 @@ impl AgentMachines {
         settings: &Settings,
         work_dir: &Path,
     ) -> Self {
-        let local = settings.local_machine.then(|| LocalExecutor::new(work_dir));
+        let local = settings
+            .gateway_machine()
+            .then(|| LocalExecutor::new(work_dir));
         Self::new(db, hub, local)
     }
 

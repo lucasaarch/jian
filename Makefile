@@ -93,14 +93,22 @@ rust-check: ## The Rust workspace: format, clippy, tests and docs, as the rules 
 	cargo test --doc --workspace --locked
 	RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --locked
 	$(MAKE) rust-editions
+	$(MAKE) rust-local
 
-rust-editions: ## The Cloud edition: the self-hosted-only plugin of the fixture must not compile or run there
+# The default build is the self-hosted edition. An edition is a sum of capabilities (`local-process`,
+# `public-url`, `multi-tenant`) and the code tests those, so each build below proves what is left out.
+rust-editions: ## The Cloud edition (Linux only): no local process, and a private address is refused
 	cargo clippy -p jian-server --no-default-features --features cloud --all-targets --locked -- -D warnings
-	cargo nextest run -p jian-server --no-default-features --features cloud --locked -E 'binary(plugin_tools) | binary(mcp_tools) | binary(outbound) | (binary(gateway) & test(/mcp_servers/))'
-	cargo clippy -p jian-plugin-mcp --no-default-features --features cloud --all-targets --locked -- -D warnings
-	cargo nextest run -p jian-plugin-mcp --no-default-features --features cloud --locked
-	cargo clippy -p jian-plugin-echo --no-default-features --features cloud --all-targets --locked -- -D warnings
-	cargo test -p jian-plugin-echo --no-default-features --features cloud --locked
+	cargo nextest run -p jian-server --no-default-features --features cloud --locked -E 'binary(plugin_tools) | binary(mcp_tools) | binary(outbound) | (binary(gateway) & test(/mcp_servers|editions/))'
+	# The plugin crates in the Cloud have no capability at all.
+	cargo clippy -p jian-plugin-mcp --no-default-features --all-targets --locked -- -D warnings
+	cargo nextest run -p jian-plugin-mcp --no-default-features --locked
+	cargo clippy -p jian-plugin-echo --no-default-features --all-targets --locked -- -D warnings
+	cargo test -p jian-plugin-echo --no-default-features --locked
+
+rust-local: ## The local edition (the desktop app, also what macOS and Windows run): no public URL
+	cargo clippy --workspace --all-targets --locked --no-default-features --features jian/local -- -D warnings
+	cargo nextest run --workspace --locked --no-default-features --features jian/local
 
 # The Rust gateway on its own embedded Postgres, in .jian-dev/ (git-ignored). A DATABASE_URL in the
 # environment, or `make rust-dev DATABASE_URL=...`, points it at an external one instead.

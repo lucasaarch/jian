@@ -28,7 +28,7 @@ async fn call(
 /// A server that lists one tool and wants no more than that. `/mcp` is open; `/oauth/mcp` wants
 /// the access token the same origin's authorization server gives (discovery, registration and a
 /// token endpoint; the PKCE check is the plugin's own test).
-#[cfg(feature = "self-hosted")]
+#[cfg(not(feature = "multi-tenant"))]
 async fn serve() -> String {
     use axum::http::{HeaderMap, StatusCode, header};
     use axum::response::IntoResponse;
@@ -113,8 +113,8 @@ async fn names(gateway: &Gateway, token: &str) -> Vec<String> {
         .collect()
 }
 
-// The fake listens on loopback: a self-hosted gateway reaches it, a Cloud one must not.
-#[cfg(feature = "self-hosted")]
+// The fake listens on loopback: a gateway without `multi-tenant` reaches it, the Cloud must not.
+#[cfg(not(feature = "multi-tenant"))]
 #[tokio::test]
 async fn a_server_that_answers_is_kept_renamed_and_never_shows_its_headers() {
     let (gateway, tenants) = start(open_settings()).await;
@@ -170,7 +170,7 @@ async fn a_server_that_answers_is_kept_renamed_and_never_shows_its_headers() {
     );
 }
 
-#[cfg(feature = "self-hosted")]
+#[cfg(not(feature = "multi-tenant"))]
 #[tokio::test]
 async fn a_server_that_is_down_or_wrongly_written_is_refused_with_a_reason_and_not_kept() {
     let (gateway, tenants) = start(open_settings()).await;
@@ -218,7 +218,7 @@ async fn a_server_that_is_down_or_wrongly_written_is_refused_with_a_reason_and_n
     assert!(names(&gateway, token).await.is_empty());
 }
 
-#[cfg(feature = "self-hosted")]
+#[cfg(not(feature = "multi-tenant"))]
 #[tokio::test]
 async fn an_oauth_server_is_kept_unsigned_then_signed_in_with_the_state_it_was_given() {
     let (gateway, tenants) = start(open_settings()).await;
@@ -318,7 +318,7 @@ async fn an_oauth_server_is_kept_unsigned_then_signed_in_with_the_state_it_was_g
     }
 }
 
-#[cfg(not(feature = "self-hosted"))]
+#[cfg(feature = "multi-tenant")]
 #[tokio::test]
 async fn the_cloud_edition_refuses_a_command_server_and_a_private_address() {
     let (gateway, tenants) = start(open_settings()).await;
@@ -328,7 +328,10 @@ async fn the_cloud_edition_refuses_a_command_server_and_a_private_address() {
     let got = call(&gateway, "POST", "/v1/mcp-servers", token, Some(command)).await;
     assert_eq!(got.0, 400);
     assert!(
-        got.1["message"].as_str().unwrap().contains("Cloud edition"),
+        got.1["message"]
+            .as_str()
+            .unwrap()
+            .contains("no local process"),
         "{}",
         got.1
     );

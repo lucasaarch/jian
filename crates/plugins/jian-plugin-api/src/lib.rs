@@ -15,17 +15,20 @@
 //! one agent, which accounts it reaches and which tools they give. A tool of an account the
 //! agent does not reach is not in the list, under any name.
 //!
-//! # Editions
+//! # Capabilities
 //!
-//! A plugin that exists only in the self-hosted build (an MCP server run as a local process)
-//! sits behind that build's Cargo feature, so it does not compile into the Cloud one. Binaries
-//! decide which plugin crates they link; libraries here are the same in both.
+//! What a plugin may need from the build is a Cargo capability, never an edition. A plugin that
+//! runs a local process (an MCP server over stdio) sits behind `local-process` in its own crate.
+//! The routes and webhooks a plugin declares (`RouteDef`, `WebhookRequest`, `Plugin::routes`,
+//! `Plugin::handle`) exist only with `public-url`: a gateway nobody can reach from outside, the
+//! desktop app, has no address for a service to call, so none of it compiles there.
 
 mod account;
 mod error;
 mod host;
 mod plugin;
 mod registry;
+#[cfg(feature = "public-url")]
 mod route;
 mod secret;
 mod tool;
@@ -35,6 +38,7 @@ pub use error::{HostError, PluginError, ToolError};
 pub use host::{AccountContext, AgentEvent, HttpRequest, HttpResponse, PluginHost, SecretChange};
 pub use plugin::{Permission, Plugin};
 pub use registry::{MAX_TOOL_NAME_CHARS, PluginRegistry, ResolvedTool};
+#[cfg(feature = "public-url")]
 pub use route::{Encoding, HttpMethod, RouteDef, Verification, WebhookRequest};
 pub use secret::Secret;
 pub use tool::ToolDef;

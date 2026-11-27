@@ -5,20 +5,20 @@ edition.workspace = true
 license.workspace = true
 
 [features]
-# The default build is the self-hosted one, as `jian-server`'s is. `cloud` has no stdio
-# transport: a command an account names would run on the operator's machine, and in the Cloud
-# edition that machine is ours. `cargo check -p jian-plugin-mcp --no-default-features --features
-# cloud` must pass and must not compile `stdio`.
-default = ["self-hosted"]
-self-hosted = ["dep:tokio", "dep:rustix"]
-cloud = []
+# Only the capability this crate hides code behind, never an edition. `local-process` is the
+# stdio transport: a command an account names runs on the gateway's machine, which is the
+# owner's in the local and self-hosted editions and ours in the Cloud, so the Cloud build has
+# none. `cargo check -p jian-plugin-mcp --no-default-features` must pass and must not compile
+# `stdio`. Capabilities only add, so two editions turned on together never conflict.
+default = ["local-process"]
+local-process = ["dep:tokio", "dep:rustix"]
 
 # A stand-in MCP command for the stdio tests: speaks the protocol over its pipes, and can crash.
 [[bin]]
 name = "fake_stdio_server"
 path = "tests/support/fake_stdio_server.rs"
 test = false
-required-features = ["self-hosted"]
+required-features = ["local-process"]
 
 [dependencies]
 base64.workspace = true

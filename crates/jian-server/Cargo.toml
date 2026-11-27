@@ -5,16 +5,26 @@ edition.workspace = true
 license.workspace = true
 
 [features]
-# The default build is the self-hosted one, as `bins/jian`'s is. `cloud` is the build without what
-# only a self-hosted install may do: a plugin that runs a local process, say. A plugin crate that
-# exists in one edition only is wired here, behind that edition's feature, so the other build
-# does not compile it. `cargo check -p jian-server --no-default-features --features cloud` must
-# pass.
+# The code tests a CAPABILITY, never an edition: `cfg(feature = "local-process")`, never
+# `cfg(feature = "cloud")`. Capabilities only add, so turning on two editions at once is the sum of
+# both and never a conflict. An edition is just a name for a sum, and `bins/jian` offers the same
+# three.
+#
+# `local-process`: the gateway's machine is the owner's, so a plugin may run a program on it (MCP
+#   over stdio, the test fixture's LocalEcho). Passed down to the plugin crates.
+# `public-url`: the gateway can be reached from outside (a link in an e-mail or in a share, a
+#   webhook). Without it the code that needs that does not compile; the desktop app has no URL.
+# `multi-tenant`: what only the Cloud has, many tenants on one machine: an outbound request may
+#   not reach a private network.
+local-process = ["jian-plugin-echo/local-process", "jian-plugin-mcp/local-process"]
+public-url = ["jian-plugin-api/public-url"]
+multi-tenant = []
+# The editions: the desktop app, a self-hosted gateway and the Cloud. The default is the
+# self-hosted one, as `bins/jian`'s is.
 default = ["self-hosted"]
-# The test fixture's self-hosted-only plugin comes with it, so the tests can show that a `cloud`
-# build leaves it out.
-self-hosted = ["jian-plugin-echo/self-hosted", "jian-plugin-mcp/self-hosted"]
-cloud = []
+local = ["local-process"]
+self-hosted = ["local-process", "public-url"]
+cloud = ["public-url", "multi-tenant"]
 
 [dependencies]
 axum = { workspace = true, features = ["ws"] }

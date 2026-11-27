@@ -9,6 +9,9 @@
 //! every address: it counts the caller, checks that a link could be sent at all and queues a job.
 //! Whether the address is a member is decided only inside the job (`login_link_job`).
 //! Spending the link is counted by address alone: its token is not guessable.
+//!
+//! The link is an address people open, so the two `magic-link` routes are compiled only with
+//! `public-url`; without it (the desktop app) they are not there at all.
 
 use axum::Json;
 use axum::extract::State;
@@ -16,17 +19,25 @@ use axum::http::StatusCode;
 use jian_auth::LoginOutcome;
 use jian_protocol::auth::{
     AuthorizeUrlResponse, GithubAccount, GithubCallbackRequest, GithubStartRequest, GithubStatus,
-    LoginResponse, MagicLinkAccepted, MagicLinkRedeemRequest, MagicLinkRequest,
+    LoginResponse,
 };
-use jian_store::{NewJob, TenantId};
+#[cfg(feature = "public-url")]
+use jian_protocol::auth::{MagicLinkAccepted, MagicLinkRedeemRequest, MagicLinkRequest};
+#[cfg(feature = "public-url")]
+use jian_store::NewJob;
+use jian_store::TenantId;
 
 use crate::AppState;
-use crate::accounts::{email_key, login_response, only_a_session};
+#[cfg(feature = "public-url")]
+use crate::accounts::email_key;
+use crate::accounts::{login_response, only_a_session};
 use crate::auth::{Address, Principal};
 use crate::http::{Refusal, auth_failure, internal, method_off, refuse, throttle};
+#[cfg(feature = "public-url")]
 use crate::login_link_job::LOGIN_LINK_SEND_KIND;
 
 /// The longest address taken at all: more than any real one.
+#[cfg(feature = "public-url")]
 const MAX_EMAIL_CHARS: usize = 254;
 
 fn require_github(app: &AppState) -> Result<(), Refusal> {
@@ -177,6 +188,7 @@ pub(crate) async fn github_unlink(
 }
 
 /// The workspace a link request is for: the one it names, or the gateway's only one.
+#[cfg(feature = "public-url")]
 async fn link_tenant(app: &AppState, named: Option<&str>) -> Result<TenantId, Refusal> {
     if let Some(tenant) = parse_tenant(named)? {
         return Ok(tenant);
@@ -189,6 +201,7 @@ async fn link_tenant(app: &AppState, named: Option<&str>) -> Result<TenantId, Re
 }
 
 /// `POST /v1/auth/magic-link`: asks for a sign-in link. Always `202`, member or not.
+#[cfg(feature = "public-url")]
 pub(crate) async fn magic_link_request(
     State(app): State<AppState>,
     Address(from): Address,
@@ -253,6 +266,7 @@ pub(crate) async fn magic_link_request(
 }
 
 /// `POST /v1/auth/magic-link/redeem`: the token of the link; answers a session.
+#[cfg(feature = "public-url")]
 pub(crate) async fn magic_link_redeem(
     State(app): State<AppState>,
     Address(from): Address,

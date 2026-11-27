@@ -6,14 +6,22 @@
 //! without e-mail, and the Cloud when the e-mail does not arrive); the e-mail is a job
 //! (`invite_job`) that writes how it went onto the invitation.
 //!
+//! Sending by e-mail needs a link people can open, so the e-mail, `resend` and the job are
+//! compiled only with `public-url`. Without it (the desktop app) an invitation is the token the
+//! admin copies and hands over, and nothing here ever makes a link.
+//!
 //! Every call runs as the caller's own tenant, so another workspace's id is a 404, word for word
 //! what one that never existed gets.
 
 use axum::Json;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
-use jian_protocol::auth::{CreateInviteRequest, InviteCreated, InviteSummary, InvitesPage};
-use jian_store::{IssuedInvite, TenantCtx};
+#[cfg(feature = "public-url")]
+use jian_protocol::auth::InviteSummary;
+use jian_protocol::auth::{CreateInviteRequest, InviteCreated, InvitesPage};
+use jian_store::IssuedInvite;
+#[cfg(feature = "public-url")]
+use jian_store::TenantCtx;
 
 use crate::AppState;
 use crate::auth::Principal;
@@ -21,10 +29,13 @@ use crate::http::{
     Refusal, auth_failure, internal, not_found, refuse, require_admin, require_password,
     store_failure, tenant_ctx,
 };
+#[cfg(feature = "public-url")]
 use crate::invite_job;
+#[cfg(feature = "public-url")]
 use crate::mail;
 use crate::summary::{invite_summary, role_of};
 
+#[cfg(feature = "public-url")]
 fn public_url_missing() -> Refusal {
     refuse(
         StatusCode::CONFLICT,
@@ -33,6 +44,7 @@ fn public_url_missing() -> Refusal {
     )
 }
 
+#[cfg(feature = "public-url")]
 fn mail_not_configured() -> Refusal {
     refuse(
         StatusCode::CONFLICT,
@@ -42,20 +54,28 @@ fn mail_not_configured() -> Refusal {
 }
 
 /// The invitation and the link that accepts it. The link is absent when there is no public URL:
-/// only the token is.
+/// only the token is. Without `public-url` there is never one.
 fn with_link(app: &AppState, issued: &IssuedInvite) -> InviteCreated {
+    #[cfg(feature = "public-url")]
+    let link = app
+        .settings
+        .public_url
+        .as_ref()
+        .and_then(|public| public.invite_link(issued.token.expose()));
+    #[cfg(not(feature = "public-url"))]
+    let link = {
+        let _ = app;
+        None
+    };
     InviteCreated {
         invite: invite_summary(&issued.invite),
         token: Some(issued.token.expose().to_owned()),
-        link: app
-            .settings
-            .public_url
-            .as_ref()
-            .and_then(|public| public.invite_link(issued.token.expose())),
+        link,
     }
 }
 
 /// Whether the workspace can send an e-mail now.
+#[cfg(feature = "public-url")]
 async fn can_send(app: &AppState, ctx: &TenantCtx) -> Result<bool, Refusal> {
     mail::resolve(&app.settings, &app.db, ctx)
         .await
@@ -64,6 +84,7 @@ async fn can_send(app: &AppState, ctx: &TenantCtx) -> Result<bool, Refusal> {
 }
 
 /// Queues the e-mail of the invitation, or 404 when it is gone.
+#[cfg(feature = "public-url")]
 async fn queue(app: &AppState, ctx: &TenantCtx, id: &str) -> Result<InviteSummary, Refusal> {
     invite_job::queue(&app.db, ctx, id)
         .await
@@ -97,6 +118,7 @@ pub(crate) async fn create(
     require_admin(&principal, "manage invitations")?;
     require_password(&app)?;
     let ctx = tenant_ctx(&app, &principal.tenant).await?;
+    #[cfg(feature = "public-url")]
     let send = match body.send {
         Some(true) => {
             if app.settings.public_url.is_none() {
@@ -110,6 +132,16 @@ pub(crate) async fn create(
         Some(false) => false,
         None => app.settings.public_url.is_some() && can_send(&app, &ctx).await?,
     };
+    #[cfg(not(feature = "public-url"))]
+    {
+        if body.send == Some(true) {
+            return Err(refuse(
+                StatusCode::CONFLICT,
+                "public_url_missing",
+                "this gateway has no public URL, so it cannot e-mail a link: copy the invitation instead",
+            ));
+        }
+    }
     let issued = app
         .settings
         .auth
@@ -122,6 +154,7 @@ pub(crate) async fn create(
         )
         .await
         .map_err(|error| auth_failure(&error))?;
+    #[cfg(feature = "public-url")]
     let created = if send {
         // The token made above is never shown: the job makes the one that is e-mailed.
         InviteCreated {
@@ -132,6 +165,8 @@ pub(crate) async fn create(
     } else {
         with_link(&app, &issued)
     };
+    #[cfg(not(feature = "public-url"))]
+    let created = with_link(&app, &issued);
     Ok((StatusCode::CREATED, Json(created)))
 }
 
@@ -144,6 +179,9 @@ pub(crate) async fn link(
 ) -> Result<Json<InviteCreated>, Refusal> {
     require_admin(&principal, "manage invitations")?;
     require_password(&app)?;
+    // The link the admin copies needs an address; the token alone is what the desktop app hands
+    // over, so without `public-url` there is nothing to refuse.
+    #[cfg(feature = "public-url")]
     if app.settings.public_url.is_none() {
         return Err(public_url_missing());
     }
@@ -160,6 +198,7 @@ pub(crate) async fn link(
 
 /// `POST /v1/invites/{id}/resend`: kills the current token now and queues an e-mail with a new
 /// one. 202: the e-mail is not sent yet; the invitation's `sendStatus` says when it is.
+#[cfg(feature = "public-url")]
 pub(crate) async fn resend(
     State(app): State<AppState>,
     principal: Principal,

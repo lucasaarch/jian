@@ -1,21 +1,21 @@
 //! Plugins for tests of the plugin machinery: one tool that only reads, one that writes, one
-//! that needs the account's secret, and a second plugin that exists only in a self-hosted
-//! build. They connect to no service and no binary links this crate.
+//! that needs the account's secret, and a second plugin that exists only where the gateway may
+//! run a local process. They connect to no service and no binary links this crate.
 //!
 //! # The edition proof
 //!
 //! `LocalEcho` stands for a plugin that may only exist where the operator owns the machine (an
-//! MCP server run as a local process). It sits behind the `self-hosted` feature, so a `cloud`
-//! build does not compile it. The module `cloud_build` holds the proof, which `cargo test --doc -p
-//! jian-plugin-echo --no-default-features --features cloud` runs.
+//! MCP server run as a local process). It sits behind the `local-process` capability, so a build
+//! without it (the Cloud) does not compile it. The module `cloud_build` holds the proof, which
+//! `cargo test --doc -p jian-plugin-echo --no-default-features` runs.
 
-/// The `cloud` build has no `LocalEcho`: this import does not resolve, so the block below, which
-/// must fail to compile, passes. With `self-hosted` this module is not there and nothing runs.
+/// A build without `local-process` has no `LocalEcho`: this import does not resolve, so the block
+/// below, which must fail to compile, passes. With the capability this module is not there.
 ///
 /// ```compile_fail,E0432
 /// use jian_plugin_echo::LocalEcho;
 /// ```
-#[cfg(not(feature = "self-hosted"))]
+#[cfg(not(feature = "local-process"))]
 pub mod cloud_build {}
 
 use std::sync::Arc;
@@ -26,20 +26,20 @@ use jian_plugin_api::{
 };
 use serde_json::{Value, json};
 
-#[cfg(feature = "self-hosted")]
+#[cfg(feature = "local-process")]
 mod local;
-#[cfg(feature = "self-hosted")]
+#[cfg(feature = "local-process")]
 pub use local::LocalEcho;
 
 /// The id of [`Echo`].
 pub const ECHO_ID: &str = "echo";
 
-/// Every plugin this build of the crate has: [`Echo`], and `LocalEcho` in a self-hosted build.
+/// Every plugin this build of the crate has: [`Echo`], and `LocalEcho` with `local-process`.
 #[must_use]
 pub fn plugins() -> Vec<Arc<dyn Plugin>> {
-    #[allow(unused_mut, reason = "a cloud build adds nothing")]
+    #[allow(unused_mut, reason = "a build without local-process adds nothing")]
     let mut all: Vec<Arc<dyn Plugin>> = vec![Arc::new(Echo)];
-    #[cfg(feature = "self-hosted")]
+    #[cfg(feature = "local-process")]
     all.push(Arc::new(LocalEcho));
     all
 }

@@ -44,8 +44,8 @@ pub enum McpError {
     /// shown.
     #[error("the MCP session ended")]
     SessionGone,
-    /// A command server, in an edition that has none.
-    #[error("command (stdio) MCP servers only run in a self-hosted install")]
+    /// A command server, in a build without the `local-process` capability.
+    #[error("command (stdio) MCP servers need a local process, which this edition does not have")]
     StdioUnavailable,
     /// A command server that did not start, stopped, or did not answer.
     #[error("the MCP command {0}")]

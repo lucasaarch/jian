@@ -103,8 +103,8 @@ pub fn build(server: &NewServer) -> Result<(Value, Option<Secret>), String> {
             if server.oauth {
                 return Err("OAuth is for HTTP servers".to_owned());
             }
-            if !cfg!(feature = "self-hosted") {
-                return Err("a command server runs a program on the gateway's machine, which the Cloud edition does not allow; use an HTTP server".to_owned());
+            if !cfg!(feature = "local-process") {
+                return Err("a command server runs a program on the gateway's machine, which this edition does not allow (no local process); use an HTTP server".to_owned());
             }
             let command = server.command.as_deref().unwrap_or_default().trim();
             if command.is_empty() {

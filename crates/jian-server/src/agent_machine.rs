@@ -28,7 +28,7 @@ fn view(app: &AppState, machine: Option<AgentMachine>) -> AgentMachineView {
     AgentMachineView {
         target,
         machine_id,
-        gateway_allowed: app.settings.local_machine,
+        gateway_allowed: app.settings.gateway_machine(),
     }
 }
 
@@ -68,7 +68,7 @@ pub(crate) async fn put(
     let chosen = match (body.target, body.machine_id) {
         (None, None) => None,
         (Some(MachineTarget::None), None) => Some(AgentMachine::None),
-        (Some(MachineTarget::Gateway), None) if app.settings.local_machine => {
+        (Some(MachineTarget::Gateway), None) if app.settings.gateway_machine() => {
             Some(AgentMachine::Gateway)
         }
         (Some(MachineTarget::Gateway), None) => {

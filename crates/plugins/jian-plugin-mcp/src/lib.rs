@@ -18,9 +18,9 @@
 //!
 //! # Editions
 //!
-//! HTTP exists in both editions. The command (stdio) transport runs a program on the gateway's
-//! machine and is compiled only with the `self-hosted` feature; an account that asks for it in
-//! the Cloud edition has no tools and says why.
+//! HTTP exists in every build. The command (stdio) transport runs a program on the gateway's
+//! machine and is compiled only with the `local-process` capability; an account that asks for it
+//! in a build without it (the Cloud) has no tools and says why.
 //!
 //! This crate does not know the tenant: the host gives a context bound to one account of one
 //! tenant, and the state kept here (sessions, catalogs) is keyed by the account's id.
@@ -33,7 +33,7 @@ pub mod http;
 pub mod names;
 pub mod oauth;
 pub mod rpc;
-#[cfg(feature = "self-hosted")]
+#[cfg(feature = "local-process")]
 pub mod stdio;
 
 use std::collections::HashMap;
@@ -71,18 +71,18 @@ struct AccountState {
     catalog: Mutex<Option<Catalog>>,
     failure: Mutex<Option<(Instant, String)>>,
     /// The account's command process, when it has started one.
-    #[cfg(feature = "self-hosted")]
+    #[cfg(feature = "local-process")]
     slot: Arc<stdio::Slot>,
 }
 
 impl AccountState {
-    #[cfg_attr(not(feature = "self-hosted"), allow(unused_variables))]
+    #[cfg_attr(not(feature = "local-process"), allow(unused_variables))]
     fn new(idle: Duration) -> Self {
         Self {
             session: Mutex::default(),
             catalog: Mutex::default(),
             failure: Mutex::default(),
-            #[cfg(feature = "self-hosted")]
+            #[cfg(feature = "local-process")]
             slot: Arc::new(stdio::Slot::new(idle)),
         }
     }
@@ -121,9 +121,9 @@ impl Default for McpPlugin {
     fn default() -> Self {
         Self {
             accounts: Mutex::default(),
-            #[cfg(feature = "self-hosted")]
+            #[cfg(feature = "local-process")]
             idle: stdio::IDLE,
-            #[cfg(not(feature = "self-hosted"))]
+            #[cfg(not(feature = "local-process"))]
             idle: Duration::ZERO,
         }
     }
@@ -146,7 +146,7 @@ struct Prepared {
 impl McpPlugin {
     /// A plugin whose command servers stop after `idle` unused, for a test that cannot wait
     /// [`stdio::IDLE`].
-    #[cfg(feature = "self-hosted")]
+    #[cfg(feature = "local-process")]
     #[must_use]
     pub fn with_idle(idle: Duration) -> Self {
         Self {
@@ -216,7 +216,7 @@ impl McpPlugin {
 /// The transport an operation runs over.
 enum Link<'a> {
     Http(Http<'a>),
-    #[cfg(feature = "self-hosted")]
+    #[cfg(feature = "local-process")]
     Stdio(stdio::Command<'a>),
 }
 
@@ -228,14 +228,14 @@ impl Rpc for Link<'_> {
     ) -> BoxFuture<'a, Result<Value, McpError>> {
         match self {
             Self::Http(http) => http.request(method, params),
-            #[cfg(feature = "self-hosted")]
+            #[cfg(feature = "local-process")]
             Self::Stdio(command) => command.request(method, params),
         }
     }
 }
 
-// Only the Cloud build can refuse; the self-hosted one always has a transport.
-#[cfg_attr(feature = "self-hosted", allow(clippy::unnecessary_wraps))]
+// Only a build without `local-process` can refuse; the others always have a transport.
+#[cfg_attr(feature = "local-process", allow(clippy::unnecessary_wraps))]
 fn link<'a>(ctx: &'a AccountContext<'a>, prepared: &'a Prepared) -> Result<Link<'a>, McpError> {
     match prepared.config.transport {
         Transport::Http => Ok(Link::Http(Http {
@@ -245,13 +245,13 @@ fn link<'a>(ctx: &'a AccountContext<'a>, prepared: &'a Prepared) -> Result<Link<
             bearer: prepared.bearer.clone(),
             session: &prepared.state.session,
         })),
-        #[cfg(feature = "self-hosted")]
+        #[cfg(feature = "local-process")]
         Transport::Stdio => Ok(Link::Stdio(stdio::Command {
             slot: &prepared.state.slot,
             config: &prepared.config,
             credentials: &prepared.credentials,
         })),
-        #[cfg(not(feature = "self-hosted"))]
+        #[cfg(not(feature = "local-process"))]
         Transport::Stdio => Err(McpError::StdioUnavailable),
     }
 }

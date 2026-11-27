@@ -1,10 +1,10 @@
-//! The plugin that only a self-hosted build has.
+//! The plugin that only a build with `local-process` has.
 
 use futures_util::future::BoxFuture;
 use jian_plugin_api::{AccountContext, AccountRef, Permission, Plugin, ToolDef, ToolError};
 use serde_json::{Value, json};
 
-/// Stands for a plugin that needs the operator's own machine. Compiled with the `self-hosted`
+/// Stands for a plugin that needs the gateway's own machine. Compiled with the `local-process`
 /// feature and not otherwise.
 pub struct LocalEcho;
 

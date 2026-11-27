@@ -1,9 +1,10 @@
 //! Downloads of an artifact's latest version: `GET /v1/artifacts/{id}/export?format=` for a
-//! member, and `GET /v1/public/artifacts/{token}/export?format=` for whoever its link opens.
+//! member, and, with `public-url`, `GET /v1/public/artifacts/{token}/export?format=` for whoever
+//! its link opens.
 //!
 //! Who may download is who may read, and nothing else: the member route has the rules of
 //! `GET /v1/artifacts/{id}` (an artifact the caller does not see is a 404, whatever the format
-//! asked), and the link route is [`readable`](crate::artifact_public::readable), so a password
+//! asked), and the link route reads as the link does (`artifact_public::readable`), so a password
 //! the link asks for (401 `password_required`), a link that was replaced (404) and a member
 //! without access (404) are the same as when it is opened. Only after that is the format
 //! looked at: one the kind does not have is a 400 that says which it has.
@@ -34,8 +35,11 @@ use serde::Deserialize;
 
 use crate::AppState;
 use crate::artifact_office::{docx, pptx, xlsx};
+#[cfg(feature = "public-url")]
 use crate::artifact_public::readable;
-use crate::auth::{Address, AuthRejection, Principal};
+use crate::auth::Principal;
+#[cfg(feature = "public-url")]
+use crate::auth::{Address, AuthRejection};
 use crate::http::{Refusal, not_found, refuse, tenant_ctx};
 use crate::workspace::{failure, viewer};
 
@@ -293,6 +297,7 @@ pub(crate) async fn export(
 }
 
 /// `GET /v1/public/artifacts/{token}/export?format=`: for whoever the link opens.
+#[cfg(feature = "public-url")]
 pub(crate) async fn export_public(
     State(app): State<AppState>,
     Address(from): Address,
