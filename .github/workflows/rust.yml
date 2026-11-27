@@ -12,6 +12,7 @@ on:
       - 'deny.toml'
       - 'rustfmt.toml'
       - 'clippy.toml'
+      - '.config/nextest.toml'
       - '.github/workflows/rust.yml'
   pull_request:
     paths:
@@ -24,6 +25,7 @@ on:
       - 'deny.toml'
       - 'rustfmt.toml'
       - 'clippy.toml'
+      - '.config/nextest.toml'
       - '.github/workflows/rust.yml'
 
 concurrency:
