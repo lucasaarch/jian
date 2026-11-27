@@ -1590,6 +1590,7 @@ dependencies = [
  "futures-util",
  "jian-plugin-api",
  "reqwest",
+ "rustix",
  "rustls",
  "serde",
  "serde_json",

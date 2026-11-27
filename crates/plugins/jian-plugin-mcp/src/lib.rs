@@ -33,6 +33,8 @@ pub mod http;
 pub mod names;
 pub mod oauth;
 pub mod rpc;
+#[cfg(feature = "self-hosted")]
+pub mod stdio;
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, MutexGuard};
@@ -64,11 +66,26 @@ pub const CATALOG_TTL: Duration = Duration::from_secs(300);
 pub const RETRY_AFTER: Duration = Duration::from_secs(30);
 
 /// What the plugin keeps of one account between calls.
-#[derive(Default)]
 struct AccountState {
     session: Mutex<Option<Session>>,
     catalog: Mutex<Option<Catalog>>,
     failure: Mutex<Option<(Instant, String)>>,
+    /// The account's command process, when it has started one.
+    #[cfg(feature = "self-hosted")]
+    slot: Arc<stdio::Slot>,
+}
+
+impl AccountState {
+    #[cfg_attr(not(feature = "self-hosted"), allow(unused_variables))]
+    fn new(idle: Duration) -> Self {
+        Self {
+            session: Mutex::default(),
+            catalog: Mutex::default(),
+            failure: Mutex::default(),
+            #[cfg(feature = "self-hosted")]
+            slot: Arc::new(stdio::Slot::new(idle)),
+        }
+    }
 }
 
 /// A listing in progress. The host gives up on a plugin that is too slow by dropping its
@@ -94,9 +111,22 @@ fn locked<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
 }
 
 /// The MCP plugin. One value serves every tenant and run.
-#[derive(Default)]
 pub struct McpPlugin {
     accounts: Mutex<HashMap<AccountId, Arc<AccountState>>>,
+    /// How long a command server's process may sit unused.
+    idle: Duration,
+}
+
+impl Default for McpPlugin {
+    fn default() -> Self {
+        Self {
+            accounts: Mutex::default(),
+            #[cfg(feature = "self-hosted")]
+            idle: stdio::IDLE,
+            #[cfg(not(feature = "self-hosted"))]
+            idle: Duration::ZERO,
+        }
+    }
 }
 
 /// The plugins this crate has.
@@ -114,10 +144,22 @@ struct Prepared {
 }
 
 impl McpPlugin {
+    /// A plugin whose command servers stop after `idle` unused, for a test that cannot wait
+    /// [`stdio::IDLE`].
+    #[cfg(feature = "self-hosted")]
+    #[must_use]
+    pub fn with_idle(idle: Duration) -> Self {
+        Self {
+            accounts: Mutex::default(),
+            idle,
+        }
+    }
+
     fn state(&self, id: &AccountId) -> Arc<AccountState> {
+        let idle = self.idle;
         locked(&self.accounts)
             .entry(id.clone())
-            .or_default()
+            .or_insert_with(|| Arc::new(AccountState::new(idle)))
             .clone()
     }
 
@@ -139,9 +181,8 @@ impl McpPlugin {
     /// Reads the server's tools now and keeps them.
     async fn refresh(&self, ctx: &AccountContext<'_>) -> Result<(), McpError> {
         let prepared = self.prepared(ctx).await?;
-        let result = match link(ctx, &prepared)? {
-            Link::Http(http) => catalog::list(&http, &prepared.config.disabled_tools).await,
-        };
+        let link = link(ctx, &prepared)?;
+        let result = catalog::list(&link, &prepared.config.disabled_tools).await;
         match result {
             Ok(catalog) => {
                 *locked(&prepared.state.catalog) = Some(catalog);
@@ -169,6 +210,8 @@ impl McpPlugin {
 /// The transport an operation runs over.
 enum Link<'a> {
     Http(Http<'a>),
+    #[cfg(feature = "self-hosted")]
+    Stdio(stdio::Command<'a>),
 }
 
 impl Rpc for Link<'_> {
@@ -179,10 +222,14 @@ impl Rpc for Link<'_> {
     ) -> BoxFuture<'a, Result<Value, McpError>> {
         match self {
             Self::Http(http) => http.request(method, params),
+            #[cfg(feature = "self-hosted")]
+            Self::Stdio(command) => command.request(method, params),
         }
     }
 }
 
+// Only the Cloud build can refuse; the self-hosted one always has a transport.
+#[cfg_attr(feature = "self-hosted", allow(clippy::unnecessary_wraps))]
 fn link<'a>(ctx: &'a AccountContext<'a>, prepared: &'a Prepared) -> Result<Link<'a>, McpError> {
     match prepared.config.transport {
         Transport::Http => Ok(Link::Http(Http {
@@ -192,6 +239,13 @@ fn link<'a>(ctx: &'a AccountContext<'a>, prepared: &'a Prepared) -> Result<Link<
             bearer: prepared.bearer.clone(),
             session: &prepared.state.session,
         })),
+        #[cfg(feature = "self-hosted")]
+        Transport::Stdio => Ok(Link::Stdio(stdio::Command {
+            slot: &prepared.state.slot,
+            config: &prepared.config,
+            credentials: &prepared.credentials,
+        })),
+        #[cfg(not(feature = "self-hosted"))]
         Transport::Stdio => Err(McpError::StdioUnavailable),
     }
 }
@@ -265,9 +319,8 @@ impl Plugin for McpPlugin {
                 ToolError::new("the MCP server does not offer this tool any more")
             })?;
             let prepared = self.prepared(ctx).await?;
-            match link(ctx, &prepared)? {
-                Link::Http(http) => catalog::call(&http, &entry.original, input).await,
-            }
+            let link = link(ctx, &prepared)?;
+            catalog::call(&link, &entry.original, input).await
         })
     }
 }
