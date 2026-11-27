@@ -167,7 +167,8 @@ pub async fn start(
     let name = format!("{run}-{}-{}", clock(), std::process::id());
     // The job leads its own session so stop_process can end its whole group. macOS ships no
     // `setsid` binary but always has perl, whose setsid-then-exec keeps the pid, so `$!` is the
-    // group either way.
+    // group either way. The new session is made after the fork, so the start waits (up to ~5 s)
+    // until the job leads its group: a stop sent before that would miss it.
     let script = format!(
         "d=\"${{TMPDIR:-/tmp}}/jian-jobs\"; mkdir -p \"$d\" && chmod 700 \"$d\" || exit 1\n\
          if command -v setsid > /dev/null; then\n\
@@ -178,7 +179,11 @@ pub async fn start(
          nohup sh -c 'sh -c \"$1\"; echo $? > \"$2\"' sh {cmd} \"$d/{name}.log.exit\" \
          > \"$d/{name}.log\" 2>&1 < /dev/null &\n\
          else echo 'starting a background job needs setsid or perl'; exit 1; fi\n\
-         echo \"{MARK}$! $d/{name}.log\"\n",
+         p=$!; i=0\n\
+         while [ $i -lt 50 ] && [ ! -f \"$d/{name}.log.exit\" ] && kill -s 0 $p 2>/dev/null \
+               && [ \"$(ps -o pgid= -p $p 2>/dev/null | tr -d ' ')\" != \"$p\" ]; do \
+         sleep 0.1; i=$((i+1)); done\n\
+         echo \"{MARK}$p $d/{name}.log\"\n",
         cmd = quote(command)
     );
     let done = machine.shell(&script, 20_000).await.map_err(|e| exec(&e))?;
@@ -218,10 +223,11 @@ fn report_script(job: &Job, tail: usize) -> String {
     let log = quote(&job.log);
     let group = &job.group;
     format!(
-        "s=$(ps -o stat= -g {group} 2>/dev/null)\n\
-         if [ -f {log}.exit ]; then echo \"status: exited with code $(cat {log}.exit)\"; \
-         elif kill -s 0 -- -{group} 2>/dev/null \
-              && {{ [ -z \"$s\" ] || echo \"$s\" | grep -qv '^ *Z'; }}; then echo 'status: running'; \
+        // The leader (the job's pid) lives until it has written the exit code, so its own pid
+        // says whether the job runs; `ps -p` is the same on Linux and macOS, `-g` is not.
+        "if [ -f {log}.exit ]; then echo \"status: exited with code $(cat {log}.exit)\"; \
+         elif kill -s 0 {group} 2>/dev/null \
+              && ! ps -o stat= -p {group} 2>/dev/null | grep -q '^ *Z'; then echo 'status: running'; \
          else echo 'status: ended without an exit code (killed)'; fi\n\
          echo '--- the last {tail} bytes of its output ---'\n\
          tail -c {tail} {log}\n"
@@ -263,8 +269,10 @@ pub async fn stop(
     // have been given to something else since.
     let _ = writeln!(
         script,
-        "if [ ! -f {log}.exit ]; then kill -s TERM -- -{group} 2>/dev/null; \
-         sleep {STOP_GRACE_SECS}; kill -s KILL -- -{group} 2>/dev/null; fi"
+        "if [ ! -f {log}.exit ]; then \
+         kill -s TERM -- -{group} 2>/dev/null || kill -s TERM {group} 2>/dev/null; \
+         sleep {STOP_GRACE_SECS}; \
+         kill -s KILL -- -{group} 2>/dev/null || kill -s KILL {group} 2>/dev/null; fi"
     );
     script.push_str(&report_script(&job, TAIL_DEFAULT));
     let done = machine.shell(&script, 30_000).await.map_err(|e| exec(&e))?;
