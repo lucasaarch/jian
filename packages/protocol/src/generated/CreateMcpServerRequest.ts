@@ -38,4 +38,15 @@ args: Array<string>,
 /**
  * Environment variables for the program. Kept in the vault, never shown again.
  */
-env: { [key in string]: string }, };
+env: { [key in string]: string }, 
+/**
+ * The server signs people in with OAuth, instead of headers. The account is made without
+ * trying the server, since it cannot answer before someone signs in: sign in through
+ * `POST /v1/mcp-servers/{id}/login`.
+ */
+oauth: boolean, 
+/**
+ * A client id registered by hand, for a server whose authorization server cannot register
+ * one by itself. Only with `oauth`.
+ */
+oauthClientId: string | null, };

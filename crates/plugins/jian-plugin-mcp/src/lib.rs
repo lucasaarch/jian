@@ -47,7 +47,7 @@ use jian_plugin_api::{
 use serde_json::Value;
 
 use crate::catalog::Catalog;
-use crate::config::{Credentials, ServerConfig, Transport};
+use crate::config::{Auth, Credentials, ServerConfig, Transport};
 use crate::error::McpError;
 use crate::http::{Http, Session};
 use crate::rpc::Rpc;
@@ -163,23 +163,29 @@ impl McpPlugin {
             .clone()
     }
 
-    async fn prepared(&self, ctx: &AccountContext<'_>) -> Result<Prepared, McpError> {
+    async fn prepared<'a>(&self, ctx: &'a AccountContext<'a>) -> Result<Prepared, McpError> {
         let config = ServerConfig::parse(&ctx.account().config)?;
-        let credentials = match ctx.secret().await {
+        let mut credentials = match ctx.secret().await {
             Ok(secret) => Credentials::read(&secret),
             Err(PluginError::NoSecret) => Credentials::default(),
             Err(error) => return Err(error.into()),
+        };
+        // Signed in with OAuth: the token, renewed first when it has lapsed.
+        let bearer = if config.auth == Auth::Oauth {
+            Some(oauth::bearer(ctx, &mut credentials).await?)
+        } else {
+            None
         };
         Ok(Prepared {
             config,
             credentials,
             state: self.state(&ctx.account().id),
-            bearer: None,
+            bearer,
         })
     }
 
     /// Reads the server's tools now and keeps them.
-    async fn refresh(&self, ctx: &AccountContext<'_>) -> Result<(), McpError> {
+    async fn refresh<'a>(&self, ctx: &'a AccountContext<'a>) -> Result<(), McpError> {
         let prepared = self.prepared(ctx).await?;
         let link = link(ctx, &prepared)?;
         let result = catalog::list(&link, &prepared.config.disabled_tools).await;

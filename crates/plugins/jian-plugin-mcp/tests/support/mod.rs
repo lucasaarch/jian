@@ -10,13 +10,15 @@ use axum::Router;
 use axum::extract::State;
 use axum::http::{HeaderMap, HeaderValue, StatusCode, header};
 use axum::response::{IntoResponse, Response};
-use axum::routing::post;
+use axum::routing::{get, post};
 use futures_util::future::BoxFuture;
 use jian_plugin_api::{
     AccountContext, AccountId, AccountRef, AgentEvent, HostError, HttpRequest, HttpResponse,
     Permission, PluginHost, Secret, SecretChange,
 };
 use serde_json::{Value, json};
+
+pub mod authserver;
 
 /// What the fake server saw of one request.
 #[derive(Clone, Debug)]
@@ -41,6 +43,8 @@ pub struct Behaviour {
     pub require: Option<String>,
     /// Sessions that no longer exist: a request carrying one is a 404.
     pub dead_sessions: Vec<String>,
+    /// The authorization server the protected-resource document names, when it names one.
+    pub authorization_server: Option<String>,
 }
 
 pub struct Fake {
@@ -166,6 +170,15 @@ fn reply(behaviour: &Behaviour, id: &Value, result: &Value) -> Response {
 
 /// Starts the fake on a free port; the address is `http://127.0.0.1:<port>/mcp`.
 pub async fn serve() -> (Arc<Fake>, String) {
+    async fn resource(State(fake): State<Arc<Fake>>) -> Response {
+        let server = fake.behaviour.lock().unwrap().authorization_server.clone();
+        match server {
+            Some(server) => {
+                axum::Json(json!({ "authorization_servers": [server] })).into_response()
+            }
+            None => StatusCode::NOT_FOUND.into_response(),
+        }
+    }
     let fake = Arc::new(Fake {
         behaviour: Mutex::default(),
         seen: Mutex::default(),
@@ -173,6 +186,7 @@ pub async fn serve() -> (Arc<Fake>, String) {
     });
     let app = Router::new()
         .route("/mcp", post(handle))
+        .route("/.well-known/oauth-protected-resource", get(resource))
         .with_state(fake.clone());
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let url = format!("http://{}/mcp", listener.local_addr().unwrap());
@@ -184,6 +198,8 @@ pub async fn serve() -> (Arc<Fake>, String) {
 pub struct TestHost {
     pub secret: Mutex<Option<String>>,
     pub client: reqwest::Client,
+    /// Held while a secret is being changed, as the vault holds its row.
+    pub lock: tokio::sync::Mutex<()>,
 }
 
 impl TestHost {
@@ -192,6 +208,7 @@ impl TestHost {
         Self {
             secret: Mutex::new(secret.map(str::to_owned)),
             client: reqwest::Client::new(),
+            lock: tokio::sync::Mutex::new(()),
         }
     }
 }
@@ -210,6 +227,7 @@ impl PluginHost for TestHost {
         change: SecretChange<'a>,
     ) -> BoxFuture<'a, Result<bool, HostError>> {
         Box::pin(async move {
+            let _held = self.lock.lock().await;
             let current = self.secret.lock().unwrap().clone();
             let Some(current) = current else {
                 return Ok(false);

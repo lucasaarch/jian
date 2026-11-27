@@ -193,6 +193,75 @@ impl Plugins {
             .await
             .unwrap_or_else(|_| Err("the server did not answer in time".to_owned()))
     }
+
+    /// Starts the OAuth login of an MCP account and returns the address to send the person to.
+    /// `redirect_uri` is where the authorization server sends them back, with a code.
+    ///
+    /// # Errors
+    ///
+    /// A sentence for a person, with no secret in it.
+    pub async fn login_start(
+        &self,
+        db: &Database,
+        ctx: &TenantCtx,
+        account: &ConnectorAccount,
+        redirect_uri: &str,
+    ) -> Result<String, String> {
+        let account = scoped(account).account;
+        let (host, doors) = self.mcp_host(db, ctx, &account.id)?;
+        let context = AccountContext::new(&host, &account, doors);
+        tokio::time::timeout(
+            PREPARE_TIMEOUT,
+            jian_plugin_mcp::oauth::start(&context, redirect_uri),
+        )
+        .await
+        .unwrap_or_else(|_| Err("the server did not answer in time".to_owned()))
+    }
+
+    /// Finishes the login with what the authorization server sent back.
+    ///
+    /// # Errors
+    ///
+    /// A sentence for a person, with no secret in it.
+    pub async fn login_finish(
+        &self,
+        db: &Database,
+        ctx: &TenantCtx,
+        account: &ConnectorAccount,
+        code: &str,
+        state: &str,
+    ) -> Result<(), String> {
+        let account = scoped(account).account;
+        let (host, doors) = self.mcp_host(db, ctx, &account.id)?;
+        let context = AccountContext::new(&host, &account, doors);
+        tokio::time::timeout(
+            PREPARE_TIMEOUT,
+            jian_plugin_mcp::oauth::finish(&context, code, state),
+        )
+        .await
+        .unwrap_or_else(|_| Err("the server did not answer in time".to_owned()))
+    }
+
+    fn mcp_host<'a>(
+        &'a self,
+        db: &'a Database,
+        ctx: &'a TenantCtx,
+        account: &'a AccountId,
+    ) -> Result<(ServerHost<'a>, &'static [jian_plugin_api::Permission]), String> {
+        let plugin = self
+            .registry
+            .get(jian_plugin_mcp::MCP_ID)
+            .ok_or_else(|| "no plugin of this build runs MCP servers".to_owned())?;
+        let host = ServerHost {
+            db,
+            ctx,
+            plugin: jian_plugin_mcp::MCP_ID,
+            account,
+            http: &self.http,
+            allow_internal: self.allow_internal,
+        };
+        Ok((host, plugin.permissions()))
+    }
 }
 
 fn scoped(account: &ConnectorAccount) -> ScopedAccount {

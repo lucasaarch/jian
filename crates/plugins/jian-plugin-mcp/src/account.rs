@@ -26,6 +26,11 @@ pub struct NewServer {
     pub args: Vec<String>,
     /// Environment variables to give it; the values are credentials.
     pub env: BTreeMap<String, String>,
+    /// The server signs people in with OAuth, so the account is made empty and the login comes
+    /// after (see [`crate::oauth`]). HTTP only, and instead of headers.
+    pub oauth: bool,
+    /// A client id registered by hand, for an authorization server that cannot register one.
+    pub oauth_client_id: Option<String>,
 }
 
 /// A name a header or variable may have: nothing that could split a header line or end a
@@ -70,15 +75,34 @@ pub fn build(server: &NewServer) -> Result<(Value, Option<Secret>), String> {
                     return Err("a header value must be on one line".to_owned());
                 }
             }
+            if server.oauth && !server.headers.is_empty() {
+                return Err("use either headers or OAuth, not both".to_owned());
+            }
             credentials.headers.clone_from(&server.headers);
-            json!({
+            let auth = match (server.oauth, server.headers.is_empty()) {
+                (true, _) => "oauth",
+                (false, true) => "none",
+                (false, false) => "headers",
+            };
+            if server.oauth {
+                // The login keeps its state in the vault, so the account must have an entry.
+                credentials.oauth = Some(crate::oauth::OAuthState::default());
+            }
+            let mut config = json!({
                 "transport": "http",
                 "url": url.as_str(),
-                "auth": if server.headers.is_empty() { "none" } else { "headers" },
+                "auth": auth,
                 "headers": server.headers.keys().map(|name| json!({ "name": name })).collect::<Vec<_>>(),
-            })
+            });
+            if let Some(id) = server.oauth_client_id.as_deref().filter(|_| server.oauth) {
+                config["oauthClientId"] = json!(id);
+            }
+            config
         }
         Transport::Stdio => {
+            if server.oauth {
+                return Err("OAuth is for HTTP servers".to_owned());
+            }
             if !cfg!(feature = "self-hosted") {
                 return Err("a command server runs a program on the gateway's machine, which the Cloud edition does not allow; use an HTTP server".to_owned());
             }
@@ -99,7 +123,10 @@ pub fn build(server: &NewServer) -> Result<(Value, Option<Secret>), String> {
             })
         }
     };
-    let secret = if credentials.headers.is_empty() && credentials.env.is_empty() {
+    let secret = if credentials.headers.is_empty()
+        && credentials.env.is_empty()
+        && credentials.oauth.is_none()
+    {
         None
     } else {
         Some(credentials.seal().map_err(|error| error.to_string())?)

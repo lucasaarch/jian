@@ -50,4 +50,43 @@ pub struct CreateMcpServerRequest {
     /// Environment variables for the program. Kept in the vault, never shown again.
     #[serde(default)]
     pub env: BTreeMap<String, String>,
+    /// The server signs people in with OAuth, instead of headers. The account is made without
+    /// trying the server, since it cannot answer before someone signs in: sign in through
+    /// `POST /v1/mcp-servers/{id}/login`.
+    #[serde(default)]
+    pub oauth: bool,
+    /// A client id registered by hand, for a server whose authorization server cannot register
+    /// one by itself. Only with `oauth`.
+    #[serde(default)]
+    pub oauth_client_id: Option<String>,
+}
+
+/// `POST /v1/mcp-servers/{id}/login`: start signing in to an OAuth server.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+#[serde(rename_all = "camelCase")]
+pub struct StartMcpLoginRequest {
+    /// Where the authorization server sends the person back to, with `code` and `state`: a page
+    /// of the panel, which then calls `POST /v1/mcp-servers/{id}/login/finish`.
+    pub redirect_uri: String,
+}
+
+/// The answer to [`StartMcpLoginRequest`].
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+#[serde(rename_all = "camelCase")]
+pub struct McpLoginStart {
+    /// The address to open, where the person approves.
+    pub authorization_url: String,
+}
+
+/// `POST /v1/mcp-servers/{id}/login/finish`: what the authorization server sent back.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+#[serde(rename_all = "camelCase")]
+pub struct FinishMcpLoginRequest {
+    /// The authorization code.
+    pub code: String,
+    /// The `state` from the address the person came back to; it must be the one the login made.
+    pub state: String,
 }

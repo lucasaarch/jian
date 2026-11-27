@@ -21,7 +21,9 @@ test = false
 required-features = ["self-hosted"]
 
 [dependencies]
+base64.workspace = true
 futures-util.workspace = true
+getrandom.workspace = true
 jian-plugin-api.workspace = true
 serde.workspace = true
 serde_json.workspace = true
@@ -40,7 +42,7 @@ rustix = { workspace = true, optional = true, features = ["process"] }
 axum.workspace = true
 reqwest.workspace = true
 rustls.workspace = true
-tokio = { workspace = true, features = ["time"] }
+tokio = { workspace = true, features = ["sync", "time"] }
 
 [lints]
 workspace = true
