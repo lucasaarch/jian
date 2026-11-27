@@ -13,8 +13,16 @@ use super::accounts::{open_settings, start};
 use super::machines::{agent_of, choose, online, scope};
 use super::support::RealWorker;
 
-/// The answer with what legitimately differs between two machines taken out: modification times
-/// and the folder the files are in.
+/// A folder as both machines name it. Canonicalizing on Windows gives the `\\?\D:\` form, which
+/// takes no `/` (os error 123) and is not what either machine answers with.
+fn plain(dir: &std::path::Path) -> String {
+    let real = std::fs::canonicalize(dir).unwrap();
+    let text = real.to_str().unwrap();
+    text.strip_prefix(r"\\?\").unwrap_or(text).to_owned()
+}
+
+/// The answer with what legitimately differs between two machines taken out: modification times,
+/// the folder the files are in, and which separator joins a Windows path.
 fn shape(answer: &FilesAnswer, root: &str) -> Value {
     fn clean(value: &mut Value, root: &str) {
         match value {
@@ -23,12 +31,13 @@ fn shape(answer: &FilesAnswer, root: &str) -> Value {
                 map.values_mut().for_each(|v| clean(v, root));
             }
             Value::Array(items) => items.iter_mut().for_each(|v| clean(v, root)),
-            Value::String(text) => *text = text.replace(root, "<root>"),
+            Value::String(text) => *text = text.replace('\\', "/").replace(root, "<root>"),
             _ => {}
         }
     }
+    let root = root.replace('\\', "/");
     let mut value = serde_json::to_value(answer).unwrap();
-    clean(&mut value, root);
+    clean(&mut value, &root);
     value
 }
 
@@ -149,8 +158,8 @@ async fn the_same_script_gives_the_same_answers_on_the_gateways_machine_and_a_co
         let mut all = std::fs::read_dir(dir).unwrap();
         all.next().unwrap().unwrap().path()
     };
-    let local_root = std::fs::canonicalize(only(&only(work.path()))).unwrap();
-    let local_answers = script(local.as_ref(), "", local_root.to_str().unwrap()).await;
+    let local_root = plain(&only(&only(work.path())));
+    let local_answers = script(local.as_ref(), "", &local_root).await;
 
     // A connected machine: the same script, in a folder of its own.
     let executor = AgentMachines::new(gateway.db.clone(), gateway.state.hub.clone(), None);
@@ -159,9 +168,9 @@ async fn the_same_script_gives_the_same_answers_on_the_gateways_machine_and_a_co
     online(&gateway, a).await;
     let hub = executor.open(&scope).await.unwrap();
     let dir = tempfile::tempdir().unwrap();
-    let hub_root = std::fs::canonicalize(dir.path()).unwrap();
-    let at = format!("{}/", hub_root.to_str().unwrap());
-    let hub_answers = script(hub.as_ref(), &at, hub_root.to_str().unwrap()).await;
+    let hub_root = plain(dir.path());
+    let at = format!("{hub_root}/");
+    let hub_answers = script(hub.as_ref(), &at, &hub_root).await;
 
     assert_eq!(local_answers.len(), hub_answers.len());
     for (i, (l, h)) in local_answers.iter().zip(&hub_answers).enumerate() {
