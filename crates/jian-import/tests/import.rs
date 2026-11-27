@@ -190,6 +190,7 @@ async fn a_dump_of_the_old_desktop_database_comes_over_once() {
     memories_and_projects_came_over(&new.db, &ctx, &first, &members[0].account_id).await;
     skills_came_over(&new.db, &ctx, &first, &members[0].account_id).await;
     connectors_came_over(&new.db, &ctx, &members[0].account_id).await;
+    channels_came_over(&new.db, &ctx, &first).await;
     artifacts_came_over(&new.db, &ctx, &first, &members[0].account_id).await;
     // The scratch server is gone with its directory.
     assert!(!dir.path().join("scratch").exists());
@@ -231,7 +232,7 @@ async fn a_dump_of_the_old_desktop_database_comes_over_once() {
         .unwrap();
     assert!(pending.domains.is_empty());
     let markers = new.db.imports(&ctx).await.unwrap();
-    assert_eq!(markers.len(), 14);
+    assert_eq!(markers.len(), 15);
     assert!(markers.iter().all(|m| m.status == ImportStatus::Done));
     new.stop().await;
 }
@@ -322,6 +323,7 @@ async fn a_run_that_stopped_or_lacked_a_key_is_finished_by_the_next() {
             Domain::Providers,
             Domain::Connectors,
             Domain::Agents,
+            Domain::Channels,
             Domain::Threads,
             Domain::Messages,
             Domain::Memories,
@@ -706,6 +708,30 @@ async fn connectors_came_over(db: &Database, ctx: &TenantCtx, owner: &jian_store
         accounts[0].config,
         serde_json::json!({"url": "https://docs.example.test/mcp"})
     );
+}
+
+/// The old `WhatsApp` channel is an account of the agent made from its profile, to pair again,
+/// with the direct contact that was approved (the pending one, the group and the email channel
+/// stay behind). The second run of the test found it already there, so one is all there can be.
+async fn channels_came_over(db: &Database, ctx: &TenantCtx, report: &ImportReport) {
+    let agent = db.agent_of_legacy(ctx, PROFILE).await.unwrap().unwrap();
+    let accounts = db.channel_accounts_of(ctx, &agent).await.unwrap();
+    assert_eq!(accounts.len(), 1);
+    assert_eq!(accounts[0].provider, "whatsapp");
+    assert_eq!(accounts[0].status, jian_store::ChannelStatus::NeedsPairing);
+    assert_eq!(accounts[0].provider_address, None);
+    let contacts = db.channel_contacts(ctx, &accounts[0].id).await.unwrap();
+    assert_eq!(contacts.len(), 1);
+    assert_eq!(contacts[0].address, "5511900000010@s.whatsapp.net");
+    assert_eq!(contacts[0].status, jian_store::ContactStatus::Approved);
+    let detail = domain(report, Domain::Channels).detail.clone().unwrap();
+    assert!(detail.contains("1 left out"), "{detail}");
+    let left: Vec<&str> = report
+        .not_imported
+        .iter()
+        .map(|t| t.name.as_str())
+        .collect();
+    assert!(!left.contains(&"channels"));
 }
 
 async fn skills_came_over(

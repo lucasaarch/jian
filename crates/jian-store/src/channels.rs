@@ -271,6 +271,24 @@ impl Database {
         Ok(rows.into_iter().map(Row::account).collect())
     }
 
+    /// The accounts a gateway that serves this tenant must keep connected: the ones that were
+    /// linked and not disconnected on purpose. A new owner of the tenant's slot reads this to
+    /// pick the connections up.
+    pub async fn channel_accounts_to_connect(
+        &self,
+        ctx: &TenantCtx,
+    ) -> Result<Vec<ChannelAccount>, StoreError> {
+        let mut tx = self.begin(ctx).await?;
+        let rows: Vec<Row> = sqlx::query_as(AssertSqlSafe(format!(
+            "SELECT {COLUMNS} FROM channel_accounts \
+             WHERE status = 'connected' AND provider_address IS NOT NULL ORDER BY seq"
+        )))
+        .fetch_all(&mut *tx)
+        .await
+        .map_err(StoreError::query("read the channel accounts to connect"))?;
+        Ok(rows.into_iter().map(Row::account).collect())
+    }
+
     /// Records where the account stands.
     pub async fn set_channel_status(
         &self,
@@ -501,6 +519,21 @@ impl Database {
         .await
         .map_err(StoreError::query("read the chat of a thread"))?;
         Ok(row.map(|(agent, provider, chat)| (AgentId::new(agent), provider, chat)))
+    }
+
+    /// The agent made from the old profile `legacy_id`, when that was imported.
+    pub async fn agent_of_legacy(
+        &self,
+        ctx: &TenantCtx,
+        legacy_id: &str,
+    ) -> Result<Option<AgentId>, StoreError> {
+        let mut tx = self.begin(ctx).await?;
+        let id: Option<String> = sqlx::query_scalar("SELECT id FROM agents WHERE legacy_id = $1")
+            .bind(legacy_id)
+            .fetch_optional(&mut *tx)
+            .await
+            .map_err(StoreError::query("read an agent by its old id"))?;
+        Ok(id.map(AgentId::new))
     }
 
     /// Brings one account of the old Jian: the account (`needs_pairing`, since its session

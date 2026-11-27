@@ -52,11 +52,14 @@
 //! here. (Profiles, sessions, contacts and messages do have one: the `agents`, `threads` and
 //! `messages` domains, which need the owner imported first; memories and projects, in the
 //! `memories` and `projects` domains, schedules in `schedules`, skills in `skills` and the
-//! artifacts of sessions, with their versions and folders, in `artifacts`. A whiteboard or a
+//! artifacts of sessions, with their versions and folders, in `artifacts`; the `WhatsApp` and
+//! Telegram channels, with their direct approved contacts, in `channels`, as accounts to pair
+//! again, because the old session cannot be carried over. A whiteboard or a
 //! picture has no place in the core and is counted in that marker as left out. The old
 //! `artifacts` table is the output of tool calls, not these, and is still listed.)
 
 mod artifacts_import;
+mod channels_import;
 mod connectors;
 mod conversations;
 mod error;

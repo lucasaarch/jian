@@ -7,8 +7,8 @@ use jian_store::{Database, ImportResult, ImportStatus, TenantCtx};
 
 use crate::reader::{LegacyReader, LegacyTable};
 use crate::{
-    ImportError, Source, artifacts_import, connectors, conversations, machines, memories, owner,
-    providers, secrets,
+    ImportError, Source, artifacts_import, channels_import, connectors, conversations, machines,
+    memories, owner, providers, secrets,
 };
 
 /// A part of the old Jian that has a table in the core, imported on its own: one marker, one
@@ -30,6 +30,9 @@ pub enum Domain {
     Devices,
     /// The old profiles, as agents everyone in the workspace sees. Needs the owner.
     Agents,
+    /// The old `WhatsApp` and Telegram channels, as accounts of the agents to pair again, with
+    /// their approved direct contacts. Needs the owner and the agents.
+    Channels,
     /// The old sessions, as direct chats and channel threads. Needs the owner and the agents.
     Threads,
     /// The messages of those sessions. Needs the threads.
@@ -51,7 +54,7 @@ pub enum Domain {
 
 impl Domain {
     /// Every domain, in the order a run takes them.
-    pub const ALL: [Self; 14] = [
+    pub const ALL: [Self; 15] = [
         Self::Owner,
         Self::Secrets,
         Self::Providers,
@@ -59,6 +62,7 @@ impl Domain {
         Self::Machines,
         Self::Devices,
         Self::Agents,
+        Self::Channels,
         Self::Threads,
         Self::Messages,
         Self::Memories,
@@ -78,6 +82,7 @@ impl Domain {
             Self::Machines => "machines",
             Self::Devices => "devices",
             Self::Agents => "agents",
+            Self::Channels => "channels",
             Self::Threads => "threads",
             Self::Messages => "messages",
             Self::Memories => "memories",
@@ -100,6 +105,8 @@ impl Domain {
             Self::Machines => &["remote_machines"],
             Self::Devices => &["devices"],
             Self::Agents => &["profiles"],
+            // `channel_auth` (the sessions) stays in the report of what was not imported.
+            Self::Channels => &["channels"],
             Self::Threads => &["sessions", "contacts"],
             Self::Messages => &["messages"],
             // `memory_projects` (which memory belonged to which project) has no place in the
@@ -279,6 +286,10 @@ impl<'a> Importer<'a> {
             Domain::Agents => {
                 let email = self.options.owner_email.as_deref();
                 conversations::agents(self.db, self.ctx, reader, email).await
+            }
+            Domain::Channels => {
+                let email = self.options.owner_email.as_deref();
+                channels_import::import(self.db, self.ctx, reader, email).await
             }
             Domain::Threads => {
                 let email = self.options.owner_email.as_deref();

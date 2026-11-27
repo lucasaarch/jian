@@ -14,6 +14,7 @@ use sqlx::{AssertSqlSafe, Connection as _, PgConnection};
 
 use crate::ImportError;
 
+mod channels;
 mod connectors;
 mod skills;
 
