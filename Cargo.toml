@@ -4,7 +4,8 @@
 resolver = "3"
 # `crates/*` would also match the folder that holds the plugin crates, which is not a crate, and
 # Cargo fails on a match with no manifest: every crate there is named `jian-*`.
-members = ["packages/remote-core/native", "crates/jian-*", "crates/plugins/*", "bins/*"]
+# Channels (WhatsApp, Telegram...) live in `crates/channels/`, one crate each, on `jian-channel-api`.
+members = ["packages/remote-core/native", "crates/jian-*", "crates/plugins/*", "crates/channels/*", "bins/*"]
 
 [workspace.package]
 version = "0.1.0"
@@ -30,6 +31,8 @@ getrandom = "0.3"
 globset = { version = "0.4", default-features = false }
 jian-auth = { path = "crates/jian-auth" }
 jian-browser = { path = "crates/jian-browser" }
+# The `fake` feature (a test double) is turned on only by tests.
+jian-channel-api = { path = "crates/channels/jian-channel-api" }
 jian-computer-use = { path = "crates/jian-computer-use" }
 jian-core = { path = "crates/jian-core" }
 jian-exec = { path = "crates/jian-exec" }

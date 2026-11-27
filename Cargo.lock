@@ -1465,6 +1465,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "jian-channel-api"
+version = "0.1.0"
+dependencies = [
+ "futures-util",
+ "jian-channel-api",
+ "serde",
+ "thiserror",
+ "tokio",
+]
+
+[[package]]
 name = "jian-computer-helper"
 version = "0.1.0"
 dependencies = [

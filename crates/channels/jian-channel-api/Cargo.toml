@@ -1,0 +1,25 @@
+[package]
+name = "jian-channel-api"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[features]
+# `fake`: an in-memory `Channel` for the tests of whoever drives one. It is a test double and is
+# never turned on by a binary.
+fake = ["dep:tokio"]
+
+[dependencies]
+futures-util.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["sync"], optional = true }
+
+[dev-dependencies]
+# Itself, with the test double on: the tests here use it, and `cargo test -p` must find it
+# without a flag.
+jian-channel-api = { path = ".", features = ["fake"] }
+tokio.workspace = true
+
+[lints]
+workspace = true
