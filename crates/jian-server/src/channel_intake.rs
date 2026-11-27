@@ -82,8 +82,10 @@ fn clipped(text: &str) -> (String, bool) {
     (kept, chars.next().is_some())
 }
 
-/// The part of the message the agent is given. Media is described, never carried: the agent opens
-/// it through the channel when it wants it.
+/// The part of the message the agent is given. Media is described, never carried, and its token
+/// is left out: it can hold the key that decrypts the file, and the event is stored, listed in
+/// the API and read by the model. The message's own id names the file for whoever opens it
+/// through the channel.
 fn body_json(body: &InboundBody) -> Value {
     match body {
         InboundBody::Text { text } => {
@@ -96,7 +98,6 @@ fn body_json(body: &InboundBody) -> Value {
             "mime": info.mime,
             "fileName": info.file_name,
             "size": info.size,
-            "media": info.media.as_str(),
             "caption": caption.as_deref().map(|c| clipped(c).0),
         }),
         InboundBody::Reaction { message, emoji } => {

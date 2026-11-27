@@ -46,8 +46,45 @@ id! {
     /// One message, unique inside its chat. It is what makes a repeated delivery one message.
     MessageId
 }
-id! {
-    /// Opaque token for an attachment that has not been downloaded. Only the channel that made it
-    /// can open it.
-    MediaRef
+/// Opaque token for an attachment that has not been downloaded. Only the channel that made it
+/// can open it.
+///
+/// A provider may put the key that decrypts the file in it, so it has no `Display` and its
+/// `Debug` hides it: it can reach a log or an error message by accident, and the file is
+/// readable by anyone who holds the token. It is read only with [`as_str`](Self::as_str), by
+/// the code that downloads.
+#[derive(Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct MediaRef(String);
+
+impl MediaRef {
+    /// Wraps the provider's token.
+    #[must_use]
+    pub fn new(token: impl Into<String>) -> Self {
+        Self(token.into())
+    }
+
+    /// The token as the provider wrote it.
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl fmt::Debug for MediaRef {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("MediaRef(<opaque>)")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_media_ref_does_not_print_its_token() {
+        let media = MediaRef::new("{\"media_key\":[7,7,7]}");
+        assert!(!format!("{media:?} {media:#?}").contains("media_key"));
+        assert_eq!(media.as_str(), "{\"media_key\":[7,7,7]}");
+    }
 }

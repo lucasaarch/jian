@@ -196,6 +196,46 @@ async fn the_owners_own_message_reaches_the_agent_but_never_asks_for_a_notificat
 }
 
 #[tokio::test]
+async fn a_files_token_never_reaches_the_inbox_nor_a_debug_print() {
+    use jian_channel_api::{MediaInfo, MediaKind, MediaRef};
+
+    let rig = Rig::new().await;
+    let db = &rig.test.db;
+    let a = &rig.tenants.a;
+    let pear = agent(db, a, "pear").await;
+    let acct = account(db, a, &pear).await;
+    // What a provider may put in a token: the key that opens the file.
+    let token = "{\"media_key\":\"MEDIA-KEY-never-stored-0123456789\"}";
+    let mut photo = said("m1", OWNER, "");
+    photo.body = InboundBody::Media {
+        info: MediaInfo {
+            kind: MediaKind::Image,
+            mime: "image/jpeg".to_owned(),
+            file_name: None,
+            size: 42,
+            media: MediaRef::new(token),
+        },
+        caption: Some("look".to_owned()),
+    };
+    assert!(!format!("{photo:?}").contains("MEDIA-KEY"), "{photo:?}");
+
+    let got = receive(db, &a.ctx, &acct, &photo).await.unwrap();
+    assert!(matches!(got, Intake::Delivered { .. }), "{got:?}");
+    let events = rig.inbox(&a.ctx, &pear).await;
+    assert_eq!(events.len(), 1);
+    let raw = events[0].payload.to_string();
+    assert!(
+        !raw.contains("MEDIA-KEY") && !raw.contains("media_key"),
+        "{raw}"
+    );
+    // The agent still hears what arrived.
+    let body = &events[0].payload["body"];
+    assert_eq!(body["type"], "media");
+    assert_eq!(body["size"], 42);
+    assert_eq!(body["caption"], "look");
+}
+
+#[tokio::test]
 async fn the_same_message_twice_is_one_event_and_a_restart_keeps_the_queue() {
     let rig = Rig::new().await;
     let db = &rig.test.db;
