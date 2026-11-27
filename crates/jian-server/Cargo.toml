@@ -17,7 +17,7 @@ license.workspace = true
 # `multi-tenant`: what only the Cloud has, many tenants on one machine: an outbound request may
 #   not reach a private network.
 local-process = ["jian-plugin-echo/local-process", "jian-plugin-mcp/local-process"]
-public-url = ["jian-plugin-api/public-url"]
+public-url = ["jian-plugin-api/public-url", "jian-plugin-github/public-url"]
 multi-tenant = []
 # The editions: the desktop app, a self-hosted gateway and the Cloud. The default is the
 # self-hosted one, as `bins/jian`'s is.
@@ -37,6 +37,7 @@ jian-exec.workspace = true
 jian-llm.workspace = true
 jian-mail.workspace = true
 jian-plugin-api.workspace = true
+jian-plugin-github.workspace = true
 jian-plugin-mcp.workspace = true
 jian-protocol.workspace = true
 jian-runtime.workspace = true

@@ -37,6 +37,8 @@ jian-import = { path = "crates/jian-import" }
 jian-llm = { path = "crates/jian-llm" }
 jian-mail = { path = "crates/jian-mail" }
 jian-plugin-api = { path = "crates/plugins/jian-plugin-api" }
+# `public-url` (the webhook) comes from `jian-server`'s capability of the same name.
+jian-plugin-github = { path = "crates/plugins/jian-plugin-github", default-features = false }
 # No default features: `jian-server`'s `local-process` capability turns the stdio transport on or
 # leaves it off.
 jian-plugin-mcp = { path = "crates/plugins/jian-plugin-mcp", default-features = false }
@@ -60,6 +62,9 @@ jpeg-encoder = "0.7.1"
 # native-tls, so there is no OpenSSL to link.
 postgresql_embedded = { version = "0.22", default-features = false, features = ["bundled", "tokio", "tls-rustls-ring"] }
 regex = "1.11"
+# RS256 for a GitHub App's JWT and HMAC for its webhooks. The provider rustls already uses, so no
+# second crypto library (and no aws-lc) comes in.
+ring = { version = "0.17", default-features = false, features = ["alloc"] }
 # Safe wrappers over the Unix calls the worker and its CLI make (signals, uid, termios), so
 # neither needs `unsafe`.
 rustix = { version = "1", default-features = false, features = ["std"] }

@@ -1601,6 +1601,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "jian-plugin-github"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "base64 0.23.1",
+ "futures-util",
+ "jian-plugin-api",
+ "jiff",
+ "reqwest",
+ "ring",
+ "rustls",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
+ "url",
+]
+
+[[package]]
 name = "jian-plugin-mcp"
 version = "0.1.0"
 dependencies = [
@@ -1704,6 +1723,7 @@ dependencies = [
  "jian-mail",
  "jian-plugin-api",
  "jian-plugin-echo",
+ "jian-plugin-github",
  "jian-plugin-mcp",
  "jian-protocol",
  "jian-remote",

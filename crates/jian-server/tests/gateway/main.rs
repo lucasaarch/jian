@@ -15,6 +15,7 @@ mod artifacts;
 mod codex;
 mod connectors;
 mod editions;
+mod github;
 #[cfg(feature = "public-url")]
 mod invites;
 mod isolation;

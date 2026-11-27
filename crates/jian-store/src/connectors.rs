@@ -215,6 +215,22 @@ async fn fill(
     Ok(accounts)
 }
 
+/// A statement that wrote a name: the unique index on GitHub account names (migration 0024)
+/// refusing it is a conflict the caller can say, not a failure of the store.
+fn name_clash(action: &'static str) -> impl FnOnce(sqlx::Error) -> StoreError {
+    move |source| {
+        let unique = source
+            .as_database_error()
+            .and_then(sqlx::error::DatabaseError::code)
+            .is_some_and(|code| code == "23505");
+        if unique {
+            StoreError::Conflict("an account of this service already has that name")
+        } else {
+            StoreError::query(action)(source)
+        }
+    }
+}
+
 fn clean_name(name: &str) -> Result<String, StoreError> {
     const WHAT: &str = "an account's name is 1 to 80 characters";
     let name = clean(name, MAX_CONNECTOR_NAME_CHARS, WHAT)?;
@@ -311,7 +327,7 @@ impl Database {
             .bind(creator.account.as_str())
             .execute(&mut *tx)
             .await
-            .map_err(StoreError::query(ACTION))?;
+            .map_err(name_clash(ACTION))?;
             write_agents(&mut tx, id.as_str(), &scope).await?;
             tx.commit().await.map_err(StoreError::query(ACTION))
         }
@@ -420,7 +436,7 @@ impl Database {
         .bind(scope.as_ref().map(scope_name))
         .execute(&mut *tx)
         .await
-        .map_err(StoreError::query(ACTION))?;
+        .map_err(name_clash(ACTION))?;
         if let Some(scope) = &scope {
             write_agents(&mut tx, id.as_str(), scope).await?;
         }

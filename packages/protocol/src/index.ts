@@ -49,6 +49,7 @@ export type { ConnectorAccountsPage } from "./generated/ConnectorAccountsPage";
 export type { ConnectorScopeView } from "./generated/ConnectorScopeView";
 export type { CreateAgentRequest } from "./generated/CreateAgentRequest";
 export type { CreateArtifactRequest } from "./generated/CreateArtifactRequest";
+export type { CreateGithubInstallationRequest } from "./generated/CreateGithubInstallationRequest";
 export type { CreateInviteRequest } from "./generated/CreateInviteRequest";
 export type { CreateMcpServerRequest } from "./generated/CreateMcpServerRequest";
 export type { CreateProjectRequest } from "./generated/CreateProjectRequest";

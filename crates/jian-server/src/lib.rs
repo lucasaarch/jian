@@ -78,6 +78,7 @@ mod codex_login;
 mod compact_job;
 mod connector_accounts;
 mod events;
+mod github;
 mod guard;
 mod http;
 mod hub;
@@ -219,6 +220,7 @@ pub const ROUTES: &[&str] = &[
     "DELETE /v1/agents/{id}/memories/{key} (a member who sees the agent)",
     "PUT /v1/agents/{id}/memories/{key}/links/{other} (a member who sees the agent)",
     "DELETE /v1/agents/{id}/memories/{key}/links/{other} (a member who sees the agent)",
+    "POST /v1/github/installations (a member)",
     "POST /v1/mcp-servers (a member)",
     "POST /v1/mcp-servers/{id}/login (its creator or an admin)",
     "POST /v1/mcp-servers/{id}/login/finish (its creator or an admin)",
@@ -547,6 +549,7 @@ pub fn router_with(state: AppState, extra: Router<AppState>) -> Router {
             "/v1/agents/{id}/proactivity",
             get(agent_events::get_proactivity).put(agent_events::put_proactivity),
         )
+        .route("/v1/github/installations", post(github::create))
         .route("/v1/mcp-servers", post(mcp_servers::create))
         .route("/v1/mcp-servers/{id}/login", post(mcp_servers::login_start))
         .route(

@@ -60,7 +60,9 @@ pub struct Plugins {
 /// `local-process`, decided inside the crate by the same feature.
 #[must_use]
 pub fn builtin_plugins() -> PluginRegistry {
-    PluginRegistry::new().with_all(jian_plugin_mcp::plugins())
+    PluginRegistry::new()
+        .with_all(jian_plugin_mcp::plugins())
+        .with_all(jian_plugin_github::plugins())
 }
 
 impl Plugins {
