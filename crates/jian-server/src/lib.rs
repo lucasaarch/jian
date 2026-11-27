@@ -86,6 +86,7 @@ mod login_link_job;
 mod machine_exec;
 mod mail;
 mod mail_settings;
+mod mcp_servers;
 mod members;
 mod memories;
 mod objectives;
@@ -207,6 +208,7 @@ pub const ROUTES: &[&str] = &[
     "DELETE /v1/agents/{id}/memories/{key} (a member who sees the agent)",
     "PUT /v1/agents/{id}/memories/{key}/links/{other} (a member who sees the agent)",
     "DELETE /v1/agents/{id}/memories/{key}/links/{other} (a member who sees the agent)",
+    "POST /v1/mcp-servers (a member)",
     "GET /v1/connector-accounts (a member: the ones they see)",
     "GET /v1/connector-accounts/{id} (a member who sees it)",
     "PATCH /v1/connector-accounts/{id} (its creator or an admin)",
@@ -403,6 +405,8 @@ pub struct AppState {
     /// What draws an artifact as PDF or PNG, which needs a browser. `None` where there is none:
     /// those two downloads answer 501.
     pub renderer: Option<Renderer>,
+    /// The plugins of this build, which a route uses to try an account before it keeps it.
+    pub plugins: Plugins,
 }
 
 impl AppState {
@@ -425,6 +429,7 @@ impl AppState {
             llm: LlmAccess::default(),
             catalog: Arc::new(jian_skills::Catalog::core()),
             renderer: None,
+            plugins: Plugins::new(builtin_plugins()),
         }
     }
 }
@@ -518,6 +523,7 @@ pub fn router_with(state: AppState, extra: Router<AppState>) -> Router {
             "/v1/agents/{id}/proactivity",
             get(agent_events::get_proactivity).put(agent_events::put_proactivity),
         )
+        .route("/v1/mcp-servers", post(mcp_servers::create))
         .route("/v1/connector-accounts", get(connector_accounts::list))
         .route(
             "/v1/connector-accounts/{id}",

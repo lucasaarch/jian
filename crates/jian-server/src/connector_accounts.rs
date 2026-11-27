@@ -2,7 +2,8 @@
 //!
 //! An account the caller may not see is a 404, the same as one that does not exist; one they see
 //! and may not change is a 403. A body carries neither the secret nor the plugin's settings.
-//! Accounts are made by a plugin's own sign-in flow (through the store), not by a route here.
+//! Accounts are made by a plugin's own flow (`POST /v1/mcp-servers`, a sign-in), not by a
+//! generic route here: what an account needs to be made, and tried, is the plugin's to say.
 
 use axum::Json;
 use axum::extract::{Path, Query, State};
@@ -27,7 +28,7 @@ pub(crate) struct ListQuery {
     limit: Option<u32>,
 }
 
-fn view(account: &ConnectorAccount, viewer: &Viewer) -> ConnectorAccountView {
+pub(crate) fn view(account: &ConnectorAccount, viewer: &Viewer) -> ConnectorAccountView {
     ConnectorAccountView {
         id: account.id.to_string(),
         plugin: account.plugin.clone(),

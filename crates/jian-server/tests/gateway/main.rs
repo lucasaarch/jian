@@ -14,6 +14,7 @@ mod invites;
 mod isolation;
 mod machine_files;
 mod machines;
+mod mcp_servers;
 mod memories;
 mod projects;
 mod providers;

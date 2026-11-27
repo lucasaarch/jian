@@ -94,7 +94,7 @@ jobs:
       - if: runner.os == 'Linux'
         run: cargo clippy -p jian-server --no-default-features --features cloud --all-targets --locked -- -D warnings
       - if: runner.os == 'Linux'
-        run: cargo nextest run -p jian-server --no-default-features --features cloud --locked -E 'binary(plugin_tools) | binary(mcp_tools) | binary(outbound)'
+        run: cargo nextest run -p jian-server --no-default-features --features cloud --locked -E 'binary(plugin_tools) | binary(mcp_tools) | binary(outbound) | (binary(gateway) & test(/mcp_servers/))'
       # The MCP plugin in the Cloud edition: no command (stdio) transport is compiled.
       - if: runner.os == 'Linux'
         run: cargo clippy -p jian-plugin-mcp --no-default-features --features cloud --all-targets --locked -- -D warnings

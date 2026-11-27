@@ -161,6 +161,38 @@ impl Plugins {
         });
         join_all(jobs).await;
     }
+
+    /// Tries one account the way a run would, and says why it does not work: the check made when
+    /// an account is added, so a wrong address or key is told to the person who typed it.
+    ///
+    /// # Errors
+    ///
+    /// A sentence for a person, with no secret in it.
+    pub async fn probe(
+        &self,
+        db: &Database,
+        ctx: &TenantCtx,
+        account: &ConnectorAccount,
+    ) -> Result<(), String> {
+        let scoped = scoped(account);
+        let plugin = self
+            .registry
+            .get(&account.plugin)
+            .filter(|plugin| plugin.kinds().contains(&account.kind.as_str()))
+            .ok_or_else(|| "no plugin of this build runs this kind of account".to_owned())?;
+        let host = ServerHost {
+            db,
+            ctx,
+            plugin: plugin.id(),
+            account: &scoped.account.id,
+            http: &self.http,
+            allow_internal: self.allow_internal,
+        };
+        let context = AccountContext::new(&host, &scoped.account, plugin.permissions());
+        tokio::time::timeout(PREPARE_TIMEOUT, plugin.prepare(&context))
+            .await
+            .unwrap_or_else(|_| Err("the server did not answer in time".to_owned()))
+    }
 }
 
 fn scoped(account: &ConnectorAccount) -> ScopedAccount {

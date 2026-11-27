@@ -96,7 +96,7 @@ rust-check: ## The Rust workspace: format, clippy, tests and docs, as the rules 
 
 rust-editions: ## The Cloud edition: the self-hosted-only plugin of the fixture must not compile or run there
 	cargo clippy -p jian-server --no-default-features --features cloud --all-targets --locked -- -D warnings
-	cargo nextest run -p jian-server --no-default-features --features cloud --locked -E 'binary(plugin_tools) | binary(mcp_tools) | binary(outbound)'
+	cargo nextest run -p jian-server --no-default-features --features cloud --locked -E 'binary(plugin_tools) | binary(mcp_tools) | binary(outbound) | (binary(gateway) & test(/mcp_servers/))'
 	cargo clippy -p jian-plugin-mcp --no-default-features --features cloud --all-targets --locked -- -D warnings
 	cargo nextest run -p jian-plugin-mcp --no-default-features --features cloud --locked
 	cargo clippy -p jian-plugin-echo --no-default-features --features cloud --all-targets --locked -- -D warnings

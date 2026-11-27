@@ -25,6 +25,7 @@
 //! This crate does not know the tenant: the host gives a context bound to one account of one
 //! tenant, and the state kept here (sessions, catalogs) is keyed by the account's id.
 
+pub mod account;
 pub mod catalog;
 pub mod config;
 pub mod error;
