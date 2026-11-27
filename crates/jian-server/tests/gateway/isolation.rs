@@ -45,6 +45,7 @@ const SIGN_IN_FILE: &str = include_str!("sign_in.rs");
 const SKILLS_FILE: &str = include_str!("skills.rs");
 const THREADS_FILE: &str = include_str!("threads.rs");
 const USAGE_FILE: &str = include_str!("usage.rs");
+const MCP_FILE: &str = include_str!("mcp_servers.rs");
 
 async fn start() -> (Gateway, TwoTenants) {
     super::accounts::start(open_settings()).await
@@ -70,6 +71,7 @@ fn is_a_test_here(name: &str) -> bool {
         || SKILLS_FILE.contains(&declared)
         || USAGE_FILE.contains(&declared)
         || THREADS_FILE.contains(&declared)
+        || MCP_FILE.contains(&declared)
 }
 
 /// Every route the router serves, and the test here that shows tenant B cannot use it on A's
@@ -123,6 +125,9 @@ const ROUTE_TESTS: &[(&str, &str)] = &[
     ("GET /v1/connector-accounts/{id}", CONNECTORS_TEST),
     ("PATCH /v1/connector-accounts/{id}", CONNECTORS_TEST),
     ("DELETE /v1/connector-accounts/{id}", CONNECTORS_TEST),
+    ("POST /v1/mcp-servers", MCP_CREATE_TEST),
+    ("POST /v1/mcp-servers/{id}/login", MCP_LOGIN_TEST),
+    ("POST /v1/mcp-servers/{id}/login/finish", MCP_LOGIN_TEST),
     ("GET /v1/skills", SKILLS_TEST),
     ("POST /v1/skills", SKILLS_TEST),
     ("POST /v1/skills/import", SKILLS_TEST),
@@ -275,6 +280,11 @@ const AGENT_MACHINE_TEST: &str =
 const AGENT_MODEL_TEST: &str = "an_agents_model_is_out_of_reach_of_another_tenant";
 const CONNECTORS_TEST: &str = "connector_accounts_of_the_other_tenant_are_out_of_reach";
 const SKILLS_TEST: &str = "skills_of_the_other_tenant_are_out_of_reach";
+/// The test that shows a server tenant A adds is not listed for tenant B.
+const MCP_CREATE_TEST: &str = "a_server_that_answers_is_kept_renamed_and_never_shows_its_headers";
+/// The test that shows tenant B gets a 404 when it tries to sign in to tenant A's server.
+const MCP_LOGIN_TEST: &str =
+    "an_oauth_server_is_kept_unsigned_then_signed_in_with_the_state_it_was_given";
 
 /// The test that shows tenant B reaches no file or repository of tenant A's projects.
 const PROJECTS_TEST: &str =
