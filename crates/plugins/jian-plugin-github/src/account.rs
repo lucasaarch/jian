@@ -4,7 +4,7 @@
 use jian_plugin_api::{AccountRef, Secret};
 use serde_json::{Value, json};
 
-use crate::config::{Config, Credentials, DEFAULT_API_BASE};
+use crate::config::{AppConfig, Config, Credentials, DEFAULT_API_BASE};
 use crate::error::GithubError;
 use crate::{GITHUB_ID, jwt};
 
@@ -23,6 +23,8 @@ pub struct NewInstallation {
     pub webhook_secret: Option<String>,
     /// A GitHub Enterprise address; GitHub's own when left out.
     pub api_base: Option<String>,
+    /// The agent that reviews the pull requests GitHub says were opened or pushed to.
+    pub review_agent: Option<String>,
 }
 
 impl std::fmt::Debug for NewInstallation {
@@ -44,6 +46,7 @@ pub fn build(new: &NewInstallation) -> Result<(Value, Secret), GithubError> {
             || DEFAULT_API_BASE.to_owned(),
             |base| base.trim().to_owned(),
         ),
+        review_agent: new.review_agent.clone().filter(|id| !id.is_empty()),
     }
     .validated()?;
     if config.installation_id == 0 {
@@ -61,8 +64,49 @@ pub fn build(new: &NewInstallation) -> Result<(Value, Secret), GithubError> {
         "installationId": config.installation_id,
         "login": config.login,
         "apiBase": config.api_base,
+        "reviewAgent": config.review_agent,
     });
     Ok((settings, secret))
+}
+
+/// The settings and the secret of the account that holds an App registered here, before any
+/// installation: the key and the webhook secret GitHub made for it.
+pub fn build_app(
+    app_id: &str,
+    private_key: &str,
+    webhook_secret: &str,
+    api_base: Option<&str>,
+) -> Result<(Value, Secret), GithubError> {
+    let config = AppConfig::parse(&json!({
+        "appId": app_id.trim(),
+        "apiBase": api_base.map_or_else(|| DEFAULT_API_BASE.to_owned(), |b| b.trim().to_owned()),
+    }))?;
+    jwt::check_key(private_key)?;
+    let secret = Credentials {
+        private_key: private_key.to_owned(),
+        webhook_secret: Some(webhook_secret.to_owned()).filter(|s| !s.is_empty()),
+        ..Credentials::default()
+    }
+    .seal()?;
+    Ok((
+        json!({ "appId": config.app_id, "apiBase": config.api_base }),
+        secret,
+    ))
+}
+
+/// `current` with the webhook secret replaced and everything else, the token included, kept.
+pub fn with_webhook_secret(current: &Secret, webhook_secret: &str) -> Result<Secret, GithubError> {
+    let mut credentials = Credentials::read(current)?;
+    credentials.webhook_secret = Some(webhook_secret.to_owned());
+    credentials.seal()
+}
+
+/// The webhook secret an account's vault holds, when it has one.
+pub fn webhook_secret_of(secret: &Secret) -> Option<String> {
+    Credentials::read(secret)
+        .ok()
+        .and_then(|c| c.webhook_secret)
+        .filter(|s| !s.is_empty())
 }
 
 /// The account whose installation owns `repo` (`owner/name`): the one on that owner. Several

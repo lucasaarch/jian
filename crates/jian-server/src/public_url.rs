@@ -67,6 +67,32 @@ impl PublicUrl {
         format!("{}/login/github", self.0)
     }
 
+    /// Where GitHub delivers a workspace's webhooks. The workspace is in the path, so the
+    /// route can look for the installation in that workspace alone; the signature is what
+    /// decides whether a delivery is believed. `None` for an id that is not URL-safe.
+    #[must_use]
+    pub fn github_webhook(&self, tenant: &str) -> Option<String> {
+        let safe = !tenant.is_empty()
+            && tenant.len() <= MAX_TOKEN_BYTES
+            && tenant
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-');
+        safe.then(|| format!("{}/v1/public/github/webhook/{tenant}", self.0))
+    }
+
+    /// The panel's page GitHub sends the person back to after registering an App from a
+    /// manifest, with a `code` the page posts to `/v1/github/apps`.
+    #[must_use]
+    pub fn github_app_page(&self) -> String {
+        format!("{}/settings/github/app", self.0)
+    }
+
+    /// The panel's own address, as the App's homepage.
+    #[must_use]
+    pub fn home(&self) -> &str {
+        &self.0
+    }
+
     fn fragment_link(&self, page: &str, token: &str) -> Option<String> {
         let safe = !token.is_empty()
             && token.len() <= MAX_TOKEN_BYTES

@@ -38,4 +38,9 @@ apiBase: string | null,
 /**
  * Which agents reach it. Every agent when left out.
  */
-scope: ConnectorScopeView | null, };
+scope: ConnectorScopeView | null, 
+/**
+ * The agent that reviews the pull requests GitHub says were opened or pushed to. Nothing is
+ * reviewed on its own when left out.
+ */
+reviewAgent: string | null, };

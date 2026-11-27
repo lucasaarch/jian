@@ -19,7 +19,8 @@ use jian_plugin_github::{GITHUB_ID, KIND_INSTALLATION};
 use jian_protocol::connectors::{ConnectorAccountView, ConnectorScopeView};
 use jian_protocol::github::CreateGithubInstallationRequest;
 use jian_store::secrets::Secret;
-use jian_store::{AgentId, ConnectorScope, NewConnectorAccount};
+use jian_store::{AgentId, ConnectorScope, NewConnectorAccount, TenantCtx, Viewer};
+use serde_json::Value;
 
 use crate::AppState;
 use crate::auth::Principal;
@@ -29,6 +30,72 @@ use crate::workspace::{failure, viewer};
 
 fn bad(code: &str, why: &str) -> Refusal {
     refuse(StatusCode::BAD_REQUEST, code, why)
+}
+
+pub(crate) fn scope_of(scope: Option<ConnectorScopeView>) -> ConnectorScope {
+    match scope.unwrap_or(ConnectorScopeView::Shared) {
+        ConnectorScopeView::Shared => ConnectorScope::Shared,
+        ConnectorScopeView::Agents { agents } => {
+            ConnectorScope::Agents(agents.into_iter().map(AgentId::new).collect())
+        }
+    }
+}
+
+/// The agent that reviews, when one is named: it must be one the person sees.
+pub(crate) async fn check_review_agent(
+    app: &AppState,
+    ctx: &TenantCtx,
+    viewer: &Viewer,
+    agent: Option<&str>,
+) -> Result<(), Refusal> {
+    let Some(agent) = agent.filter(|id| !id.is_empty()) else {
+        return Ok(());
+    };
+    match app
+        .db
+        .agent(ctx, viewer, &AgentId::new(agent))
+        .await
+        .map_err(|e| failure(&e))?
+    {
+        Some(_) => Ok(()),
+        None => Err(bad("invalid_input", "the review agent is not one you see")),
+    }
+}
+
+/// Keeps an installation and tries it: a token is requested, and an account that cannot get one is
+/// removed again and the person is told why.
+pub(crate) async fn keep_installation(
+    app: &AppState,
+    ctx: &TenantCtx,
+    viewer: &Viewer,
+    (name, scope, config, secret): (String, ConnectorScope, Value, jian_plugin_api::Secret),
+) -> Result<(StatusCode, Json<ConnectorAccountView>), Refusal> {
+    let account = app
+        .db
+        .create_connector_account(
+            ctx,
+            viewer,
+            &NewConnectorAccount {
+                plugin: GITHUB_ID.to_owned(),
+                kind: KIND_INSTALLATION.to_owned(),
+                name,
+                scope,
+                config,
+            },
+            Some(&Secret::new(secret.expose())),
+        )
+        .await
+        .map_err(|e| failure(&e))?;
+    if let Err(why) = app.plugins.probe(&app.db, ctx, &account).await {
+        // Not kept: an installation that never worked would sit in the list until someone
+        // noticed.
+        app.db
+            .delete_connector_account(ctx, viewer, &account.id)
+            .await
+            .map_err(|e| failure(&e))?;
+        return Err(bad("installation_unusable", &why));
+    }
+    Ok((StatusCode::CREATED, Json(view(&account, viewer))))
 }
 
 /// `POST /v1/github/installations`: any member adds an installation, tried before it is kept.
@@ -44,6 +111,8 @@ pub(crate) async fn create(
     if name.is_empty() {
         return Err(bad("invalid_input", "an installation needs a name"));
     }
+    let ctx = tenant_ctx(&app, &principal.tenant).await?;
+    check_review_agent(&app, &ctx, &viewer, body.review_agent.as_deref()).await?;
     let (config, secret) = build(&NewInstallation {
         app_id: body.app_id,
         installation_id: body.installation_id,
@@ -51,39 +120,14 @@ pub(crate) async fn create(
         private_key: body.private_key,
         webhook_secret: body.webhook_secret,
         api_base: body.api_base,
+        review_agent: body.review_agent,
     })
     .map_err(|why| bad("invalid_input", &why.to_string()))?;
-    let scope = match body.scope.unwrap_or(ConnectorScopeView::Shared) {
-        ConnectorScopeView::Shared => ConnectorScope::Shared,
-        ConnectorScopeView::Agents { agents } => {
-            ConnectorScope::Agents(agents.into_iter().map(AgentId::new).collect())
-        }
-    };
-    let ctx = tenant_ctx(&app, &principal.tenant).await?;
-    let account = app
-        .db
-        .create_connector_account(
-            &ctx,
-            &viewer,
-            &NewConnectorAccount {
-                plugin: GITHUB_ID.to_owned(),
-                kind: KIND_INSTALLATION.to_owned(),
-                name,
-                scope,
-                config,
-            },
-            Some(&Secret::new(secret.expose())),
-        )
-        .await
-        .map_err(|e| failure(&e))?;
-    if let Err(why) = app.plugins.probe(&app.db, &ctx, &account).await {
-        // Not kept: an installation that never worked would sit in the list until someone
-        // noticed.
-        app.db
-            .delete_connector_account(&ctx, &viewer, &account.id)
-            .await
-            .map_err(|e| failure(&e))?;
-        return Err(bad("installation_unusable", &why));
-    }
-    Ok((StatusCode::CREATED, Json(view(&account, &viewer))))
+    keep_installation(
+        &app,
+        &ctx,
+        &viewer,
+        (name, scope_of(body.scope), config, secret),
+    )
+    .await
 }

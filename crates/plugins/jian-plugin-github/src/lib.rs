@@ -23,17 +23,25 @@
 //! # Editions
 //!
 //! Without `public-url` the plugin has no webhook and is set up from pasted values (App id,
-//! key, installation id). With it GitHub can call back; that part has its own module.
+//! key, installation id). With it GitHub can call back: `webhook` believes a delivery only if
+//! its signature is right and turns it into what an agent is told, and `app` registers the App
+//! from a manifest and sets its webhook. A review (`review`) is asked of an agent the same way
+//! in both: by hand, or because a pull request was opened or pushed to.
 
 pub mod account;
 pub mod api;
+#[cfg(feature = "public-url")]
+pub mod app;
 pub mod config;
 pub mod error;
 mod input;
 pub mod issues;
 pub mod jwt;
 pub mod pulls;
+pub mod review;
 pub mod token;
+#[cfg(feature = "public-url")]
+pub mod webhook;
 
 use futures_util::future::BoxFuture;
 use jian_plugin_api::{AccountContext, AccountRef, Permission, Plugin, ToolDef, ToolError};
@@ -49,9 +57,25 @@ pub const GITHUB_ID: &str = "github";
 /// The kind of account: one installation of an App.
 pub const KIND_INSTALLATION: &str = "installation";
 
+/// The kind of account that only holds an App registered here, until it is installed: the
+/// source of installations, with no tools of its own.
+pub const KIND_APP: &str = "app";
+
 /// The GitHub plugin. One value serves every tenant and run; it keeps no state.
 #[derive(Default)]
 pub struct GithubPlugin;
+
+/// What the plugin may ask of the host: its own secret, HTTP, and events for its agents. The
+/// gateway's own flows (an App's registration, a review asked by hand) run with the same.
+#[must_use]
+pub fn permissions() -> &'static [Permission] {
+    &[
+        Permission::Secret,
+        Permission::SecretWrite,
+        Permission::Http,
+        Permission::Events,
+    ]
+}
 
 /// The plugins this crate has.
 #[must_use]
@@ -69,19 +93,17 @@ impl Plugin for GithubPlugin {
     }
 
     fn kinds(&self) -> &'static [&'static str] {
-        &[KIND_INSTALLATION]
+        &[KIND_INSTALLATION, KIND_APP]
     }
 
     fn permissions(&self) -> &'static [Permission] {
-        &[
-            Permission::Secret,
-            Permission::SecretWrite,
-            Permission::Http,
-            Permission::Events,
-        ]
+        permissions()
     }
 
-    fn tools(&self, _account: &AccountRef) -> Vec<ToolDef> {
+    fn tools(&self, account: &AccountRef) -> Vec<ToolDef> {
+        if account.kind == KIND_APP {
+            return Vec::new();
+        }
         let mut tools = pulls::defs();
         tools.extend(issues::defs());
         tools
@@ -91,6 +113,12 @@ impl Plugin for GithubPlugin {
     /// or an uninstalled App is told here, and the run goes on without the account's tools.
     fn prepare<'a>(&'a self, ctx: &'a AccountContext<'a>) -> BoxFuture<'a, Result<(), String>> {
         Box::pin(async move {
+            // An App with no installation has no token to get.
+            if ctx.account().kind == KIND_APP {
+                return config::AppConfig::parse(&ctx.account().config)
+                    .map(drop)
+                    .map_err(|e| e.to_string());
+            }
             let config = config::Config::parse(&ctx.account().config).map_err(|e| e.to_string())?;
             token::bearer(ctx, &config, None)
                 .await
@@ -106,6 +134,12 @@ impl Plugin for GithubPlugin {
         input: &'a Value,
     ) -> BoxFuture<'a, Result<String, ToolError>> {
         Box::pin(async move {
+            if ctx.account().kind == KIND_APP {
+                return Err(ToolError(
+                    "this account only holds an App: it has no tools until it is installed"
+                        .to_owned(),
+                ));
+            }
             let api = Api::new(ctx)?;
             let answer = match pulls::call(&api, tool, input).await {
                 Some(answer) => answer,

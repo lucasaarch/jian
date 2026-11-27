@@ -79,6 +79,11 @@ mod compact_job;
 mod connector_accounts;
 mod events;
 mod github;
+#[cfg(feature = "public-url")]
+mod github_app;
+mod github_review;
+#[cfg(feature = "public-url")]
+mod github_webhook;
 mod guard;
 mod http;
 mod hub;
@@ -142,6 +147,8 @@ pub use auto_continue::MAX_IDLE_CONTINUATIONS;
 pub use browser_tools::{BrowserRenderer, browser_policy, browser_tools};
 pub use compact_job::{Model, ModelSource, ThreadCompactor};
 pub use events::{BUFFER_DELTAS, EventBus, MemoryEventBus, Scope, Subscription};
+#[cfg(feature = "public-url")]
+pub use github_webhook::{GITHUB_WEBHOOK_KIND, GithubWebhookHandler};
 pub use hub::{DispatchError, HubCommand, MachineHub};
 #[cfg(feature = "public-url")]
 pub use invite_job::{INVITE_SEND_KIND, InviteSender};
@@ -221,6 +228,19 @@ pub const ROUTES: &[&str] = &[
     "PUT /v1/agents/{id}/memories/{key}/links/{other} (a member who sees the agent)",
     "DELETE /v1/agents/{id}/memories/{key}/links/{other} (a member who sees the agent)",
     "POST /v1/github/installations (a member)",
+    "POST /v1/github/reviews (a member who sees the installation and the agent)",
+    #[cfg(feature = "public-url")]
+    "POST /v1/github/apps/manifest (a member)",
+    #[cfg(feature = "public-url")]
+    "POST /v1/github/apps (a member)",
+    #[cfg(feature = "public-url")]
+    "GET /v1/github/apps/{id} (a member who sees it)",
+    #[cfg(feature = "public-url")]
+    "POST /v1/github/apps/{id}/webhook (its creator or an admin)",
+    #[cfg(feature = "public-url")]
+    "POST /v1/github/apps/{id}/installations (a member who sees the App)",
+    #[cfg(feature = "public-url")]
+    "POST /v1/public/github/webhook/{tenant} (no token; GitHub's signature; 401 for any other)",
     "POST /v1/mcp-servers (a member)",
     "POST /v1/mcp-servers/{id}/login (its creator or an admin)",
     "POST /v1/mcp-servers/{id}/login/finish (its creator or an admin)",
@@ -550,6 +570,7 @@ pub fn router_with(state: AppState, extra: Router<AppState>) -> Router {
             get(agent_events::get_proactivity).put(agent_events::put_proactivity),
         )
         .route("/v1/github/installations", post(github::create))
+        .route("/v1/github/reviews", post(github_review::create))
         .route("/v1/mcp-servers", post(mcp_servers::create))
         .route("/v1/mcp-servers/{id}/login", post(mcp_servers::login_start))
         .route(
@@ -687,6 +708,17 @@ pub fn router_with(state: AppState, extra: Router<AppState>) -> Router {
         .route("/v1/invites/{id}/resend", post(invites::resend))
         .route("/v1/artifacts/{id}/password", put(artifact_share::password))
         .route("/v1/artifacts/{id}/link", post(artifact_share::rotate))
+        .route("/v1/github/apps/manifest", post(github_app::manifest_form))
+        .route("/v1/github/apps", post(github_app::create))
+        .route("/v1/github/apps/{id}", get(github_app::get))
+        .route(
+            "/v1/github/apps/{id}/webhook",
+            post(github_app::set_up_webhook),
+        )
+        .route(
+            "/v1/github/apps/{id}/installations",
+            post(github_app::install),
+        )
         .route("/v1/public/artifacts/{token}", get(artifact_public::get))
         .route(
             "/v1/public/artifacts/{token}/unlock",
@@ -696,7 +728,16 @@ pub fn router_with(state: AppState, extra: Router<AppState>) -> Router {
             "/v1/public/artifacts/{token}/export",
             get(artifact_export::export_public),
         )
-        .layer(DefaultBodyLimit::max(MAX_ACCOUNT_BODY));
+        .layer(DefaultBodyLimit::max(MAX_ACCOUNT_BODY))
+        // GitHub's own deliveries are bigger than anything a person posts.
+        .merge(
+            Router::new()
+                .route(
+                    "/v1/public/github/webhook/{tenant}",
+                    post(github_webhook::receive),
+                )
+                .layer(DefaultBodyLimit::max(github_webhook::MAX_WEBHOOK_BODY)),
+        );
     #[cfg(not(feature = "public-url"))]
     let public = Router::new();
     // A file is held in memory up to its limit, and the body is read by the handler, which

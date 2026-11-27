@@ -346,6 +346,25 @@ impl Database {
             .ok_or(StoreError::Vanished)
     }
 
+    /// Every account of one plugin in the workspace, with no viewer: what a webhook's handler
+    /// reads to find the account a delivery is for. Not for an answer to a person, who sees
+    /// only what [`Self::list_connector_accounts`] shows them.
+    pub async fn plugin_connector_accounts(
+        &self,
+        ctx: &TenantCtx,
+        plugin: &str,
+    ) -> Result<Vec<ConnectorAccount>, StoreError> {
+        let mut tx = self.begin(ctx).await?;
+        let rows: Vec<Row> = sqlx::query_as(AssertSqlSafe(format!(
+            "SELECT {COLUMNS} FROM connector_accounts c WHERE c.plugin = $1 ORDER BY c.seq"
+        )))
+        .bind(plugin)
+        .fetch_all(&mut *tx)
+        .await
+        .map_err(StoreError::query("read the accounts of a plugin"))?;
+        fill(&mut tx, rows, None).await
+    }
+
     /// One account, when the viewer may see it.
     pub async fn connector_account(
         &self,

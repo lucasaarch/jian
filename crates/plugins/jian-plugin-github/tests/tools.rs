@@ -275,6 +275,7 @@ fn a_new_account_checks_its_key_and_keeps_it_out_of_the_settings() {
         private_key: KEY_PKCS1.to_owned(),
         webhook_secret: Some("whsec-synthetic".to_owned()),
         api_base: Some("http://127.0.0.1:1/".to_owned()),
+        review_agent: None,
     })
     .unwrap();
     let settings = ok.0.to_string();

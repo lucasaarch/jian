@@ -47,6 +47,7 @@ const THREADS_FILE: &str = include_str!("threads.rs");
 const USAGE_FILE: &str = include_str!("usage.rs");
 const MCP_FILE: &str = include_str!("mcp_servers.rs");
 const GITHUB_FILE: &str = include_str!("github.rs");
+const GITHUB_WEBHOOK_FILE: &str = include_str!("github_webhook.rs");
 
 async fn start() -> (Gateway, TwoTenants) {
     super::accounts::start(open_settings()).await
@@ -74,6 +75,7 @@ fn is_a_test_here(name: &str) -> bool {
         || THREADS_FILE.contains(&declared)
         || MCP_FILE.contains(&declared)
         || GITHUB_FILE.contains(&declared)
+        || GITHUB_WEBHOOK_FILE.contains(&declared)
 }
 
 /// Every route the router serves, and the test here that shows tenant B cannot use it on A's
@@ -132,6 +134,22 @@ const ROUTE_TESTS: &[(&str, &str)] = &[
     ("PATCH /v1/connector-accounts/{id}", CONNECTORS_TEST),
     ("DELETE /v1/connector-accounts/{id}", CONNECTORS_TEST),
     ("POST /v1/github/installations", GITHUB_CREATE_TEST),
+    ("POST /v1/github/reviews", GITHUB_REVIEW_TEST),
+    #[cfg(feature = "public-url")]
+    ("POST /v1/github/apps/manifest", GITHUB_APP_TEST),
+    #[cfg(feature = "public-url")]
+    ("POST /v1/github/apps", GITHUB_APP_TEST),
+    #[cfg(feature = "public-url")]
+    ("GET /v1/github/apps/{id}", GITHUB_APP_TEST),
+    #[cfg(feature = "public-url")]
+    ("POST /v1/github/apps/{id}/webhook", GITHUB_APP_TEST),
+    #[cfg(feature = "public-url")]
+    ("POST /v1/github/apps/{id}/installations", GITHUB_APP_TEST),
+    #[cfg(feature = "public-url")]
+    (
+        "POST /v1/public/github/webhook/{tenant}",
+        GITHUB_WEBHOOK_TEST,
+    ),
     ("POST /v1/mcp-servers", MCP_CREATE_TEST),
     ("POST /v1/mcp-servers/{id}/login", MCP_LOGIN_TEST),
     ("POST /v1/mcp-servers/{id}/login/finish", MCP_LOGIN_TEST),
@@ -296,6 +314,17 @@ const SKILLS_TEST: &str = "skills_of_the_other_tenant_are_out_of_reach";
 /// name tenant A uses is free for tenant B.
 const GITHUB_CREATE_TEST: &str =
     "installations_are_kept_with_unique_names_and_never_show_their_key_or_token";
+/// The test that shows tenant B cannot ask for a review with tenant A's installation or agent.
+const GITHUB_REVIEW_TEST: &str =
+    "a_review_is_asked_once_per_head_commit_and_never_with_the_words_of_the_pull_request";
+/// The test that shows tenant B finds no App of tenant A's, in any of its routes.
+#[cfg(feature = "public-url")]
+const GITHUB_APP_TEST: &str =
+    "a_github_app_is_registered_read_and_given_a_webhook_only_inside_its_workspace";
+/// The test that shows a delivery signed for tenant A is refused at tenant B's address.
+#[cfg(feature = "public-url")]
+const GITHUB_WEBHOOK_TEST: &str =
+    "a_delivery_only_reaches_the_workspace_and_installation_whose_secret_signed_it";
 /// The test that shows a server tenant A adds is not listed for tenant B.
 const MCP_CREATE_TEST: &str = "a_server_that_answers_is_kept_renamed_and_never_shows_its_headers";
 /// The test that shows tenant B gets a 404 when it tries to sign in to tenant A's server.

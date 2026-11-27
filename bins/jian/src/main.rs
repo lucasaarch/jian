@@ -35,7 +35,10 @@ use jian_server::{
 };
 // The e-mails carry a link people open, so only a build with `public-url` sends them.
 #[cfg(feature = "public-url")]
-use jian_server::{INVITE_SEND_KIND, InviteSender, LOGIN_LINK_SEND_KIND, LoginLinkSender};
+use jian_server::{
+    GITHUB_WEBHOOK_KIND, GithubWebhookHandler, INVITE_SEND_KIND, InviteSender,
+    LOGIN_LINK_SEND_KIND, LoginLinkSender, Plugins,
+};
 use jian_store::embedded::EmbeddedConfig;
 use jian_store::secrets::{LocalKeyring, MasterKeys as _};
 use jian_store::{
@@ -517,6 +520,12 @@ fn job_registry(
         .register(
             LOGIN_LINK_SEND_KIND,
             Arc::new(LoginLinkSender::new(settings)),
+        )
+        .register(
+            GITHUB_WEBHOOK_KIND,
+            Arc::new(GithubWebhookHandler::new(Plugins::new(
+                jian_server::builtin_plugins(),
+            ))),
         );
     let mut runner = AgentRunner::new(models.clone(), executor.clone(), events.clone())
         .with_plugins(jian_server::builtin_plugins());

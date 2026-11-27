@@ -244,6 +244,158 @@ impl Plugins {
         .unwrap_or_else(|_| Err("the server did not answer in time".to_owned()))
     }
 
+    /// One request the gateway itself makes for a plugin flow that has no account yet (an App
+    /// manifest's code turned into credentials), through the same client and the same address
+    /// rules as a plugin's own.
+    pub async fn fetch(&self, request: HttpRequest) -> Result<HttpResponse, HostError> {
+        send(&self.http, request, self.allow_internal).await
+    }
+
+    /// Writes `event` for the agents that reach `account`, as the plugin itself would from a
+    /// tool: the kind is prefixed with the plugin's id and the key makes it count once per agent.
+    /// With `only`, for that agent alone, and only when it reaches the account. Answers how many
+    /// agents it was written for.
+    pub async fn emit(
+        &self,
+        db: &Database,
+        ctx: &TenantCtx,
+        account: &ConnectorAccount,
+        only: Option<&jian_store::AgentId>,
+        event: AgentEvent,
+    ) -> Result<usize, HostError> {
+        deliver(db, ctx, &account.plugin, &account.id, only, event).await
+    }
+
+    /// The head commit of an open pull request, read through a GitHub installation: what a
+    /// review asked by hand is of.
+    ///
+    /// # Errors
+    ///
+    /// A sentence for a person, with no secret in it.
+    pub async fn github_head(
+        &self,
+        db: &Database,
+        ctx: &TenantCtx,
+        account: &ConnectorAccount,
+        repo: &str,
+        number: u64,
+    ) -> Result<String, String> {
+        let account = scoped(account).account;
+        let host = self.github_host(db, ctx, &account.id);
+        let context = AccountContext::new(&host, &account, jian_plugin_github::permissions());
+        tokio::time::timeout(
+            PREPARE_TIMEOUT,
+            jian_plugin_github::review::head(&context, repo, number),
+        )
+        .await
+        .unwrap_or_else(|_| {
+            Err(jian_plugin_github::error::GithubError::Transport(
+                "GitHub did not answer in time".to_owned(),
+            ))
+        })
+        .map_err(|e| e.to_string())
+    }
+
+    /// The App behind a GitHub account, read from GitHub now.
+    ///
+    /// # Errors
+    ///
+    /// A sentence for a person, with no secret in it.
+    #[cfg(feature = "public-url")]
+    pub async fn github_app(
+        &self,
+        db: &Database,
+        ctx: &TenantCtx,
+        account: &ConnectorAccount,
+    ) -> Result<jian_plugin_github::app::AppInfo, String> {
+        let account = scoped(account).account;
+        let host = self.github_host(db, ctx, &account.id);
+        let context = AccountContext::new(&host, &account, jian_plugin_github::permissions());
+        tokio::time::timeout(PREPARE_TIMEOUT, jian_plugin_github::app::read(&context))
+            .await
+            .unwrap_or_else(|_| {
+                Err(jian_plugin_github::error::GithubError::Transport(
+                    "GitHub did not answer in time".to_owned(),
+                ))
+            })
+            .map_err(|e| e.to_string())
+    }
+
+    /// Points the App's webhook at `url`, signed with `secret`.
+    ///
+    /// # Errors
+    ///
+    /// A sentence for a person, with no secret in it.
+    #[cfg(feature = "public-url")]
+    pub async fn github_set_webhook(
+        &self,
+        db: &Database,
+        ctx: &TenantCtx,
+        account: &ConnectorAccount,
+        url: &str,
+        secret: &str,
+    ) -> Result<(), String> {
+        let account = scoped(account).account;
+        let host = self.github_host(db, ctx, &account.id);
+        let context = AccountContext::new(&host, &account, jian_plugin_github::permissions());
+        tokio::time::timeout(
+            PREPARE_TIMEOUT,
+            jian_plugin_github::app::set_webhook(&context, url, secret),
+        )
+        .await
+        .unwrap_or_else(|_| {
+            Err(jian_plugin_github::error::GithubError::Transport(
+                "GitHub did not answer in time".to_owned(),
+            ))
+        })
+        .map_err(|e| e.to_string())
+    }
+
+    /// Who an installation of the App is on.
+    ///
+    /// # Errors
+    ///
+    /// A sentence for a person, with no secret in it.
+    #[cfg(feature = "public-url")]
+    pub async fn github_installation_login(
+        &self,
+        db: &Database,
+        ctx: &TenantCtx,
+        account: &ConnectorAccount,
+        installation: u64,
+    ) -> Result<String, String> {
+        let account = scoped(account).account;
+        let host = self.github_host(db, ctx, &account.id);
+        let context = AccountContext::new(&host, &account, jian_plugin_github::permissions());
+        tokio::time::timeout(
+            PREPARE_TIMEOUT,
+            jian_plugin_github::app::installation_login(&context, installation),
+        )
+        .await
+        .unwrap_or_else(|_| {
+            Err(jian_plugin_github::error::GithubError::Transport(
+                "GitHub did not answer in time".to_owned(),
+            ))
+        })
+        .map_err(|e| e.to_string())
+    }
+
+    fn github_host<'a>(
+        &'a self,
+        db: &'a Database,
+        ctx: &'a TenantCtx,
+        account: &'a AccountId,
+    ) -> ServerHost<'a> {
+        ServerHost {
+            db,
+            ctx,
+            plugin: jian_plugin_github::GITHUB_ID,
+            account,
+            http: &self.http,
+            allow_internal: self.allow_internal,
+        }
+    }
+
     fn mcp_host<'a>(
         &'a self,
         db: &'a Database,
@@ -429,31 +581,49 @@ impl PluginHost for ServerHost<'_> {
     ) -> BoxFuture<'a, Result<(), HostError>> {
         Box::pin(async move {
             let id = self.own(account)?;
-            let agents = self
-                .db
-                .connector_account_agents(self.ctx, &id)
+            deliver(self.db, self.ctx, self.plugin, &id, None, event)
                 .await
-                .map_err(failed)?;
-            let kind = format!("plugin.{}.{}", self.plugin, event.kind);
-            for agent in agents {
-                self.db
-                    .add_event(
-                        self.ctx,
-                        &agent,
-                        NewEvent {
-                            kind: kind.clone(),
-                            thread: None,
-                            payload: event.payload.clone(),
-                            available_ms: system_now_ms(),
-                            key: event.key.clone(),
-                        },
-                    )
-                    .await
-                    .map_err(failed)?;
-            }
-            Ok(())
+                .map(drop)
         })
     }
+}
+
+/// Writes a plugin's event into the inbox of the agents that reach `account` (or of `only`, when
+/// it is one of them), kind prefixed with the plugin's id.
+async fn deliver(
+    db: &Database,
+    ctx: &TenantCtx,
+    plugin: &str,
+    account: &ConnectorAccountId,
+    only: Option<&jian_store::AgentId>,
+    event: AgentEvent,
+) -> Result<usize, HostError> {
+    let agents = db
+        .connector_account_agents(ctx, account)
+        .await
+        .map_err(failed)?;
+    let kind = format!("plugin.{plugin}.{}", event.kind);
+    let mut written = 0;
+    for agent in agents
+        .iter()
+        .filter(|agent| only.is_none_or(|one| one == *agent))
+    {
+        db.add_event(
+            ctx,
+            agent,
+            NewEvent {
+                kind: kind.clone(),
+                thread: None,
+                payload: event.payload.clone(),
+                available_ms: system_now_ms(),
+                key: event.key.clone(),
+            },
+        )
+        .await
+        .map_err(failed)?;
+        written += 1;
+    }
+    Ok(written)
 }
 
 /// Sends a plugin's request: `http` and `https` only, and an answer cut at

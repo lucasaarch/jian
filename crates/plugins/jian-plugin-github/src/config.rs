@@ -19,11 +19,48 @@ pub struct Config {
     /// The installation this account acts as.
     pub installation_id: u64,
     /// The user or organization the installation is on. Which installation owns a repo is
-    /// decided by this (see [`crate::owner_of`]).
+    /// decided by this (see [`crate::account::owner_of`]).
     pub login: String,
     /// The API address, without a trailing `/`.
     #[serde(default = "default_base")]
     pub api_base: String,
+    /// The agent a pull request is handed to for review when GitHub says one was opened or
+    /// pushed to (an id of the workspace). Without it nothing is reviewed on its own.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub review_agent: Option<String>,
+}
+
+/// The settings of an App that was registered here but is not installed anywhere yet: the
+/// account that holds its key, from which installations are made. It has no tools.
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AppConfig {
+    /// The GitHub App's id.
+    pub app_id: String,
+    /// The API address, without a trailing `/`.
+    #[serde(default = "default_base")]
+    pub api_base: String,
+}
+
+impl AppConfig {
+    /// Reads the settings of an App account.
+    pub fn parse(config: &Value) -> Result<Self, GithubError> {
+        let parsed: Self = serde_json::from_value(config.clone())
+            .map_err(|_| GithubError::Config("the settings are missing the app"))?;
+        // The same checks as an installation's: the address and the id.
+        let checked = Config {
+            app_id: parsed.app_id,
+            installation_id: 1,
+            login: "app".to_owned(),
+            api_base: parsed.api_base,
+            review_agent: None,
+        }
+        .validated()?;
+        Ok(Self {
+            app_id: checked.app_id,
+            api_base: checked.api_base,
+        })
+    }
 }
 
 fn default_base() -> String {

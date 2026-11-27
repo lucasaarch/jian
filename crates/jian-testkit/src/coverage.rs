@@ -42,4 +42,8 @@ pub const JOB_KINDS: &[(&str, &str)] = &[
         "login_link.send",
         "jian-server/tests/gateway/sign_in.rs: a_magic_link_opens_only_the_workspace_and_member_it_was_made_for",
     ),
+    (
+        "github.webhook",
+        "jian-server/tests/gateway/github_webhook.rs: a_delivery_only_reaches_the_workspace_and_installation_whose_secret_signed_it",
+    ),
 ];

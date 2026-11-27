@@ -325,7 +325,7 @@ async fn the_embedded_migrations_apply_to_the_platform_and_to_each_tenant() {
         .await,
         [
             "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16",
-            "17", "18", "19", "20", "21", "22", "23", "24"
+            "17", "18", "19", "20", "21", "22", "23", "24", "25"
         ]
     );
     // After a restart the tenant is migrated again with nothing to do.
@@ -418,7 +418,8 @@ async fn tool_approval_is_dropped_and_a_run_that_waited_on_one_ends_failed() {
         .map(|entry| entry.unwrap().file_name().into_string().unwrap())
         .collect::<Vec<_>>();
     shipped.sort();
-    // The release before: everything up to 0016 (0017 is under test; 0018 to 0024 come after).
+    // The release before: everything up to 0016 (0017 is under test; 0018 to 0025 come after).
+    assert!(shipped.pop().unwrap().starts_with("0025_"));
     assert!(shipped.pop().unwrap().starts_with("0024_"));
     assert!(shipped.pop().unwrap().starts_with("0023_"));
     assert!(shipped.pop().unwrap().starts_with("0022_"));
@@ -519,7 +520,8 @@ async fn proactivity_defaults_to_suggest_and_an_hourly_limit_resets_except_off()
         .map(|entry| entry.unwrap().file_name().into_string().unwrap())
         .collect::<Vec<_>>();
     shipped.sort();
-    // The release before: everything up to 0018 (0019 to 0024 come after it).
+    // The release before: everything up to 0018 (0019 to 0025 come after it).
+    assert!(shipped.pop().unwrap().starts_with("0025_"));
     assert!(shipped.pop().unwrap().starts_with("0024_"));
     assert!(shipped.pop().unwrap().starts_with("0023_"));
     assert!(shipped.pop().unwrap().starts_with("0022_"));
