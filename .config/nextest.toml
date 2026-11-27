@@ -35,6 +35,13 @@ filter = """
 """
 test-group = "own-pg"
 
+# Tests that compare how long two paths take (argon2 for a wrong password against the dummy hash
+# for an unknown address). With every core busy the ratio drifted to 0.47 on the Linux runner, so
+# they run alone: `threads-required` holds every slot while they run.
+[[profile.default.overrides]]
+filter = "package(jian-auth) & test(/costs_what/)"
+threads-required = "num-test-threads"
+
 [profile.default]
 # One process per test, each with a pool and sometimes a whole gateway: a CPU per test is what
 # 16 GB holds. A test that fails is a failure, not a flake.
