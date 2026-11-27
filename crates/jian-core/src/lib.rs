@@ -10,6 +10,7 @@ mod artifact;
 mod catalog;
 mod cron;
 mod message;
+mod net;
 mod provider;
 
 pub use artifact::{
@@ -22,4 +23,5 @@ pub use message::{
     MAX_PARTS, MAX_TEXT_BYTES, MAX_TOOL_INPUT_BYTES, MAX_TOOL_RESULT_BYTES, MessagePart,
     MessageParts, PartsError, ThreadKind, Visibility, cap_tool_result,
 };
+pub use net::is_internal;
 pub use provider::{AccountMode, ProviderKind};

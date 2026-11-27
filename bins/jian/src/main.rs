@@ -9,6 +9,7 @@
 // What a server prints at start-up is this binary's interface to whoever runs it.
 #![allow(clippy::print_stdout)]
 
+mod browser_flags;
 mod debug_jobs;
 mod github_flags;
 mod import_cli;
@@ -168,6 +169,9 @@ struct Cli {
 
     #[command(flatten)]
     github: github_flags::GithubFlags,
+
+    #[command(flatten)]
+    browser: browser_flags::BrowserFlags,
 
     #[command(subcommand)]
     command: Option<Command>,
@@ -375,6 +379,7 @@ async fn run() -> anyhow::Result<()> {
                     &owner_source,
                     settings,
                     &data_dir,
+                    &cli.browser,
                     &mut shutdown,
                 )
                 .await
@@ -501,6 +506,7 @@ fn job_registry(
     models: &Arc<dyn ModelSource>,
     events: &Arc<dyn EventBus>,
     executor: &Arc<dyn Executor>,
+    pages: Option<Arc<jian_browser::Sessions>>,
 ) -> JobRegistry {
     let registry = debug_jobs::registry();
     #[cfg(not(feature = "public-url"))]
@@ -512,6 +518,11 @@ fn job_registry(
             LOGIN_LINK_SEND_KIND,
             Arc::new(LoginLinkSender::new(settings)),
         );
+    let mut runner = AgentRunner::new(models.clone(), executor.clone(), events.clone())
+        .with_plugins(jian_server::builtin_plugins());
+    if let Some(pages) = pages {
+        runner = runner.with_browser(pages);
+    }
     registry
         .register(SCHEDULE_FIRE_KIND, Arc::new(ScheduleFirer))
         .register(
@@ -526,13 +537,7 @@ fn job_registry(
             THREAD_COMPACT_KIND,
             Arc::new(ThreadCompactor::new(models.clone())),
         )
-        .register(
-            RUN_KIND,
-            Arc::new(
-                AgentRunner::new(models.clone(), executor.clone(), events.clone())
-                    .with_plugins(jian_server::builtin_plugins()),
-            ),
-        )
+        .register(RUN_KIND, Arc::new(runner))
 }
 
 /// Serves until a stop signal, then drains: it stops serving tenants (every open socket is told
@@ -546,6 +551,7 @@ async fn serve(
     owner_source: &Source,
     settings: Settings,
     data_dir: &Path,
+    browser: &browser_flags::BrowserFlags,
     shutdown: &mut Shutdown,
 ) -> anyhow::Result<()> {
     let listener = tokio::net::TcpListener::bind(addr)
@@ -596,11 +602,25 @@ async fn serve(
         &settings,
         &data_dir.join("work"),
     ));
+    // Looked for once, at start: with no program there is no browser tool and no PDF download.
+    let browsers = browser.find(
+        &std::env::var_os("PATH").unwrap_or_default(),
+        jian_server::browser_policy(),
+    );
+    if browsers.is_none() {
+        tracing::info!("no browser program found; agents have no browser and PDF/PNG are off");
+    }
     let runner = JobRunner::start(
         database.clone(),
         keeper.instance().clone(),
         slots.clone(),
-        job_registry(&settings, &models, &events, &executor),
+        job_registry(
+            &settings,
+            &models,
+            &events,
+            &executor,
+            browsers.as_ref().map(browser_flags::Browsers::sessions),
+        ),
         JobOptions::default(),
     )
     .await;
@@ -615,6 +635,9 @@ async fn serve(
     state.events = events;
     state.hub = hub;
     state.llm = llm;
+    state.renderer = browsers
+        .as_ref()
+        .map(|b| Arc::new(jian_server::BrowserRenderer::new(Arc::clone(&b.browser))) as _);
     let (stop, stopped) = oneshot::channel::<()>();
     let mut server = tokio::spawn(
         // Connect info is how the server tells callers apart for its rate limit.
@@ -664,6 +687,10 @@ async fn serve(
     // No new job is taken (the slots are no longer served); the ones running get until the
     // deadline, and what is left is stopped and handed back to the queue below.
     let stopped = runner.shutdown(jobs_until).await;
+    // After the jobs: a run may still be reading a page until they end.
+    if let Some(browsers) = &browsers {
+        browsers.shutdown().await;
+    }
     // Nothing serves a tenant now, so the slots can go to another instance without waiting for
     // their leases to run out, once the jobs still running are back in the queue.
     match keeper

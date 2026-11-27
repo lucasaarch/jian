@@ -1413,6 +1413,7 @@ dependencies = [
  "directories",
  "futures-util",
  "jian-auth",
+ "jian-browser",
  "jian-exec",
  "jian-import",
  "jian-mail",
@@ -1444,6 +1445,23 @@ dependencies = [
  "tokio",
  "url",
  "zeroize",
+]
+
+[[package]]
+name = "jian-browser"
+version = "0.1.0"
+dependencies = [
+ "base64 0.23.1",
+ "futures-util",
+ "jian-core",
+ "rustix",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+ "tokio",
+ "tokio-tungstenite",
+ "tracing",
+ "url",
 ]
 
 [[package]]
@@ -1679,6 +1697,7 @@ dependencies = [
  "base64 0.23.1",
  "futures-util",
  "jian-auth",
+ "jian-browser",
  "jian-core",
  "jian-exec",
  "jian-llm",

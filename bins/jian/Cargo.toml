@@ -25,6 +25,7 @@ clap.workspace = true
 directories.workspace = true
 futures-util.workspace = true
 jian-auth.workspace = true
+jian-browser.workspace = true
 jian-exec.workspace = true
 jian-import.workspace = true
 jian-mail.workspace = true

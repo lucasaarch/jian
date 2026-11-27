@@ -22,6 +22,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use futures_util::future::BoxFuture;
+use jian_browser::Sessions;
 use jian_exec::{Executor, Scope};
 use jian_plugin_api::PluginRegistry;
 use jian_protocol::artifacts::ArtifactWriting;
@@ -42,6 +43,7 @@ use serde_json::json;
 
 use crate::artifact_events::{announce_created_with, announce_reshared, announce_version};
 use crate::auto_continue::{after_run, still_wanted};
+use crate::browser_tools::browser_tools;
 use crate::events::EventBus;
 use crate::guard::catching;
 use crate::objectives::objective_view;
@@ -66,6 +68,8 @@ pub struct AgentRunner {
     catalog: Arc<Catalog>,
     config: RunConfig,
     plugins: Plugins,
+    /// The pages the runs hold, when this gateway has a browser: only then do runs get its tools.
+    browser: Option<Arc<Sessions>>,
 }
 
 impl AgentRunner {
@@ -84,6 +88,7 @@ impl AgentRunner {
             catalog: Arc::new(Catalog::core()),
             config: RunConfig::default(),
             plugins: Plugins::new(PluginRegistry::new()),
+            browser: None,
         }
     }
 
@@ -103,6 +108,13 @@ impl AgentRunner {
         self
     }
 
+    /// The same with a browser: a run gets the `browser_*` tools, over pages kept in `sessions`.
+    #[must_use]
+    pub fn with_browser(mut self, sessions: Arc<Sessions>) -> Self {
+        self.browser = Some(sessions);
+        self
+    }
+
     /// The same with other limits.
     #[must_use]
     pub fn with_config(mut self, config: RunConfig) -> Self {
@@ -118,7 +130,7 @@ impl AgentRunner {
         };
         let machine = MachineSlot::new(self.executor.clone(), scope)
             .with_base_ms(u64::try_from(run.machine_ms).unwrap_or(0));
-        let tools = tools_for(db, ctx, run, &self.plugins).await;
+        let tools = tools_for(db, ctx, run, &self.plugins, self.browser.as_ref()).await;
         let listener = Listener {
             db,
             ctx,
@@ -288,6 +300,7 @@ async fn tools_for(
     ctx: &TenantCtx,
     run: &Run,
     plugins: &Plugins,
+    browser: Option<&Arc<Sessions>>,
 ) -> jian_runtime::Tools {
     let depth = db
         .subagent_depth(ctx, &run.thread)
@@ -299,6 +312,9 @@ async fn tools_for(
     // The plugins' tools join before the read-only cut: a run that may only suggest keeps the
     // ones their plugin declared `read_only`, and no other.
     let mut tools = standard_tools().with_all(plugins.tools(db, ctx, &run.agent).await);
+    if let Some(sessions) = browser {
+        tools = tools.with_all(browser_tools(Arc::clone(sessions)));
+    }
     if run.origin == RunOrigin::Wake {
         let mode = db
             .agent_proactivity(ctx, &run.agent)

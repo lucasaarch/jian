@@ -29,6 +29,7 @@ futures-util = { version = "0.3.31", default-features = false, features = ["sink
 getrandom = "0.3"
 globset = { version = "0.4", default-features = false }
 jian-auth = { path = "crates/jian-auth" }
+jian-browser = { path = "crates/jian-browser" }
 jian-computer-use = { path = "crates/jian-computer-use" }
 jian-core = { path = "crates/jian-core" }
 jian-exec = { path = "crates/jian-exec" }
