@@ -39,6 +39,8 @@ jian-mail = { path = "crates/jian-mail" }
 jian-plugin-api = { path = "crates/plugins/jian-plugin-api" }
 # `public-url` (the webhook) comes from `jian-server`'s capability of the same name.
 jian-plugin-github = { path = "crates/plugins/jian-plugin-github", default-features = false }
+# `public-url` (the webhook) comes from `jian-server`'s capability of the same name.
+jian-plugin-linear = { path = "crates/plugins/jian-plugin-linear", default-features = false }
 # No default features: `jian-server`'s `local-process` capability turns the stdio transport on or
 # leaves it off.
 jian-plugin-mcp = { path = "crates/plugins/jian-plugin-mcp", default-features = false }

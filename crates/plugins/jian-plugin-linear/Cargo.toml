@@ -1,0 +1,32 @@
+[package]
+name = "jian-plugin-linear"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[features]
+# `public-url`: Linear can reach the gateway, so the plugin answers its webhooks. Without it the
+# plugin has no webhook and everything else works. A capability, never an edition.
+public-url = ["jian-plugin-api/public-url"]
+
+[dependencies]
+base64.workspace = true
+futures-util.workspace = true
+getrandom.workspace = true
+jian-plugin-api.workspace = true
+ring.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["time"] }
+url.workspace = true
+
+[dev-dependencies]
+axum.workspace = true
+reqwest.workspace = true
+rustls.workspace = true
+tokio = { workspace = true, features = ["sync", "time"] }
+
+[lints]
+workspace = true
