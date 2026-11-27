@@ -95,6 +95,11 @@ jobs:
           curl -fsSL https://github.com/h4ckf0r0day/obscura/releases/download/v0.2.7/obscura-x86_64-linux.tar.gz | tar xz
           echo "547f9d8a60048983f0e45c310f160d1239575af062af28e4f6755e361f8abcbf  obscura" | sha256sum -c -
           echo "JIAN_TEST_OBSCURA=$PWD/obscura" >> "$GITHUB_ENV"
+          # Ubuntu 24.04 refuses Chrome's sandbox to a user without privileges; the runner is
+          # a throwaway machine, so the restriction is lifted here and nowhere else.
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
+          ./obscura --help | head -3 || true
+          for c in google-chrome chromium chromium-browser; do command -v $c && $c --version; done || true
       # nextest does not run doctests, and starts the shared test Postgres (.config/nextest.toml).
       - name: tests, self-hosted
         if: runner.os == 'Linux'
