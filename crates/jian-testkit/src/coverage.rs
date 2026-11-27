@@ -46,4 +46,8 @@ pub const JOB_KINDS: &[(&str, &str)] = &[
         "github.webhook",
         "jian-server/tests/gateway/github_webhook.rs: a_delivery_only_reaches_the_workspace_and_installation_whose_secret_signed_it",
     ),
+    (
+        "linear.webhook",
+        "jian-server/tests/gateway/linear_webhook.rs: a_delivery_only_reaches_the_workspace_and_account_whose_secret_signed_it_while_it_is_recent",
+    ),
 ];

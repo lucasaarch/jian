@@ -17,11 +17,9 @@
 use axum::Json;
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
-use jian_core::{MessagePart, MessageParts, ThreadKind};
 use jian_plugin_github::config::Config;
 use jian_plugin_github::{GITHUB_ID, KIND_INSTALLATION, git::is_repo};
 use jian_plugin_mcp::MCP_ID;
-use jian_protocol::client::DeltaPayload;
 use jian_protocol::connectors::ConnectorAccountView;
 use jian_protocol::github::{
     CreateGithubMcpRequest, CreateGithubThreadRequest, GithubItemKind, GithubThreadView,
@@ -30,7 +28,7 @@ use jian_protocol::github::{
 use jian_store::secrets::Secret;
 use jian_store::{
     AgentId, ConnectorAccount, ConnectorAccountId, GithubThreadLink, NewConnectorAccount,
-    NewMessage, NewThread, TenantCtx, Viewer,
+    TenantCtx, Viewer,
 };
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -39,20 +37,15 @@ use crate::AppState;
 use crate::auth::Principal;
 use crate::connector_accounts::view;
 use crate::github::check_review_agent;
-use crate::http::{Refusal, not_found, refuse, tenant_ctx};
-use crate::workspace::{announce, announce_thread, failure, message_view, thread_view, viewer};
+use crate::http::{Refusal, not_found, tenant_ctx};
+use crate::item_threads::{self, agent_of, bad, clean_note, reaches};
+use crate::workspace::{failure, viewer};
 
 /// GitHub's own MCP server.
 const OFFICIAL_MCP_URL: &str = "https://api.githubcopilot.com/mcp/";
 /// What the official server offers, as the old Jian turned it on; `get_me` is left out (see
 /// `disabledTools`) because an installation's token is not a person.
 const TOOLSETS: &str = "default,actions,code_security,dependabot,discussions,git,labels,secret_protection,security_advisories";
-/// The longest note a person adds to the first message.
-const MAX_NOTE_CHARS: usize = 2_000;
-
-fn bad(code: &str, why: &str) -> Refusal {
-    refuse(StatusCode::BAD_REQUEST, code, why)
-}
 
 /// The installation `id` the viewer sees, or a 404.
 async fn installation(
@@ -67,21 +60,6 @@ async fn installation(
         .map_err(|e| failure(&e))?
         .filter(|account| account.plugin == GITHUB_ID && account.kind == KIND_INSTALLATION)
         .ok_or_else(|| not_found("installation"))
-}
-
-/// Whether `agent` reaches `account`.
-async fn reaches(
-    app: &AppState,
-    ctx: &TenantCtx,
-    account: &ConnectorAccount,
-    agent: &AgentId,
-) -> Result<bool, Refusal> {
-    let agents = app
-        .db
-        .connector_account_agents(ctx, &account.id)
-        .await
-        .map_err(|e| failure(&e))?;
-    Ok(agents.contains(agent))
 }
 
 /// `POST /v1/github/installations/{id}/mcp`: GitHub's official MCP server, calling with the
@@ -247,18 +225,7 @@ pub(crate) async fn create_thread(
     let viewer = viewer(&principal)?;
     let ctx = tenant_ctx(&app, &principal.tenant).await?;
     let installation = installation(&app, &ctx, &viewer, &body.account_id).await?;
-    let agent = AgentId::new(&body.agent_id);
-    app.db
-        .agent(&ctx, &viewer, &agent)
-        .await
-        .map_err(|e| failure(&e))?
-        .ok_or_else(|| not_found("agent"))?;
-    if !reaches(&app, &ctx, &installation, &agent).await? {
-        return Err(bad(
-            "agent_not_reached",
-            "that agent does not reach this installation",
-        ));
-    }
+    let agent = agent_of(&app, &ctx, &viewer, &installation, &body.agent_id).await?;
     let on_owner = is_repo(&body.repo)
         && Config::parse(&installation.config).is_ok_and(|config| {
             body.repo
@@ -271,27 +238,9 @@ pub(crate) async fn create_thread(
             "the item is owner/name of the installation's owner, and a number",
         ));
     }
-    let note = body
-        .note
-        .as_deref()
-        .map(str::trim)
-        .filter(|n| !n.is_empty())
-        .map(|n| n.chars().take(MAX_NOTE_CHARS).collect::<String>());
-    let thread = app
-        .db
-        .create_thread(
-            &ctx,
-            &viewer,
-            &NewThread {
-                kind: ThreadKind::Dm,
-                title: Some(format!("{} #{}", body.repo, body.number)),
-                members: Vec::new(),
-                agents: vec![agent.clone()],
-            },
-        )
-        .await
-        .map_err(|e| failure(&e))?
-        .ok_or_else(|| not_found("agent"))?;
+    let note = clean_note(body.note.as_deref());
+    let title = format!("{} #{}", body.repo, body.number);
+    let thread = item_threads::create(&app, &ctx, &viewer, &agent, title).await?;
     let link = GithubThreadLink {
         thread: thread.id.clone(),
         account: installation.id.clone(),
@@ -304,44 +253,8 @@ pub(crate) async fn create_thread(
         .link_github_thread(&ctx, &link)
         .await
         .map_err(|e| failure(&e))?;
-    announce(
-        &app,
-        &ctx,
-        &thread.id,
-        None,
-        DeltaPayload::ThreadUpdated(thread_view(&thread)),
-    )
-    .await;
-    let parts = MessageParts::new(vec![MessagePart::Text(opening(
-        &installation.name,
-        &link,
-        note.as_deref(),
-    ))])
-    .map_err(|e| bad("invalid_input", &e.to_string()))?;
-    let posted = app
-        .db
-        .post_message(
-            &ctx,
-            &viewer,
-            &thread.id,
-            NewMessage {
-                parts,
-                reply_to: None,
-                client_key: None,
-            },
-        )
-        .await
-        .map_err(|e| failure(&e))?
-        .ok_or_else(|| not_found("thread"))?;
-    announce(
-        &app,
-        &ctx,
-        &thread.id,
-        None,
-        DeltaPayload::MessageCreated(message_view(&posted.message)),
-    )
-    .await;
-    announce_thread(&app, &ctx, &viewer, &thread.id).await;
+    let text = opening(&installation.name, &link, note.as_deref());
+    item_threads::open(&app, &ctx, &viewer, &thread, text).await?;
     Ok((StatusCode::CREATED, Json(thread_item(&link))))
 }
 

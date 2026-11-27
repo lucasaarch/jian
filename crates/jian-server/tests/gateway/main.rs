@@ -24,6 +24,9 @@ mod github_webhook;
 #[cfg(feature = "public-url")]
 mod invites;
 mod isolation;
+mod linear;
+#[cfg(all(feature = "public-url", not(feature = "multi-tenant")))]
+mod linear_webhook;
 mod machine_files;
 mod machines;
 mod mcp_servers;

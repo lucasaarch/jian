@@ -151,6 +151,7 @@ mod legacy_memories;
 mod legacy_schedules;
 mod legacy_skills;
 mod legacy_threads;
+mod linear_threads;
 mod logins;
 mod machines;
 mod members;
@@ -245,6 +246,7 @@ pub use legacy_memories::{LegacyMemory, LegacyMemoryLink, LegacyProject};
 pub use legacy_schedules::LegacySchedule;
 pub use legacy_skills::LegacySkill;
 pub use legacy_threads::{LegacyAgent, LegacyChat, LegacyMessage, LegacyThread};
+pub use linear_threads::LinearThreadLink;
 pub use logins::{
     GithubLink, LiveLoginLink, LoginPurpose, MAX_LOGIN_VALUE_LEN, NewLoginState, UsedLoginState,
 };

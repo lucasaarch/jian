@@ -14,6 +14,7 @@ pub mod auth;
 pub mod client;
 pub mod connectors;
 pub mod github;
+pub mod linear;
 pub mod machine;
 pub mod mcp;
 pub mod memories;

@@ -37,6 +37,8 @@ use jian_store::{
 };
 use serde_json::Value;
 
+mod linear;
+
 /// The most an answer to a plugin's request may hold; the rest is cut.
 const MAX_RESPONSE_BYTES: usize = 4 * 1024 * 1024;
 /// How long a plugin's request may take, whole.
@@ -63,6 +65,7 @@ pub fn builtin_plugins() -> PluginRegistry {
     PluginRegistry::new()
         .with_all(jian_plugin_mcp::plugins())
         .with_all(jian_plugin_github::plugins())
+        .with_all(jian_plugin_linear::plugins())
 }
 
 impl Plugins {

@@ -49,6 +49,8 @@ const MCP_FILE: &str = include_str!("mcp_servers.rs");
 const GITHUB_FILE: &str = include_str!("github.rs");
 const GITHUB_WEBHOOK_FILE: &str = include_str!("github_webhook.rs");
 const GITHUB_ITEMS_FILE: &str = include_str!("github_items.rs");
+const LINEAR_FILE: &str = include_str!("linear.rs");
+const LINEAR_WEBHOOK_FILE: &str = include_str!("linear_webhook.rs");
 
 async fn start() -> (Gateway, TwoTenants) {
     super::accounts::start(open_settings()).await
@@ -78,6 +80,8 @@ fn is_a_test_here(name: &str) -> bool {
         || GITHUB_FILE.contains(&declared)
         || GITHUB_WEBHOOK_FILE.contains(&declared)
         || GITHUB_ITEMS_FILE.contains(&declared)
+        || LINEAR_FILE.contains(&declared)
+        || LINEAR_WEBHOOK_FILE.contains(&declared)
 }
 
 /// Every route the router serves, and the test here that shows tenant B cannot use it on A's
@@ -144,6 +148,19 @@ const ROUTE_TESTS: &[(&str, &str)] = &[
     ),
     ("POST /v1/github/threads", GITHUB_THREAD_TEST),
     ("GET /v1/github/threads", GITHUB_THREAD_TEST),
+    ("POST /v1/linear/accounts", LINEAR_ACCOUNT_TEST),
+    ("POST /v1/linear/accounts/{id}/login", LINEAR_ACCOUNT_TEST),
+    (
+        "POST /v1/linear/accounts/{id}/login/finish",
+        LINEAR_ACCOUNT_TEST,
+    ),
+    ("POST /v1/linear/threads", LINEAR_THREAD_TEST),
+    ("GET /v1/linear/threads", LINEAR_THREAD_TEST),
+    #[cfg(feature = "public-url")]
+    (
+        "POST /v1/public/linear/webhook/{tenant}",
+        LINEAR_WEBHOOK_TEST,
+    ),
     #[cfg(feature = "public-url")]
     ("POST /v1/github/apps/manifest", GITHUB_APP_TEST),
     #[cfg(feature = "public-url")]
@@ -334,6 +351,16 @@ const GITHUB_REVIEW_AGENT_TEST: &str = "the_review_agent_is_changed_only_inside_
 /// The test that shows tenant B cannot start or find threads of tenant A's installation.
 const GITHUB_THREAD_TEST: &str =
     "a_thread_started_from_an_item_is_linked_both_ways_and_is_the_workspaces_own";
+/// The test that shows tenant B cannot sign in to, nor use the name of, tenant A's Linear account.
+const LINEAR_ACCOUNT_TEST: &str =
+    "a_workspace_of_linear_is_kept_once_per_name_signed_in_with_its_state_and_never_shows_a_secret";
+/// The test that shows tenant B cannot start or find threads of tenant A's Linear account.
+const LINEAR_THREAD_TEST: &str =
+    "a_thread_started_from_an_issue_is_linked_both_ways_and_is_the_workspaces_own";
+/// The test that shows a delivery signed for tenant A is refused at tenant B's address.
+#[cfg(feature = "public-url")]
+const LINEAR_WEBHOOK_TEST: &str =
+    "a_delivery_only_reaches_the_workspace_and_account_whose_secret_signed_it_while_it_is_recent";
 /// The test that shows tenant B finds no App of tenant A's, in any of its routes.
 #[cfg(feature = "public-url")]
 const GITHUB_APP_TEST: &str =

@@ -72,12 +72,21 @@ impl PublicUrl {
     /// decides whether a delivery is believed. `None` for an id that is not URL-safe.
     #[must_use]
     pub fn github_webhook(&self, tenant: &str) -> Option<String> {
-        let safe = !tenant.is_empty()
-            && tenant.len() <= MAX_TOKEN_BYTES
-            && tenant
-                .bytes()
-                .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-');
-        safe.then(|| format!("{}/v1/public/github/webhook/{tenant}", self.0))
+        self.id_link("v1/public/github/webhook", tenant)
+    }
+
+    /// Where Linear delivers a workspace's webhooks, with the workspace in the path for the same
+    /// reasons as [`github_webhook`](Self::github_webhook).
+    #[must_use]
+    pub fn linear_webhook(&self, tenant: &str) -> Option<String> {
+        self.id_link("v1/public/linear/webhook", tenant)
+    }
+
+    /// The panel's page for one thread, what a comment on a Linear issue links to. `None` for an
+    /// id that is not URL-safe.
+    #[must_use]
+    pub fn thread_page(&self, thread: &str) -> Option<String> {
+        self.id_link("threads", thread)
     }
 
     /// The panel's page GitHub sends the person back to after registering an App from a
@@ -91,6 +100,16 @@ impl PublicUrl {
     #[must_use]
     pub fn home(&self) -> &str {
         &self.0
+    }
+
+    /// `<base>/<path>/<id>`, for an id of URL-safe characters only.
+    fn id_link(&self, path: &str, id: &str) -> Option<String> {
+        let safe = !id.is_empty()
+            && id.len() <= MAX_TOKEN_BYTES
+            && id
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-');
+        safe.then(|| format!("{}/{path}/{id}", self.0))
     }
 
     fn fragment_link(&self, page: &str, token: &str) -> Option<String> {

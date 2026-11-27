@@ -11,6 +11,8 @@
 use ring::hmac;
 use serde_json::{Value, json};
 
+use crate::ids::{id as plain_id, identifier};
+
 /// How far a delivery's own clock may be from ours, in milliseconds. Linear's guidance is one
 /// minute: wide enough for a skewed clock and a retry in flight, short enough that a recorded
 /// delivery is of no use.
@@ -24,6 +26,20 @@ fn unhex(text: &str) -> Option<Vec<u8>> {
         .step_by(2)
         .map(|i| u8::from_str_radix(&text[i..i + 2], 16).ok())
         .collect()
+}
+
+/// The `Linear-Signature` of `body` under `secret`: lowercase hex of its HMAC-SHA256. Linear
+/// makes these; this is for a test that plays Linear.
+#[must_use]
+pub fn sign(secret: &str, body: &[u8]) -> String {
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+    let tag = hmac::sign(&hmac::Key::new(hmac::HMAC_SHA256, secret.as_bytes()), body);
+    let mut text = String::with_capacity(64);
+    for byte in tag.as_ref() {
+        text.push(char::from(HEX[usize::from(byte >> 4)]));
+        text.push(char::from(HEX[usize::from(byte & 15)]));
+    }
+    text
 }
 
 /// Whether `signature` (hex) is the HMAC-SHA256 of `body` under `secret`. An empty secret never
@@ -68,26 +84,8 @@ pub struct Notice {
     pub payload: Value,
 }
 
-/// An identifier as Linear writes it: a team key, `-`, a number.
-fn identifier(text: Option<&str>) -> Option<&str> {
-    let (key, number) = text?.split_once('-')?;
-    let ok = (1..=10).contains(&key.len())
-        && key
-            .bytes()
-            .all(|b| b.is_ascii_uppercase() || b.is_ascii_digit())
-        && (1..=9).contains(&number.len())
-        && number.bytes().all(|b| b.is_ascii_digit());
-    ok.then(|| text.unwrap_or_default())
-}
-
 fn id(value: &Value) -> Option<&str> {
-    value
-        .as_str()
-        .filter(|s| (1..=64).contains(&s.len()))
-        .filter(|s| {
-            s.bytes()
-                .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
-        })
+    value.as_str().and_then(plain_id)
 }
 
 /// A Linear issue link without its trailing slug: the slug is the issue's title, which a

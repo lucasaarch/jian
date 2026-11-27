@@ -92,7 +92,11 @@ mod hub;
 #[cfg(feature = "public-url")]
 mod invite_job;
 mod invites;
+mod item_threads;
 mod jobs;
+mod linear;
+#[cfg(feature = "public-url")]
+mod linear_webhook;
 mod llm_access;
 #[cfg(feature = "public-url")]
 mod login_link_job;
@@ -156,6 +160,8 @@ pub use hub::{DispatchError, HubCommand, MachineHub};
 pub use invite_job::{INVITE_SEND_KIND, InviteSender};
 pub use jian_runtime::THREAD_COMPACT_KIND;
 pub use jobs::{JobContext, JobError, JobHandler, JobOptions, JobRegistry, JobRequeue, JobRunner};
+#[cfg(feature = "public-url")]
+pub use linear_webhook::{LINEAR_WEBHOOK_KIND, LinearWebhookHandler};
 pub use llm_access::{LlmAccess, PendingLogins};
 #[cfg(feature = "public-url")]
 pub use login_link_job::{LOGIN_LINK_SEND_KIND, LoginLinkSender};
@@ -247,6 +253,13 @@ pub const ROUTES: &[&str] = &[
     "POST /v1/github/apps/{id}/installations (a member who sees the App)",
     #[cfg(feature = "public-url")]
     "POST /v1/public/github/webhook/{tenant} (no token; GitHub's signature; 401 for any other)",
+    "POST /v1/linear/accounts (a member)",
+    "POST /v1/linear/accounts/{id}/login (its creator or an admin)",
+    "POST /v1/linear/accounts/{id}/login/finish (its creator or an admin)",
+    "POST /v1/linear/threads (a member who sees the account and the agent)",
+    "GET /v1/linear/threads (a member who sees the account; only threads they are in)",
+    #[cfg(feature = "public-url")]
+    "POST /v1/public/linear/webhook/{tenant} (no token; Linear's signature; 401 for any other)",
     "POST /v1/mcp-servers (a member)",
     "POST /v1/mcp-servers/{id}/login (its creator or an admin)",
     "POST /v1/mcp-servers/{id}/login/finish (its creator or an admin)",
@@ -589,6 +602,16 @@ pub fn router_with(state: AppState, extra: Router<AppState>) -> Router {
             "/v1/github/threads",
             post(github_items::create_thread).get(github_items::list_threads),
         )
+        .route("/v1/linear/accounts", post(linear::create))
+        .route("/v1/linear/accounts/{id}/login", post(linear::login_start))
+        .route(
+            "/v1/linear/accounts/{id}/login/finish",
+            post(linear::login_finish),
+        )
+        .route(
+            "/v1/linear/threads",
+            post(linear::create_thread).get(linear::list_threads),
+        )
         .route("/v1/mcp-servers", post(mcp_servers::create))
         .route("/v1/mcp-servers/{id}/login", post(mcp_servers::login_start))
         .route(
@@ -755,6 +778,14 @@ pub fn router_with(state: AppState, extra: Router<AppState>) -> Router {
                     post(github_webhook::receive),
                 )
                 .layer(DefaultBodyLimit::max(github_webhook::MAX_WEBHOOK_BODY)),
+        )
+        .merge(
+            Router::new()
+                .route(
+                    "/v1/public/linear/webhook/{tenant}",
+                    post(linear_webhook::receive),
+                )
+                .layer(DefaultBodyLimit::max(linear_webhook::MAX_WEBHOOK_BODY)),
         );
     #[cfg(not(feature = "public-url"))]
     let public = Router::new();

@@ -31,7 +31,9 @@ pub mod account;
 pub mod api;
 pub mod config;
 pub mod error;
+pub mod ids;
 pub mod oauth;
+pub mod reference;
 pub mod tools;
 #[cfg(feature = "public-url")]
 pub mod webhook;
