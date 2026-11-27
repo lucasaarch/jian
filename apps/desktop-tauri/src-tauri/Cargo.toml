@@ -7,9 +7,11 @@ publish = false
 build = "build.rs"
 
 [build-dependencies]
-tauri-build = { version = "2", features = [] }
+tauri-build.workspace = true
 
 [dependencies]
-tauri = { version = "2", features = [] }
-
-[workspace]
+jian = { workspace = true, features = ["local"] }
+tauri.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tokio-util.workspace = true

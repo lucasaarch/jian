@@ -63,6 +63,7 @@ export function plan(paths, full = false) {
     } else if (path.startsWith('apps/gateway/')) enable('gateway', 'postgres', 'desktop');
     else if (path.startsWith('packages/ui/')) enable('web', 'ui', 'desktop');
     else if (path.startsWith('apps/web/')) enable('web');
+    else if (path.startsWith('apps/desktop-tauri/')) enable('desktop', 'rust');
     else if (path.startsWith('apps/desktop/')) enable('desktop');
     else if (path.startsWith('packages/contracts/')) enable(...nodeConsumers);
     else if (path.startsWith('packages/sdk/'))

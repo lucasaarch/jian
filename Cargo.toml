@@ -5,7 +5,7 @@ resolver = "3"
 # `crates/*` would also match the folder that holds the plugin crates, which is not a crate, and
 # Cargo fails on a match with no manifest: every crate there is named `jian-*`.
 # Channels (WhatsApp, Telegram...) live in `crates/channels/`, one crate each, on `jian-channel-api`.
-members = ["packages/remote-core/native", "crates/jian-*", "crates/plugins/*", "crates/channels/*", "bins/*"]
+members = ["packages/remote-core/native", "crates/jian-*", "crates/plugins/*", "crates/channels/*", "bins/*", "apps/desktop-tauri/src-tauri"]
 
 [workspace.package]
 version = "0.1.0"
@@ -62,6 +62,8 @@ jian-runtime = { path = "crates/jian-runtime" }
 jian-server = { path = "crates/jian-server", default-features = false }
 jian-skills = { path = "crates/jian-skills" }
 jian-store = { path = "crates/jian-store" }
+# The server CLI also exposes the local gateway lifecycle used by the Tauri desktop host.
+jian = { path = "bins/jian", default-features = false }
 # Test fixtures only: a crate lists them under [dev-dependencies].
 jian-plugin-echo = { path = "crates/plugins/jian-plugin-echo", default-features = false }
 jian-testkit = { path = "crates/jian-testkit" }
@@ -101,6 +103,8 @@ thiserror = "2"
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "net"] }
 tokio-tungstenite = { version = "0.29", default-features = false, features = ["connect", "rustls-tls-webpki-roots"] }
 tokio-util = { version = "0.7.15", default-features = false }
+tauri = "2"
+tauri-build = "2"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", default-features = false, features = ["ansi", "env-filter", "fmt"] }
 # The Discord Gateway; keep the TLS roots and provider aligned with the rest of the workspace.

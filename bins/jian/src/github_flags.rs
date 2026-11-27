@@ -14,9 +14,10 @@ pub struct GithubFlags {
     /// The OAuth App's client id (an OAuth App, not a GitHub App).
     #[arg(
         long = "github-client-id",
+        id = "github_client_id",
         env = "JIAN_GITHUB_CLIENT_ID",
         value_name = "ID",
-        requires = "client_secret"
+        requires = "github_client_secret"
     )]
     client_id: Option<String>,
 
@@ -24,10 +25,11 @@ pub struct GithubFlags {
     /// `--help` does not show its value.
     #[arg(
         long = "github-client-secret",
+        id = "github_client_secret",
         env = "JIAN_GITHUB_CLIENT_SECRET",
         value_name = "SECRET",
         hide_env_values = true,
-        requires = "client_id"
+        requires = "github_client_id"
     )]
     client_secret: Option<String>,
 

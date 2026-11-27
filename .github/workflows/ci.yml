@@ -179,14 +179,20 @@ jobs:
         with:
           node-version: 24
           cache: pnpm
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Tauri system dependencies
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install --no-install-recommends -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev librsvg2-dev patchelf
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @jian/contracts build
       - run: pnpm --filter @jian/sdk build
-      - run: pnpm exec biome check apps/desktop --error-on-warnings
+      - run: pnpm exec biome check apps/desktop apps/desktop-tauri --error-on-warnings
       - run: pnpm --filter @jian/desktop typecheck
       - run: pnpm --filter @jian/desktop test
       - run: pnpm --filter @jian/desktop build
       - run: pnpm --filter @jian/desktop stage:gateway
+      - run: pnpm --filter @jian/desktop-tauri build
   # The Computer Use helper on each OS it runs on: a platform's code compiles, lints and tests
   # only on that platform.
   rust:
@@ -203,6 +209,9 @@ jobs:
         with:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
+      - name: Tauri system dependencies
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install --no-install-recommends -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev librsvg2-dev patchelf
       - if: matrix.os == 'ubuntu-latest'
         run: cargo fmt --check
       - run: cargo clippy --all-targets --locked -- -D warnings

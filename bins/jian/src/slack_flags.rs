@@ -6,12 +6,18 @@ use jian_server::PublicUrl;
 #[derive(Args, Clone, Default)]
 pub struct SlackFlags {
     /// OAuth client id of the Slack app.
-    #[arg(long = "slack-client-id", env = "JIAN_SLACK_CLIENT_ID", global = true)]
+    #[arg(
+        long = "slack-client-id",
+        id = "slack_client_id",
+        env = "JIAN_SLACK_CLIENT_ID",
+        global = true
+    )]
     client_id: Option<String>,
 
     /// OAuth client secret of the Slack app.
     #[arg(
         long = "slack-client-secret",
+        id = "slack_client_secret",
         env = "JIAN_SLACK_CLIENT_SECRET",
         hide_env_values = true,
         global = true

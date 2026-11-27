@@ -35,7 +35,8 @@ apps/desktop/release/
 apps/desktop/.gateway/
 # A copy of Electron named Jian, for running the app from source on macOS.
 apps/desktop/.dev/
-# Cargo output for the standalone Tauri workspace.
+# Tauri renderer output; Rust builds use the root Cargo target directory.
+apps/desktop-tauri/dist/
 apps/desktop-tauri/src-tauri/target/
 apps/desktop-tauri/src-tauri/gen/schemas/
 

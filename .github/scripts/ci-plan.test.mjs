@@ -22,6 +22,7 @@ test('host-only changes stay scoped and shared UI reaches both hosts', () => {
   assert.deepEqual(selected(['packages/ui/src/kit/dialog.tsx']), ['desktop', 'ui', 'web']);
   assert.deepEqual(selected(['apps/web/app/page.tsx']), ['web']);
   assert.deepEqual(selected(['apps/desktop/src/main/index.ts']), ['desktop']);
+  assert.deepEqual(selected(['apps/desktop-tauri/src/App.tsx']), ['desktop', 'rust']);
 });
 test('gateway source reaches its embedded consumer but unit fixtures do not rebuild desktop', () => {
   assert.deepEqual(selected(['apps/gateway/src/local.ts']), ['desktop', 'gateway', 'postgres']);

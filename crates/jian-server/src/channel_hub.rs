@@ -172,6 +172,7 @@ impl ChannelHub {
 
     /// Delivers a webhook already authenticated by the public ingress and queued for this
     /// tenant's slot. Only the durable provider-webhook handler calls this path.
+    #[cfg(feature = "public-url")]
     pub(crate) async fn push_verified(
         &self,
         tenant: &TenantId,

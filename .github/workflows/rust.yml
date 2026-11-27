@@ -5,6 +5,7 @@ on:
     paths:
       - 'crates/**'
       - 'bins/**'
+      - 'apps/desktop-tauri/**'
       - 'packages/protocol/**'
       - 'Cargo.toml'
       - 'Cargo.lock'
@@ -18,6 +19,7 @@ on:
     paths:
       - 'crates/**'
       - 'bins/**'
+      - 'apps/desktop-tauri/**'
       - 'packages/protocol/**'
       - 'Cargo.toml'
       - 'Cargo.lock'
@@ -47,6 +49,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Tauri system dependencies
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install --no-install-recommends -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev librsvg2-dev patchelf
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: 1.98.0
@@ -66,7 +71,7 @@ jobs:
       - run: cargo machete
 
   # Code behind cfg(target_os) compiles, lints and tests only on its own OS, so each runs here.
-  # The Linux helper is pure Rust (x11rb), so no system packages are needed.
+  # The helper is pure Rust; the Tauri host needs WebKit2GTK on Linux, installed by each job below.
   test:
     runs-on: ${{ matrix.os }}
     strategy:
@@ -75,6 +80,9 @@ jobs:
         os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
       - uses: actions/checkout@v4
+      - name: Tauri system dependencies
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install --no-install-recommends -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev librsvg2-dev patchelf
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: 1.98.0

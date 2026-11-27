@@ -187,6 +187,7 @@ pub use rate::{Clock, Limit, ManualClock, MemoryRateLimiter, RateLimiter, System
 pub use run_job::{AgentRunner, RUN_KIND};
 pub use schedule_job::{SCHEDULE_FIRE_KIND, ScheduleFirer, run_ticker, tick};
 pub use schedule_run_job::{SCHEDULE_RUN_KIND, ScheduleRunner, dispatch_tick};
+#[cfg(feature = "public-url")]
 pub use slack::{SLACK_EVENT_KIND, SlackEventHandler};
 pub use slots::{DrainReport, NoRunQueue, RunRequeue, SlotKeeper, SlotOwnership};
 pub use wake_job::{AGENT_WAKE_KIND, AgentWaker, NowMs, SETTLE_MS, round_tick, tick as wake_tick};

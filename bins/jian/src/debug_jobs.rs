@@ -70,7 +70,7 @@ mod tests {
             .iter()
             .map(|(kind, _)| *kind)
             .collect();
-        for kind in crate::job_registry(
+        for kind in crate::desktop::job_registry(
             &Settings::default(),
             &(Arc::new(NoModels) as Arc<dyn ModelSource>),
             &(Arc::new(MemoryEventBus::new()) as Arc<dyn EventBus>),

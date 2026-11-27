@@ -13,7 +13,6 @@ tracing.workspace = true
 
 [dev-dependencies]
 axum.workspace = true
-jian-testkit.workspace = true
 tokio = { workspace = true, features = ["rt-multi-thread", "sync"] }
 
 [lints]

@@ -5,11 +5,11 @@ export default function App() {
         <p className="eyebrow">Jian · Desktop</p>
         <h1 id="welcome-title">A native home for Jian.</h1>
         <p className="description">
-          The React renderer is running inside a Tauri window. Gateway startup and product screens
-          are the next integration.
+          The React renderer is running inside a Tauri window, with Jian’s local Rust gateway
+          starting alongside it. Product screens are the next integration.
         </p>
         <p className="status" role="status">
-          Native desktop shell ready
+          Local gateway is starting
         </p>
       </section>
     </main>

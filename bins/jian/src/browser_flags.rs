@@ -19,7 +19,7 @@ use jian_browser::{
 const PAGE_IDLE: Duration = Duration::from_mins(10);
 
 /// Where the browser programs are.
-#[derive(Args)]
+#[derive(Args, Default)]
 pub struct BrowserFlags {
     /// The Obscura program (the default browser). Without it, `obscura` on `PATH`.
     #[arg(long, env = "JIAN_OBSCURA_PATH", value_name = "PATH")]
@@ -144,7 +144,7 @@ mod tests {
         let cli = Cli::parse_from(["jian", "--chromium-path", named.to_str().unwrap()]);
         let found = cli
             .browser
-            .find(std::ffi::OsStr::new(""), NetworkPolicy::AnyNetwork)
+            .find(OsStr::new(""), NetworkPolicy::AnyNetwork)
             .unwrap();
         assert_eq!(found.browser.engine(), "chromium");
     }

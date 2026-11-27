@@ -5,28 +5,46 @@
 //! matching account so the slot owner can hand it to that account's channel.
 
 use axum::Json;
+#[cfg(feature = "public-url")]
 use axum::body::Bytes;
 use axum::extract::{Path, Query, State};
-use axum::http::{HeaderMap, StatusCode};
+#[cfg(feature = "public-url")]
+use axum::http::HeaderMap;
+use axum::http::StatusCode;
+#[cfg(feature = "public-url")]
 use axum::response::{IntoResponse, Response};
 use base64::Engine as _;
+#[cfg(feature = "public-url")]
 use futures_util::future::BoxFuture;
-use jian_channel_api::{ChannelError, PairingMethod};
-use jian_store::{ChannelAccountId, ChannelStatus, NewJob, TenantId};
+#[cfg(feature = "public-url")]
+use jian_channel_api::ChannelError;
+use jian_channel_api::PairingMethod;
+use jian_store::ChannelAccountId;
+use jian_store::TenantId;
+#[cfg(feature = "public-url")]
+use jian_store::{ChannelStatus, NewJob};
 use serde::{Deserialize, Serialize};
+#[cfg(feature = "public-url")]
 use serde_json::{Value, json};
 
+use crate::AppState;
 use crate::auth::Principal;
 use crate::channel_hub::HubError;
-use crate::http::{Refusal, forbidden, internal, not_found, refuse};
+#[cfg(feature = "public-url")]
+use crate::http::internal;
+use crate::http::{Refusal, forbidden, not_found, refuse};
 use crate::workspace::failure;
-use crate::{AppState, ChannelHub, JobContext, JobError, JobHandler};
+#[cfg(feature = "public-url")]
+use crate::{ChannelHub, JobContext, JobError, JobHandler};
 
 /// A durable event queued for the tenant's slot owner.
+#[cfg(feature = "public-url")]
 pub const SLACK_EVENT_KIND: &str = "slack.event";
 
 const OAUTH_STATE_KEY: &str = "slack_oauth_state";
+#[cfg(feature = "public-url")]
 const MAX_EVENT_BYTES: usize = 60 * 1024;
+#[cfg(feature = "public-url")]
 pub(crate) const MAX_SLACK_BODY: usize = 1024 * 1024;
 
 #[derive(Serialize)]
@@ -353,11 +371,13 @@ pub(crate) async fn events(
 }
 
 /// Handles queued signed events on the slot owner; provider parsing remains in its channel crate.
+#[cfg(feature = "public-url")]
 #[derive(Clone)]
 pub struct SlackEventHandler {
     channels: ChannelHub,
 }
 
+#[cfg(feature = "public-url")]
 impl SlackEventHandler {
     /// A handler dispatching accepted Events API deliveries to their workspace channels.
     #[must_use]
@@ -406,12 +426,14 @@ impl SlackEventHandler {
     }
 }
 
+#[cfg(feature = "public-url")]
 impl JobHandler for SlackEventHandler {
     fn handle(&self, context: JobContext) -> BoxFuture<'_, Result<(), JobError>> {
         Box::pin(self.run(context))
     }
 }
 
+#[cfg(feature = "public-url")]
 fn unauthorized() -> Refusal {
     refuse(
         StatusCode::UNAUTHORIZED,
@@ -420,6 +442,7 @@ fn unauthorized() -> Refusal {
     )
 }
 
+#[cfg(feature = "public-url")]
 fn valid_team_id(value: &str) -> bool {
     !value.is_empty()
         && value.len() <= 32
@@ -427,6 +450,7 @@ fn valid_team_id(value: &str) -> bool {
         && matches!(value.as_bytes().first().copied(), Some(b'T' | b'E'))
 }
 
+#[cfg(feature = "public-url")]
 fn valid_event_id(value: &str) -> bool {
     !value.is_empty()
         && value.len() <= 128
