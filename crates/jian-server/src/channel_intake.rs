@@ -13,6 +13,10 @@
 //!   answered here, in code, before the agent sees anything: that is how a waiting identity
 //!   link is decided, and no tool of the agent can do it.
 //! - A known person: the same message, `notify: true`.
+//!
+//! What the creator and a known person write is also written to their chat's thread, as the
+//! person's own words, so the agent reading the chat sees what came before. The event is still
+//! the wake and the queue.
 //! - A blocked person: nothing at all.
 //! - Nobody the agent knows: what they wrote goes in their chat's thread and the hub starts a
 //!   run with a few tools and no data (`RunOrigin::Stranger`); the creator is told once.
@@ -37,7 +41,7 @@ use jian_channel_api::{
 };
 use jian_core::MessageParts;
 use jian_store::{
-    AgentId, ChannelAccount, Database, NewEvent, PersonRole, Sender, StoreError, TenantCtx,
+    AgentId, ChannelAccount, Database, NewEvent, PersonRole, Posted, Sender, StoreError, TenantCtx,
     ThreadId,
 };
 use serde_json::{Value, json};
@@ -180,6 +184,11 @@ pub async fn receive(
             (sender, &label),
         )
         .await?;
+    // The chat's history: the run that answers reads the thread, and a person's earlier words
+    // have to be in it. The event below stays the wake, and is the dedupe of the delivery.
+    if let Some(text) = body_text(&message.body) {
+        write_to_thread(db, ctx, account, message, &thread, &text).await?;
+    }
     let notify = !owner;
     let event = NewEvent {
         kind: CHANNEL_MESSAGE_EVENT.to_owned(),
@@ -254,8 +263,8 @@ async fn decision(
     }))
 }
 
-/// What a stranger wrote as text for the run, or `None` for what is not worth one (a reaction).
-fn stranger_text(body: &InboundBody) -> Option<String> {
+/// What someone wrote as text for the thread, or `None` for what is not worth one (a reaction).
+fn body_text(body: &InboundBody) -> Option<String> {
     match body {
         InboundBody::Text { text } => Some(clipped(text).0),
         InboundBody::Media { info, caption } => Some(format!(
@@ -274,6 +283,48 @@ fn stranger_text(body: &InboundBody) -> Option<String> {
     }
 }
 
+/// Writes what `message` says in the chat's thread as the person's own words, once however many
+/// times the provider delivers it. `None` when the thread already has it and a run has read it
+/// (or is queued to): the message is not news. A message written whose run was never made (the
+/// gateway failed in between) is answered with its [`Posted`] again, so the retry makes the run.
+async fn write_to_thread(
+    db: &Database,
+    ctx: &TenantCtx,
+    account: &ChannelAccount,
+    message: &InboundMessage,
+    thread: &ThreadId,
+    text: &str,
+) -> Result<Option<Posted>, StoreError> {
+    let sender = message.sender.id.as_str();
+    let label = message
+        .sender
+        .display_name
+        .as_deref()
+        .unwrap_or(sender)
+        .to_owned();
+    let parts = MessageParts::text(text)
+        .map_err(|_| StoreError::InvalidWorkspace("a received message is empty"))?;
+    let key = format!(
+        "ch:{}:{}:{}",
+        account.id,
+        message.chat.as_str(),
+        message.id.as_str()
+    );
+    let Some(posted) = db
+        .post_external_message(ctx, thread, (sender, &label), parts, Some(key))
+        .await?
+    else {
+        return Ok(None);
+    };
+    if posted.created {
+        return Ok(Some(posted));
+    }
+    let waiting = db
+        .message_awaits_run(ctx, thread, &account.agent, posted.message.seq)
+        .await?;
+    Ok(waiting.then_some(posted))
+}
+
 /// Nobody the agent knows wrote. Their words go to the chat's thread (the only place they are
 /// kept: not an inbox event, so no wake and no data tool sees them as a contact) and the hub is
 /// told to start the run that answers them.
@@ -283,7 +334,7 @@ async fn stranger(
     account: &ChannelAccount,
     message: &InboundMessage,
 ) -> Result<Intake, StoreError> {
-    let Some(text) = stranger_text(&message.body) else {
+    let Some(text) = body_text(&message.body) else {
         return Ok(Intake::Ignored);
     };
     let sender = message.sender.id.as_str();
@@ -315,19 +366,7 @@ async fn stranger(
         Some(format!("stranger-note:{}", thread.as_str())),
     )
     .await?;
-    let parts = MessageParts::text(&text)
-        .map_err(|_| StoreError::InvalidWorkspace("a stranger's message is empty"))?;
-    let key = format!(
-        "ch:{}:{}:{}",
-        account.id,
-        message.chat.as_str(),
-        message.id.as_str()
-    );
-    let Some(posted) = db
-        .post_external_message(ctx, &thread, (sender, &label), parts, Some(key))
-        .await?
-        .filter(|posted| posted.created)
-    else {
+    let Some(posted) = write_to_thread(db, ctx, account, message, &thread, &text).await? else {
         return Ok(Intake::Duplicate);
     };
     // Once per account and sender, whatever they write next: this is what makes the creator be

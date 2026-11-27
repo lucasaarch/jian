@@ -183,6 +183,7 @@ pub mod secrets;
 mod sessions;
 mod skills;
 mod slots;
+mod stranger_runs;
 mod subagents;
 mod subjects;
 mod tenant;

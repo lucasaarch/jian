@@ -7,8 +7,8 @@ use jian_channel_api::{
     ChannelEvent, ChannelKind, ChatId, ChatKind, InboundBody, InboundMessage, MessageId,
     OutboundContent, Participant, ParticipantId,
 };
-use jian_server::{TELL_CREATOR, people_tools, stranger_tools};
-use jian_store::{Identity, PersonRole, RunOrigin, Sender};
+use jian_server::{StrangerLimits, TELL_CREATOR, people_tools, stranger_tools};
+use jian_store::{Identity, PersonRole, Run, RunOrigin, RunState, Sender, ThreadId};
 use jian_testkit::TwoTenants;
 use serde_json::json;
 
@@ -19,6 +19,8 @@ use super::support::Gateway;
 
 const OWNER: &str = "5511900000001@s.whatsapp.net";
 const STRANGER: &str = "5511911110000@s.whatsapp.net";
+const STRANGER_TWO: &str = "5511911110002@s.whatsapp.net";
+const STRANGER_THREE: &str = "5511911110003@s.whatsapp.net";
 
 fn text_from(chat: &str, id: &str, text: &str) -> ChannelEvent {
     ChannelEvent::Message(InboundMessage {
@@ -127,6 +129,104 @@ async fn a_stranger_gets_a_limited_run_and_the_creator_is_told_once() {
             .unwrap(),
         Sender::Unknown
     );
+
+    hub.shutdown().await;
+    gateway.stop().await;
+}
+
+async fn runs_of(gateway: &Gateway, rig: &Rig, chat: &str) -> Vec<Run> {
+    let thread = chat_of(gateway, rig, chat).await;
+    gateway.db.list_runs(&rig.ctx, &thread, 20).await.unwrap()
+}
+
+async fn chat_of(gateway: &Gateway, rig: &Rig, chat: &str) -> ThreadId {
+    gateway
+        .db
+        .open_channel_thread(&rig.ctx, &rig.account, chat, "whatsapp: Zed", (chat, "Zed"))
+        .await
+        .unwrap()
+}
+
+#[tokio::test]
+async fn a_stranger_costs_a_few_runs_an_hour_and_the_creator_is_told_once_however_many() {
+    let gateway = Gateway::start(open_settings()).await;
+    let tenants = TwoTenants::seed(&gateway.db).await;
+    let rig = Rig::new(&gateway, &tenants).await;
+    let fake = FakeChannel::new(ChannelKind::Whatsapp);
+    let hub = hub(&gateway, quick(), &fake);
+    // Two a sender, three for the agent, in a window short enough to wait out.
+    hub.set_stranger_limits(StrangerLimits {
+        per_sender: 2,
+        per_agent: 3,
+        window_ms: 2_000,
+    });
+    assert_eq!(hub.reconcile().await.unwrap(), 1);
+    eventually("the connection", async || fake.connections().len() == 1).await;
+    let db = &gateway.db;
+
+    // Each run ends before the next message, as a real one does, so a message may start another.
+    for (n, id) in ["s1", "s2"].into_iter().enumerate() {
+        fake.push(text_from(STRANGER, id, "hello?"));
+        eventually("the run", async || {
+            runs_of(&gateway, &rig, STRANGER).await.len() == n + 1
+        })
+        .await;
+        let run = runs_of(&gateway, &rig, STRANGER).await.remove(0);
+        db.set_run_state(&rig.ctx, &run.id, RunState::Done, None)
+            .await
+            .unwrap();
+    }
+    // The third is past the sender's limit. The message after it, from someone else, is handled
+    // after it (the hub reads one at a time), so when that one has its run this one was decided.
+    fake.push(text_from(STRANGER, "s3", "hello???"));
+    fake.push(text_from(STRANGER_TWO, "t1", "hi"));
+    eventually("the other stranger's run", async || {
+        runs_of(&gateway, &rig, STRANGER_TWO).await.len() == 1
+    })
+    .await;
+    assert_eq!(runs_of(&gateway, &rig, STRANGER).await.len(), 2);
+    // The words are kept all the same.
+    let kept = db
+        .history_page(
+            &rig.ctx,
+            &chat_of(&gateway, &rig, STRANGER).await,
+            0,
+            None,
+            50,
+        )
+        .await
+        .unwrap();
+    assert!(kept.iter().any(|row| row.text == "hello???"));
+
+    // Three runs are the agent's limit: a third stranger is stored and starts nothing.
+    fake.push(text_from(STRANGER_THREE, "u1", "hey"));
+    eventually("the third stranger's message", async || {
+        let thread = chat_of(&gateway, &rig, STRANGER_THREE).await;
+        db.history_page(&rig.ctx, &thread, 0, None, 50)
+            .await
+            .unwrap()
+            .iter()
+            .any(|row| row.text == "hey")
+    })
+    .await;
+    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+    assert!(runs_of(&gateway, &rig, STRANGER_THREE).await.is_empty());
+
+    // The window passes: the same sender is answered again.
+    tokio::time::sleep(std::time::Duration::from_millis(2_100)).await;
+    fake.push(text_from(STRANGER, "s4", "still there?"));
+    eventually("a run after the window", async || {
+        runs_of(&gateway, &rig, STRANGER).await.len() == 3
+    })
+    .await;
+
+    // Three people wrote for the first time: three notes, whatever else they wrote.
+    let notes = fake
+        .sent()
+        .into_iter()
+        .filter(|m| m.chat.as_str() == OWNER)
+        .count();
+    assert_eq!(notes, 3);
 
     hub.shutdown().await;
     gateway.stop().await;

@@ -13,8 +13,8 @@ use jian_server::{
     CHANNEL_MESSAGE_EVENT, CHANNEL_UNKNOWN_SENDER_EVENT, Intake, ReplyError, receive, reply,
 };
 use jian_store::{
-    AgentEvent, AgentId, ChannelAccount, Database, Identity, NewAgent, PersonRole, Sender,
-    TenantCtx, Viewer, channel_secret_owner, secrets::Secret,
+    AgentEvent, AgentId, ChannelAccount, Database, Identity, NewAgent, PersonRole, RunOrigin,
+    Sender, TenantCtx, ThreadId, Viewer, channel_secret_owner, secrets::Secret,
 };
 use jian_testkit::{Side, TestDb, TwoTenants};
 
@@ -113,7 +113,13 @@ async fn an_unknown_sender_is_a_stranger_never_a_contact_and_the_first_time_is_m
         matches!(&again, Intake::Stranger { first: false, .. }),
         "{again:?}"
     );
-    // The same message again is not a third run.
+    // Once a run has read the message, the same one again is not another run.
+    let Intake::Stranger { thread, seq, .. } = again else {
+        panic!("not a stranger");
+    };
+    db.start_run(&a.ctx, &thread, &pear, None, seq, RunOrigin::Stranger)
+        .await
+        .unwrap();
     let replay = receive(db, &a.ctx, &acct, &said("m2", STRANGER, "hello?"))
         .await
         .unwrap();
@@ -132,6 +138,128 @@ async fn an_unknown_sender_is_a_stranger_never_a_contact_and_the_first_time_is_m
     let people = db.people_of(&a.ctx, &pear).await.unwrap();
     assert_eq!(people.len(), 1);
     assert_eq!(people[0].role, PersonRole::Creator);
+}
+
+async fn thread_of(db: &Database, a: &Side, acct: &ChannelAccount, chat: &str) -> ThreadId {
+    db.open_channel_thread(&a.ctx, acct, chat, "whatsapp: Someone", (chat, "Someone"))
+        .await
+        .unwrap()
+}
+
+/// What a run of the agent reads of the thread, oldest first.
+async fn read_by_a_run(db: &Database, a: &Side, thread: &ThreadId) -> Vec<String> {
+    let mut rows = db.history_page(&a.ctx, thread, 0, None, 50).await.unwrap();
+    rows.reverse();
+    rows.into_iter().map(|row| row.text).collect()
+}
+
+#[tokio::test]
+async fn a_message_written_before_its_run_failed_to_start_makes_exactly_one_run_when_it_comes_again()
+ {
+    let rig = Rig::new().await;
+    let db = &rig.test.db;
+    let a = &rig.tenants.a;
+    let pear = agent(db, a, "pear").await;
+    let acct = account(db, a, &pear).await;
+
+    // The hub gets this and fails before it makes the run: nothing below `receive` happens.
+    let lost = receive(db, &a.ctx, &acct, &said("m1", STRANGER, "anyone there?"))
+        .await
+        .unwrap();
+    assert!(
+        matches!(lost, Intake::Stranger { first: true, .. }),
+        "{lost:?}"
+    );
+    // The provider sends it again: it is not a mute duplicate, it asks for the run, and the
+    // creator is not told a second time.
+    let again = receive(db, &a.ctx, &acct, &said("m1", STRANGER, "anyone there?"))
+        .await
+        .unwrap();
+    let Intake::Stranger {
+        thread,
+        seq,
+        first: false,
+        ..
+    } = again
+    else {
+        panic!("{again:?}");
+    };
+    let (_, made) = db
+        .start_run(&a.ctx, &thread, &pear, None, seq, RunOrigin::Stranger)
+        .await
+        .unwrap();
+    assert!(made);
+    // A third delivery, and the same ask made twice, are still one run and one message.
+    let third = receive(db, &a.ctx, &acct, &said("m1", STRANGER, "anyone there?"))
+        .await
+        .unwrap();
+    assert_eq!(third, Intake::Duplicate);
+    let (_, made_again) = db
+        .start_run(&a.ctx, &thread, &pear, None, seq, RunOrigin::Stranger)
+        .await
+        .unwrap();
+    assert!(!made_again);
+    assert_eq!(db.list_runs(&a.ctx, &thread, 10).await.unwrap().len(), 1);
+    let said_by_them = read_by_a_run(db, a, &thread).await;
+    assert_eq!(
+        said_by_them
+            .iter()
+            .filter(|t| *t == "anyone there?")
+            .count(),
+        1
+    );
+}
+
+#[tokio::test]
+async fn what_a_known_person_and_the_creator_write_is_in_the_chats_thread_in_order() {
+    let rig = Rig::new().await;
+    let db = &rig.test.db;
+    let a = &rig.tenants.a;
+    let pear = agent(db, a, "pear").await;
+    let acct = account(db, a, &pear).await;
+    let by = a.admin.account_id.as_str();
+    db.create_person(
+        &a.ctx,
+        &pear,
+        "Friend",
+        PersonRole::Known,
+        &[Identity::new("whatsapp", FRIEND)],
+        by,
+    )
+    .await
+    .unwrap();
+
+    for (id, text) in [("f1", "my order is 42"), ("f2", "any news?")] {
+        let got = receive(db, &a.ctx, &acct, &said(id, FRIEND, text))
+            .await
+            .unwrap();
+        assert!(matches!(got, Intake::Delivered { .. }), "{got:?}");
+    }
+    // The same one delivered again is not written twice.
+    receive(db, &a.ctx, &acct, &said("f2", FRIEND, "any news?"))
+        .await
+        .unwrap();
+    receive(db, &a.ctx, &acct, &said("o1", OWNER, "hi, it is me"))
+        .await
+        .unwrap();
+
+    // A run that wakes on the second message reads the first, and nothing twice.
+    let thread = thread_of(db, a, &acct, FRIEND).await;
+    assert_eq!(
+        read_by_a_run(db, a, &thread).await,
+        ["my order is 42", "any news?"]
+    );
+    let mine = thread_of(db, a, &acct, OWNER).await;
+    assert_eq!(read_by_a_run(db, a, &mine).await, ["hi, it is me"]);
+    // And the wake is still an event each.
+    let events = rig.inbox(&a.ctx, &pear).await;
+    assert_eq!(
+        events
+            .iter()
+            .filter(|e| e.kind == CHANNEL_MESSAGE_EVENT)
+            .count(),
+        3
+    );
 }
 
 #[tokio::test]

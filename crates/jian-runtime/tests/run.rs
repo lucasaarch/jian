@@ -225,6 +225,37 @@ async fn the_run(set: &Setup) -> Run {
 }
 
 #[tokio::test]
+async fn a_strangers_prompt_holds_nothing_the_owner_wrote_and_a_chats_prompt_does() {
+    let set = setup().await;
+    // "Be brief." stands for anything private in the agent's instructions.
+    let mut stranger = set.run.clone();
+    stranger.origin = RunOrigin::Stranger;
+    let parts = Parts::new(&set, vec![say("hello")], FakeMachineScript::default());
+    let slot = parts.slot();
+    assert_eq!(parts.run_from(&slot, &stranger).await, Outcome::Done);
+    let request = &parts.provider.requests()[0];
+    let prompt: String = request.system.iter().map(|b| b.text.as_str()).collect();
+    assert!(
+        prompt.contains("pear") && prompt.contains("do not know"),
+        "{prompt}"
+    );
+    assert!(!prompt.contains("Be brief."), "{prompt}");
+    assert!(!prompt.contains("Skills you can read"), "{prompt}");
+
+    // The same agent in a run for a person it serves is given both.
+    let parts = Parts::new(&set, vec![say("hello")], FakeMachineScript::default());
+    let slot = parts.slot();
+    assert_eq!(parts.run(&slot).await, Outcome::Done);
+    let request = &parts.provider.requests()[0];
+    let prompt: String = request.system.iter().map(|b| b.text.as_str()).collect();
+    assert!(
+        prompt.contains("Be brief.") && prompt.contains("Skills you can read"),
+        "{prompt}"
+    );
+    set.test.stop().await;
+}
+
+#[tokio::test]
 async fn a_chat_is_answered_in_the_thread_with_the_tools_and_the_instructions_in_the_request() {
     let set = setup().await;
     let parts = Parts::new(&set, vec![say("hi there")], FakeMachineScript::default());

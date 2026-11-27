@@ -157,7 +157,7 @@ pub use artifact_export::{ArtifactRenderer, RenderFormat, Renderer};
 pub use auth::{AuthRejection, Principal};
 pub use auto_continue::MAX_IDLE_CONTINUATIONS;
 pub use browser_tools::{BrowserRenderer, browser_policy, browser_tools};
-pub use channel_hub::{ChannelHub, ChannelOpener, HubError};
+pub use channel_hub::{ChannelHub, ChannelOpener, HubError, StrangerLimits};
 pub use channel_intake::{
     CHANNEL_MESSAGE_EVENT, CHANNEL_UNKNOWN_SENDER_EVENT, Intake, ReplyError, receive, reply,
 };

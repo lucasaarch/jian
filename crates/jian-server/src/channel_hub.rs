@@ -51,6 +51,7 @@ mod answer;
 mod hold;
 mod people;
 
+pub use people::StrangerLimits;
 pub(crate) use people::creator_text;
 
 /// Makes the [`Channel`] of an account, keeping its session in the store it is given. It only
@@ -97,6 +98,7 @@ pub(crate) struct Inner {
     closing: CancellationToken,
     openers: RwLock<HashMap<ChannelKind, ChannelOpener>>,
     pub(crate) running: Mutex<HashMap<Key, Arc<Live>>>,
+    pub(crate) stranger_limits: Mutex<StrangerLimits>,
 }
 
 /// The accounts this instance keeps connected. Cloning shares them.
@@ -128,6 +130,7 @@ impl ChannelHub {
                 closing,
                 openers: RwLock::default(),
                 running: Mutex::default(),
+                stranger_limits: Mutex::default(),
             }),
         }
     }

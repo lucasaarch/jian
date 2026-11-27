@@ -252,7 +252,8 @@ async fn handle(
                 }) => {
                     let chat = message.chat.as_str();
                     let note = first.then_some((chat, label.as_str(), text.as_str()));
-                    engage(inner, ctx, account, &thread, seq, note).await
+                    let sender = message.sender.id.as_str();
+                    engage(inner, ctx, account, &thread, seq, (sender, note)).await
                 }
                 Ok(Intake::Decision { reply }) => {
                     answer_in_chat(live, message.chat.as_str(), &reply).await;
