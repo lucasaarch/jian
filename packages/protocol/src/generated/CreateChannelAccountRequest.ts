@@ -15,7 +15,7 @@ provider: string,
  */
 ownerAddress: string | null, 
 /**
- * A Telegram bot's token. It goes to the vault and is never returned: no response,
+ * A Telegram or Discord bot token. It goes to the vault and is never returned: no response,
  * event or log carries it. Refused for a provider that has no token.
  */
 token: string | null, };

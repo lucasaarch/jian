@@ -1,0 +1,56 @@
+:root {
+  font-family: system-ui, sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  color-scheme: light dark;
+  color: CanvasText;
+  background: Canvas;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  min-width: 760px;
+  min-height: 100vh;
+  margin: 0;
+}
+
+.shell {
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+  padding: 3rem;
+}
+
+.welcome {
+  width: min(100%, 42rem);
+}
+
+.eyebrow {
+  font-size: 0.75rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+h1 {
+  max-width: 12ch;
+  margin: 1.5rem 0;
+  font-size: clamp(2.75rem, 8vw, 5rem);
+  line-height: 1;
+}
+
+.description {
+  max-width: 38rem;
+  line-height: 1.6;
+}
+
+.status {
+  display: inline-flex;
+  margin-top: 1.5rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid ButtonBorder;
+  border-radius: 999px;
+  font-size: 0.875rem;
+}

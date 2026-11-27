@@ -78,16 +78,6 @@ make dev
 prints a secret. `make dev` serves the API on `127.0.0.1:4310` and the panel with hot
 reload on `http://localhost:3000/`.
 
-To test the packaged application in production mode from VS Code, open this repository
-in a Dev Container using `.devcontainer/devcontainer.json`. It builds the gateway and web
-images, starts them with an isolated PostgreSQL database, and serves the panel on port 4310. The
-Dev Container attaches to a separate Node workspace; the production gateway does not mount
-the source tree or its `.env` secrets. Use `jian-devcontainer-test-token-only` to sign in.
-The Compose file contains fixed synthetic credentials strictly for local tests: do not use
-them with real data or outside this Dev Container. Rebuild the container after changing
-source so the production image includes those changes. Its database and `/home/node`
-workspace use separate volumes from `make up`.
-
 ## Status
 
 Early. The contract, the vault and the runtime are in place; the native client currently
