@@ -11,20 +11,29 @@
 //! only suggest (`Tools::read_only`) loses the writing ones without this module knowing why.
 //! Each call gets a [`ServerHost`] bound to that one account: it reads that account's secret,
 //! sends HTTP and writes events for the agents that reach that account, and nothing else.
+//!
+//! Before the tools are listed, each reached account's plugin gets to [`prepare`] (an MCP server's
+//! catalog is read there), in parallel and within [`PREPARE_TIMEOUT`]; one that fails or is slow
+//! costs the run that account's tools, never the run.
+//!
+//! [`prepare`]: jian_plugin_api::Plugin::prepare
 
 use std::collections::HashSet;
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Duration;
 
-use futures_util::future::BoxFuture;
+use futures_util::future::{BoxFuture, join_all};
 use jian_llm::ToolSpec;
 use jian_plugin_api::{
     AccountContext, AccountId, AccountRef, AgentEvent, AgentId, HostError, HttpRequest,
     HttpResponse, Plugin, PluginHost, PluginRegistry, ResolvedTool, Scope, ScopedAccount, Secret,
+    SecretChange,
 };
 use jian_runtime::{Tool, ToolEnv, system_now_ms};
+use jian_store::secrets::RefreshError;
 use jian_store::{
     ConnectorAccount, ConnectorAccountId, ConnectorScope, Database, NewEvent, TenantCtx,
+    connector_secret_owner,
 };
 use serde_json::Value;
 
@@ -32,41 +41,46 @@ use serde_json::Value;
 const MAX_RESPONSE_BYTES: usize = 4 * 1024 * 1024;
 /// How long a plugin's request may take, whole.
 const HTTP_TIMEOUT: Duration = Duration::from_secs(60);
+/// How long a run waits for one account's plugin to get ready (an MCP server to list its
+/// tools). A server slower than this is treated as down for the run; its tools are still there
+/// once a later run finds a fresh list.
+pub const PREPARE_TIMEOUT: Duration = Duration::from_secs(15);
 
 /// The plugins this build carries, and the one HTTP client they send through.
 #[derive(Clone)]
 pub struct Plugins {
     registry: PluginRegistry,
     http: reqwest::Client,
+    allow_internal: bool,
 }
 
 /// The plugins of this build. Real ones are added here, each behind the feature of the edition
 /// it exists in: `#[cfg(feature = "self-hosted")]` for one that may only run where the operator
-/// owns the machine. None exists yet.
+/// owns the machine. MCP is in both; its command transport is the part only self-hosted has,
+/// decided inside the crate by the same feature.
 #[must_use]
 pub fn builtin_plugins() -> PluginRegistry {
-    PluginRegistry::new()
+    PluginRegistry::new().with_all(jian_plugin_mcp::plugins())
 }
 
 impl Plugins {
-    /// A set of plugins. Builds the HTTP client: no redirects (a token must reach only the
-    /// address it was sent to) and a timeout.
-    ///
-    /// # Panics
-    ///
-    /// Never in practice: the client has no settings that can fail to build.
+    /// A set of plugins for this build's edition: a self-hosted one may send to private
+    /// addresses (an MCP server on the same machine), a Cloud one may not (see
+    /// [`crate::outbound`]).
     #[must_use]
     pub fn new(registry: PluginRegistry) -> Self {
-        // reqwest's rustls has no crypto provider here (see the workspace manifest): ring is
-        // installed before the first client. An error only means one is already installed.
-        drop(rustls::crypto::ring::default_provider().install_default());
-        #[allow(clippy::expect_used, reason = "the builder has nothing that can fail")]
-        let http = reqwest::Client::builder()
-            .redirect(reqwest::redirect::Policy::none())
-            .timeout(HTTP_TIMEOUT)
-            .build()
-            .expect("an HTTP client with a timeout and no redirects");
-        Self { registry, http }
+        Self::in_edition(registry, cfg!(feature = "self-hosted"))
+    }
+
+    /// The same, with the choice of reaching private addresses made by the caller, so one build
+    /// can be tried as both editions.
+    #[must_use]
+    pub fn in_edition(registry: PluginRegistry, allow_internal: bool) -> Self {
+        Self {
+            registry,
+            http: crate::outbound::client(allow_internal, HTTP_TIMEOUT),
+            allow_internal,
+        }
     }
 
     /// The tools `agent` has in a run that starts now, from the accounts it reaches. A failure
@@ -86,6 +100,7 @@ impl Plugins {
         };
         let scoped: Vec<ScopedAccount> = accounts.iter().map(scoped).collect();
         let me = AgentId::new(agent.as_str());
+        self.prepare(db, ctx, &me, &scoped).await;
         self.registry
             .resolve(&me, &scoped)
             .into_iter()
@@ -99,10 +114,52 @@ impl Plugins {
                     },
                     name: interned(&tool.name),
                     http: self.http.clone(),
+                    allow_internal: self.allow_internal,
                     tool,
                 }) as Arc<dyn Tool>
             })
             .collect()
+    }
+
+    /// Lets each plugin get ready for the accounts `agent` reaches, all at once.
+    async fn prepare(
+        &self,
+        db: &Database,
+        ctx: &TenantCtx,
+        agent: &AgentId,
+        accounts: &[ScopedAccount],
+    ) {
+        let jobs = accounts.iter().filter_map(|scoped| {
+            if !scoped.scope.reaches(agent) {
+                return None;
+            }
+            let account = &scoped.account;
+            let plugin = self.registry.get(&account.plugin)?;
+            if !plugin.kinds().contains(&account.kind.as_str()) {
+                return None;
+            }
+            Some(async move {
+                let host = ServerHost {
+                    db,
+                    ctx,
+                    plugin: plugin.id(),
+                    account: &account.id,
+                    http: &self.http,
+                    allow_internal: self.allow_internal,
+                };
+                let context = AccountContext::new(&host, account, plugin.permissions());
+                match tokio::time::timeout(PREPARE_TIMEOUT, plugin.prepare(&context)).await {
+                    Ok(Ok(())) => {}
+                    Ok(Err(why)) => {
+                        tracing::warn!(plugin = plugin.id(), %why, "a connector account is not ready; its tools are left out");
+                    }
+                    Err(_) => {
+                        tracing::warn!(plugin = plugin.id(), "a connector account was too slow to get ready; its tools are left out");
+                    }
+                }
+            })
+        });
+        join_all(jobs).await;
     }
 }
 
@@ -145,6 +202,7 @@ struct PluginTool {
     spec: ToolSpec,
     tool: ResolvedTool,
     http: reqwest::Client,
+    allow_internal: bool,
 }
 
 impl Tool for PluginTool {
@@ -176,6 +234,7 @@ impl Tool for PluginTool {
                 plugin: self.tool.plugin.id(),
                 account: &self.tool.account.id,
                 http: &self.http,
+                allow_internal: self.allow_internal,
             };
             let plugin: &dyn Plugin = self.tool.plugin.as_ref();
             let context = AccountContext::new(&host, &self.tool.account, plugin.permissions());
@@ -195,6 +254,7 @@ pub struct ServerHost<'a> {
     plugin: &'a str,
     account: &'a AccountId,
     http: &'a reqwest::Client,
+    allow_internal: bool,
 }
 
 fn failed(error: impl std::fmt::Display) -> HostError {
@@ -229,8 +289,34 @@ impl PluginHost for ServerHost<'_> {
         })
     }
 
+    fn update_secret<'a>(
+        &'a self,
+        account: &'a AccountId,
+        change: SecretChange<'a>,
+    ) -> BoxFuture<'a, Result<bool, HostError>> {
+        Box::pin(async move {
+            let id = self.own(account)?;
+            self.db
+                .vault()
+                .refresh(
+                    self.ctx,
+                    &connector_secret_owner(&id),
+                    |current| async move {
+                        change(Secret::new(current.expose()))
+                            .await
+                            .map(|next| jian_store::secrets::Secret::new(next.expose()))
+                    },
+                )
+                .await
+                .map_err(|error| match error {
+                    RefreshError::Transform(message) => HostError::Failed(message),
+                    RefreshError::Store(_) => failed("the vault could not be updated"),
+                })
+        })
+    }
+
     fn http(&self, request: HttpRequest) -> BoxFuture<'_, Result<HttpResponse, HostError>> {
-        Box::pin(async move { send(self.http, request).await })
+        Box::pin(async move { send(self.http, request, self.allow_internal).await })
     }
 
     fn emit<'a>(
@@ -269,13 +355,22 @@ impl PluginHost for ServerHost<'_> {
 
 /// Sends a plugin's request: `http` and `https` only, and an answer cut at
 /// [`MAX_RESPONSE_BYTES`]. The error never carries the request's headers or address query.
-async fn send(client: &reqwest::Client, request: HttpRequest) -> Result<HttpResponse, HostError> {
+/// Without `allow_internal` an address written as a private IP is refused here; a name is
+/// refused by the client's resolver (see [`crate::outbound`]).
+async fn send(
+    client: &reqwest::Client,
+    request: HttpRequest,
+    allow_internal: bool,
+) -> Result<HttpResponse, HostError> {
     let url = url::Url::parse(&request.url)
         .map_err(|_| HostError::Refused("the address is not a URL".to_owned()))?;
     if !matches!(url.scheme(), "http" | "https") {
         return Err(HostError::Refused(
             "only http and https addresses are allowed".to_owned(),
         ));
+    }
+    if !allow_internal {
+        crate::outbound::check_literal(&url)?;
     }
     let method = reqwest::Method::from_bytes(request.method.as_bytes())
         .map_err(|_| HostError::Refused("the method is not an HTTP method".to_owned()))?;
@@ -289,7 +384,7 @@ async fn send(client: &reqwest::Client, request: HttpRequest) -> Result<HttpResp
     let mut response = builder
         .send()
         .await
-        .map_err(|error| failed(error.without_url()))?;
+        .map_err(|error| failed(describe(error)))?;
     let status = response.status().as_u16();
     let headers = response
         .headers()
@@ -300,7 +395,7 @@ async fn send(client: &reqwest::Client, request: HttpRequest) -> Result<HttpResp
     while let Some(chunk) = response
         .chunk()
         .await
-        .map_err(|error| failed(error.without_url()))?
+        .map_err(|error| failed(describe(error)))?
     {
         let room = MAX_RESPONSE_BYTES - body.len();
         body.extend_from_slice(&chunk[..chunk.len().min(room)]);
@@ -313,4 +408,18 @@ async fn send(client: &reqwest::Client, request: HttpRequest) -> Result<HttpResp
         headers,
         body,
     })
+}
+
+/// What went wrong with a request, with its causes (a DNS answer, a refused connection) and no
+/// address: a request error carries the URL, and a URL may carry a token in its query.
+fn describe(error: reqwest::Error) -> String {
+    let error = error.without_url();
+    let mut text = error.to_string();
+    let mut cause = std::error::Error::source(&error);
+    while let Some(next) = cause {
+        text.push_str(": ");
+        text.push_str(&next.to_string());
+        cause = next.source();
+    }
+    text
 }

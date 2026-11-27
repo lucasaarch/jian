@@ -32,7 +32,7 @@ mod tool;
 
 pub use account::{AccountId, AccountRef, AgentId, Scope, ScopedAccount};
 pub use error::{HostError, PluginError, ToolError};
-pub use host::{AccountContext, AgentEvent, HttpRequest, HttpResponse, PluginHost};
+pub use host::{AccountContext, AgentEvent, HttpRequest, HttpResponse, PluginHost, SecretChange};
 pub use plugin::{Permission, Plugin};
 pub use registry::{MAX_TOOL_NAME_CHARS, PluginRegistry, ResolvedTool};
 pub use route::{Encoding, HttpMethod, RouteDef, Verification, WebhookRequest};

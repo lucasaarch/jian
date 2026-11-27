@@ -95,6 +95,14 @@ impl AgentRunner {
         self
     }
 
+    /// The same with a ready set of plugins, for a caller that chose the edition's network
+    /// rules itself ([`Plugins::in_edition`]).
+    #[must_use]
+    pub fn with_plugin_set(mut self, plugins: Plugins) -> Self {
+        self.plugins = plugins;
+        self
+    }
+
     /// The same with other limits.
     #[must_use]
     pub fn with_config(mut self, config: RunConfig) -> Self {

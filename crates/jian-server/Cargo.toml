@@ -13,7 +13,7 @@ license.workspace = true
 default = ["self-hosted"]
 # The test fixture's self-hosted-only plugin comes with it, so the tests can show that a `cloud`
 # build leaves it out.
-self-hosted = ["jian-plugin-echo/self-hosted"]
+self-hosted = ["jian-plugin-echo/self-hosted", "jian-plugin-mcp/self-hosted"]
 cloud = []
 
 [dependencies]
@@ -26,6 +26,7 @@ jian-exec.workspace = true
 jian-llm.workspace = true
 jian-mail.workspace = true
 jian-plugin-api.workspace = true
+jian-plugin-mcp.workspace = true
 jian-protocol.workspace = true
 jian-runtime.workspace = true
 jian-skills.workspace = true

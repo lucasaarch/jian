@@ -15,6 +15,8 @@ use crate::tool::ToolDef;
 pub enum Permission {
     /// Read the secret of the account it runs for (and no other).
     Secret,
+    /// Replace the secret of the account it runs for (a refreshed token).
+    SecretWrite,
     /// Make outbound HTTP requests.
     Http,
     /// Put an event in the box of the agents that reach the account.
@@ -47,6 +49,15 @@ pub trait Plugin: Send + Sync {
     /// The tools the account gives its agents. It may depend on the account's kind and
     /// settings; it is called when a run starts, so it does no IO.
     fn tools(&self, account: &AccountRef) -> Vec<ToolDef>;
+
+    /// Gets ready for a run that starts now: reads from the service what [`tools`](Self::tools)
+    /// will list (an MCP server's catalog). It may do IO, and it may be slow, so the host bounds
+    /// it in time. `Err` is why the account's tools are not there, in words for the owner and
+    /// with no secret in them: the run goes on without that account's tools, and a test of the
+    /// connection shows it. The default does nothing.
+    fn prepare<'a>(&'a self, _ctx: &'a AccountContext<'a>) -> BoxFuture<'a, Result<(), String>> {
+        Box::pin(async { Ok(()) })
+    }
 
     /// Runs one of its tools for the account in `ctx`. `Ok` is the text the model reads; `Err`
     /// is read as the tool's failure, and the model may try something else.

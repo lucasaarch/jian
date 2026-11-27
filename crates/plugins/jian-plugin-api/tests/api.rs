@@ -99,6 +99,14 @@ impl PluginHost for FakeHost {
         })
     }
 
+    fn update_secret<'a>(
+        &'a self,
+        _account: &'a AccountId,
+        _change: jian_plugin_api::SecretChange<'a>,
+    ) -> BoxFuture<'a, Result<bool, HostError>> {
+        Box::pin(async move { Ok(false) })
+    }
+
     fn http(&self, _request: HttpRequest) -> BoxFuture<'_, Result<HttpResponse, HostError>> {
         Box::pin(async move {
             self.asked.lock().unwrap().push("http".to_owned());

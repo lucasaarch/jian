@@ -89,6 +89,7 @@ mod mail_settings;
 mod members;
 mod memories;
 mod objectives;
+pub mod outbound;
 mod plugins;
 mod project_events;
 mod project_files;

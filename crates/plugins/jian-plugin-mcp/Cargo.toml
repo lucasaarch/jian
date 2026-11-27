@@ -1,0 +1,33 @@
+[package]
+name = "jian-plugin-mcp"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[features]
+# The default build is the self-hosted one, as `jian-server`'s is. `cloud` has no stdio
+# transport: a command an account names would run on the operator's machine, and in the Cloud
+# edition that machine is ours. `cargo check -p jian-plugin-mcp --no-default-features --features
+# cloud` must pass and must not compile `stdio`.
+default = ["self-hosted"]
+self-hosted = []
+cloud = []
+
+[dependencies]
+futures-util.workspace = true
+jian-plugin-api.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+url.workspace = true
+
+[dev-dependencies]
+axum.workspace = true
+reqwest.workspace = true
+rustls.workspace = true
+tokio = { workspace = true, features = ["time"] }
+
+[lints]
+workspace = true

@@ -44,6 +44,11 @@ pub struct AgentEvent {
     pub key: Option<String>,
 }
 
+/// What [`PluginHost::update_secret`] runs under the secret's lock: the current secret in, the new
+/// one out, or why it could not be made (text without a secret in it).
+pub type SecretChange<'a> =
+    Box<dyn FnOnce(Secret) -> BoxFuture<'a, Result<Secret, String>> + Send + 'a>;
+
 /// What the host gives a plugin. `jian-server` implements it, bound to one tenant; a plugin
 /// never sees the store, the runtime or another tenant.
 ///
@@ -55,6 +60,17 @@ pub trait PluginHost: Send + Sync {
         &'a self,
         account: &'a AccountId,
     ) -> BoxFuture<'a, Result<Option<Secret>, HostError>>;
+
+    /// Replaces the account's secret with what `change` makes of the current one, all under a
+    /// lock the host holds for that secret: two calls at once (two requests that both find an
+    /// OAuth token expired) take turns, and the second `change` sees the first's result. The
+    /// answer is `false`, without calling `change`, when the account has no secret. If `change`
+    /// fails the secret stays as it was and the error is the one `change` gave.
+    fn update_secret<'a>(
+        &'a self,
+        account: &'a AccountId,
+        change: SecretChange<'a>,
+    ) -> BoxFuture<'a, Result<bool, HostError>>;
 
     /// Sends a request and reads the answer.
     fn http(&self, request: HttpRequest) -> BoxFuture<'_, Result<HttpResponse, HostError>>;
@@ -111,6 +127,14 @@ impl<'a> AccountContext<'a> {
             .secret(&self.account.id)
             .await?
             .ok_or(PluginError::NoSecret)
+    }
+
+    /// Rewrites the account's secret under the host's lock for it (see
+    /// [`PluginHost::update_secret`]). Needs [`Permission::SecretWrite`]. `Ok(false)`: no secret
+    /// is stored.
+    pub async fn update_secret(&self, change: SecretChange<'a>) -> Result<bool, PluginError> {
+        self.allow(Permission::SecretWrite)?;
+        Ok(self.host.update_secret(&self.account.id, change).await?)
     }
 
     /// Sends an outbound request. Needs [`Permission::Http`].
