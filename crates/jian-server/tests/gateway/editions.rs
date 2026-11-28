@@ -15,6 +15,11 @@ use super::support::http_request;
 use super::support::{http_get, http_post};
 
 const CAPABILITY_ROUTES: &[(&str, bool)] = &[
+    ("GET / (self-hosted web panel)", cfg!(feature = "web-panel")),
+    (
+        "GET /assets/{*path} (self-hosted web panel)",
+        cfg!(feature = "web-panel"),
+    ),
     ("/v1/auth/magic-link", cfg!(feature = "email-login")),
     (
         "/v1/invites/{id}/resend",
@@ -44,6 +49,45 @@ const CAPABILITY_ROUTES: &[(&str, bool)] = &[
     ("/v1/members", cfg!(feature = "multi-user")),
     ("/v1/mcp-servers/{id}/login", cfg!(feature = "mcp-http")),
 ];
+
+#[cfg(feature = "web-panel")]
+#[tokio::test]
+async fn self_hosted_panel_serves_assets_and_keeps_api_misses_as_404s() {
+    let (gateway, _tenants) = start(open_settings()).await;
+    let (status, html) = http_get(gateway.addr, "/", None).await;
+    assert_eq!(status, 200, "{html}");
+    assert!(html.contains("Jian"), "{html}");
+
+    let script_path = html
+        .split("src=\"")
+        .nth(1)
+        .and_then(|source| source.split('\"').next())
+        .expect("the panel has a script asset");
+    let (status, script) = http_get(gateway.addr, script_path, None).await;
+    assert_eq!(status, 200, "{script}");
+    assert!(script.contains("A home for your agents."), "{script}");
+
+    let (status, route) = http_get(gateway.addr, "/agents/example", None).await;
+    assert_eq!(status, 200, "{route}");
+    assert!(route.contains("Jian"), "{route}");
+
+    let (status, missing_api) = http_get(gateway.addr, "/v1/not-a-route", None).await;
+    assert_eq!(status, 404, "{missing_api}");
+    assert!(
+        !missing_api.contains("A home for your agents."),
+        "{missing_api}"
+    );
+    gateway.stop().await;
+}
+
+#[cfg(not(feature = "web-panel"))]
+#[tokio::test]
+async fn panel_is_not_served_by_editions_without_web_panel() {
+    let (gateway, _tenants) = start(open_settings()).await;
+    let (status, body) = http_get(gateway.addr, "/", None).await;
+    assert_eq!(status, 404, "{body}");
+    gateway.stop().await;
+}
 
 #[tokio::test]
 async fn routes_are_present_only_with_their_capabilities() {

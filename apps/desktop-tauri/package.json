@@ -12,7 +12,9 @@
     "dev": "tauri dev",
     "build": "tauri build",
     "dev:web": "vite --host 127.0.0.1",
-    "build:web": "tsc --noEmit && vite build"
+    "build:web": "tsc --noEmit && vite build",
+    "dev:tauri": "vite --mode tauri --host 127.0.0.1",
+    "build:tauri": "tsc --noEmit && vite build --mode tauri"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.12.3",

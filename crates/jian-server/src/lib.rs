@@ -1,5 +1,5 @@
-//! The HTTP and WebSocket server. It also serves the panel static build, so one process is the
-//! whole gateway, on a server and inside the desktop app.
+//! The HTTP and WebSocket server. The self-hosted build also serves the embedded web panel; the
+//! local desktop build loads its panel in Tauri.
 //!
 //! It is the edge only: it authenticates a request, turns it into a call on `jian-runtime` or
 //! `jian-store`, and writes the answer. It holds no domain rules and reads no environment; the
@@ -7,10 +7,11 @@
 //!
 //! # Who is calling
 //!
-//! Every route but `/health` takes a bearer token, and [`Principal`] is how a handler asks who
-//! holds it: `jo_` is the owner's, `jrm_` a machine's, `jd_` a phone's. The token is the only
-//! thing that names the tenant, so a handler never reads one from a path, header or body. A bad or
-//! missing token is a 401 with no reason.
+//! Every API route but `/health` takes a bearer token, and [`Principal`] is how a handler asks who
+//! holds it: `jo_` is the owner's, `jrm_` a machine's, `jd_` a phone's. The self-hosted panel's
+//! static assets contain no workspace data and are public. The token is the only thing that names
+//! the tenant, so a handler never reads one from a path, header or body. A bad or missing token is
+//! a 401 with no reason.
 //!
 //! # People
 //!
@@ -120,6 +121,8 @@ mod members;
 mod memories;
 mod objectives;
 pub mod outbound;
+#[cfg(feature = "web-panel")]
+mod panel;
 mod people_routes;
 mod people_tools;
 mod plugins;
@@ -201,10 +204,13 @@ pub use slack::{SLACK_EVENT_KIND, SlackEventHandler};
 pub use slots::{DrainReport, NoRunQueue, RunRequeue, SlotKeeper, SlotOwnership};
 pub use wake_job::{AGENT_WAKE_KIND, AgentWaker, NowMs, SETTLE_MS, round_tick, tick as wake_tick};
 
-/// The routes `router` serves, for the binary to print at start-up: there is no panel yet to
-/// show what is reachable. Keep it in step with `router`.
+/// The routes `router` serves. Keep this in step with `router` and the edition capability tests.
 pub const ROUTES: &[&str] = &[
     "GET /health",
+    #[cfg(feature = "web-panel")]
+    "GET / (self-hosted web panel)",
+    #[cfg(feature = "web-panel")]
+    "GET /assets/{*path} (self-hosted web panel)",
     "GET /v1/me",
     "POST /v1/auth/login (no token; the password sign-in must be on)",
     "POST /v1/auth/logout (a session)",
@@ -957,7 +963,7 @@ pub fn router_with(state: AppState, extra: Router<AppState>) -> Router {
             get(project_files::list).post(project_files::upload),
         )
         .layer(DefaultBodyLimit::disable());
-    Router::new()
+    let router = Router::new()
         .route("/health", get(health))
         .route("/v1/me", get(me))
         .merge(accounts)
@@ -970,7 +976,10 @@ pub fn router_with(state: AppState, extra: Router<AppState>) -> Router {
             get(worker_ws::connect),
         )
         .route(jian_protocol::client::CLIENT_PATH, get(client_ws::connect))
-        .merge(extra)
+        .merge(extra);
+    #[cfg(feature = "web-panel")]
+    let router = router.merge(panel::router());
+    router
         // The ceiling for every route not given its own above, so a new route is bounded by
         // default. The groups' own layers sit inside this one and win; the upload route reads
         // its body itself, up to its own limit.

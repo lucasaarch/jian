@@ -251,34 +251,28 @@ where
     let listener = tokio::net::TcpListener::bind(addr)
         .await
         .with_context(|| format!("cannot listen on {addr}"))?;
-    println!("jian listening on http://{addr}");
+    tracing::info!(address = %format!("http://{addr}"), "jian is listening");
     match owner_source {
-        crate::owner_token::Source::Variable => println!("owner token: from JIAN_API_TOKEN"),
+        crate::owner_token::Source::Variable => {
+            tracing::info!(source = "JIAN_API_TOKEN", "owner token is available");
+        }
         crate::owner_token::Source::NewFile(path) => {
-            println!("owner token: generated into {}", path.display());
+            tracing::info!(source = "new file", path = %path.display(), "owner token was generated");
         }
         crate::owner_token::Source::File(path) => {
-            println!("owner token: in {}", path.display());
+            tracing::info!(source = "file", path = %path.display(), "owner token was loaded");
         }
     }
-    println!(
-        "sign-in methods: {}{}",
-        settings.auth.policy(),
-        if settings
-            .auth
-            .policy()
-            .allows(jian_auth::CredentialKind::Password)
-        {
-            " (add the first admin with `jian users add --admin --email ... --password-stdin`)"
-        } else {
-            ""
-        }
-    );
-    for route in jian_server::ROUTES {
-        let (method, path) = route.split_once(' ').unwrap_or(("GET", route));
-        println!("  {method} http://{addr}{path}");
+    let policy = settings.auth.policy();
+    if policy.allows(jian_auth::CredentialKind::Password) {
+        tracing::info!(
+            methods = %policy,
+            first_admin_command = "jian users add --admin --email ... --password-stdin",
+            "sign-in methods are available"
+        );
+    } else {
+        tracing::info!(methods = %policy, "sign-in methods are available");
     }
-
     let mut keeper = jian_server::SlotKeeper::start(database.clone(), SlotOptions::default())
         .await
         .context("cannot take the slot leases")?;

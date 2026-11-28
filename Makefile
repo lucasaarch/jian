@@ -116,10 +116,10 @@ RUST_DEV_DIR := $(CURDIR)/.jian-dev
 RUST_LOG ?= info,sqlx=warn,jian=debug,jian_server=debug,jian_store=debug
 export RUST_LOG
 
-rust-dev: ## Run the Rust gateway on :4410 with its own Postgres in .jian-dev/, restarting on code changes
+rust-dev: ## Run the Rust gateway and web panel on :4410 with its own Postgres in .jian-dev/
 	@mkdir -p $(RUST_DEV_DIR)
 	@if cargo watch --version >/dev/null 2>&1; then \
-	  exec cargo watch -w Cargo.toml -w Cargo.lock -w crates -w bins -x 'run -p jian -- --data-dir $(RUST_DEV_DIR)'; \
+	  exec cargo watch -w Cargo.toml -w Cargo.lock -w crates -w bins -w apps/desktop-tauri/src -w apps/desktop-tauri/index.html -w apps/desktop-tauri/package.json -w apps/desktop-tauri/tsconfig.json -w apps/desktop-tauri/vite.config.ts -w package.json -w pnpm-lock.yaml -w pnpm-workspace.yaml -x 'run -p jian -- --data-dir $(RUST_DEV_DIR)'; \
 	else \
 	  echo "cargo-watch is not installed, so the gateway will not restart on changes."; \
 	  echo "Install it once with: cargo install cargo-watch --locked"; \

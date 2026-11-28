@@ -12,6 +12,7 @@ mcp-http = ["jian-plugin-mcp/mcp-http"]
 mcp-stdio = ["local-process", "jian-plugin-mcp/mcp-stdio"]
 channels = ["dep:jian-channel-slack"]
 public-artifacts = []
+web-panel = ["dep:include_dir", "dep:mime_guess"]
 email-login = []
 github-login = []
 multi-user = []
@@ -38,6 +39,7 @@ self-hosted = [
     "linear-webhooks",
     "channel-webhooks",
     "slack-events-api",
+    "web-panel",
 ]
 cloud = [
     "mcp-http",
@@ -58,6 +60,7 @@ cloud = [
 axum = { workspace = true, features = ["ws"] }
 base64.workspace = true
 futures-util.workspace = true
+include_dir = { workspace = true, optional = true }
 jian-auth.workspace = true
 jian-browser.workspace = true
 jian-core.workspace = true
@@ -75,6 +78,7 @@ jian-protocol.workspace = true
 jian-runtime.workspace = true
 jian-skills.workspace = true
 jian-store.workspace = true
+mime_guess = { workspace = true, optional = true }
 reqwest.workspace = true
 ring.workspace = true
 rustls.workspace = true

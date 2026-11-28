@@ -29,6 +29,7 @@ futures-util = { version = "0.3.31", default-features = false, features = ["sink
 # The OS random source, for nonces and data keys.
 getrandom = "0.3"
 globset = { version = "0.4", default-features = false }
+include_dir = "0.7"
 jian-auth = { path = "crates/jian-auth" }
 jian-browser = { path = "crates/jian-browser" }
 # The `fake` feature (a test double) is turned on only by tests.
@@ -71,6 +72,7 @@ jian-testkit = { path = "crates/jian-testkit" }
 # so the next run never depends on the host's zoneinfo; no system or IO feature is on.
 jiff = { version = "1", default-features = false, features = ["std", "tz-fat", "tzdb-bundle-always"] }
 jpeg-encoder = "0.7.1"
+mime_guess = "2"
 # The Postgres the gateway embeds. `bundled` puts the archive in the binary at build time (from
 # theseus-rs/postgresql-binaries, which is why CI passes GITHUB_TOKEN) so nothing is downloaded at
 # boot; the major it bundles is pinned by POSTGRESQL_VERSION in .cargo/config.toml. rustls, not
